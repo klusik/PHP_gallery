@@ -1,0 +1,78 @@
+<?php
+
+return [
+    "CREATE TABLE users (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(190) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        role ENUM('admin') NOT NULL DEFAULT 'admin',
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "CREATE TABLE galleries (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        parent_id BIGINT UNSIGNED NULL,
+        folder_path VARCHAR(1024) NOT NULL,
+        folder_path_hash CHAR(64) NOT NULL,
+        slug VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        cover_image_id BIGINT UNSIGNED NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        visibility ENUM('draft','public','private') NOT NULL DEFAULT 'draft',
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY galleries_folder_path_hash_unique (folder_path_hash),
+        UNIQUE KEY galleries_slug_unique (slug),
+        KEY galleries_parent_id_index (parent_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "CREATE TABLE images (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        gallery_id BIGINT UNSIGNED NOT NULL,
+        relative_path VARCHAR(1024) NOT NULL,
+        relative_path_hash CHAR(64) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NULL,
+        description TEXT NULL,
+        width INT UNSIGNED NULL,
+        height INT UNSIGNED NULL,
+        mime_type VARCHAR(100) NULL,
+        file_size BIGINT UNSIGNED NULL,
+        modified_at DATETIME NULL,
+        checksum_sha256 CHAR(64) NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        visibility ENUM('draft','public','private') NOT NULL DEFAULT 'public',
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY images_gallery_path_hash_unique (gallery_id, relative_path_hash),
+        KEY images_gallery_id_index (gallery_id),
+        CONSTRAINT images_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "CREATE TABLE image_votes (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        image_id BIGINT UNSIGNED NOT NULL,
+        user_id BIGINT UNSIGNED NULL,
+        visitor_hash CHAR(64) NULL,
+        vote TINYINT NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY image_votes_image_user_unique (image_id, user_id),
+        UNIQUE KEY image_votes_image_visitor_unique (image_id, visitor_hash),
+        CONSTRAINT image_votes_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+        CONSTRAINT image_votes_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT image_votes_vote_check CHECK (vote IN (-1, 1))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "CREATE TABLE zip_archives (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        scope ENUM('gallery','all') NOT NULL,
+        gallery_id BIGINT UNSIGNED NULL,
+        file_path VARCHAR(1024) NOT NULL,
+        content_signature CHAR(64) NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        KEY zip_archives_lookup_index (scope, gallery_id, content_signature),
+        CONSTRAINT zip_archives_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+    "ALTER TABLE galleries ADD CONSTRAINT galleries_parent_id_foreign FOREIGN KEY (parent_id) REFERENCES galleries(id) ON DELETE SET NULL",
+    "ALTER TABLE galleries ADD CONSTRAINT galleries_cover_image_id_foreign FOREIGN KEY (cover_image_id) REFERENCES images(id) ON DELETE SET NULL",
+];

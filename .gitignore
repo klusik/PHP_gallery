@@ -1,0 +1,10 @@
+config.php
+/cache/*
+!/cache/.htaccess
+/logs/
+/tmp/
+.env
+*.log
+*.tmp
+Thumbs.db
+.DS_Store

@@ -1,0 +1,421 @@
+<?php
+
+declare(strict_types=1);
+
+function galleries_root(): string
+{
+    return rtrim((string) cms_config()['galleries_root'], DIRECTORY_SEPARATOR);
+}
+
+function gallery_abs_path(string $relativePath): string
+{
+    $relativePath = normalize_relative_path($relativePath);
+    $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    if (!path_inside(galleries_root(), $path)) {
+        throw new RuntimeException('Gallery path is outside the configured root.');
+    }
+    return $path;
+}
+
+function image_abs_path(array $image, array $gallery): string
+{
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, normalize_relative_path((string) $image['relative_path']));
+    $parent = dirname($path);
+    if (!path_inside($galleryRoot, $parent)) {
+        throw new RuntimeException('Image path is outside its gallery.');
+    }
+    return $path;
+}
+
+function discover_gallery_candidates(): array
+{
+    $root = galleries_root();
+    if (!is_dir($root)) {
+        return [];
+    }
+
+    $pdo = db();
+    $known = $pdo->query('SELECT folder_path FROM galleries')->fetchAll(PDO::FETCH_COLUMN);
+    $known = array_flip($known);
+    $candidates = [];
+    $ignoreNames = ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'];
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveCallbackFilterIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            function (SplFileInfo $file) use ($ignoreNames): bool {
+                if (!$file->isDir()) {
+                    return true;
+                }
+                $name = $file->getFilename();
+                return !str_starts_with($name, '.') && !in_array(strtolower($name), $ignoreNames, true);
+            }
+        ),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $item) {
+        if (!$item->isDir()) {
+            continue;
+        }
+        $relative = normalize_relative_path(substr($item->getPathname(), strlen($root)));
+        if ($relative === '' || isset($known[$relative])) {
+            continue;
+        }
+        $hasImages = false;
+        foreach (new DirectoryIterator($item->getPathname()) as $child) {
+            if ($child->isFile() && is_supported_image_path($child->getFilename())) {
+                $hasImages = true;
+                break;
+            }
+        }
+        $jsonPath = $item->getPathname() . DIRECTORY_SEPARATOR . 'gallery.json';
+        if ($hasImages || is_file($jsonPath)) {
+            $metadata = read_gallery_sidecar($jsonPath);
+            $candidates[] = [
+                'folder_path' => $relative,
+                'title' => $metadata['title'] ?? basename($relative),
+                'description' => $metadata['description'] ?? '',
+                'visibility' => $metadata['visibility'] ?? 'draft',
+                'sort_order' => (int) ($metadata['sort_order'] ?? 0),
+            ];
+        }
+    }
+
+    return $candidates;
+}
+
+function read_gallery_sidecar(string $path): array
+{
+    if (!is_file($path)) {
+        return [];
+    }
+    $data = json_decode((string) file_get_contents($path), true);
+    return is_array($data) ? $data : [];
+}
+
+function write_gallery_sidecar(array $gallery): void
+{
+    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json';
+    $data = [
+        'title' => $gallery['title'],
+        'description' => $gallery['description'],
+        'visibility' => $gallery['visibility'],
+        'sort_order' => (int) $gallery['sort_order'],
+    ];
+    if (!empty($gallery['cover_image_id'])) {
+        $cover = find_image((int) $gallery['cover_image_id']);
+        if ($cover) {
+            $data['cover'] = $cover['relative_path'];
+        }
+    }
+    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+function import_galleries(array $folderPaths): int
+{
+    $pdo = db();
+    $candidates = [];
+    foreach (discover_gallery_candidates() as $candidate) {
+        $candidates[$candidate['folder_path']] = $candidate;
+    }
+    $count = 0;
+    foreach ($folderPaths as $folderPath) {
+        $folderPath = normalize_relative_path((string) $folderPath);
+        if (!isset($candidates[$folderPath])) {
+            continue;
+        }
+        $candidate = $candidates[$folderPath];
+        $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+        $parent = find_parent_gallery_for_path($folderPath);
+        $stmt = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $parent ? (int) $parent['id'] : null,
+            $folderPath,
+            hash('sha256', $folderPath),
+            unique_slug($pdo, (string) $candidate['title']),
+            $candidate['title'],
+            $candidate['description'],
+            (int) $candidate['sort_order'],
+            $visibility,
+            now_sql(),
+            now_sql(),
+        ]);
+        $gallery = find_gallery((int) $pdo->lastInsertId());
+        if ($gallery) {
+            write_gallery_sidecar($gallery);
+        }
+        $count++;
+    }
+    return $count;
+}
+
+function scan_gallery_images(int $galleryId): int
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return 0;
+    }
+    $root = gallery_abs_path((string) $gallery['folder_path']);
+    if (!is_dir($root)) {
+        return 0;
+    }
+
+    $pdo = db();
+    $count = 0;
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
+            continue;
+        }
+        $relative = normalize_relative_path(substr($file->getPathname(), strlen($root)));
+        $info = @getimagesize($file->getPathname());
+        if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+            continue;
+        }
+        $modifiedAt = date('Y-m-d H:i:s', $file->getMTime());
+        $existing = find_image_by_path($galleryId, $relative);
+        if (!$existing) {
+            $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, checksum_sha256, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                $galleryId,
+                $relative,
+                hash('sha256', $relative),
+                $file->getFilename(),
+                pathinfo($file->getFilename(), PATHINFO_FILENAME),
+                (int) $info[0],
+                (int) $info[1],
+                (string) $info['mime'],
+                $file->getSize(),
+                $modifiedAt,
+                hash_file('sha256', $file->getPathname()) ?: null,
+                now_sql(),
+                now_sql(),
+            ]);
+            $count++;
+            continue;
+        }
+        if ((int) $existing['file_size'] !== $file->getSize() || (string) $existing['modified_at'] !== $modifiedAt) {
+            $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([
+                $file->getFilename(),
+                (int) $info[0],
+                (int) $info[1],
+                (string) $info['mime'],
+                $file->getSize(),
+                $modifiedAt,
+                hash_file('sha256', $file->getPathname()) ?: null,
+                now_sql(),
+                (int) $existing['id'],
+            ]);
+            $count++;
+        }
+    }
+    apply_gallery_cover_from_sidecar($gallery);
+    return $count;
+}
+
+function apply_gallery_cover_from_sidecar(array $gallery): void
+{
+    $metadata = read_gallery_sidecar(gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json');
+    if (empty($metadata['cover']) || !is_string($metadata['cover'])) {
+        return;
+    }
+    try {
+        $coverPath = normalize_relative_path($metadata['cover']);
+    } catch (RuntimeException) {
+        return;
+    }
+    $image = find_image_by_path((int) $gallery['id'], $coverPath);
+    if (!$image) {
+        return;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([(int) $image['id'], now_sql(), (int) $gallery['id']]);
+}
+
+function find_gallery(int $id): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ?');
+    $stmt->execute([$id]);
+    $gallery = $stmt->fetch();
+    return $gallery ?: null;
+}
+
+function find_gallery_by_slug(string $slug): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM galleries WHERE slug = ?');
+    $stmt->execute([$slug]);
+    $gallery = $stmt->fetch();
+    return $gallery ?: null;
+}
+
+function find_gallery_by_folder_path(string $folderPath): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path_hash = ?');
+    $stmt->execute([hash('sha256', normalize_relative_path($folderPath))]);
+    $gallery = $stmt->fetch();
+    return $gallery ?: null;
+}
+
+function find_parent_gallery_for_path(string $folderPath): ?array
+{
+    $segments = explode('/', normalize_relative_path($folderPath));
+    while (count($segments) > 1) {
+        array_pop($segments);
+        $parent = find_gallery_by_folder_path(implode('/', $segments));
+        if ($parent) {
+            return $parent;
+        }
+    }
+    return null;
+}
+
+function find_image(int $id): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM images WHERE id = ?');
+    $stmt->execute([$id]);
+    $image = $stmt->fetch();
+    return $image ?: null;
+}
+
+function find_image_by_path(int $galleryId, string $relativePath): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
+    $stmt->execute([$galleryId, hash('sha256', $relativePath)]);
+    $image = $stmt->fetch();
+    return $image ?: null;
+}
+
+function vote_score(int $imageId): int
+{
+    $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
+    $stmt->execute([$imageId]);
+    return (int) $stmt->fetchColumn();
+}
+
+function zip_cache_dir(): string
+{
+    $path = (string) cms_config()['zip_cache_path'];
+    if (!is_dir($path)) {
+        mkdir($path, 0775, true);
+    }
+    return rtrim($path, DIRECTORY_SEPARATOR);
+}
+
+function gallery_zip_signature(int $galleryId, bool $publicOnly): string
+{
+    $sql = 'SELECT relative_path, file_size, modified_at FROM images WHERE gallery_id = ?';
+    $params = [$galleryId];
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= ' ORDER BY relative_path';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return hash('sha256', json_encode($stmt->fetchAll(), JSON_UNESCAPED_SLASHES));
+}
+
+function all_zip_signature(): string
+{
+    $rows = db()->query('SELECT g.folder_path, i.relative_path, i.file_size, i.modified_at FROM images i JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path')->fetchAll();
+    return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
+}
+
+function build_gallery_zip(int $galleryId, bool $publicOnly): string
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    $signature = gallery_zip_signature($galleryId, $publicOnly);
+    $scope = 'gallery';
+    $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id = ? AND content_signature = ? ORDER BY id DESC LIMIT 1');
+    $stmt->execute([$scope, $galleryId, $signature]);
+    $cached = $stmt->fetch();
+    if ($cached && is_file((string) $cached['file_path'])) {
+        return (string) $cached['file_path'];
+    }
+
+    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . $galleryId . '-' . $signature . '.zip';
+    create_zip($filePath, gallery_zip_files($gallery, $publicOnly));
+    $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+    $insert->execute([$scope, $galleryId, $filePath, $signature, now_sql(), now_sql()]);
+    return $filePath;
+}
+
+function build_all_zip(): string
+{
+    $signature = all_zip_signature();
+    $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id IS NULL AND content_signature = ? ORDER BY id DESC LIMIT 1');
+    $stmt->execute(['all', $signature]);
+    $cached = $stmt->fetch();
+    if ($cached && is_file((string) $cached['file_path'])) {
+        return (string) $cached['file_path'];
+    }
+
+    $galleries = db()->query('SELECT * FROM galleries ORDER BY folder_path')->fetchAll();
+    $files = [];
+    foreach ($galleries as $gallery) {
+        foreach (gallery_zip_files($gallery, false) as $file) {
+            $files[] = $file;
+        }
+    }
+    $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'all-' . $signature . '.zip';
+    create_zip($filePath, $files);
+    $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)');
+    $insert->execute(['all', $filePath, $signature, now_sql(), now_sql()]);
+    return $filePath;
+}
+
+function gallery_zip_files(array $gallery, bool $publicOnly): array
+{
+    $sql = 'SELECT * FROM images WHERE gallery_id = ?';
+    $params = [(int) $gallery['id']];
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= ' ORDER BY sort_order, filename';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $files = [];
+    foreach ($stmt->fetchAll() as $image) {
+        $absolute = image_abs_path($image, $gallery);
+        if (is_file($absolute)) {
+            $files[] = [
+                'absolute' => $absolute,
+                'zip_path' => normalize_relative_path($gallery['folder_path'] . '/' . $image['relative_path']),
+            ];
+        }
+    }
+    return $files;
+}
+
+function create_zip(string $filePath, array $files): void
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('ZipArchive is not available.');
+    }
+    $zip = new ZipArchive();
+    if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Unable to create ZIP archive.');
+    }
+    foreach ($files as $file) {
+        $zip->addFile($file['absolute'], $file['zip_path']);
+        $zip->setCompressionName($file['zip_path'], ZipArchive::CM_STORE);
+    }
+    $zip->close();
+}
+
+function send_download(string $filePath, string $downloadName): never
+{
+    if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
+        http_response_code(404);
+        exit('Download not found.');
+    }
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');
+    header('Content-Length: ' . filesize($filePath));
+    readfile($filePath);
+    exit;
+}

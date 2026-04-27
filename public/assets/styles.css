@@ -1,0 +1,252 @@
+:root {
+    --ink: #202124;
+    --muted: #626975;
+    --paper: #f8f4ec;
+    --panel: #fffaf0;
+    --line: #ded4c2;
+    --accent: #a5481c;
+    --accent-dark: #713414;
+    --field: #fffdf8;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    color: var(--ink);
+    background:
+        radial-gradient(circle at top left, rgba(165, 72, 28, 0.15), transparent 28rem),
+        linear-gradient(135deg, #f8f4ec 0%, #efe4d0 100%);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.55;
+}
+
+a {
+    color: var(--accent-dark);
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+.site-header,
+.site-main,
+.site-footer {
+    width: min(1120px, calc(100% - 2rem));
+    margin: 0 auto;
+}
+
+.site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.5rem 0;
+}
+
+.brand {
+    font-size: clamp(1.7rem, 4vw, 3rem);
+    text-decoration: none;
+    color: var(--ink);
+    letter-spacing: -0.04em;
+}
+
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.nav a,
+.button,
+button,
+input[type="submit"] {
+    border: 1px solid var(--accent-dark);
+    background: var(--accent);
+    color: #fffdf8;
+    padding: 0.55rem 0.85rem;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+    border-radius: 999px;
+}
+
+.button.secondary,
+button.secondary {
+    background: transparent;
+    color: var(--accent-dark);
+}
+
+.hero,
+.panel,
+.gallery-card,
+.image-card {
+    background: rgba(255, 250, 240, 0.88);
+    border: 1px solid var(--line);
+    box-shadow: 0 12px 34px rgba(54, 38, 20, 0.08);
+}
+
+.hero,
+.panel {
+    padding: clamp(1rem, 3vw, 2rem);
+    margin-bottom: 1rem;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+}
+
+.gallery-card,
+.image-card {
+    overflow: hidden;
+    border-radius: 1rem;
+}
+
+.gallery-card a {
+    display: grid;
+    min-height: 12rem;
+    padding: 1rem;
+    color: inherit;
+    text-decoration: none;
+    align-content: end;
+    background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
+}
+
+.image-card {
+    position: relative;
+}
+
+.image-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    cursor: zoom-in;
+}
+
+.image-meta {
+    padding: 0.75rem;
+}
+
+.muted {
+    color: var(--muted);
+}
+
+.form-grid {
+    display: grid;
+    gap: 0.8rem;
+}
+
+label {
+    display: grid;
+    gap: 0.25rem;
+    font-weight: 700;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+}
+
+textarea {
+    min-height: 8rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+}
+
+th,
+td {
+    padding: 0.6rem;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+}
+
+.notice {
+    padding: 0.75rem 1rem;
+    background: #fff3cd;
+    border: 1px solid #e3c46d;
+    margin-bottom: 1rem;
+}
+
+.vote-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.vote-row button {
+    padding: 0.2rem 0.55rem;
+}
+
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(20, 15, 10, 0.88);
+}
+
+.lightbox[hidden] {
+    display: none;
+}
+
+.lightbox figure {
+    margin: 0;
+    color: #fffdf8;
+    text-align: center;
+}
+
+.lightbox img {
+    max-height: 78vh;
+    object-fit: contain;
+}
+
+.lightbox button {
+    border-color: #fffdf8;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.has-lightbox {
+    overflow: hidden;
+}
+
+.site-footer {
+    padding: 2rem 0;
+}
+
+@media (max-width: 680px) {
+    .site-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .lightbox {
+        grid-template-columns: 1fr;
+    }
+}
+
