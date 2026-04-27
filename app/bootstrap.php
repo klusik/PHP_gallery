@@ -48,6 +48,7 @@ function cms_run(): void
         'admin' => 'cms_admin',
         'admin_login' => 'cms_admin_login',
         'admin_logout' => 'cms_admin_logout',
+        'admin_theme' => 'cms_admin_theme',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',

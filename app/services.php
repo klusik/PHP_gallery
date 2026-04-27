@@ -321,6 +321,7 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
 {
     $images = [];
+    // Parent galleries without direct images borrow covers from child galleries.
     foreach (child_galleries($galleryId, $publicOnly) as $child) {
         $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
         if ($cover) {
@@ -416,6 +417,140 @@ function vote_score(int $imageId): int
     $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
     $stmt->execute([$imageId]);
     return (int) $stmt->fetchColumn();
+}
+
+function current_vote_for_image(int $imageId): int
+{
+    $user = current_user();
+    if ($user) {
+        $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND user_id = ?');
+        $stmt->execute([$imageId, (int) $user['id']]);
+        return (int) ($stmt->fetchColumn() ?: 0);
+    }
+    $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
+    $stmt->execute([$imageId, visitor_hash()]);
+    return (int) ($stmt->fetchColumn() ?: 0);
+}
+
+/**
+ * Parse admin-entered comma/semicolon/newline tag text into unique names.
+ */
+function split_tag_names(string $tags): array
+{
+    $names = [];
+    foreach (preg_split('/[,;\n]+/', $tags) ?: [] as $name) {
+        $name = trim($name);
+        if ($name !== '') {
+            $names[strtolower($name)] = substr($name, 0, 100);
+        }
+    }
+    return array_values($names);
+}
+
+function tag_slug(string $name): string
+{
+    $slug = slugify($name);
+    return $slug !== '' ? substr($slug, 0, 120) : 'tag';
+}
+
+function find_or_create_tag(string $name): int
+{
+    $slug = tag_slug($name);
+    $stmt = db()->prepare('SELECT id FROM tags WHERE slug = ?');
+    $stmt->execute([$slug]);
+    $existing = $stmt->fetchColumn();
+    if ($existing) {
+        return (int) $existing;
+    }
+    $stmt = db()->prepare('INSERT INTO tags (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)');
+    $stmt->execute([$name, $slug, now_sql(), now_sql()]);
+    return (int) db()->lastInsertId();
+}
+
+/**
+ * Replace all tags for one gallery or image with the submitted tag list.
+ */
+function sync_entity_tags(string $type, int $id, string $tagText): void
+{
+    $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
+    db()->prepare('DELETE FROM ' . $mapTable . ' WHERE ' . $idColumn . ' = ?')->execute([$id]);
+    foreach (split_tag_names($tagText) as $name) {
+        $tagId = find_or_create_tag($name);
+        $stmt = db()->prepare('INSERT IGNORE INTO ' . $mapTable . ' (' . $idColumn . ', tag_id) VALUES (?, ?)');
+        $stmt->execute([$id, $tagId]);
+    }
+}
+
+function tags_for_entity(string $type, int $id): array
+{
+    $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
+    try {
+        $stmt = db()->prepare('SELECT t.* FROM tags t JOIN ' . $mapTable . ' mt ON mt.tag_id = t.id WHERE mt.' . $idColumn . ' = ? ORDER BY t.name');
+        $stmt->execute([$id]);
+        return $stmt->fetchAll();
+    } catch (PDOException) {
+        return [];
+    }
+}
+
+function tag_names_for_entity(string $type, int $id): string
+{
+    return implode(', ', array_column(tags_for_entity($type, $id), 'name'));
+}
+
+function all_tag_names(): array
+{
+    try {
+        return db()->query('SELECT name FROM tags ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException) {
+        return [];
+    }
+}
+
+function app_setting(string $key, ?string $default = null): ?string
+{
+    try {
+        $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+        $stmt->execute([$key]);
+        $value = $stmt->fetchColumn();
+        return $value === false ? $default : (string) $value;
+    } catch (PDOException) {
+        return $default;
+    }
+}
+
+function set_app_setting(string $key, string $value): void
+{
+    $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+    $stmt->execute([$key, $value, now_sql()]);
+}
+
+/**
+ * Theme settings are stored in the DB so the visual preset can be changed
+ * without editing PHP or CSS files.
+ */
+function theme_settings(): array
+{
+    return [
+        'accent' => app_setting('theme_accent', '#a5481c'),
+        'accent_dark' => app_setting('theme_accent_dark', '#713414'),
+        'paper' => app_setting('theme_paper', '#f8f4ec'),
+        'panel' => app_setting('theme_panel', '#fffaf0'),
+        'radius' => app_setting('theme_radius', '16'),
+        'font' => app_setting('theme_font', 'serif'),
+    ];
+}
+
+function custom_css_path(): string
+{
+    return dirname(__DIR__) . '/public/assets/custom.css';
+}
+
+function custom_css_url(): ?string
+{
+    return is_file(custom_css_path()) ? asset_url('assets/custom.css') : null;
 }
 
 function zip_cache_dir(): string

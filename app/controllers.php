@@ -42,6 +42,7 @@ function cms_gallery(): void
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
+    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
@@ -53,10 +54,12 @@ function cms_gallery(): void
     echo '<section class="grid">';
     foreach ($images as $image) {
         $mediaUrl = url_for('media', ['id' => $image['id']]);
+        $imageTags = tags_for_entity('image', (int) $image['id']);
         echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '">';
         echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($mediaUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
-        render_vote_form((int) $image['id'], (int) $image['score']);
+        render_tag_list($imageTags);
+        render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
         echo '</div></article>';
     }
     echo '</section>';
@@ -99,13 +102,25 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '</a></article>';
 }
 
-function render_vote_form(int $imageId, int $score): void
+function render_tag_list(array $tags): void
+{
+    if (!$tags) {
+        return;
+    }
+    echo '<p class="tag-list">';
+    foreach ($tags as $tag) {
+        echo '<span class="tag">' . e($tag['name']) . '</span>';
+    }
+    echo '</p>';
+}
+
+function render_vote_form(int $imageId, int $score, int $currentVote): void
 {
     echo '<form class="vote-row" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
     echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo '<span>Score: <strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
-    echo '<button type="submit" name="vote" value="1" aria-label="Vote up">Up</button>';
-    echo '<button type="submit" name="vote" value="-1" aria-label="Vote down">Down</button>';
+    echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="Vote up">Up</button>';
+    echo '<button type="submit" name="vote" value="-1" class="' . ($currentVote === -1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === -1 ? 'true' : 'false') . '" aria-label="Vote down">Down</button>';
     echo '</form>';
 }
 
@@ -113,9 +128,9 @@ function render_lightbox(): void
 {
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
-    echo '<button type="button" data-lightbox-action="previous">Previous</button>';
+    echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
     echo '<figure><img data-lightbox-img alt=""><figcaption><h2 data-lightbox-title></h2><p data-lightbox-description></p><p>Score: <strong data-lightbox-score>0</strong></p></figcaption></figure>';
-    echo '<button type="button" data-lightbox-action="next">Next</button>';
+    echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
 }
 
@@ -170,7 +185,7 @@ function cms_vote(): void
         $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
         $stmt->execute([$imageId, $hash, $vote, now_sql(), now_sql()]);
     }
-    $result = ['image_id' => $imageId, 'score' => vote_score($imageId)];
+    $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => $vote];
     if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
         header('Content-Type: application/json');
         echo json_encode($result);
@@ -227,6 +242,40 @@ function cms_admin_logout(): void
 {
     unset($_SESSION['user_id']);
     redirect_to(url_for('home'));
+}
+
+function cms_admin_theme(): void
+{
+    require_admin();
+    if (request_method() === 'POST') {
+        verify_csrf();
+        set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
+        set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
+        set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
+        set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
+        set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
+        set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+        if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
+            $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
+            if (str_ends_with($name, '.css')) {
+                move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+            }
+        }
+        redirect_to(url_for('admin_theme', ['saved' => 1]));
+    }
+    $theme = theme_settings();
+    render_header('Theme');
+    echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
+    echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '"></label>';
+    echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '"></label>';
+    echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '"></label>';
+    echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '"></label>';
+    echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '"></label>';
+    echo '<label>Font style<select name="theme_font"><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
+    echo '<p class="muted">Uploaded CSS is loaded after the built-in stylesheet and theme controls.</p>';
+    echo '<button type="submit">Save theme</button></form></section>';
+    render_footer();
 }
 
 function cms_admin(): void
@@ -346,6 +395,7 @@ function cms_admin_edit_gallery(): void
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
         $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
         $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         $gallery = find_gallery((int) $gallery['id']);
         if ($gallery) {
             write_gallery_sidecar($gallery);
@@ -363,6 +413,8 @@ function cms_admin_edit_gallery(): void
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
     echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
+    echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
+    render_tag_datalist();
     echo '<button type="submit">Save gallery</button></form></section>';
     echo '<section class="panel"><h2>Scan</h2><form method="post" action="' . e(url_for('admin_scan_images')) . '" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
@@ -436,6 +488,7 @@ function cms_admin_edit_image(): void
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'public';
         $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
         $stmt->execute([(string) $_POST['title'], (string) $_POST['description'], $visibility, (int) $_POST['sort_order'], now_sql(), (int) $image['id']]);
+        sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
     render_header('Edit image');
@@ -446,6 +499,8 @@ function cms_admin_edit_image(): void
     echo '<label>Description<textarea name="description">' . e($image['description']) . '</textarea></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $image['visibility']) . '</select></label>';
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
+    render_tag_datalist();
     echo '<button type="submit">Save image</button></form></section>';
     render_footer();
 }
@@ -469,6 +524,21 @@ function visibility_options(string $selected): string
         $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e($visibility) . '</option>';
     }
     return $html;
+}
+
+function sanitize_hex_color(string $value, string $fallback): string
+{
+    $value = trim($value);
+    return preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : $fallback;
+}
+
+function render_tag_datalist(): void
+{
+    echo '<datalist id="tag-suggestions">';
+    foreach (all_tag_names() as $name) {
+        echo '<option value="' . e((string) $name) . '"></option>';
+    }
+    echo '</datalist>';
 }
 
 function gallery_parent_options(array $currentGallery): string

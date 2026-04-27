@@ -11,19 +11,78 @@ A small PHP 8+ gallery CMS for ordinary shared hosting. Media discovery comes fr
 
 No WordPress, Composer packages, npm build step, or framework is required.
 
+## Release Highlights
+
+This release contains the full plain-PHP gallery application:
+
+- browser installer through `install.php`
+- filesystem gallery discovery with nested subgalleries
+- admin dashboard with bulk gallery and image actions
+- editable gallery metadata, cover images, tags, visibility, and hierarchy
+- public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
+- theme controls and optional custom CSS upload
+- ZIP downloads for one gallery or all galleries
+- FTP/local deployment helper scripts
+- Apache `.htaccess` files for routing and private-folder protection
+
 ## Setup
 
-For browser-based setup, upload the files, open:
+The easiest setup path is the browser installer. It is meant for ordinary shared
+hosting, local Laragon/XAMPP-style installs, and cases where you do not want to
+run console commands.
+
+### Browser Installer
+
+1. Upload or copy all project files to your webserver.
+2. Open the installer in your browser:
 
 ```text
 https://example.com/install.php
 ```
 
-The installer can create the database, create or update the database user, write
-`config.php`, run migrations, create writable folders, and add the first admin
-user. Delete or block `install.php` after setup.
+For a local Laragon example, that may look like:
 
-For manual setup:
+```text
+http://localhost/Galerie/install.php
+```
+
+3. Fill in the database administrator login. On local installs this is often
+   user `root` with an empty password. On shared hosting, use the MySQL database
+   credentials from your hosting control panel.
+4. Choose the gallery database name and the database user/password the gallery
+   application should use. The installer can create or update that user.
+5. Leave `caching_sha2_password` selected for newer MySQL. If your host uses
+   MariaDB or rejects that plugin, choose `Server default`.
+6. Confirm the application paths. The installer will create the galleries folder
+   and ZIP cache folder if PHP has permission.
+7. Enter the first admin username and password.
+8. Submit the form, then open:
+
+```text
+https://example.com/index.php?page=admin_login
+```
+
+The installer does these jobs for you:
+
+- creates the database if it does not exist
+- creates or updates the database user
+- writes `config.php`
+- creates the galleries and ZIP cache folders
+- runs all database migrations
+- creates the first admin account
+
+After setup, delete `install.php` from the server or block access to it. Keeping
+it online is unnecessary and should not be done on a public website.
+
+If the installer says a folder is not writable, change the folder permissions in
+your hosting control panel or create the folder manually. If database user
+creation is not allowed by your host, create the database and user in the hosting
+control panel first, then enter those credentials in the installer.
+
+### Manual Setup
+
+Use this path only if you prefer shell commands or your hosting environment does
+not allow the browser installer to create the database/user.
 
 1. Copy `config.example.php` to `config.php`.
 2. Edit database credentials, `base_url`, `galleries_root`, `zip_cache_path`, `admin_session_name`, `visitor_vote_secret`, and `setup_key`.
@@ -94,10 +153,39 @@ Admin workflow:
 2. Use `Check for new gallery folders`.
 3. Review detected folders and import selected galleries.
 4. Use `Scan images` for each imported gallery.
-5. Edit gallery title, description, slug, visibility, and sort order.
-6. Edit image title, description, visibility, and sort order.
+5. Use bulk actions to scan, publish, draft, or privatize selected galleries.
+6. Edit gallery title, description, slug, visibility, sort order, parent gallery,
+   title picture, and tags.
+7. Edit image title, description, visibility, sort order, and tags.
 
 Discovery is explicit and does not run on public requests.
+
+Nested folders become subgalleries. Public visitors get breadcrumb navigation,
+subgallery cards, lightbox image browsing, and keyboard left/right navigation.
+
+## Tags
+
+Admins can tag galleries and individual images from their edit pages. Tags are
+entered as comma-separated text. Existing tags are suggested while typing so the
+same tag names can be reused consistently.
+
+Tags are stored in reusable database tables and displayed on public gallery and
+image cards.
+
+## Theme And Templates
+
+Admins can open `index.php?page=admin_theme` to adjust the site look without
+editing code. The current theme controls include:
+
+- accent colors
+- page and panel background colors
+- corner roundness
+- serif or sans-serif font mode
+- optional custom CSS upload
+
+Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
+built-in stylesheet. This gives technical users a template-like override path,
+while non-technical users can use the form controls.
 
 ## Routing
 
@@ -120,7 +208,7 @@ ZIP files are cached under `zip_cache_path`. The cache key is derived from image
 
 ## Voting
 
-Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed.
+Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed. The public UI marks the current visitor's selected up/down vote.
 
 ## FTP Deployment
 
@@ -147,6 +235,11 @@ After upload:
 2. If you use manual setup, create the database and run the setup URL with your `setup_key` or run the CLI scripts if your host provides shell access.
 3. Ensure `galleries_root` and `zip_cache_path` are writable by PHP.
 4. Delete or block `install.php` after setup.
+
+The deployment helper intentionally does not upload `config.php`, cache files,
+logs, Git metadata, or local development artifacts. Create production
+configuration on the target server through `install.php` or by copying
+`config.example.php` manually.
 
 ## Security Notes
 

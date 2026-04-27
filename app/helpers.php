@@ -86,15 +86,23 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
 function render_header(string $title): void
 {
     $user = current_user();
+    $theme = theme_settings();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title) . '</title>';
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
+    $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
+    echo '<style>:root{--accent:' . e((string) $theme['accent']) . ';--accent-dark:' . e((string) $theme['accent_dark']) . ';--paper:' . e((string) $theme['paper']) . ';--panel:' . e((string) $theme['panel']) . ';--radius:' . (int) $theme['radius'] . 'px;--font-family:' . e($fontFamily) . ';}</style>';
+    $customCss = custom_css_url();
+    if ($customCss) {
+        echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
+    }
     echo '</head><body><header class="site-header">';
     echo '<a class="brand" href="' . e(url_for('home')) . '">Gallery CMS</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
+        echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
