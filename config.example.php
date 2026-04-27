@@ -3,6 +3,7 @@
 return [
     'database' => [
         'host' => '127.0.0.1',
+        'port' => 3306,
         'name' => 'gallery_cms',
         'user' => 'gallery_user',
         'password' => 'change-me',
