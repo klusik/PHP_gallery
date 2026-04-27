@@ -1,4 +1,36 @@
 (() => {
+    document.addEventListener('submit', async (event) => {
+        const form = event.target.closest('[data-vote-form]');
+        if (!form) {
+            return;
+        }
+        event.preventDefault();
+        const body = new FormData(form);
+        if (event.submitter && event.submitter.name) {
+            body.set(event.submitter.name, event.submitter.value);
+        }
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body,
+            headers: {'Accept': 'application/json'},
+        });
+        if (!response.ok) {
+            return;
+        }
+        const result = await response.json();
+        document.querySelectorAll(`[data-score-for="${result.image_id}"]`).forEach((node) => {
+            node.textContent = result.score;
+        });
+        document.querySelectorAll(`[data-image-id="${result.image_id}"]`).forEach((node) => {
+            node.dataset.score = String(result.score);
+        });
+        const lightbox = document.querySelector('[data-lightbox]');
+        const lightboxScore = document.querySelector('[data-lightbox-score]');
+        if (lightbox && lightboxScore && lightbox.dataset.currentImageId === String(result.image_id)) {
+            lightboxScore.textContent = String(result.score);
+        }
+    });
+
     const cards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
     const overlay = document.querySelector('[data-lightbox]');
     if (!overlay || cards.length === 0) {
@@ -22,6 +54,7 @@
         title.textContent = card.dataset.title || '';
         description.textContent = card.dataset.description || '';
         score.textContent = card.dataset.score || '0';
+        overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
     }
@@ -71,31 +104,6 @@
         }
         if (event.key === 'ArrowRight') {
             step(1);
-        }
-    });
-
-    document.addEventListener('submit', async (event) => {
-        const form = event.target.closest('[data-vote-form]');
-        if (!form) {
-            return;
-        }
-        event.preventDefault();
-        const response = await fetch(form.action, {
-            method: 'POST',
-            body: new FormData(form),
-            headers: {'Accept': 'application/json'},
-        });
-        if (!response.ok) {
-            return;
-        }
-        const result = await response.json();
-        document.querySelectorAll(`[data-score-for="${result.image_id}"]`).forEach((node) => {
-            node.textContent = result.score;
-        });
-        const active = cards[currentIndex];
-        if (active && active.dataset.imageId === String(result.image_id)) {
-            active.dataset.score = String(result.score);
-            score.textContent = String(result.score);
         }
     });
 })();

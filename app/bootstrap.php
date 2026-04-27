@@ -50,8 +50,10 @@ function cms_run(): void
         'admin_logout' => 'cms_admin_logout',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
+        'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
+        'admin_bulk_images' => 'cms_admin_bulk_images',
         'admin_edit_image' => 'cms_admin_edit_image',
         'setup' => 'cms_setup',
     ];
