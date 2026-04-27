@@ -118,8 +118,28 @@ button.secondary {
 .gallery-card img {
     display: block;
     width: 100%;
-    aspect-ratio: 4 / 3;
+    height: 8rem;
     object-fit: cover;
+}
+
+.gallery-collage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 8rem;
+    overflow: hidden;
+}
+
+.gallery-collage img {
+    height: 100%;
+    aspect-ratio: auto;
+}
+
+.gallery-collage.collage-count-1 {
+    grid-template-columns: 1fr;
+}
+
+.gallery-collage.collage-count-3 img:first-child {
+    grid-row: span 2;
 }
 
 .gallery-card-body {

@@ -83,6 +83,15 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '<article class="gallery-card"><a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
     if ($cover) {
         echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $cover['id']])) . '" alt="">';
+    } else {
+        $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
+        if ($collage) {
+            echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
+            foreach ($collage as $image) {
+                echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt="">';
+            }
+            echo '</span>';
+        }
     }
     echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
     echo '<p>' . e($gallery['description']) . '</p>';

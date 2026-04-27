@@ -292,6 +292,11 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
 
 function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
 {
+    return gallery_direct_cover_image($galleryId, $publicOnly);
+}
+
+function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
+{
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         return null;
@@ -311,6 +316,27 @@ function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
     $stmt->execute([$galleryId]);
     $image = $stmt->fetch();
     return $image ?: null;
+}
+
+function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
+{
+    $images = [];
+    foreach (child_galleries($galleryId, $publicOnly) as $child) {
+        $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
+        if ($cover) {
+            $images[(int) $cover['id']] = $cover;
+        }
+        if (count($images) >= $limit) {
+            break;
+        }
+        foreach (gallery_cover_collage_images((int) $child['id'], $publicOnly, $limit - count($images)) as $descendantCover) {
+            $images[(int) $descendantCover['id']] = $descendantCover;
+            if (count($images) >= $limit) {
+                break 2;
+            }
+        }
+    }
+    return array_values($images);
 }
 
 function apply_gallery_cover_from_sidecar(array $gallery): void
