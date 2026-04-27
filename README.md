@@ -13,17 +13,62 @@ No WordPress, Composer packages, npm build step, or framework is required.
 
 ## Setup
 
-For browser-based setup, upload the files, open:
+The easiest setup path is the browser installer. It is meant for ordinary shared
+hosting, local Laragon/XAMPP-style installs, and cases where you do not want to
+run console commands.
+
+### Browser Installer
+
+1. Upload or copy all project files to your webserver.
+2. Open the installer in your browser:
 
 ```text
 https://example.com/install.php
 ```
 
-The installer can create the database, create or update the database user, write
-`config.php`, run migrations, create writable folders, and add the first admin
-user. Delete or block `install.php` after setup.
+For a local Laragon example, that may look like:
 
-For manual setup:
+```text
+http://localhost/Galerie/install.php
+```
+
+3. Fill in the database administrator login. On local installs this is often
+   user `root` with an empty password. On shared hosting, use the MySQL database
+   credentials from your hosting control panel.
+4. Choose the gallery database name and the database user/password the gallery
+   application should use. The installer can create or update that user.
+5. Leave `caching_sha2_password` selected for newer MySQL. If your host uses
+   MariaDB or rejects that plugin, choose `Server default`.
+6. Confirm the application paths. The installer will create the galleries folder
+   and ZIP cache folder if PHP has permission.
+7. Enter the first admin username and password.
+8. Submit the form, then open:
+
+```text
+https://example.com/index.php?page=admin_login
+```
+
+The installer does these jobs for you:
+
+- creates the database if it does not exist
+- creates or updates the database user
+- writes `config.php`
+- creates the galleries and ZIP cache folders
+- runs all database migrations
+- creates the first admin account
+
+After setup, delete `install.php` from the server or block access to it. Keeping
+it online is unnecessary and should not be done on a public website.
+
+If the installer says a folder is not writable, change the folder permissions in
+your hosting control panel or create the folder manually. If database user
+creation is not allowed by your host, create the database and user in the hosting
+control panel first, then enter those credentials in the installer.
+
+### Manual Setup
+
+Use this path only if you prefer shell commands or your hosting environment does
+not allow the browser installer to create the database/user.
 
 1. Copy `config.example.php` to `config.php`.
 2. Edit database credentials, `base_url`, `galleries_root`, `zip_cache_path`, `admin_session_name`, `visitor_vote_secret`, and `setup_key`.
