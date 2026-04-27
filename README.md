@@ -187,6 +187,158 @@ Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
 built-in stylesheet. This gives technical users a template-like override path,
 while non-technical users can use the form controls.
 
+## Naming And Design Conventions
+
+This project is intentionally small and direct. New features should keep names
+boring, predictable, and easy to search.
+
+### Routes And Pages
+
+Routes use the `page` query parameter and snake_case names:
+
+```text
+index.php?page=admin_edit_gallery&id=1
+index.php?page=admin_theme
+index.php?page=download_gallery&id=1
+```
+
+Route names should follow these rules:
+
+- public pages use the noun or action directly: `home`, `gallery`, `media`,
+  `vote`
+- admin pages start with `admin_`: `admin_edit_image`, `admin_bulk_images`
+- destructive or state-changing routes must be POST-only and CSRF-protected
+- route handler functions use the same name with the `cms_` prefix:
+  `cms_admin_edit_gallery`
+
+### PHP Functions
+
+PHP functions use snake_case. Use prefixes to show responsibility:
+
+- `cms_*` for route/controller functions
+- `render_*` for HTML rendering helpers
+- `find_*` for single database lookups
+- `*_options` for HTML `<option>` builders
+- `*_url` for URL helpers
+- `sync_*` for replace/update operations that reconcile stored state
+
+Keep controller functions focused on request handling and HTML. Put reusable
+database, filesystem, ZIP, tag, vote, cover, and theme behavior in
+`app/services.php`.
+
+### Database Names
+
+Database tables and columns use snake_case:
+
+```text
+galleries
+image_votes
+cover_image_id
+visitor_hash
+created_at
+updated_at
+```
+
+Use singular IDs like `gallery_id`, `image_id`, and `tag_id`. Many-to-many join
+tables use both nouns in plural form, such as `gallery_tags` and `image_tags`.
+
+Every table that stores editable records should have `created_at` and
+`updated_at`. Join tables do not need timestamps unless they later gain their
+own metadata.
+
+### CSS Classes
+
+CSS classes use kebab-case:
+
+```css
+.gallery-card
+.image-card
+.vote-row
+.tag-list
+.site-header
+```
+
+Class names should describe the element's role, not its current color or exact
+position. Prefer `.gallery-card` over `.brown-box`, and `.bulk-row` over
+`.top-left-controls`.
+
+State classes use the `is-` prefix:
+
+```css
+.is-active
+.is-subgallery
+```
+
+JavaScript hooks use `data-*` attributes instead of styling classes:
+
+```html
+data-lightbox-image
+data-vote-form
+data-tag-input
+```
+
+Do not rely on a CSS class as both a styling hook and a JavaScript behavior hook
+unless there is no better option.
+
+### UI Text
+
+Use short, direct labels:
+
+- `Save gallery`
+- `Scan/import images`
+- `Set public`
+- `Title picture`
+- `Check for new gallery folders`
+
+Avoid clever or decorative wording. Admin screens should feel practical and
+repeatable. Public pages should be clear and calm.
+
+### Visual Design
+
+The default UI should remain a quiet gallery CMS, not a marketing landing page.
+Use these rules when adding or changing screens:
+
+- keep content centered in the existing `1120px` layout
+- use `.panel` for admin/edit surfaces
+- use `.grid` for repeated gallery or image cards
+- use `.gallery-card` only for galleries
+- use `.image-card` only for images
+- keep cards readable on mobile and desktop
+- preserve theme variables such as `--accent`, `--panel`, `--paper`, and
+  `--radius`
+- do not hardcode new dominant colors unless they are derived from the theme
+- keep buttons visually consistent with the existing rounded button style
+- show current state clearly, for example active votes use `.is-active`
+- keep public image browsing in the lightbox, with visible previous/next buttons
+  and keyboard left/right support
+
+Gallery title pictures should be compact. If a parent gallery has no direct
+image, its card may use a small collage from subgallery covers, but it should
+still occupy the same visual space as a normal title picture.
+
+### Forms
+
+Forms should use clear labels and existing form patterns:
+
+- use `class="form-grid"` for stacked edit forms
+- use `class="bulk-row"` for bulk action controls above tables
+- use `<select>` for fixed choices such as visibility or parent gallery
+- use `<input type="color">` for theme colors
+- use comma-separated text for tags, with `data-tag-input` and the shared tag
+  datalist
+
+Any admin POST form must include `csrf_field()` and the target controller must
+call `verify_csrf()`.
+
+### Documentation
+
+When adding a feature, update the relevant README section and, if the feature
+changes the architecture or data flow, update `ARCHITECTURE.md`.
+
+Add code comments only where they explain a non-obvious decision, such as why
+MySQL DDL migrations are not wrapped in explicit transactions. Avoid comments
+that simply repeat the next line of code.
+
 ## Routing
 
 Pretty URLs are attempted through `.htaccess`, but every route also works by query string:
