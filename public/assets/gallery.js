@@ -23,12 +23,54 @@
         });
         document.querySelectorAll(`[data-image-id="${result.image_id}"]`).forEach((node) => {
             node.dataset.score = String(result.score);
+            node.dataset.userVote = String(result.vote);
+        });
+        form.querySelectorAll('button[name="vote"]').forEach((button) => {
+            const active = button.value === String(result.vote);
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
         const lightbox = document.querySelector('[data-lightbox]');
         const lightboxScore = document.querySelector('[data-lightbox-score]');
         if (lightbox && lightboxScore && lightbox.dataset.currentImageId === String(result.image_id)) {
             lightboxScore.textContent = String(result.score);
         }
+    });
+
+    document.querySelectorAll('[data-tag-input]').forEach((input) => {
+        const list = document.querySelector(`#${input.getAttribute('list')}`);
+        const names = list ? Array.from(list.options).map((option) => option.value) : [];
+        const suggestions = document.createElement('div');
+        suggestions.className = 'tag-suggestions';
+        input.insertAdjacentElement('afterend', suggestions);
+
+        function currentPrefix() {
+            const parts = input.value.split(',');
+            return parts[parts.length - 1].trim().toLowerCase();
+        }
+
+        function choose(name) {
+            const parts = input.value.split(',');
+            parts[parts.length - 1] = ` ${name}`;
+            input.value = parts.map((part) => part.trim()).filter(Boolean).join(', ');
+            suggestions.innerHTML = '';
+            input.focus();
+        }
+
+        input.addEventListener('input', () => {
+            const prefix = currentPrefix();
+            suggestions.innerHTML = '';
+            if (!prefix) {
+                return;
+            }
+            names.filter((name) => name.toLowerCase().startsWith(prefix)).slice(0, 6).forEach((name) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = name;
+                button.addEventListener('click', () => choose(name));
+                suggestions.append(button);
+            });
+        });
     });
 
     const cards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
@@ -71,7 +113,7 @@
 
     cards.forEach((card, index) => {
         card.addEventListener('click', (event) => {
-            if (event.target.closest('form') || event.target.closest('a')) {
+            if (event.target.closest('form')) {
                 return;
             }
             event.preventDefault();

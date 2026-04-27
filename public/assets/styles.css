@@ -18,8 +18,8 @@ body {
     color: var(--ink);
     background:
         radial-gradient(circle at top left, rgba(165, 72, 28, 0.15), transparent 28rem),
-        linear-gradient(135deg, #f8f4ec 0%, #efe4d0 100%);
-    font-family: Georgia, "Times New Roman", serif;
+        linear-gradient(135deg, var(--paper) 0%, #efe4d0 100%);
+    font-family: var(--font-family, Georgia, "Times New Roman", serif);
     line-height: 1.55;
 }
 
@@ -104,7 +104,7 @@ button.secondary {
 .gallery-card,
 .image-card {
     overflow: hidden;
-    border-radius: 1rem;
+    border-radius: var(--radius, 16px);
 }
 
 .gallery-card a {
@@ -236,6 +236,33 @@ textarea {
     min-height: 8rem;
 }
 
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.5rem 0;
+}
+
+.tag {
+    border: 1px solid var(--line);
+    background: rgba(255, 253, 248, 0.75);
+    border-radius: 999px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.9rem;
+}
+
+.tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.tag-suggestions button {
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    color: var(--accent-dark);
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -274,6 +301,11 @@ td {
     padding: 0.2rem 0.55rem;
 }
 
+.vote-row button.is-active {
+    background: var(--accent-dark);
+    box-shadow: 0 0 0 3px rgba(165, 72, 28, 0.18);
+}
+
 .lightbox {
     position: fixed;
     inset: 0;
@@ -303,6 +335,14 @@ td {
 
 .lightbox button {
     border-color: #fffdf8;
+}
+
+.lightbox button[data-lightbox-action="previous"],
+.lightbox button[data-lightbox-action="next"] {
+    min-width: 3rem;
+    min-height: 3rem;
+    border-radius: 999px;
+    font-size: 1.5rem;
 }
 
 .lightbox-close {

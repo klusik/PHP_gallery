@@ -139,10 +139,39 @@ Admin workflow:
 2. Use `Check for new gallery folders`.
 3. Review detected folders and import selected galleries.
 4. Use `Scan images` for each imported gallery.
-5. Edit gallery title, description, slug, visibility, and sort order.
-6. Edit image title, description, visibility, and sort order.
+5. Use bulk actions to scan, publish, draft, or privatize selected galleries.
+6. Edit gallery title, description, slug, visibility, sort order, parent gallery,
+   title picture, and tags.
+7. Edit image title, description, visibility, sort order, and tags.
 
 Discovery is explicit and does not run on public requests.
+
+Nested folders become subgalleries. Public visitors get breadcrumb navigation,
+subgallery cards, lightbox image browsing, and keyboard left/right navigation.
+
+## Tags
+
+Admins can tag galleries and individual images from their edit pages. Tags are
+entered as comma-separated text. Existing tags are suggested while typing so the
+same tag names can be reused consistently.
+
+Tags are stored in reusable database tables and displayed on public gallery and
+image cards.
+
+## Theme And Templates
+
+Admins can open `index.php?page=admin_theme` to adjust the site look without
+editing code. The current theme controls include:
+
+- accent colors
+- page and panel background colors
+- corner roundness
+- serif or sans-serif font mode
+- optional custom CSS upload
+
+Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
+built-in stylesheet. This gives technical users a template-like override path,
+while non-technical users can use the form controls.
 
 ## Routing
 
@@ -165,7 +194,7 @@ ZIP files are cached under `zip_cache_path`. The cache key is derived from image
 
 ## Voting
 
-Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed.
+Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed. The public UI marks the current visitor's selected up/down vote.
 
 ## FTP Deployment
 
