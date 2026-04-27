@@ -67,6 +67,25 @@ function cms_gallery(): void
     render_footer();
 }
 
+function cms_tag(): void
+{
+    $tag = find_tag_by_slug((string) ($_GET['slug'] ?? ''));
+    if (!$tag) {
+        cms_not_found();
+        return;
+    }
+    $galleries = public_galleries_for_tag((int) $tag['id']);
+    render_header('Tag: ' . (string) $tag['name']);
+    echo '<nav class="breadcrumbs" aria-label="Breadcrumbs"><a href="' . e(url_for('home')) . '">Galleries</a><span aria-hidden="true">/</span><span>Tag: ' . e($tag['name']) . '</span></nav>';
+    echo '<section class="hero"><h1>Tag: ' . e($tag['name']) . '</h1><p class="muted">' . count($galleries) . ' galleries</p></section>';
+    echo '<section class="grid">';
+    foreach ($galleries as $gallery) {
+        render_gallery_card($gallery, true);
+    }
+    echo '</section>';
+    render_footer();
+}
+
 function render_breadcrumbs(?array $gallery = null): void
 {
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs">';
@@ -109,7 +128,7 @@ function render_tag_list(array $tags): void
     }
     echo '<p class="tag-list">';
     foreach ($tags as $tag) {
-        echo '<span class="tag">' . e($tag['name']) . '</span>';
+        echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
     }
     echo '</p>';
 }

@@ -15,6 +15,7 @@ Important routes:
 - `page=home` lists public top-level galleries.
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
+- `page=tag&slug=...` renders a public gallery listing filtered by one tag.
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.

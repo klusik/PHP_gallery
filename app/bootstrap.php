@@ -41,6 +41,7 @@ function cms_run(): void
     $routes = [
         'home' => 'cms_home',
         'gallery' => 'cms_gallery',
+        'tag' => 'cms_tag',
         'media' => 'cms_media',
         'vote' => 'cms_vote',
         'download_gallery' => 'cms_download_gallery',
@@ -84,6 +85,9 @@ function cms_route_from_request(): array
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
         return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+    }
+    if ($segments[0] === 'tag' && isset($segments[1])) {
+        return ['page' => 'tag', 'params' => ['slug' => rawurldecode($segments[1])]];
     }
     if ($segments[0] === 'admin') {
         return ['page' => 'admin', 'params' => []];

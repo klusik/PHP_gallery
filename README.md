@@ -170,7 +170,12 @@ entered as comma-separated text. Existing tags are suggested while typing so the
 same tag names can be reused consistently.
 
 Tags are stored in reusable database tables and displayed on public gallery and
-image cards.
+image cards. Public tags are clickable. Clicking a tag opens a filtered gallery
+listing such as:
+
+```text
+index.php?page=tag&slug=travel
+```
 
 ## Theme And Templates
 

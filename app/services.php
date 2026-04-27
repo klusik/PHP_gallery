@@ -509,6 +509,27 @@ function all_tag_names(): array
     }
 }
 
+function find_tag_by_slug(string $slug): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM tags WHERE slug = ?');
+    $stmt->execute([$slug]);
+    $tag = $stmt->fetch();
+    return $tag ?: null;
+}
+
+function public_galleries_for_tag(int $tagId): array
+{
+    $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
+        FROM galleries g
+        JOIN gallery_tags gt ON gt.gallery_id = g.id
+        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+        WHERE gt.tag_id = ? AND g.visibility = 'public'
+        GROUP BY g.id
+        ORDER BY g.sort_order, g.title");
+    $stmt->execute([$tagId]);
+    return $stmt->fetchAll();
+}
+
 function app_setting(string $key, ?string $default = null): ?string
 {
     try {
