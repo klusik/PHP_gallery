@@ -26,6 +26,7 @@ function csrf_field(): string
  */
 function verify_csrf(): void
 {
+    // Variable $token stores this steps working value.
     $token = (string) ($_POST['csrf_token'] ?? '');
     if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
         http_response_code(400);
@@ -41,8 +42,10 @@ function current_user(): ?array
     if (empty($_SESSION['user_id'])) {
         return null;
     }
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
     $stmt->execute([(int) $_SESSION['user_id']]);
+    // Variable $user stores this steps working value.
     $user = $stmt->fetch();
     return $user ?: null;
 }
@@ -52,6 +55,7 @@ function current_user(): ?array
  */
 function require_admin(): void
 {
+    // Variable $user stores this steps working value.
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
         redirect_to(url_for('admin_login'));
@@ -63,9 +67,61 @@ function require_admin(): void
  */
 function visitor_hash(): string
 {
+    // Variable $secret stores this steps working value.
     $secret = (string) cms_config()['visitor_vote_secret'];
+    // Variable $ip stores this steps working value.
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    // Variable $agent stores this steps working value.
     $agent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
     return hash('sha256', $ip . '|' . $agent . '|' . $secret);
 }
 
+
+/**
+ * Send conservative browser security headers for normal HTML and asset routes.
+ */
+function send_security_headers(): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    header('X-Frame-Options: SAMEORIGIN');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: same-origin');
+}
+
+/**
+ * Reject public POST abuse by limiting fast repeated anonymous votes per image.
+ */
+function verify_vote_rate_limit(int $imageId): void
+{
+    $now = time();
+    $key = 'vote_rate_' . $imageId;
+    $lastVote = (int) ($_SESSION[$key] ?? 0);
+    if ($lastVote > 0 && ($now - $lastVote) < 2) {
+        http_response_code(429);
+        header('Content-Type: application/json');
+        exit(json_encode(['error' => 'Too many votes. Try again in a moment.']));
+    }
+    $_SESSION[$key] = $now;
+}
+
+/**
+ * Return true when installer/setup functionality has been locked after install.
+ */
+function cms_setup_is_locked(): bool
+{
+    return is_file(dirname(__DIR__) . '/config.php') && is_file(dirname(__DIR__) . '/cache/installed.lock');
+}
+
+/**
+ * Create the one-way installation lock file after the first successful setup.
+ */
+function cms_write_setup_lock(): void
+{
+    $path = dirname(__DIR__) . '/cache/installed.lock';
+    if (!is_dir(dirname($path))) {
+        mkdir(dirname($path), 0775, true);
+    }
+    file_put_contents($path, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
+}

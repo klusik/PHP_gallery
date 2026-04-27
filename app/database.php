@@ -16,11 +16,14 @@ function db(): PDO
         return $pdo;
     }
 
+    // Variable $database stores this steps working value.
     $database = cms_config()['database'];
+    // Variable $dsn stores this steps working value.
     $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $database['host'], $database['name'], $database['charset'] ?? 'utf8mb4');
     if (!empty($database['port'])) {
         $dsn .= ';port=' . (int) $database['port'];
     }
+    // Variable $pdo stores this steps working value.
     $pdo = new PDO($dsn, $database['user'], $database['password'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

@@ -15,6 +15,7 @@ function e(?string $value): string
  */
 function base_url(string $path = ''): string
 {
+    // Variable $base stores this steps working value.
     $base = rtrim((string) cms_config()['base_url'], '/');
     if ($path === '') {
         return $base === '' ? 'index.php' : $base . '/';
@@ -30,6 +31,7 @@ function base_url(string $path = ''): string
  */
 function url_for(string $page, array $params = []): string
 {
+    // Variable $params stores this steps working value.
     $params = ['page' => $page] + $params;
     return base_url('index.php?' . http_build_query($params));
 }
@@ -39,8 +41,11 @@ function url_for(string $page, array $params = []): string
  */
 function asset_url(string $path): string
 {
+    // Variable $path stores this steps working value.
     $path = ltrim($path, '/');
+    // Variable $script stores this steps working value.
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    // Variable $scriptFile stores this steps working value.
     $scriptFile = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
     if (str_ends_with($script, '/public/index.php') || str_ends_with($scriptFile, '/public/index.php')) {
         return base_url($path);
@@ -78,9 +83,13 @@ function now_sql(): string
  */
 function slugify(string $text): string
 {
+    // Variable $ascii stores this steps working value.
     $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+    // Variable $source stores this steps working value.
     $source = $ascii === false ? $text : $ascii;
+    // Variable $slug stores this steps working value.
     $slug = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $source));
+    // Variable $slug stores this steps working value.
     $slug = trim($slug, '-');
     return $slug !== '' ? $slug : 'gallery';
 }
@@ -90,21 +99,28 @@ function slugify(string $text): string
  */
 function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): string
 {
+    // Variable $base stores this steps working value.
     $base = slugify($title);
+    // Variable $slug stores this steps working value.
     $slug = $base;
+    // Variable $counter stores this steps working value.
     $counter = 2;
     while (true) {
+        // Variable $sql stores this steps working value.
         $sql = 'SELECT id FROM galleries WHERE slug = ?';
+        // Variable $params stores this steps working value.
         $params = [$slug];
         if ($excludeGalleryId !== null) {
             $sql .= ' AND id <> ?';
             $params[] = $excludeGalleryId;
         }
+        // Variable $stmt stores this steps working value.
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         if (!$stmt->fetch()) {
             return $slug;
         }
+        // Variable $slug stores this steps working value.
         $slug = $base . '-' . $counter;
         $counter++;
     }
@@ -115,19 +131,23 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
  */
 function render_header(string $title): void
 {
+    // Variable $user stores this steps working value.
     $user = current_user();
+    // Variable $theme stores this steps working value.
     $theme = theme_settings();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title) . '</title>';
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
-    $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
-    echo '<style>:root{--accent:' . e((string) $theme['accent']) . ';--accent-dark:' . e((string) $theme['accent_dark']) . ';--paper:' . e((string) $theme['paper']) . ';--panel:' . e((string) $theme['panel']) . ';--radius:' . (int) $theme['radius'] . 'px;--font-family:' . e($fontFamily) . ';}</style>';
+    echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
+    // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {
         echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
     }
+    // Variable $page stores this steps working value.
     $page = (string) ($_GET['page'] ?? 'home');
+    // Variable $bodyClass stores this steps working value.
     $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
     echo '</head><body class="' . e($bodyClass) . '"><header class="site-header">';
     echo '<a class="brand" href="' . e(url_for('home')) . '">Gallery CMS</a><nav class="nav">';
@@ -147,7 +167,9 @@ function render_header(string $title): void
  */
 function render_footer(): void
 {
-    echo '</main><footer class="site-footer muted">Plain PHP gallery CMS.</footer>';
+    echo '</main><footer class="site-footer muted">';
+    echo '<a class="site-footer-link" href="https://github.com/klusik/PHP_gallery" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
+    echo '</footer>';
     echo '<script src="' . e(asset_url('assets/gallery.js')) . '" defer></script>';
     echo '</body></html>';
 }
@@ -173,7 +195,9 @@ function is_supported_image_path(string $path): bool
  */
 function normalize_relative_path(string $path): string
 {
+    // Variable $path stores this steps working value.
     $path = str_replace('\\', '/', $path);
+    // Variable $segments stores this steps working value.
     $segments = [];
     foreach (explode('/', $path) as $segment) {
         if ($segment === '' || $segment === '.') {
@@ -192,10 +216,28 @@ function normalize_relative_path(string $path): string
  */
 function path_inside(string $root, string $path): bool
 {
+    // Variable $rootReal stores this steps working value.
     $rootReal = realpath($root);
+    // Variable $pathReal stores this steps working value.
     $pathReal = realpath($path);
     if ($rootReal === false || $pathReal === false) {
         return false;
     }
     return str_starts_with($pathReal, rtrim($rootReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) || $pathReal === $rootReal;
+}
+
+/**
+ * Build a short cache key for the generated theme stylesheet URL.
+ */
+function theme_cache_key(array $theme): string
+{
+    return substr(hash('sha256', json_encode($theme, JSON_UNESCAPED_SLASHES)), 0, 12);
+}
+
+/**
+ * Escape a CSS custom property value used by the generated theme stylesheet.
+ */
+function css_value(string $value): string
+{
+    return str_replace(['\\', ';', '{', '}'], '', $value);
 }

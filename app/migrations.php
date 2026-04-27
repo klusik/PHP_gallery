@@ -11,28 +11,36 @@ declare(strict_types=1);
  */
 function run_migrations(): array
 {
+    // Variable $pdo stores this steps working value.
     $pdo = db();
     $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
         version VARCHAR(64) NOT NULL PRIMARY KEY,
         applied_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Variable $applied stores this steps working value.
     $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    // Variable $applied stores this steps working value.
     $applied = array_flip($applied);
+    // Variable $files stores this steps working value.
     $files = glob(dirname(__DIR__) . '/database/migrations/*.php') ?: [];
     sort($files);
+    // Variable $ran stores this steps working value.
     $ran = [];
 
     foreach ($files as $file) {
+        // Variable $version stores this steps working value.
         $version = basename($file, '.php');
         if (isset($applied[$version])) {
             continue;
         }
+        // Variable $statements stores this steps working value.
         $statements = require $file;
         try {
             foreach ($statements as $statement) {
                 $pdo->exec($statement);
             }
+            // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
             $stmt->execute([$version, now_sql()]);
             $ran[] = $version;

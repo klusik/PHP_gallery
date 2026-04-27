@@ -1,13 +1,22 @@
 :root {
     /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
+    /* `--ink` defines the base foreground text color used across the UI. */
     --ink: #202124;
+    /* `--muted` defines secondary text tone for less prominent metadata. */
     --muted: #626975;
+    /* `--paper` defines the page-level background tone. */
     --paper: #f8f4ec;
+    /* `--panel` defines container backgrounds for cards, panels, and tables. */
     --panel: #fffaf0;
+    /* `--line` defines shared border and divider color. */
     --line: #ded4c2;
+    /* `--accent` defines primary interactive color. */
     --accent: #a5481c;
+    /* `--accent-dark` defines darker accent tone for contrast and links. */
     --accent-dark: #713414;
+    /* `--field` defines form control background fill. */
     --field: #fffdf8;
+    /* `--radius` controls rounded corner size for reusable components. */
     --radius: 16px;
 }
 
@@ -36,7 +45,7 @@ img {
     height: auto;
 }
 
-/* Shared navigation and buttons ------------------------------------------ */
+/* Shared navigation and buttons */
 
 .site-header,
 .site-main,
@@ -86,7 +95,7 @@ button.secondary {
     color: var(--accent-dark);
 }
 
-/* Panels, cards, and gallery grids --------------------------------------- */
+/* Panels, cards, and gallery grids */
 
 .hero,
 .panel,
@@ -178,7 +187,7 @@ button.secondary {
     color: var(--muted);
 }
 
-/* Admin forms, breadcrumbs, and hierarchy indicators --------------------- */
+/* Admin forms, breadcrumbs, and hierarchy indicators */
 
 .form-grid {
     display: grid;
@@ -260,7 +269,7 @@ input[type="checkbox"] {
     width: auto;
 }
 
-/* Tags ------------------------------------------------------------------- */
+/* Tags */
 
 .tag-list {
     display: flex;
@@ -308,7 +317,7 @@ input[type="checkbox"] {
     color: var(--accent-dark);
 }
 
-/* Tables and admin thumbnails -------------------------------------------- */
+/* Tables and admin thumbnails */
 
 table {
     width: 100%;
@@ -396,7 +405,7 @@ td {
     color: var(--accent-dark);
 }
 
-/* Voting and lightbox ----------------------------------------------------- */
+/* Voting and lightbox */
 
 .vote-row {
     display: flex;
@@ -468,7 +477,7 @@ td {
     overflow: hidden;
 }
 
-/* Tamper warning ---------------------------------------------------------- */
+/* Tamper warning */
 
 .compromise-warning {
     position: fixed;
@@ -483,13 +492,26 @@ td {
     text-align: center;
 }
 
-/* Responsive adjustments -------------------------------------------------- */
+/* Responsive adjustments */
 
 .site-footer {
     padding: 2rem 0;
+    text-align: center;
 }
 
-/* Compact admin treatment ------------------------------------------------- */
+.site-footer-link {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.site-footer-link:hover,
+.site-footer-link:focus {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* Compact admin treatment */
 
 .admin-page {
     --ink: #1d2327;
@@ -647,3 +669,112 @@ td {
     }
 }
 
+
+/* Public design refinements */
+.public-page .hero {
+    position: relative;
+    overflow: hidden;
+    border: 0;
+    background: linear-gradient(135deg, rgba(255, 250, 240, 0.94), rgba(239, 228, 208, 0.9));
+}
+
+.public-page .hero h1 {
+    max-width: 18ch;
+    margin: 0 0 0.35rem;
+    font-size: clamp(2rem, 5vw, 4.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.055em;
+}
+
+.public-page .hero p {
+    max-width: 68ch;
+}
+
+.public-page .gallery-card {
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.public-page .gallery-card:hover,
+.public-page .gallery-card:focus-within {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(54, 38, 20, 0.14);
+}
+
+.public-page .gallery-card img,
+.public-page .gallery-collage {
+    height: 12rem;
+}
+
+.public-page .gallery-card-body {
+    min-height: 8rem;
+}
+
+.public-page .gallery-card-body h2,
+.public-page .image-meta h2 {
+    margin: 0 0 0.25rem;
+    line-height: 1.15;
+}
+
+.public-page .image-card {
+    background: rgba(255, 250, 240, 0.94);
+}
+
+.public-page .image-meta p {
+    margin-top: 0.25rem;
+}
+
+.gallery-card > .tag-list .tag-list-label,
+.hero .tag-list .tag-list-label {
+    opacity: 0.7;
+}
+
+.vote-row {
+    margin-top: 0.6rem;
+}
+
+.vote-row span {
+    min-width: 5.25rem;
+}
+
+.vote-row button {
+    min-width: 2.1rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.lightbox figure {
+    display: grid;
+    gap: 0.75rem;
+    justify-items: center;
+}
+
+.lightbox-meta {
+    display: grid;
+    gap: 0.45rem;
+    justify-items: center;
+}
+
+.lightbox-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.lightbox-counter,
+.lightbox-help {
+    color: rgba(255, 253, 248, 0.78);
+    font-size: 0.9rem;
+}
+
+.lightbox-original-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #fffdf8;
+    border-radius: var(--radius, 16px);
+    color: #fffdf8;
+    padding: 0.35rem 0.65rem;
+    text-decoration: none;
+}
