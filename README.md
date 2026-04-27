@@ -107,6 +107,15 @@ deploy.bat
 
 The script prompts for FTP host, username, password, remote folder, and whether media should be uploaded. It excludes `.git`, `config.php`, cache, logs, temporary files, and local development artifacts.
 
+If you do not want the script to upload by FTP, choose local deploy folder mode when prompted. It creates a `deploy/` directory containing the files that should be copied manually with your FTP client.
+
+You can also run either mode explicitly:
+
+```bat
+deploy.bat -Mode local
+deploy.bat -Mode ftp
+```
+
 After upload:
 
 1. Create `config.php` on the server from `config.example.php`.
@@ -125,4 +134,3 @@ After upload:
 - SQL access uses PDO prepared statements.
 - User and database output is escaped with `htmlspecialchars`.
 - Passwords use `password_hash` and `password_verify`.
-
