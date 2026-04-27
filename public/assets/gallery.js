@@ -1,4 +1,6 @@
 (() => {
+    // Inline styles bypass the theme/custom CSS workflow. If somebody edits the
+    // rendered HTML directly, make the tampering obvious to public visitors.
     function showCompromiseWarning() {
         if (document.querySelector('[data-compromise-warning]')) {
             return;
@@ -24,6 +26,8 @@
         subtree: true,
     });
 
+    // Submit votes through fetch so the selected state and score update without
+    // leaving the lightbox/gallery page.
     document.addEventListener('submit', async (event) => {
         const form = event.target.closest('[data-vote-form]');
         if (!form) {
@@ -62,6 +66,8 @@
         }
     });
 
+    // Tag fields still store comma-separated text, but this small helper makes
+    // reused tags discoverable while the admin types.
     document.querySelectorAll('[data-tag-input]').forEach((input) => {
         const list = document.querySelector(`#${input.getAttribute('list')}`);
         const names = list ? Array.from(list.options).map((option) => option.value) : [];
@@ -98,6 +104,8 @@
         });
     });
 
+    // Lightbox state is derived from rendered image cards. Normal image links
+    // remain valid when JavaScript is unavailable.
     const cards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
     const overlay = document.querySelector('[data-lightbox]');
     if (!overlay || cards.length === 0) {

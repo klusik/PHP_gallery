@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+/**
+ * Configured filesystem root where gallery folders are stored.
+ */
 function galleries_root(): string
 {
     return rtrim((string) cms_config()['galleries_root'], DIRECTORY_SEPARATOR);
 }
 
+/**
+ * Resolve a gallery's relative folder path to an absolute filesystem path.
+ */
 function gallery_abs_path(string $relativePath): string
 {
     $relativePath = normalize_relative_path($relativePath);
@@ -17,6 +23,9 @@ function gallery_abs_path(string $relativePath): string
     return $path;
 }
 
+/**
+ * Resolve an image record to its absolute file path inside its gallery folder.
+ */
 function image_abs_path(array $image, array $gallery): string
 {
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
@@ -28,6 +37,13 @@ function image_abs_path(array $image, array $gallery): string
     return $path;
 }
 
+/**
+ * Find folders under galleries_root that can become gallery records.
+ *
+ * A folder is a candidate when it contains direct images, descendant images, or
+ * a gallery.json sidecar. Descendant images allow empty parent folders to become
+ * top-level galleries that contain subgalleries.
+ */
 function discover_gallery_candidates(): array
 {
     $root = galleries_root();
@@ -95,6 +111,9 @@ function discover_gallery_candidates(): array
     return $candidates;
 }
 
+/**
+ * Read optional gallery metadata from gallery.json.
+ */
 function read_gallery_sidecar(string $path): array
 {
     if (!is_file($path)) {
@@ -104,6 +123,9 @@ function read_gallery_sidecar(string $path): array
     return is_array($data) ? $data : [];
 }
 
+/**
+ * Persist editable gallery metadata back into gallery.json.
+ */
 function write_gallery_sidecar(array $gallery): void
 {
     $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json';
@@ -122,6 +144,9 @@ function write_gallery_sidecar(array $gallery): void
     file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+/**
+ * Create gallery rows for selected discovered folders.
+ */
 function import_galleries(array $folderPaths): int
 {
     $pdo = db();
@@ -162,6 +187,12 @@ function import_galleries(array $folderPaths): int
     return $count;
 }
 
+/**
+ * Import/update image rows for images directly inside one gallery folder.
+ *
+ * Child-folder images are intentionally ignored here because child folders are
+ * represented as subgalleries with their own scans.
+ */
 function scan_gallery_images(int $galleryId): int
 {
     $gallery = find_gallery($galleryId);
@@ -227,6 +258,9 @@ function scan_gallery_images(int $galleryId): int
     return $count;
 }
 
+/**
+ * Pick the first direct image as cover when the gallery has no explicit cover.
+ */
 function ensure_gallery_cover(int $galleryId): void
 {
     $gallery = find_gallery($galleryId);
@@ -243,6 +277,9 @@ function ensure_gallery_cover(int $galleryId): void
     $update->execute([(int) $coverId, now_sql(), $galleryId]);
 }
 
+/**
+ * Rebuild parent_id links from filesystem folder nesting.
+ */
 function sync_gallery_parent_ids(): void
 {
     $galleries = db()->query('SELECT id, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
@@ -259,6 +296,9 @@ function sync_gallery_parent_ids(): void
     }
 }
 
+/**
+ * Return direct child galleries for a parent gallery.
+ */
 function child_galleries(int $parentId, bool $publicOnly): array
 {
     $sql = "SELECT g.*, COUNT(i.id) AS image_count
@@ -275,6 +315,9 @@ function child_galleries(int $parentId, bool $publicOnly): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Walk from a gallery to its root ancestors for breadcrumb rendering.
+ */
 function gallery_ancestors(array $gallery, bool $publicOnly): array
 {
     $ancestors = [];
@@ -290,11 +333,17 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
     return $ancestors;
 }
 
+/**
+ * Public wrapper for the preferred direct cover image.
+ */
 function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
 {
     return gallery_direct_cover_image($galleryId, $publicOnly);
 }
 
+/**
+ * Return the explicit cover image or first direct image for one gallery.
+ */
 function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 {
     $gallery = find_gallery($galleryId);
@@ -340,6 +389,9 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
     return array_values($images);
 }
 
+/**
+ * Apply a cover image path from gallery.json after images have been scanned.
+ */
 function apply_gallery_cover_from_sidecar(array $gallery): void
 {
     $metadata = read_gallery_sidecar(gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json');
@@ -359,6 +411,9 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
     $stmt->execute([(int) $image['id'], now_sql(), (int) $gallery['id']]);
 }
 
+/**
+ * Fetch one gallery by numeric ID.
+ */
 function find_gallery(int $id): ?array
 {
     $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ?');
@@ -367,6 +422,9 @@ function find_gallery(int $id): ?array
     return $gallery ?: null;
 }
 
+/**
+ * Fetch one gallery by its public URL slug.
+ */
 function find_gallery_by_slug(string $slug): ?array
 {
     $stmt = db()->prepare('SELECT * FROM galleries WHERE slug = ?');
@@ -375,6 +433,9 @@ function find_gallery_by_slug(string $slug): ?array
     return $gallery ?: null;
 }
 
+/**
+ * Fetch one gallery by normalized folder path.
+ */
 function find_gallery_by_folder_path(string $folderPath): ?array
 {
     $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path_hash = ?');
@@ -383,6 +444,9 @@ function find_gallery_by_folder_path(string $folderPath): ?array
     return $gallery ?: null;
 }
 
+/**
+ * Find the nearest already-imported parent folder for a gallery path.
+ */
 function find_parent_gallery_for_path(string $folderPath): ?array
 {
     $segments = explode('/', normalize_relative_path($folderPath));
@@ -396,6 +460,9 @@ function find_parent_gallery_for_path(string $folderPath): ?array
     return null;
 }
 
+/**
+ * Fetch one image by numeric ID.
+ */
 function find_image(int $id): ?array
 {
     $stmt = db()->prepare('SELECT * FROM images WHERE id = ?');
@@ -404,6 +471,9 @@ function find_image(int $id): ?array
     return $image ?: null;
 }
 
+/**
+ * Fetch one image by gallery and normalized relative image path.
+ */
 function find_image_by_path(int $galleryId, string $relativePath): ?array
 {
     $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
@@ -412,6 +482,9 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
     return $image ?: null;
 }
 
+/**
+ * Sum all votes for an image.
+ */
 function vote_score(int $imageId): int
 {
     $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
@@ -419,6 +492,9 @@ function vote_score(int $imageId): int
     return (int) $stmt->fetchColumn();
 }
 
+/**
+ * Return the current logged-in user or visitor's vote for one image.
+ */
 function current_vote_for_image(int $imageId): int
 {
     $user = current_user();
@@ -453,6 +529,9 @@ function tag_slug(string $name): string
     return $slug !== '' ? substr($slug, 0, 120) : 'tag';
 }
 
+/**
+ * Return an existing tag ID or create a new tag row.
+ */
 function find_or_create_tag(string $name): int
 {
     $slug = tag_slug($name);
@@ -500,6 +579,9 @@ function tag_names_for_entity(string $type, int $id): string
     return implode(', ', array_column(tags_for_entity($type, $id), 'name'));
 }
 
+/**
+ * Return all tag names for datalist suggestions in admin forms.
+ */
 function all_tag_names(): array
 {
     try {
@@ -509,6 +591,9 @@ function all_tag_names(): array
     }
 }
 
+/**
+ * Fetch one tag by slug for public tag-filter pages.
+ */
 function find_tag_by_slug(string $slug): ?array
 {
     $stmt = db()->prepare('SELECT * FROM tags WHERE slug = ?');
@@ -517,6 +602,9 @@ function find_tag_by_slug(string $slug): ?array
     return $tag ?: null;
 }
 
+/**
+ * Return public galleries that directly or indirectly contain a tag.
+ */
 function public_galleries_for_tag(int $tagId): array
 {
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
@@ -532,6 +620,9 @@ function public_galleries_for_tag(int $tagId): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Aggregate tags from descendant galleries and descendant images.
+ */
 function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 {
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
@@ -558,6 +649,9 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Read one application setting with a fallback.
+ */
 function app_setting(string $key, ?string $default = null): ?string
 {
     try {
@@ -570,6 +664,9 @@ function app_setting(string $key, ?string $default = null): ?string
     }
 }
 
+/**
+ * Upsert one application setting.
+ */
 function set_app_setting(string $key, string $value): void
 {
     $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
@@ -597,11 +694,17 @@ function custom_css_path(): string
     return dirname(__DIR__) . '/public/assets/custom.css';
 }
 
+/**
+ * Return the custom CSS URL only when a custom file exists.
+ */
 function custom_css_url(): ?string
 {
     return is_file(custom_css_path()) ? asset_url('assets/custom.css') : null;
 }
 
+/**
+ * Ensure the ZIP cache folder exists and return its normalized path.
+ */
 function zip_cache_dir(): string
 {
     $path = (string) cms_config()['zip_cache_path'];
@@ -611,6 +714,9 @@ function zip_cache_dir(): string
     return rtrim($path, DIRECTORY_SEPARATOR);
 }
 
+/**
+ * Build a content signature for one gallery ZIP cache entry.
+ */
 function gallery_zip_signature(int $galleryId, bool $publicOnly): string
 {
     $sql = "SELECT relative_path, file_size, modified_at FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
@@ -624,12 +730,18 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
     return hash('sha256', json_encode($stmt->fetchAll(), JSON_UNESCAPED_SLASHES));
 }
 
+/**
+ * Build a content signature for the admin "all galleries" ZIP cache entry.
+ */
 function all_zip_signature(): string
 {
     $rows = db()->query("SELECT g.folder_path, i.relative_path, i.file_size, i.modified_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.relative_path")->fetchAll();
     return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
 }
 
+/**
+ * Create or reuse a ZIP archive for one gallery.
+ */
 function build_gallery_zip(int $galleryId, bool $publicOnly): string
 {
     $gallery = find_gallery($galleryId);
@@ -652,6 +764,9 @@ function build_gallery_zip(int $galleryId, bool $publicOnly): string
     return $filePath;
 }
 
+/**
+ * Create or reuse a ZIP archive containing every imported gallery.
+ */
 function build_all_zip(): string
 {
     $signature = all_zip_signature();
@@ -676,6 +791,9 @@ function build_all_zip(): string
     return $filePath;
 }
 
+/**
+ * Produce the list of files that should be stored in a gallery ZIP.
+ */
 function gallery_zip_files(array $gallery, bool $publicOnly): array
 {
     $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
@@ -699,6 +817,9 @@ function gallery_zip_files(array $gallery, bool $publicOnly): array
     return $files;
 }
 
+/**
+ * Write a ZIP archive to disk.
+ */
 function create_zip(string $filePath, array $files): void
 {
     if (!class_exists(ZipArchive::class)) {
@@ -715,6 +836,9 @@ function create_zip(string $filePath, array $files): void
     $zip->close();
 }
 
+/**
+ * Stream a ZIP file to the browser and stop processing.
+ */
 function send_download(string $filePath, string $downloadName): never
 {
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {

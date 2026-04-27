@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+/**
+ * Public homepage showing top-level public galleries.
+ */
 function cms_home(): void
 {
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
@@ -21,6 +24,9 @@ function cms_home(): void
     render_footer();
 }
 
+/**
+ * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
+ */
 function cms_gallery(): void
 {
     $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
@@ -70,6 +76,9 @@ function cms_gallery(): void
     render_footer();
 }
 
+/**
+ * Public tag-filter page listing galleries associated with a tag.
+ */
 function cms_tag(): void
 {
     $tag = find_tag_by_slug((string) ($_GET['slug'] ?? ''));
@@ -89,6 +98,9 @@ function cms_tag(): void
     render_footer();
 }
 
+/**
+ * Render gallery ancestor links for public navigation.
+ */
 function render_breadcrumbs(?array $gallery = null): void
 {
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs">';
@@ -102,6 +114,9 @@ function render_breadcrumbs(?array $gallery = null): void
     echo '</nav>';
 }
 
+/**
+ * Render one gallery card, including direct cover or child-cover collage.
+ */
 function render_gallery_card(array $gallery, bool $publicOnly): void
 {
     $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
@@ -126,6 +141,9 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '</article>';
 }
 
+/**
+ * Render clickable tag pills.
+ */
 function render_tag_list(array $tags, ?string $label = null): void
 {
     if (!$tags) {
@@ -141,6 +159,9 @@ function render_tag_list(array $tags, ?string $label = null): void
     echo '</p>';
 }
 
+/**
+ * Render the public vote controls and current vote state.
+ */
 function render_vote_form(int $imageId, int $score, int $currentVote): void
 {
     echo '<form class="vote-row" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
@@ -151,6 +172,9 @@ function render_vote_form(int $imageId, int $score, int $currentVote): void
     echo '</form>';
 }
 
+/**
+ * Render the lightbox shell used by public gallery JavaScript.
+ */
 function render_lightbox(): void
 {
     echo '<div class="lightbox" data-lightbox hidden>';
@@ -161,6 +185,9 @@ function render_lightbox(): void
     echo '</div>';
 }
 
+/**
+ * Stream a protected image file after checking gallery/image visibility.
+ */
 function cms_media(): void
 {
     $image = find_image((int) ($_GET['id'] ?? 0));
@@ -189,6 +216,9 @@ function cms_media(): void
     readfile($path);
 }
 
+/**
+ * Record or update the current visitor's vote for an image.
+ */
 function cms_vote(): void
 {
     if (request_method() !== 'POST') {
@@ -221,6 +251,9 @@ function cms_vote(): void
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }
 
+/**
+ * Download a public ZIP for one gallery.
+ */
 function cms_download_gallery(): void
 {
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
@@ -232,6 +265,9 @@ function cms_download_gallery(): void
     send_download($zip, slugify((string) $gallery['title']) . '.zip');
 }
 
+/**
+ * Download an admin ZIP containing all imported galleries.
+ */
 function cms_download_all(): void
 {
     require_admin();
@@ -239,6 +275,9 @@ function cms_download_all(): void
     send_download($zip, 'all-galleries.zip');
 }
 
+/**
+ * Render and process the admin login form.
+ */
 function cms_admin_login(): void
 {
     if (request_method() === 'POST') {
@@ -265,12 +304,18 @@ function cms_admin_login(): void
     render_footer();
 }
 
+/**
+ * Log the admin out of the current session.
+ */
 function cms_admin_logout(): void
 {
     unset($_SESSION['user_id']);
     redirect_to(url_for('home'));
 }
 
+/**
+ * Render and process visual theme settings.
+ */
 function cms_admin_theme(): void
 {
     require_admin();
@@ -305,6 +350,9 @@ function cms_admin_theme(): void
     render_footer();
 }
 
+/**
+ * Admin dashboard for gallery scanning, publishing, and bulk actions.
+ */
 function cms_admin(): void
 {
     require_admin();
@@ -331,6 +379,9 @@ function cms_admin(): void
     render_footer();
 }
 
+/**
+ * Show filesystem folders that can be imported as galleries.
+ */
 function cms_admin_discover(): void
 {
     require_admin();
@@ -351,6 +402,9 @@ function cms_admin_discover(): void
     render_footer();
 }
 
+/**
+ * Import selected discovered gallery folders.
+ */
 function cms_admin_import(): void
 {
     require_admin();
@@ -359,6 +413,9 @@ function cms_admin_import(): void
     redirect_to(url_for('admin', ['imported' => $count]));
 }
 
+/**
+ * Apply a bulk action to selected galleries.
+ */
 function cms_admin_bulk_galleries(): void
 {
     require_admin();
@@ -387,6 +444,9 @@ function cms_admin_bulk_galleries(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Scan selected galleries or one gallery from its edit page.
+ */
 function cms_admin_scan_images(): void
 {
     require_admin();
@@ -402,6 +462,9 @@ function cms_admin_scan_images(): void
     redirect_to(url_for('admin', ['scanned' => $count]));
 }
 
+/**
+ * Render and process gallery metadata editing.
+ */
 function cms_admin_edit_gallery(): void
 {
     require_admin();
@@ -461,6 +524,9 @@ function cms_admin_edit_gallery(): void
     render_footer();
 }
 
+/**
+ * Apply a bulk action to images inside one gallery.
+ */
 function cms_admin_bulk_images(): void
 {
     require_admin();
@@ -503,6 +569,9 @@ function cms_admin_bulk_images(): void
     redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
 }
 
+/**
+ * Render and process image metadata editing.
+ */
 function cms_admin_edit_image(): void
 {
     require_admin();
@@ -533,6 +602,9 @@ function cms_admin_edit_image(): void
     render_footer();
 }
 
+/**
+ * Fetch images for admin/public rendering, optionally public-only.
+ */
 function gallery_images(int $galleryId, bool $publicOnly): array
 {
     $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
@@ -545,6 +617,9 @@ function gallery_images(int $galleryId, bool $publicOnly): array
     return $stmt->fetchAll();
 }
 
+/**
+ * Build visibility select options.
+ */
 function visibility_options(string $selected): string
 {
     $html = '';
@@ -554,12 +629,18 @@ function visibility_options(string $selected): string
     return $html;
 }
 
+/**
+ * Validate a six-digit hex color from theme settings.
+ */
 function sanitize_hex_color(string $value, string $fallback): string
 {
     $value = trim($value);
     return preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : $fallback;
 }
 
+/**
+ * Render existing tags as datalist suggestions for tag inputs.
+ */
 function render_tag_datalist(): void
 {
     echo '<datalist id="tag-suggestions">';
@@ -569,6 +650,9 @@ function render_tag_datalist(): void
     echo '</datalist>';
 }
 
+/**
+ * Build parent gallery options while preventing cycles.
+ */
 function gallery_parent_options(array $currentGallery): string
 {
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
@@ -588,6 +672,9 @@ function gallery_parent_options(array $currentGallery): string
     return $html;
 }
 
+/**
+ * Build cover-image options for one gallery.
+ */
 function gallery_cover_options(int $galleryId, int $selectedImageId): string
 {
     $images = gallery_images($galleryId, false);
@@ -600,6 +687,9 @@ function gallery_cover_options(int $galleryId, int $selectedImageId): string
     return $html;
 }
 
+/**
+ * Generate a unique slug from a submitted slug value.
+ */
 function unique_slug_for_value(string $slug, int $excludeGalleryId): string
 {
     $pdo = db();
@@ -617,6 +707,9 @@ function unique_slug_for_value(string $slug, int $excludeGalleryId): string
     }
 }
 
+/**
+ * Browser setup route protected by config setup_key.
+ */
 function cms_setup(): void
 {
     $key = (string) ($_GET['key'] ?? '');
@@ -644,6 +737,9 @@ function cms_setup(): void
     render_footer();
 }
 
+/**
+ * Render a generic 404 page.
+ */
 function cms_not_found(): void
 {
     http_response_code(404);

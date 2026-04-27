@@ -1,4 +1,5 @@
 :root {
+    /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
     --ink: #202124;
     --muted: #626975;
     --paper: #f8f4ec;
@@ -8,6 +9,8 @@
     --accent-dark: #713414;
     --field: #fffdf8;
 }
+
+/* Global page frame ------------------------------------------------------- */
 
 * {
     box-sizing: border-box;
@@ -31,6 +34,8 @@ img {
     max-width: 100%;
     height: auto;
 }
+
+/* Shared navigation and buttons ------------------------------------------ */
 
 .site-header,
 .site-main,
@@ -79,6 +84,8 @@ button.secondary {
     background: transparent;
     color: var(--accent-dark);
 }
+
+/* Panels, cards, and gallery grids --------------------------------------- */
 
 .hero,
 .panel,
@@ -169,6 +176,8 @@ button.secondary {
     color: var(--muted);
 }
 
+/* Admin forms, breadcrumbs, and hierarchy indicators --------------------- */
+
 .form-grid {
     display: grid;
     gap: 0.8rem;
@@ -244,6 +253,8 @@ textarea {
     min-height: 8rem;
 }
 
+/* Tags ------------------------------------------------------------------- */
+
 .tag-list {
     display: flex;
     align-items: center;
@@ -290,6 +301,8 @@ textarea {
     color: var(--accent-dark);
 }
 
+/* Tables and admin thumbnails -------------------------------------------- */
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -317,6 +330,8 @@ td {
     border: 1px solid #e3c46d;
     margin-bottom: 1rem;
 }
+
+/* Voting and lightbox ----------------------------------------------------- */
 
 .vote-row {
     display: flex;
@@ -382,6 +397,8 @@ td {
     overflow: hidden;
 }
 
+/* Tamper warning ---------------------------------------------------------- */
+
 .compromise-warning {
     position: fixed;
     inset: 0;
@@ -394,6 +411,8 @@ td {
     font: 700 clamp(1.5rem, 5vw, 4rem) Arial, sans-serif;
     text-align: center;
 }
+
+/* Responsive adjustments -------------------------------------------------- */
 
 .site-footer {
     padding: 2rem 0;

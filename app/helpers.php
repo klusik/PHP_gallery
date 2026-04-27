@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+/**
+ * Escape text for safe HTML output.
+ */
 function e(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Build an absolute or root-relative URL using the configured base URL.
+ */
 function base_url(string $path = ''): string
 {
     $base = rtrim((string) cms_config()['base_url'], '/');
@@ -19,12 +25,18 @@ function base_url(string $path = ''): string
     return ($base === '' ? '' : $base) . '/' . ltrim($path, '/');
 }
 
+/**
+ * Build a query-string route URL.
+ */
 function url_for(string $page, array $params = []): string
 {
     $params = ['page' => $page] + $params;
     return base_url('index.php?' . http_build_query($params));
 }
 
+/**
+ * Resolve public asset paths for either repository-root or public/ web roots.
+ */
 function asset_url(string $path): string
 {
     $path = ltrim($path, '/');
@@ -36,22 +48,34 @@ function asset_url(string $path): string
     return base_url('public/' . $path);
 }
 
+/**
+ * Send a 302 redirect and stop processing immediately.
+ */
 function redirect_to(string $url): never
 {
     header('Location: ' . $url, true, 302);
     exit;
 }
 
+/**
+ * Normalize the current HTTP method for simple route guards.
+ */
 function request_method(): string
 {
     return strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 }
 
+/**
+ * Return the current timestamp in the format used by MySQL DATETIME columns.
+ */
 function now_sql(): string
 {
     return date('Y-m-d H:i:s');
 }
 
+/**
+ * Convert human-entered titles/tag names into URL-safe slugs.
+ */
 function slugify(string $text): string
 {
     $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
@@ -61,6 +85,9 @@ function slugify(string $text): string
     return $slug !== '' ? $slug : 'gallery';
 }
 
+/**
+ * Generate a unique gallery slug, optionally excluding an existing gallery ID.
+ */
 function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): string
 {
     $base = slugify($title);
@@ -83,6 +110,9 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
     }
 }
 
+/**
+ * Render the shared document header, navigation, theme variables, and CSS links.
+ */
 function render_header(string $title): void
 {
     $user = current_user();
@@ -110,6 +140,9 @@ function render_header(string $title): void
     echo '</nav></header><main class="site-main">';
 }
 
+/**
+ * Render the shared footer and JavaScript include.
+ */
 function render_footer(): void
 {
     echo '</main><footer class="site-footer muted">Plain PHP gallery CMS.</footer>';
@@ -117,16 +150,25 @@ function render_footer(): void
     echo '</body></html>';
 }
 
+/**
+ * Image extensions accepted during filesystem scans.
+ */
 function supported_image_extensions(): array
 {
     return ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 }
 
+/**
+ * Check whether a path points to one of the supported image formats.
+ */
 function is_supported_image_path(string $path): bool
 {
     return in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), supported_image_extensions(), true);
 }
 
+/**
+ * Normalize a user/filesystem relative path and reject traversal segments.
+ */
 function normalize_relative_path(string $path): string
 {
     $path = str_replace('\\', '/', $path);
@@ -143,6 +185,9 @@ function normalize_relative_path(string $path): string
     return implode('/', $segments);
 }
 
+/**
+ * Verify that a resolved path stays inside a resolved root directory.
+ */
 function path_inside(string $root, string $path): bool
 {
     $rootReal = realpath($root);
