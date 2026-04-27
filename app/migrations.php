@@ -22,17 +22,17 @@ function run_migrations(): array
             continue;
         }
         $statements = require $file;
-        $pdo->beginTransaction();
         try {
             foreach ($statements as $statement) {
                 $pdo->exec($statement);
             }
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
             $stmt->execute([$version, now_sql()]);
-            $pdo->commit();
             $ran[] = $version;
         } catch (Throwable $exception) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             throw $exception;
         }
     }
