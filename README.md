@@ -20,6 +20,7 @@ This release contains the full plain-PHP gallery application:
 - admin dashboard with bulk gallery and image actions
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
+- visible inherited tags for galleries that contain tagged subgalleries
 - theme controls and optional custom CSS upload
 - ZIP downloads for one gallery or all galleries
 - FTP/local deployment helper scripts
@@ -170,7 +171,16 @@ entered as comma-separated text. Existing tags are suggested while typing so the
 same tag names can be reused consistently.
 
 Tags are stored in reusable database tables and displayed on public gallery and
-image cards.
+image cards. Public tags are clickable. Clicking a tag opens a filtered gallery
+listing such as:
+
+```text
+index.php?page=tag&slug=travel
+```
+
+Parent galleries also show `Containing tags` when their subgalleries or
+subgallery images use tags. This makes top-level galleries useful even when the
+top-level folder only contains subfolders.
 
 ## Theme And Templates
 
@@ -311,6 +321,8 @@ Use these rules when adding or changing screens:
 - show current state clearly, for example active votes use `.is-active`
 - keep public image browsing in the lightbox, with visible previous/next buttons
   and keyboard left/right support
+- never add inline `style=""` attributes to rendered HTML; the public JavaScript
+  treats inline style attributes as tampering and shows a full-page warning
 
 Gallery title pictures should be compact. If a parent gallery has no direct
 image, its card may use a small collage from subgallery covers, but it should

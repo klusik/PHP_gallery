@@ -9,6 +9,13 @@ require __DIR__ . '/migrations.php';
 require __DIR__ . '/services.php';
 require __DIR__ . '/controllers.php';
 
+/**
+ * Load the application configuration once per request.
+ *
+ * Production installs should provide config.php. The example config is used as
+ * a fallback so installer/setup pages can render before final configuration is
+ * written.
+ */
 function cms_config(): array
 {
     static $config = null;
@@ -25,6 +32,12 @@ function cms_config(): array
     return $config;
 }
 
+/**
+ * Start the session, resolve the requested route, and dispatch to a controller.
+ *
+ * The project intentionally uses a small route table instead of a framework so
+ * it remains easy to run on shared hosting.
+ */
 function cms_run(): void
 {
     $config = cms_config();
@@ -41,6 +54,7 @@ function cms_run(): void
     $routes = [
         'home' => 'cms_home',
         'gallery' => 'cms_gallery',
+        'tag' => 'cms_tag',
         'media' => 'cms_media',
         'vote' => 'cms_vote',
         'download_gallery' => 'cms_download_gallery',
@@ -63,6 +77,12 @@ function cms_run(): void
     $handler();
 }
 
+/**
+ * Convert either query-string routes or simple pretty URLs into a page name.
+ *
+ * Query-string routes are the canonical form. Pretty URLs are only a convenience
+ * layer when Apache rewrite rules are available.
+ */
 function cms_route_from_request(): array
 {
     if (isset($_GET['page'])) {
@@ -84,6 +104,9 @@ function cms_route_from_request(): array
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
         return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+    }
+    if ($segments[0] === 'tag' && isset($segments[1])) {
+        return ['page' => 'tag', 'params' => ['slug' => rawurldecode($segments[1])]];
     }
     if ($segments[0] === 'admin') {
         return ['page' => 'admin', 'params' => []];

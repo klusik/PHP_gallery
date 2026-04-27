@@ -15,6 +15,7 @@ Important routes:
 - `page=home` lists public top-level galleries.
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
+- `page=tag&slug=...` renders a public gallery listing filtered by one tag.
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.
@@ -54,7 +55,10 @@ cover image, public gallery cards can compose a small cover from child gallery
 covers.
 
 `tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as
-comma-separated text; the UI recommends existing tags while typing.
+comma-separated text; the UI recommends existing tags while typing. Public tag
+links filter galleries by gallery tags and by image tags. Parent galleries can
+also display `Containing tags`, which are aggregated from descendant galleries
+and their images.
 
 `image_votes` stores one vote per logged-in user or anonymous visitor hash.
 Scores are summed from those rows, and the UI marks the current visitor's choice.
@@ -62,6 +66,10 @@ Scores are summed from those rows, and the UI marks the current visitor's choice
 `app_settings` stores theme values such as colors, radius, and font mode. A
 custom CSS upload is saved to `public/assets/custom.css` and loaded after the
 built-in stylesheet.
+
+The public JavaScript intentionally detects inline `style` attributes and shows
+a full-page warning. Theme changes should go through theme settings or custom
+CSS, not ad hoc inline HTML styling.
 
 Migrations are ordered PHP files that return SQL statements. The runner records
 applied versions in `schema_migrations`. MySQL DDL statements are not wrapped in

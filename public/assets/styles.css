@@ -1,4 +1,5 @@
 :root {
+    /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
     --ink: #202124;
     --muted: #626975;
     --paper: #f8f4ec;
@@ -8,6 +9,8 @@
     --accent-dark: #713414;
     --field: #fffdf8;
 }
+
+/* Global page frame ------------------------------------------------------- */
 
 * {
     box-sizing: border-box;
@@ -31,6 +34,8 @@ img {
     max-width: 100%;
     height: auto;
 }
+
+/* Shared navigation and buttons ------------------------------------------ */
 
 .site-header,
 .site-main,
@@ -80,6 +85,8 @@ button.secondary {
     color: var(--accent-dark);
 }
 
+/* Panels, cards, and gallery grids --------------------------------------- */
+
 .hero,
 .panel,
 .gallery-card,
@@ -107,7 +114,7 @@ button.secondary {
     border-radius: var(--radius, 16px);
 }
 
-.gallery-card a {
+.gallery-card-link {
     display: grid;
     min-height: 12rem;
     color: inherit;
@@ -169,6 +176,8 @@ button.secondary {
     color: var(--muted);
 }
 
+/* Admin forms, breadcrumbs, and hierarchy indicators --------------------- */
+
 .form-grid {
     display: grid;
     gap: 0.8rem;
@@ -203,8 +212,16 @@ button.secondary {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding-left: calc(var(--depth, 0) * 1.4rem);
 }
+
+.tree-depth-1 { padding-left: 1.4rem; }
+.tree-depth-2 { padding-left: 2.8rem; }
+.tree-depth-3 { padding-left: 4.2rem; }
+.tree-depth-4 { padding-left: 5.6rem; }
+.tree-depth-5 { padding-left: 7rem; }
+.tree-depth-6 { padding-left: 8.4rem; }
+.tree-depth-7 { padding-left: 9.8rem; }
+.tree-depth-8 { padding-left: 11.2rem; }
 
 .tree-branch::before {
     content: "\21B3";
@@ -236,19 +253,40 @@ textarea {
     min-height: 8rem;
 }
 
+/* Tags ------------------------------------------------------------------- */
+
 .tag-list {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
     gap: 0.35rem;
     margin: 0.5rem 0;
 }
 
+.gallery-card > .tag-list {
+    padding: 0 1rem 1rem;
+}
+
+.tag-list-label {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
 .tag {
+    color: var(--accent-dark);
     border: 1px solid var(--line);
     background: rgba(255, 253, 248, 0.75);
     border-radius: 999px;
     padding: 0.15rem 0.5rem;
     font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.tag:hover,
+.tag:focus {
+    border-color: var(--accent-dark);
+    background: var(--panel);
 }
 
 .tag-suggestions {
@@ -262,6 +300,8 @@ textarea {
     background: transparent;
     color: var(--accent-dark);
 }
+
+/* Tables and admin thumbnails -------------------------------------------- */
 
 table {
     width: 100%;
@@ -290,6 +330,8 @@ td {
     border: 1px solid #e3c46d;
     margin-bottom: 1rem;
 }
+
+/* Voting and lightbox ----------------------------------------------------- */
 
 .vote-row {
     display: flex;
@@ -354,6 +396,23 @@ td {
 .has-lightbox {
     overflow: hidden;
 }
+
+/* Tamper warning ---------------------------------------------------------- */
+
+.compromise-warning {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    background: rgba(20, 0, 0, 0.92);
+    color: #fff;
+    font: 700 clamp(1.5rem, 5vw, 4rem) Arial, sans-serif;
+    text-align: center;
+}
+
+/* Responsive adjustments -------------------------------------------------- */
 
 .site-footer {
     padding: 2rem 0;

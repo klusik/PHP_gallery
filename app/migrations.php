@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+/**
+ * Apply all pending database migrations in filename order.
+ *
+ * MySQL can auto-commit DDL statements such as CREATE TABLE, so migrations are
+ * not wrapped in an explicit transaction. Each migration records its version
+ * only after every SQL statement in that file has executed successfully.
+ */
 function run_migrations(): array
 {
     $pdo = db();
