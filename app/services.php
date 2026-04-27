@@ -521,12 +521,40 @@ function public_galleries_for_tag(int $tagId): array
 {
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
-        JOIN gallery_tags gt ON gt.gallery_id = g.id
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE gt.tag_id = ? AND g.visibility = 'public'
+        WHERE g.visibility = 'public' AND (
+            EXISTS (SELECT 1 FROM gallery_tags gt WHERE gt.gallery_id = g.id AND gt.tag_id = ?)
+            OR EXISTS (SELECT 1 FROM image_tags it JOIN images tagged_image ON tagged_image.id = it.image_id WHERE tagged_image.gallery_id = g.id AND it.tag_id = ?)
+        )
         GROUP BY g.id
         ORDER BY g.sort_order, g.title");
-    $stmt->execute([$tagId]);
+    $stmt->execute([$tagId, $tagId]);
+    return $stmt->fetchAll();
+}
+
+function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
+{
+    $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+    if ($folderPath === '') {
+        return [];
+    }
+    $visibilitySql = $publicOnly ? " AND g.visibility = 'public'" : '';
+    $imageVisibilitySql = $publicOnly ? " AND tagged_image.visibility = 'public'" : '';
+    $sql = "SELECT DISTINCT t.id, t.name, t.slug
+        FROM tags t
+        JOIN gallery_tags gt ON gt.tag_id = t.id
+        JOIN galleries g ON g.id = gt.gallery_id
+        WHERE g.folder_path LIKE ?" . $visibilitySql . "
+        UNION
+        SELECT DISTINCT t.id, t.name, t.slug
+        FROM tags t
+        JOIN image_tags it ON it.tag_id = t.id
+        JOIN images tagged_image ON tagged_image.id = it.image_id
+        JOIN galleries g ON g.id = tagged_image.gallery_id
+        WHERE g.folder_path LIKE ?" . $visibilitySql . $imageVisibilitySql . "
+        ORDER BY name";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$folderPath . '/%', $folderPath . '/%']);
     return $stmt->fetchAll();
 }
 

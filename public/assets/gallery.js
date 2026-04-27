@@ -1,4 +1,29 @@
 (() => {
+    function showCompromiseWarning() {
+        if (document.querySelector('[data-compromise-warning]')) {
+            return;
+        }
+        const warning = document.createElement('div');
+        warning.className = 'compromise-warning';
+        warning.dataset.compromiseWarning = 'true';
+        warning.textContent = 'unoriginal changes, this page is corrupted and compromised!';
+        document.body.append(warning);
+    }
+
+    function detectInlineStyleTampering() {
+        if (document.querySelector('[style]')) {
+            showCompromiseWarning();
+        }
+    }
+
+    detectInlineStyleTampering();
+    new MutationObserver(detectInlineStyleTampering).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['style'],
+        childList: true,
+        subtree: true,
+    });
+
     document.addEventListener('submit', async (event) => {
         const form = event.target.closest('[data-vote-form]');
         if (!form) {

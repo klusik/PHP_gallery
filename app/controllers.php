@@ -43,6 +43,9 @@ function cms_gallery(): void
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
+    if ($children) {
+        render_tag_list(contained_tags_for_gallery($gallery, true), 'Containing tags');
+    }
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
@@ -102,7 +105,7 @@ function render_breadcrumbs(?array $gallery = null): void
 function render_gallery_card(array $gallery, bool $publicOnly): void
 {
     $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card"><a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
+    echo '<article class="gallery-card"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
     if ($cover) {
         echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $cover['id']])) . '" alt="">';
     } else {
@@ -118,15 +121,20 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
     echo '<p>' . e($gallery['description']) . '</p>';
     echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p></span>';
-    echo '</a></article>';
+    echo '</a>';
+    render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+    echo '</article>';
 }
 
-function render_tag_list(array $tags): void
+function render_tag_list(array $tags, ?string $label = null): void
 {
     if (!$tags) {
         return;
     }
     echo '<p class="tag-list">';
+    if ($label !== null) {
+        echo '<span class="tag-list-label">' . e($label) . '</span>';
+    }
     foreach ($tags as $tag) {
         echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
     }
@@ -313,7 +321,8 @@ function cms_admin(): void
     foreach ($galleries as $gallery) {
         $depth = substr_count((string) $gallery['folder_path'], '/');
         echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
-        echo '<td><span class="tree-title" style="--depth: ' . $depth . '">' . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . e($gallery['title']) . '</span></td>';
+        $depthClass = 'tree-depth-' . min($depth, 8);
+        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . e($gallery['title']) . '</span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav">';
         echo '<a href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
         echo '</td></tr>';
