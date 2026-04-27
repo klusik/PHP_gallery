@@ -6,7 +6,7 @@ A small PHP 8+ gallery CMS for ordinary shared hosting. Media discovery comes fr
 
 - PHP 8.0 or newer
 - MySQL or MariaDB
-- PHP extensions: PDO MySQL, ZipArchive, GD or another extension that supports `getimagesize`
+- PHP extensions: PDO MySQL, ZipArchive, and GD for thumbnail creation
 - Apache with `.htaccess` support is recommended, but query-string routes also work
 
 No WordPress, Composer packages, npm build step, or framework is required.
@@ -20,6 +20,8 @@ This release contains the full plain-PHP gallery application:
 - admin dashboard with bulk gallery and image actions
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
+- web-optimized JPEG thumbnails generated in each gallery's `thumbs/` folder
+- automatic scan and optional thumbnail creation during gallery import
 - visible inherited tags for galleries that contain tagged subgalleries
 - theme controls and optional custom CSS upload
 - ZIP downloads for one gallery or all galleries
@@ -152,17 +154,56 @@ Admin workflow:
 
 1. Log in at `index.php?page=admin_login`.
 2. Use `Check for new gallery folders`.
-3. Review detected folders and import selected galleries.
-4. Use `Scan images` for each imported gallery.
+3. Review detected folders and import selected galleries. Importing a parent
+   folder also imports its detected subgallery folders.
+4. Leave `Create optimized thumbnails during import` checked unless you want to
+   generate thumbnails later from the admin dashboard.
 5. Use bulk actions to scan, publish, draft, or privatize selected galleries.
-6. Edit gallery title, description, slug, visibility, sort order, parent gallery,
+6. Use the gallery or image thumbnail buttons when you need to rebuild generated
+   thumbnails after replacing source files.
+7. Edit gallery title, description, slug, visibility, sort order, parent gallery,
    title picture, and tags.
-7. Edit image title, description, visibility, sort order, and tags.
+8. Edit image title, description, visibility, sort order, and tags.
 
 Discovery is explicit and does not run on public requests.
 
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
-subgallery cards, lightbox image browsing, and keyboard left/right navigation.
+subgallery cards, lightbox image browsing, keyboard left/right navigation, and
+keyboard up/down voting in the lightbox.
+
+## Thumbnails
+
+Thumbnail generation creates a `thumbs/` folder inside each imported gallery
+folder when needed. Every generated file is a JPEG, even when the source image is
+PNG, GIF, or WebP. The filenames keep the original base name and add the target
+size:
+
+```text
+some_picture.jpg
+thumbs/some_picture_thumb300.jpg
+thumbs/some_picture_thumb800.jpg
+```
+
+Cards advertise both `300` and `800` variants through responsive image sources,
+so the browser can pick the right file for the rendered size. Admin previews use
+the smaller variant. Both sizes mean "maximum longer side"; smaller source
+images are not enlarged. The public lightbox loads the original protected media
+route and links the displayed image to that same original route.
+
+Admins can create or rebuild thumbnails in several places:
+
+- during import, with the default-checked import option
+- from the dashboard, for all galleries
+- from a gallery row, for that gallery
+- from a gallery edit page, for all images or selected images
+
+Generated thumbnails are served through `index.php?page=thumb&id=...&size=...`
+so gallery and image visibility checks still apply.
+
+Existing thumbnails are not regenerated when they are already newer than the
+source image. Thumbnail actions run in AJAX batches when JavaScript is enabled,
+showing a progress bar with checked images plus created and skipped file counts.
+Without JavaScript, the same buttons fall back to the normal form submit.
 
 ## Tags
 
@@ -321,6 +362,7 @@ Use these rules when adding or changing screens:
 - show current state clearly, for example active votes use `.is-active`
 - keep public image browsing in the lightbox, with visible previous/next buttons
   and keyboard left/right support
+- keep the lightbox vote controls visible; keyboard up/down maps to vote up/down
 - never add inline `style=""` attributes to rendered HTML; the public JavaScript
   treats inline style attributes as tampering and shows a full-page warning
 
@@ -373,6 +415,13 @@ ZIP files are cached under `zip_cache_path`. The cache key is derived from image
 ## Voting
 
 Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed. The public UI marks the current visitor's selected up/down vote.
+
+## Admin Gallery Tree
+
+The admin gallery table is hierarchical. Subgalleries can be collapsed or
+expanded individually, and the dashboard has `Collapse all` and `Expand all`
+controls. The collapsed gallery IDs are stored in `app_settings`, so the tree
+state persists across reloads.
 
 ## FTP Deployment
 

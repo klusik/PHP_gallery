@@ -23,11 +23,14 @@ function cms_config(): array
         return $config;
     }
 
+    // Variable $configFile stores this steps working value.
     $configFile = dirname(__DIR__) . '/config.php';
     if (!is_file($configFile)) {
+        // Variable $configFile stores this steps working value.
         $configFile = dirname(__DIR__) . '/config.example.php';
     }
 
+    // Variable $config stores this steps working value.
     $config = require $configFile;
     return $config;
 }
@@ -40,23 +43,38 @@ function cms_config(): array
  */
 function cms_run(): void
 {
+    // Variable $config stores this steps working value.
     $config = cms_config();
     session_name((string) $config['admin_session_name']);
     if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
         session_start();
     }
+    send_security_headers();
 
+    // Variable $route stores this steps working value.
     $route = cms_route_from_request();
+    // Variable $page stores this steps working value.
     $page = $route['page'];
+    $_GET['page'] = $page;
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    // Variable $routes stores this steps working value.
     $routes = [
         'home' => 'cms_home',
         'gallery' => 'cms_gallery',
         'tag' => 'cms_tag',
         'media' => 'cms_media',
+        'thumb' => 'cms_thumb',
         'vote' => 'cms_vote',
+        'theme_css' => 'cms_theme_css',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',
@@ -66,6 +84,8 @@ function cms_run(): void
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
+        'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
@@ -73,6 +93,7 @@ function cms_run(): void
         'setup' => 'cms_setup',
     ];
 
+    // Variable $handler stores this steps working value.
     $handler = $routes[$page] ?? 'cms_not_found';
     $handler();
 }
@@ -89,14 +110,19 @@ function cms_route_from_request(): array
         return ['page' => (string) $_GET['page'], 'params' => []];
     }
 
+    // Variable $path stores this steps working value.
     $path = trim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH), '/');
+    // Variable $scriptDir stores this steps working value.
     $scriptDir = trim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
     if ($scriptDir !== '' && str_starts_with($path, $scriptDir . '/')) {
+        // Variable $path stores this steps working value.
         $path = substr($path, strlen($scriptDir) + 1);
     }
     if (str_starts_with($path, 'public/')) {
+        // Variable $path stores this steps working value.
         $path = substr($path, 7);
     }
+    // Variable $segments stores this steps working value.
     $segments = array_values(array_filter(explode('/', $path), static fn (string $segment): bool => $segment !== ''));
 
     if ($segments === [] || $segments === ['index.php']) {

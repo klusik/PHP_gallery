@@ -24,7 +24,8 @@ return [
         updated_at DATETIME NOT NULL,
         UNIQUE KEY galleries_folder_path_hash_unique (folder_path_hash),
         UNIQUE KEY galleries_slug_unique (slug),
-        KEY galleries_parent_id_index (parent_id)
+        KEY galleries_parent_id_index (parent_id),
+        KEY galleries_parent_visibility_sort_index (parent_id, visibility, sort_order, title)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     "CREATE TABLE images (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -46,6 +47,7 @@ return [
         updated_at DATETIME NOT NULL,
         UNIQUE KEY images_gallery_path_hash_unique (gallery_id, relative_path_hash),
         KEY images_gallery_id_index (gallery_id),
+        KEY images_visibility_sort_index (gallery_id, visibility, sort_order, filename),
         CONSTRAINT images_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     "CREATE TABLE image_votes (
@@ -58,6 +60,7 @@ return [
         updated_at DATETIME NOT NULL,
         UNIQUE KEY image_votes_image_user_unique (image_id, user_id),
         UNIQUE KEY image_votes_image_visitor_unique (image_id, visitor_hash),
+        KEY image_votes_image_vote_index (image_id, vote),
         CONSTRAINT image_votes_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT image_votes_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
         CONSTRAINT image_votes_vote_check CHECK (vote IN (-1, 1))

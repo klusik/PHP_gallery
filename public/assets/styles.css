@@ -1,13 +1,23 @@
 :root {
     /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
+    /* `--ink` defines the base foreground text color used across the UI. */
     --ink: #202124;
+    /* `--muted` defines secondary text tone for less prominent metadata. */
     --muted: #626975;
+    /* `--paper` defines the page-level background tone. */
     --paper: #f8f4ec;
+    /* `--panel` defines container backgrounds for cards, panels, and tables. */
     --panel: #fffaf0;
+    /* `--line` defines shared border and divider color. */
     --line: #ded4c2;
+    /* `--accent` defines primary interactive color. */
     --accent: #a5481c;
+    /* `--accent-dark` defines darker accent tone for contrast and links. */
     --accent-dark: #713414;
+    /* `--field` defines form control background fill. */
     --field: #fffdf8;
+    /* `--radius` controls rounded corner size for reusable components. */
+    --radius: 16px;
 }
 
 /* Global page frame ------------------------------------------------------- */
@@ -35,7 +45,7 @@ img {
     height: auto;
 }
 
-/* Shared navigation and buttons ------------------------------------------ */
+/* Shared navigation and buttons */
 
 .site-header,
 .site-main,
@@ -76,7 +86,7 @@ input[type="submit"] {
     text-decoration: none;
     cursor: pointer;
     font: inherit;
-    border-radius: 999px;
+    border-radius: var(--radius, 16px);
 }
 
 .button.secondary,
@@ -85,7 +95,7 @@ button.secondary {
     color: var(--accent-dark);
 }
 
-/* Panels, cards, and gallery grids --------------------------------------- */
+/* Panels, cards, and gallery grids */
 
 .hero,
 .panel,
@@ -100,6 +110,7 @@ button.secondary {
 .panel {
     padding: clamp(1rem, 3vw, 2rem);
     margin-bottom: 1rem;
+    border-radius: var(--radius, 16px);
 }
 
 .grid {
@@ -176,7 +187,7 @@ button.secondary {
     color: var(--muted);
 }
 
-/* Admin forms, breadcrumbs, and hierarchy indicators --------------------- */
+/* Admin forms, breadcrumbs, and hierarchy indicators */
 
 .form-grid {
     display: grid;
@@ -247,13 +258,18 @@ select {
     background: var(--field);
     color: var(--ink);
     font: inherit;
+    border-radius: var(--radius, 16px);
 }
 
 textarea {
     min-height: 8rem;
 }
 
-/* Tags ------------------------------------------------------------------- */
+input[type="checkbox"] {
+    width: auto;
+}
+
+/* Tags */
 
 .tag-list {
     display: flex;
@@ -277,7 +293,7 @@ textarea {
     color: var(--accent-dark);
     border: 1px solid var(--line);
     background: rgba(255, 253, 248, 0.75);
-    border-radius: 999px;
+    border-radius: var(--radius, 16px);
     padding: 0.15rem 0.5rem;
     font-size: 0.9rem;
     text-decoration: none;
@@ -301,12 +317,14 @@ textarea {
     color: var(--accent-dark);
 }
 
-/* Tables and admin thumbnails -------------------------------------------- */
+/* Tables and admin thumbnails */
 
 table {
     width: 100%;
     border-collapse: collapse;
     background: var(--panel);
+    border-radius: var(--radius, 16px);
+    overflow: hidden;
 }
 
 th,
@@ -322,6 +340,7 @@ td {
     width: 5rem;
     height: 3.75rem;
     object-fit: cover;
+    border-radius: var(--radius, 16px);
 }
 
 .notice {
@@ -329,9 +348,64 @@ td {
     background: #fff3cd;
     border: 1px solid #e3c46d;
     margin-bottom: 1rem;
+    border-radius: var(--radius, 16px);
 }
 
-/* Voting and lightbox ----------------------------------------------------- */
+.inline-form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.thumbnail-progress {
+    width: 100%;
+    margin: 0 0 1rem;
+}
+
+.thumbnail-progress-bar {
+    display: block;
+    width: 100%;
+    height: 0.75rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--field);
+    border-radius: var(--radius, 16px);
+    appearance: none;
+}
+
+.thumbnail-progress-bar::-webkit-progress-bar {
+    background: var(--field);
+}
+
+.thumbnail-progress-bar::-webkit-progress-value {
+    background: var(--accent);
+    transition: inline-size 0.2s ease;
+}
+
+.thumbnail-progress-bar::-moz-progress-bar {
+    background: var(--accent);
+}
+
+.thumbnail-progress p {
+    margin: 0.35rem 0 0;
+}
+
+.tree-toggle,
+.tree-spacer {
+    display: inline-grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+}
+
+.tree-toggle {
+    padding: 0;
+    background: transparent;
+    color: var(--accent-dark);
+}
+
+/* Voting and lightbox */
 
 .vote-row {
     display: flex;
@@ -373,6 +447,12 @@ td {
 .lightbox img {
     max-height: 78vh;
     object-fit: contain;
+    border-radius: var(--radius, 16px);
+}
+
+.lightbox figure a {
+    display: inline-block;
+    color: inherit;
 }
 
 .lightbox button {
@@ -383,7 +463,7 @@ td {
 .lightbox button[data-lightbox-action="next"] {
     min-width: 3rem;
     min-height: 3rem;
-    border-radius: 999px;
+    border-radius: var(--radius, 16px);
     font-size: 1.5rem;
 }
 
@@ -397,7 +477,7 @@ td {
     overflow: hidden;
 }
 
-/* Tamper warning ---------------------------------------------------------- */
+/* Tamper warning */
 
 .compromise-warning {
     position: fixed;
@@ -412,10 +492,170 @@ td {
     text-align: center;
 }
 
-/* Responsive adjustments -------------------------------------------------- */
+/* Responsive adjustments */
 
 .site-footer {
     padding: 2rem 0;
+    text-align: center;
+}
+
+.site-footer-link {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.site-footer-link:hover,
+.site-footer-link:focus {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* Compact admin treatment */
+
+.admin-page {
+    --ink: #1d2327;
+    --muted: #646970;
+    --line: #dcdcde;
+    --paper: #f0f0f1;
+    --panel: #fff;
+    --field: #fff;
+    background: var(--paper);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+}
+
+.admin-page .site-header {
+    width: 100%;
+    padding: 0.55rem 1rem;
+    background: #1d2327;
+    color: #f0f0f1;
+}
+
+.admin-page .brand {
+    color: #f0f0f1;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.admin-page .nav {
+    gap: 0.35rem;
+}
+
+.admin-page .nav a,
+.admin-page .button,
+.admin-page button,
+.admin-page input[type="submit"] {
+    padding: 0.35rem 0.6rem;
+    border-color: #2271b1;
+    background: #2271b1;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.admin-page .button.secondary,
+.admin-page button.secondary,
+.admin-page .tree-toggle {
+    background: #fff;
+    color: #2271b1;
+}
+
+.admin-page .site-main,
+.admin-page .site-footer {
+    width: min(1280px, calc(100% - 2rem));
+}
+
+.admin-page .hero,
+.admin-page .panel {
+    padding: 1rem;
+    border-color: #c3c4c7;
+    background: #fff;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+}
+
+.admin-page .hero h1,
+.admin-page .panel h1,
+.admin-page .panel h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.35rem;
+    line-height: 1.25;
+}
+
+.admin-page .bulk-row {
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+}
+
+.admin-page .bulk-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    font-weight: 600;
+}
+
+.admin-page input,
+.admin-page textarea,
+.admin-page select {
+    min-height: 2rem;
+    padding: 0.35rem 0.5rem;
+    border-color: #8c8f94;
+    border-radius: 3px;
+}
+
+.admin-page table {
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.admin-page th {
+    background: #f6f7f7;
+    color: #1d2327;
+    font-weight: 600;
+}
+
+.admin-page th,
+.admin-page td {
+    padding: 0.4rem 0.55rem;
+    vertical-align: middle;
+}
+
+.admin-page tr:hover td {
+    background: #f6f7f7;
+}
+
+.admin-page tr.is-subgallery td {
+    background: #fbfbfc;
+}
+
+.admin-page .admin-thumb {
+    width: 4rem;
+    height: 3rem;
+    border-radius: 3px;
+}
+
+.admin-page .tree-toggle,
+.admin-page .tree-spacer {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.admin-page .tree-title {
+    gap: 0.25rem;
+}
+
+.admin-page .thumbnail-progress-bar {
+    height: 0.55rem;
+    border-radius: 3px;
 }
 
 @media (max-width: 680px) {
@@ -429,3 +669,112 @@ td {
     }
 }
 
+
+/* Public design refinements */
+.public-page .hero {
+    position: relative;
+    overflow: hidden;
+    border: 0;
+    background: linear-gradient(135deg, rgba(255, 250, 240, 0.94), rgba(239, 228, 208, 0.9));
+}
+
+.public-page .hero h1 {
+    max-width: 18ch;
+    margin: 0 0 0.35rem;
+    font-size: clamp(2rem, 5vw, 4.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.055em;
+}
+
+.public-page .hero p {
+    max-width: 68ch;
+}
+
+.public-page .gallery-card {
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.public-page .gallery-card:hover,
+.public-page .gallery-card:focus-within {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(54, 38, 20, 0.14);
+}
+
+.public-page .gallery-card img,
+.public-page .gallery-collage {
+    height: 12rem;
+}
+
+.public-page .gallery-card-body {
+    min-height: 8rem;
+}
+
+.public-page .gallery-card-body h2,
+.public-page .image-meta h2 {
+    margin: 0 0 0.25rem;
+    line-height: 1.15;
+}
+
+.public-page .image-card {
+    background: rgba(255, 250, 240, 0.94);
+}
+
+.public-page .image-meta p {
+    margin-top: 0.25rem;
+}
+
+.gallery-card > .tag-list .tag-list-label,
+.hero .tag-list .tag-list-label {
+    opacity: 0.7;
+}
+
+.vote-row {
+    margin-top: 0.6rem;
+}
+
+.vote-row span {
+    min-width: 5.25rem;
+}
+
+.vote-row button {
+    min-width: 2.1rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.lightbox figure {
+    display: grid;
+    gap: 0.75rem;
+    justify-items: center;
+}
+
+.lightbox-meta {
+    display: grid;
+    gap: 0.45rem;
+    justify-items: center;
+}
+
+.lightbox-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.lightbox-counter,
+.lightbox-help {
+    color: rgba(255, 253, 248, 0.78);
+    font-size: 0.9rem;
+}
+
+.lightbox-original-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #fffdf8;
+    border-radius: var(--radius, 16px);
+    color: #fffdf8;
+    padding: 0.35rem 0.65rem;
+    text-decoration: none;
+}

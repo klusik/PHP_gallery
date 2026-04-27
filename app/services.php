@@ -15,7 +15,9 @@ function galleries_root(): string
  */
 function gallery_abs_path(string $relativePath): string
 {
+    // Variable $relativePath stores this steps working value.
     $relativePath = normalize_relative_path($relativePath);
+    // Variable $path stores this steps working value.
     $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     if (!path_inside(galleries_root(), $path)) {
         throw new RuntimeException('Gallery path is outside the configured root.');
@@ -28,8 +30,11 @@ function gallery_abs_path(string $relativePath): string
  */
 function image_abs_path(array $image, array $gallery): string
 {
+    // Variable $galleryRoot stores this steps working value.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    // Variable $path stores this steps working value.
     $path = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, normalize_relative_path((string) $image['relative_path']));
+    // Variable $parent stores this steps working value.
     $parent = dirname($path);
     if (!path_inside($galleryRoot, $parent)) {
         throw new RuntimeException('Image path is outside its gallery.');
@@ -46,16 +51,23 @@ function image_abs_path(array $image, array $gallery): string
  */
 function discover_gallery_candidates(): array
 {
+    // Variable $root stores this steps working value.
     $root = galleries_root();
     if (!is_dir($root)) {
         return [];
     }
 
+    // Variable $pdo stores this steps working value.
     $pdo = db();
+    // Variable $known stores this steps working value.
     $known = $pdo->query('SELECT folder_path FROM galleries')->fetchAll(PDO::FETCH_COLUMN);
+    // Variable $known stores this steps working value.
     $known = array_flip($known);
+    // Variable $candidates stores this steps working value.
     $candidates = [];
+    // Variable $ignoreNames stores this steps working value.
     $ignoreNames = ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'];
+    // Variable $iterator stores this steps working value.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveCallbackFilterIterator(
             new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
@@ -63,6 +75,7 @@ function discover_gallery_candidates(): array
                 if (!$file->isDir()) {
                     return true;
                 }
+                // Variable $name stores this steps working value.
                 $name = $file->getFilename();
                 return !str_starts_with($name, '.') && !in_array(strtolower($name), $ignoreNames, true);
             }
@@ -74,29 +87,37 @@ function discover_gallery_candidates(): array
         if (!$item->isDir()) {
             continue;
         }
+        // Variable $relative stores this steps working value.
         $relative = normalize_relative_path(substr($item->getPathname(), strlen($root)));
         if ($relative === '' || isset($known[$relative])) {
             continue;
         }
+        // Variable $hasImages stores this steps working value.
         $hasImages = false;
         foreach (new DirectoryIterator($item->getPathname()) as $child) {
             if ($child->isFile() && is_supported_image_path($child->getFilename())) {
+                // Variable $hasImages stores this steps working value.
                 $hasImages = true;
                 break;
             }
         }
+        // Variable $hasDescendantImages stores this steps working value.
         $hasDescendantImages = false;
         if (!$hasImages) {
+            // Variable $descendants stores this steps working value.
             $descendants = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($item->getPathname(), FilesystemIterator::SKIP_DOTS));
             foreach ($descendants as $descendant) {
                 if ($descendant->isFile() && is_supported_image_path($descendant->getFilename())) {
+                    // Variable $hasDescendantImages stores this steps working value.
                     $hasDescendantImages = true;
                     break;
                 }
             }
         }
+        // Variable $jsonPath stores this steps working value.
         $jsonPath = $item->getPathname() . DIRECTORY_SEPARATOR . 'gallery.json';
         if ($hasImages || $hasDescendantImages || is_file($jsonPath)) {
+            // Variable $metadata stores this steps working value.
             $metadata = read_gallery_sidecar($jsonPath);
             $candidates[] = [
                 'folder_path' => $relative,
@@ -119,6 +140,7 @@ function read_gallery_sidecar(string $path): array
     if (!is_file($path)) {
         return [];
     }
+    // Variable $data stores this steps working value.
     $data = json_decode((string) file_get_contents($path), true);
     return is_array($data) ? $data : [];
 }
@@ -128,7 +150,9 @@ function read_gallery_sidecar(string $path): array
  */
 function write_gallery_sidecar(array $gallery): void
 {
+    // Variable $path stores this steps working value.
     $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json';
+    // Variable $data stores this steps working value.
     $data = [
         'title' => $gallery['title'],
         'description' => $gallery['description'],
@@ -136,6 +160,7 @@ function write_gallery_sidecar(array $gallery): void
         'sort_order' => (int) $gallery['sort_order'],
     ];
     if (!empty($gallery['cover_image_id'])) {
+        // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id']);
         if ($cover) {
             $data['cover'] = $cover['relative_path'];
@@ -147,23 +172,46 @@ function write_gallery_sidecar(array $gallery): void
 /**
  * Create gallery rows for selected discovered folders.
  */
-function import_galleries(array $folderPaths): int
+function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
+    // Variable $pdo stores this steps working value.
     $pdo = db();
+    // Variable $candidates stores this steps working value.
     $candidates = [];
     foreach (discover_gallery_candidates() as $candidate) {
         $candidates[$candidate['folder_path']] = $candidate;
     }
-    $count = 0;
+    // Variable $requested stores this steps working value.
+    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
+    // Variable $folderPaths stores this steps working value.
+    $folderPaths = [];
+    foreach ($requested as $requestedPath) {
+        foreach (array_keys($candidates) as $candidatePath) {
+            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
+                $folderPaths[$candidatePath] = $candidatePath;
+            }
+        }
+    }
     usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    // Variable $imported stores this steps working value.
+    $imported = 0;
+    // Variable $scanned stores this steps working value.
+    $scanned = 0;
+    // Variable $thumbs stores this steps working value.
+    $thumbs = 0;
+    // Variable $importedIds stores this steps working value.
+    $importedIds = [];
     foreach ($folderPaths as $folderPath) {
-        $folderPath = normalize_relative_path((string) $folderPath);
         if (!isset($candidates[$folderPath])) {
             continue;
         }
+        // Variable $candidate stores this steps working value.
         $candidate = $candidates[$folderPath];
+        // Variable $visibility stores this steps working value.
         $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+        // Variable $parent stores this steps working value.
         $parent = find_parent_gallery_for_path($folderPath);
+        // Variable $stmt stores this steps working value.
         $stmt = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $parent ? (int) $parent['id'] : null,
@@ -177,14 +225,22 @@ function import_galleries(array $folderPaths): int
             now_sql(),
             now_sql(),
         ]);
+        // Variable $gallery stores this steps working value.
         $gallery = find_gallery((int) $pdo->lastInsertId());
         if ($gallery) {
             write_gallery_sidecar($gallery);
+            $importedIds[] = (int) $gallery['id'];
         }
-        $count++;
+        $imported++;
     }
     sync_gallery_parent_ids();
-    return $count;
+    foreach ($importedIds as $galleryId) {
+        $scanned += scan_gallery_images($galleryId);
+        if ($createThumbnails) {
+            $thumbs += create_gallery_thumbnails($galleryId);
+        }
+    }
+    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs];
 }
 
 /**
@@ -195,29 +251,38 @@ function import_galleries(array $folderPaths): int
  */
 function scan_gallery_images(int $galleryId): int
 {
+    // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         return 0;
     }
+    // Variable $root stores this steps working value.
     $root = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($root)) {
         return 0;
     }
 
+    // Variable $pdo stores this steps working value.
     $pdo = db();
+    // Variable $count stores this steps working value.
     $count = 0;
     foreach (new DirectoryIterator($root) as $file) {
         if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
             continue;
         }
+        // Variable $relative stores this steps working value.
         $relative = normalize_relative_path(substr($file->getPathname(), strlen($root)));
+        // Variable $info stores this steps working value.
         $info = @getimagesize($file->getPathname());
         if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
             continue;
         }
+        // Variable $modifiedAt stores this steps working value.
         $modifiedAt = date('Y-m-d H:i:s', $file->getMTime());
+        // Variable $existing stores this steps working value.
         $existing = find_image_by_path($galleryId, $relative);
         if (!$existing) {
+            // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, checksum_sha256, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 $galleryId,
@@ -238,6 +303,7 @@ function scan_gallery_images(int $galleryId): int
             continue;
         }
         if ((int) $existing['file_size'] !== $file->getSize() || (string) $existing['modified_at'] !== $modifiedAt) {
+            // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
             $stmt->execute([
                 $file->getFilename(),
@@ -259,20 +325,242 @@ function scan_gallery_images(int $galleryId): int
 }
 
 /**
+ * Thumbnail variants generated for web views.
+ */
+function thumbnail_sizes(): array
+{
+    return [300, 800];
+}
+
+/**
+ * Resolve the thumbs folder for a gallery and create it when requested.
+ */
+function gallery_thumbs_dir(array $gallery, bool $create = false): string
+{
+    // Variable $path stores this steps working value.
+    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'thumbs';
+    if ($create && !is_dir($path)) {
+        mkdir($path, 0775, true);
+    }
+    if (!path_inside(gallery_abs_path((string) $gallery['folder_path']), $path)) {
+        throw new RuntimeException('Thumbnail path is outside its gallery.');
+    }
+    return $path;
+}
+
+/**
+ * Build the generated JPEG thumbnail filename for an image and size.
+ */
+function thumbnail_filename(array $image, int $size): string
+{
+    return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.jpg';
+}
+
+/**
+ * Resolve one generated thumbnail path.
+ */
+function thumbnail_abs_path(array $image, array $gallery, int $size): string
+{
+    if (!in_array($size, thumbnail_sizes(), true)) {
+        throw new RuntimeException('Unsupported thumbnail size.');
+    }
+    return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size);
+}
+
+/**
+ * Return the best public URL for an image thumbnail, falling back to the source.
+ */
+function thumbnail_url(array $image, int $size): string
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) $image['gallery_id']);
+    if ($gallery) {
+        try {
+            if (is_file(thumbnail_abs_path($image, $gallery, $size))) {
+                return url_for('thumb', ['id' => $image['id'], 'size' => $size]);
+            }
+        } catch (RuntimeException) {
+            return url_for('media', ['id' => $image['id']]);
+        }
+    }
+    return url_for('media', ['id' => $image['id']]);
+}
+
+/**
+ * Generate all configured thumbnails for direct images in one gallery.
+ */
+function create_gallery_thumbnails(int $galleryId): int
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return 0;
+    }
+    // Variable $count stores this steps working value.
+    $count = 0;
+    foreach (gallery_images($galleryId, false) as $image) {
+        $count += create_image_thumbnails($image, $gallery);
+    }
+    return $count;
+}
+
+/**
+ * Generate all configured thumbnails for every imported image.
+ */
+function create_all_thumbnails(): int
+{
+    // Variable $count stores this steps working value.
+    $count = 0;
+    foreach (db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $galleryId) {
+        $count += create_gallery_thumbnails((int) $galleryId);
+    }
+    return $count;
+}
+
+/**
+ * Rebuild web-optimized JPEG thumbnails for one source image.
+ */
+function create_image_thumbnails(array $image, array $gallery): int
+{
+    return create_image_thumbnails_result($image, $gallery)['created'];
+}
+
+/**
+ * Rebuild missing or stale thumbnails and report created/skipped variants.
+ */
+function create_image_thumbnails_result(array $image, array $gallery): array
+{
+    // Variable $sourcePath stores this steps working value.
+    $sourcePath = image_abs_path($image, $gallery);
+    if (!is_file($sourcePath)) {
+        return ['created' => 0, 'skipped' => 0];
+    }
+    gallery_thumbs_dir($gallery, true);
+    // Variable $targets stores this steps working value.
+    $targets = [];
+    // Variable $skipped stores this steps working value.
+    $skipped = 0;
+    foreach (thumbnail_sizes() as $size) {
+        // Variable $targetPath stores this steps working value.
+        $targetPath = thumbnail_abs_path($image, $gallery, $size);
+        if (is_file($targetPath) && filemtime($targetPath) >= filemtime($sourcePath)) {
+            $skipped++;
+            continue;
+        }
+        $targets[$size] = $targetPath;
+    }
+    if (!$targets) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    if (!extension_loaded('gd')) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    // Variable $info stores this steps working value.
+    $info = @getimagesize($sourcePath);
+    if ($info === false || empty($info['mime'])) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    // Variable $source stores this steps working value.
+    $source = image_create_from_path($sourcePath, (string) $info['mime']);
+    if (!$source) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    // Variable $created stores this steps working value.
+    $created = 0;
+    foreach ($targets as $size => $targetPath) {
+        if (write_resized_jpeg($source, (int) $info[0], (int) $info[1], $size, $targetPath)) {
+            $created++;
+        }
+    }
+    imagedestroy($source);
+    return ['created' => $created, 'skipped' => $skipped];
+}
+
+/**
+ * Return image IDs directly owned by the selected galleries.
+ */
+function image_ids_for_galleries(array $galleryIds): array
+{
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if (!$galleryIds) {
+        return [];
+    }
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id IN ($placeholders) AND relative_path NOT LIKE '%/%' ORDER BY gallery_id, sort_order, filename");
+    $stmt->execute($galleryIds);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Return every imported direct image ID in stable dashboard order.
+ */
+function all_image_ids(): array
+{
+    // Variable $rows stores this steps working value.
+    $rows = db()->query("SELECT i.id FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename")->fetchAll(PDO::FETCH_COLUMN);
+    return array_map('intval', $rows);
+}
+
+/**
+ * Load a GD image resource from the supported source MIME types.
+ */
+function image_create_from_path(string $path, string $mime): GdImage|false
+{
+    return match ($mime) {
+        'image/jpeg' => imagecreatefromjpeg($path),
+        'image/png' => imagecreatefrompng($path),
+        'image/gif' => imagecreatefromgif($path),
+        'image/webp' => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
+        default => false,
+    };
+}
+
+/**
+ * Resize an image to a maximum longer side and write a progressive JPEG.
+ */
+function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
+{
+    // Variable $scale stores this steps working value.
+    $scale = min(1.0, $maxSide / max($width, $height));
+    // Variable $targetWidth stores this steps working value.
+    $targetWidth = max(1, (int) round($width * $scale));
+    // Variable $targetHeight stores this steps working value.
+    $targetHeight = max(1, (int) round($height * $scale));
+    // Variable $target stores this steps working value.
+    $target = imagecreatetruecolor($targetWidth, $targetHeight);
+    // Variable $white stores this steps working value.
+    $white = imagecolorallocate($target, 255, 255, 255);
+    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
+    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    imageinterlace($target, true);
+    // Variable $written stores this steps working value.
+    $written = imagejpeg($target, $targetPath, 82);
+    imagedestroy($target);
+    return $written;
+}
+
+/**
  * Pick the first direct image as cover when the gallery has no explicit cover.
  */
 function ensure_gallery_cover(int $galleryId): void
 {
+    // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery || !empty($gallery['cover_image_id'])) {
         return;
     }
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1");
     $stmt->execute([$galleryId]);
+    // Variable $coverId stores this steps working value.
     $coverId = $stmt->fetchColumn();
     if (!$coverId) {
         return;
     }
+    // Variable $update stores this steps working value.
     $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
     $update->execute([(int) $coverId, now_sql(), $galleryId]);
 }
@@ -282,15 +570,20 @@ function ensure_gallery_cover(int $galleryId): void
  */
 function sync_gallery_parent_ids(): void
 {
+    // Variable $galleries stores this steps working value.
     $galleries = db()->query('SELECT id, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
+        // Variable $parent stores this steps working value.
         $parent = find_parent_gallery_for_path((string) $gallery['folder_path']);
+        // Variable $parentId stores this steps working value.
         $parentId = $parent ? (int) $parent['id'] : null;
         if ($parentId === null) {
+            // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
             $stmt->execute([now_sql(), (int) $gallery['id']]);
             continue;
         }
+        // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
         $stmt->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
     }
@@ -301,15 +594,18 @@ function sync_gallery_parent_ids(): void
  */
 function child_galleries(int $parentId, bool $publicOnly): array
 {
+    // Variable $sql stores this steps working value.
     $sql = "SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
         WHERE g.parent_id = ?";
+    // Variable $params stores this steps working value.
     $params = [$parentId];
     if ($publicOnly) {
         $sql .= " AND g.visibility = 'public'";
     }
     $sql .= ' GROUP BY g.id ORDER BY g.sort_order, g.title';
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();
@@ -320,14 +616,18 @@ function child_galleries(int $parentId, bool $publicOnly): array
  */
 function gallery_ancestors(array $gallery, bool $publicOnly): array
 {
+    // Variable $ancestors stores this steps working value.
     $ancestors = [];
+    // Variable $parentId stores this steps working value.
     $parentId = $gallery['parent_id'] ?? null;
     while ($parentId) {
+        // Variable $parent stores this steps working value.
         $parent = find_gallery((int) $parentId);
         if (!$parent || ($publicOnly && $parent['visibility'] !== 'public')) {
             break;
         }
         array_unshift($ancestors, $parent);
+        // Variable $parentId stores this steps working value.
         $parentId = $parent['parent_id'] ?? null;
     }
     return $ancestors;
@@ -346,32 +646,42 @@ function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
  */
 function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 {
+    // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         return null;
     }
     if (!empty($gallery['cover_image_id'])) {
+        // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id']);
         if ($cover && !str_contains((string) $cover['relative_path'], '/') && (!$publicOnly || $cover['visibility'] === 'public')) {
             return $cover;
         }
     }
+    // Variable $sql stores this steps working value.
     $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
     $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1";
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute([$galleryId]);
+    // Variable $image stores this steps working value.
     $image = $stmt->fetch();
     return $image ?: null;
 }
 
+/**
+ * Function `gallery_cover_collage_images` handles this scoped operation.
+ */
 function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
 {
+    // Variable $images stores this steps working value.
     $images = [];
     // Parent galleries without direct images borrow covers from child galleries.
     foreach (child_galleries($galleryId, $publicOnly) as $child) {
+        // Variable $cover stores this steps working value.
         $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
         if ($cover) {
             $images[(int) $cover['id']] = $cover;
@@ -394,19 +704,23 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
  */
 function apply_gallery_cover_from_sidecar(array $gallery): void
 {
+    // Variable $metadata stores this steps working value.
     $metadata = read_gallery_sidecar(gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json');
     if (empty($metadata['cover']) || !is_string($metadata['cover'])) {
         return;
     }
     try {
+        // Variable $coverPath stores this steps working value.
         $coverPath = normalize_relative_path($metadata['cover']);
     } catch (RuntimeException) {
         return;
     }
+    // Variable $image stores this steps working value.
     $image = find_image_by_path((int) $gallery['id'], $coverPath);
     if (!$image) {
         return;
     }
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
     $stmt->execute([(int) $image['id'], now_sql(), (int) $gallery['id']]);
 }
@@ -416,8 +730,10 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
  */
 function find_gallery(int $id): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ?');
     $stmt->execute([$id]);
+    // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
     return $gallery ?: null;
 }
@@ -427,8 +743,10 @@ function find_gallery(int $id): ?array
  */
 function find_gallery_by_slug(string $slug): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE slug = ?');
     $stmt->execute([$slug]);
+    // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
     return $gallery ?: null;
 }
@@ -438,8 +756,10 @@ function find_gallery_by_slug(string $slug): ?array
  */
 function find_gallery_by_folder_path(string $folderPath): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path_hash = ?');
     $stmt->execute([hash('sha256', normalize_relative_path($folderPath))]);
+    // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
     return $gallery ?: null;
 }
@@ -449,9 +769,11 @@ function find_gallery_by_folder_path(string $folderPath): ?array
  */
 function find_parent_gallery_for_path(string $folderPath): ?array
 {
+    // Variable $segments stores this steps working value.
     $segments = explode('/', normalize_relative_path($folderPath));
     while (count($segments) > 1) {
         array_pop($segments);
+        // Variable $parent stores this steps working value.
         $parent = find_gallery_by_folder_path(implode('/', $segments));
         if ($parent) {
             return $parent;
@@ -465,8 +787,10 @@ function find_parent_gallery_for_path(string $folderPath): ?array
  */
 function find_image(int $id): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM images WHERE id = ?');
     $stmt->execute([$id]);
+    // Variable $image stores this steps working value.
     $image = $stmt->fetch();
     return $image ?: null;
 }
@@ -476,10 +800,29 @@ function find_image(int $id): ?array
  */
 function find_image_by_path(int $galleryId, string $relativePath): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
     $stmt->execute([$galleryId, hash('sha256', $relativePath)]);
+    // Variable $image stores this steps working value.
     $image = $stmt->fetch();
     return $image ?: null;
+}
+
+/**
+ * Fetch images for admin/public rendering, optionally public-only.
+ */
+function gallery_images(int $galleryId, bool $publicOnly): array
+{
+    // Variable $sql stores this steps working value.
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= ' ORDER BY sort_order, filename';
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$galleryId]);
+    return $stmt->fetchAll();
 }
 
 /**
@@ -487,6 +830,7 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
  */
 function vote_score(int $imageId): int
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT COALESCE(SUM(vote), 0) FROM image_votes WHERE image_id = ?');
     $stmt->execute([$imageId]);
     return (int) $stmt->fetchColumn();
@@ -497,12 +841,15 @@ function vote_score(int $imageId): int
  */
 function current_vote_for_image(int $imageId): int
 {
+    // Variable $user stores this steps working value.
     $user = current_user();
     if ($user) {
+        // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND user_id = ?');
         $stmt->execute([$imageId, (int) $user['id']]);
         return (int) ($stmt->fetchColumn() ?: 0);
     }
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT vote FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
     $stmt->execute([$imageId, visitor_hash()]);
     return (int) ($stmt->fetchColumn() ?: 0);
@@ -513,8 +860,10 @@ function current_vote_for_image(int $imageId): int
  */
 function split_tag_names(string $tags): array
 {
+    // Variable $names stores this steps working value.
     $names = [];
     foreach (preg_split('/[,;\n]+/', $tags) ?: [] as $name) {
+        // Variable $name stores this steps working value.
         $name = trim($name);
         if ($name !== '') {
             $names[strtolower($name)] = substr($name, 0, 100);
@@ -523,8 +872,12 @@ function split_tag_names(string $tags): array
     return array_values($names);
 }
 
+/**
+ * Function `tag_slug` handles this scoped operation.
+ */
 function tag_slug(string $name): string
 {
+    // Variable $slug stores this steps working value.
     $slug = slugify($name);
     return $slug !== '' ? substr($slug, 0, 120) : 'tag';
 }
@@ -534,13 +887,17 @@ function tag_slug(string $name): string
  */
 function find_or_create_tag(string $name): int
 {
+    // Variable $slug stores this steps working value.
     $slug = tag_slug($name);
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT id FROM tags WHERE slug = ?');
     $stmt->execute([$slug]);
+    // Variable $existing stores this steps working value.
     $existing = $stmt->fetchColumn();
     if ($existing) {
         return (int) $existing;
     }
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('INSERT INTO tags (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)');
     $stmt->execute([$name, $slug, now_sql(), now_sql()]);
     return (int) db()->lastInsertId();
@@ -551,21 +908,31 @@ function find_or_create_tag(string $name): int
  */
 function sync_entity_tags(string $type, int $id, string $tagText): void
 {
+    // Variable $mapTable stores this steps working value.
     $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    // Variable $idColumn stores this steps working value.
     $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
     db()->prepare('DELETE FROM ' . $mapTable . ' WHERE ' . $idColumn . ' = ?')->execute([$id]);
     foreach (split_tag_names($tagText) as $name) {
+        // Variable $tagId stores this steps working value.
         $tagId = find_or_create_tag($name);
+        // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('INSERT IGNORE INTO ' . $mapTable . ' (' . $idColumn . ', tag_id) VALUES (?, ?)');
         $stmt->execute([$id, $tagId]);
     }
 }
 
+/**
+ * Function `tags_for_entity` handles this scoped operation.
+ */
 function tags_for_entity(string $type, int $id): array
 {
+    // Variable $mapTable stores this steps working value.
     $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    // Variable $idColumn stores this steps working value.
     $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
     try {
+        // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT t.* FROM tags t JOIN ' . $mapTable . ' mt ON mt.tag_id = t.id WHERE mt.' . $idColumn . ' = ? ORDER BY t.name');
         $stmt->execute([$id]);
         return $stmt->fetchAll();
@@ -574,6 +941,9 @@ function tags_for_entity(string $type, int $id): array
     }
 }
 
+/**
+ * Function `tag_names_for_entity` handles this scoped operation.
+ */
 function tag_names_for_entity(string $type, int $id): string
 {
     return implode(', ', array_column(tags_for_entity($type, $id), 'name'));
@@ -596,8 +966,10 @@ function all_tag_names(): array
  */
 function find_tag_by_slug(string $slug): ?array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM tags WHERE slug = ?');
     $stmt->execute([$slug]);
+    // Variable $tag stores this steps working value.
     $tag = $stmt->fetch();
     return $tag ?: null;
 }
@@ -607,6 +979,7 @@ function find_tag_by_slug(string $slug): ?array
  */
 function public_galleries_for_tag(int $tagId): array
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
@@ -625,12 +998,16 @@ function public_galleries_for_tag(int $tagId): array
  */
 function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 {
+    // Variable $folderPath stores this steps working value.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     if ($folderPath === '') {
         return [];
     }
+    // Variable $visibilitySql stores this steps working value.
     $visibilitySql = $publicOnly ? " AND g.visibility = 'public'" : '';
+    // Variable $imageVisibilitySql stores this steps working value.
     $imageVisibilitySql = $publicOnly ? " AND tagged_image.visibility = 'public'" : '';
+    // Variable $sql stores this steps working value.
     $sql = "SELECT DISTINCT t.id, t.name, t.slug
         FROM tags t
         JOIN gallery_tags gt ON gt.tag_id = t.id
@@ -644,6 +1021,7 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         JOIN galleries g ON g.id = tagged_image.gallery_id
         WHERE g.folder_path LIKE ?" . $visibilitySql . $imageVisibilitySql . "
         ORDER BY name";
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute([$folderPath . '/%', $folderPath . '/%']);
     return $stmt->fetchAll();
@@ -655,8 +1033,10 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 function app_setting(string $key, ?string $default = null): ?string
 {
     try {
+        // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
         $stmt->execute([$key]);
+        // Variable $value stores this steps working value.
         $value = $stmt->fetchColumn();
         return $value === false ? $default : (string) $value;
     } catch (PDOException) {
@@ -669,8 +1049,32 @@ function app_setting(string $key, ?string $default = null): ?string
  */
 function set_app_setting(string $key, string $value): void
 {
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
     $stmt->execute([$key, $value, now_sql()]);
+}
+
+/**
+ * Return gallery IDs whose admin tree rows should start collapsed.
+ */
+function collapsed_gallery_ids(): array
+{
+    // Variable $decoded stores this steps working value.
+    $decoded = json_decode((string) app_setting('admin_collapsed_gallery_ids', '[]'), true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    return array_values(array_unique(array_map('intval', $decoded)));
+}
+
+/**
+ * Persist the admin gallery tree collapse state.
+ */
+function set_collapsed_gallery_ids(array $ids): void
+{
+    // Variable $ids stores this steps working value.
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    set_app_setting('admin_collapsed_gallery_ids', json_encode($ids, JSON_THROW_ON_ERROR));
 }
 
 /**
@@ -689,6 +1093,9 @@ function theme_settings(): array
     ];
 }
 
+/**
+ * Function `custom_css_path` handles this scoped operation.
+ */
 function custom_css_path(): string
 {
     return dirname(__DIR__) . '/public/assets/custom.css';
@@ -707,6 +1114,7 @@ function custom_css_url(): ?string
  */
 function zip_cache_dir(): string
 {
+    // Variable $path stores this steps working value.
     $path = (string) cms_config()['zip_cache_path'];
     if (!is_dir($path)) {
         mkdir($path, 0775, true);
@@ -719,12 +1127,15 @@ function zip_cache_dir(): string
  */
 function gallery_zip_signature(int $galleryId, bool $publicOnly): string
 {
+    // Variable $sql stores this steps working value.
     $sql = "SELECT relative_path, file_size, modified_at FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    // Variable $params stores this steps working value.
     $params = [$galleryId];
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
     $sql .= ' ORDER BY relative_path';
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return hash('sha256', json_encode($stmt->fetchAll(), JSON_UNESCAPED_SLASHES));
@@ -735,6 +1146,7 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
  */
 function all_zip_signature(): string
 {
+    // Variable $rows stores this steps working value.
     $rows = db()->query("SELECT g.folder_path, i.relative_path, i.file_size, i.modified_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.relative_path")->fetchAll();
     return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
 }
@@ -744,21 +1156,28 @@ function all_zip_signature(): string
  */
 function build_gallery_zip(int $galleryId, bool $publicOnly): string
 {
+    // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException('Gallery not found.');
     }
+    // Variable $signature stores this steps working value.
     $signature = gallery_zip_signature($galleryId, $publicOnly);
+    // Variable $scope stores this steps working value.
     $scope = 'gallery';
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id = ? AND content_signature = ? ORDER BY id DESC LIMIT 1');
     $stmt->execute([$scope, $galleryId, $signature]);
+    // Variable $cached stores this steps working value.
     $cached = $stmt->fetch();
     if ($cached && is_file((string) $cached['file_path'])) {
         return (string) $cached['file_path'];
     }
 
+    // Variable $filePath stores this steps working value.
     $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . $galleryId . '-' . $signature . '.zip';
     create_zip($filePath, gallery_zip_files($gallery, $publicOnly));
+    // Variable $insert stores this steps working value.
     $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
     $insert->execute([$scope, $galleryId, $filePath, $signature, now_sql(), now_sql()]);
     return $filePath;
@@ -769,23 +1188,30 @@ function build_gallery_zip(int $galleryId, bool $publicOnly): string
  */
 function build_all_zip(): string
 {
+    // Variable $signature stores this steps working value.
     $signature = all_zip_signature();
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM zip_archives WHERE scope = ? AND gallery_id IS NULL AND content_signature = ? ORDER BY id DESC LIMIT 1');
     $stmt->execute(['all', $signature]);
+    // Variable $cached stores this steps working value.
     $cached = $stmt->fetch();
     if ($cached && is_file((string) $cached['file_path'])) {
         return (string) $cached['file_path'];
     }
 
+    // Variable $galleries stores this steps working value.
     $galleries = db()->query('SELECT * FROM galleries ORDER BY folder_path')->fetchAll();
+    // Variable $files stores this steps working value.
     $files = [];
     foreach ($galleries as $gallery) {
         foreach (gallery_zip_files($gallery, false) as $file) {
             $files[] = $file;
         }
     }
+    // Variable $filePath stores this steps working value.
     $filePath = zip_cache_dir() . DIRECTORY_SEPARATOR . 'all-' . $signature . '.zip';
     create_zip($filePath, $files);
+    // Variable $insert stores this steps working value.
     $insert = db()->prepare('INSERT INTO zip_archives (scope, gallery_id, file_path, content_signature, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?)');
     $insert->execute(['all', $filePath, $signature, now_sql(), now_sql()]);
     return $filePath;
@@ -796,16 +1222,21 @@ function build_all_zip(): string
  */
 function gallery_zip_files(array $gallery, bool $publicOnly): array
 {
+    // Variable $sql stores this steps working value.
     $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    // Variable $params stores this steps working value.
     $params = [(int) $gallery['id']];
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
     $sql .= ' ORDER BY sort_order, filename';
+    // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
+    // Variable $files stores this steps working value.
     $files = [];
     foreach ($stmt->fetchAll() as $image) {
+        // Variable $absolute stores this steps working value.
         $absolute = image_abs_path($image, $gallery);
         if (is_file($absolute)) {
             $files[] = [
@@ -825,6 +1256,7 @@ function create_zip(string $filePath, array $files): void
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('ZipArchive is not available.');
     }
+    // Variable $zip stores this steps working value.
     $zip = new ZipArchive();
     if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException('Unable to create ZIP archive.');
