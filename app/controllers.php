@@ -6,8 +6,8 @@ function cms_home(): void
 {
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public'
-        WHERE g.visibility = 'public'
+        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+        WHERE g.visibility = 'public' AND g.parent_id IS NULL
         GROUP BY g.id
         ORDER BY g.sort_order, g.title");
     $stmt->execute();
@@ -15,11 +15,7 @@ function cms_home(): void
     echo '<section class="hero"><h1>Galleries</h1><p class="muted">Filesystem-backed galleries with CMS metadata.</p></section>';
     echo '<section class="grid">';
     foreach ($stmt->fetchAll() as $gallery) {
-        echo '<article class="gallery-card"><a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
-        echo '<h2>' . e($gallery['title']) . '</h2>';
-        echo '<p>' . e($gallery['description']) . '</p>';
-        echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p>';
-        echo '</a></article>';
+        render_gallery_card($gallery, true);
     }
     echo '</section>';
     render_footer();
@@ -36,15 +32,24 @@ function cms_gallery(): void
     $stmt = db()->prepare("SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
         FROM images i
         LEFT JOIN image_votes v ON v.image_id = i.id
-        WHERE i.gallery_id = ? AND i.visibility = 'public'
+        WHERE i.gallery_id = ? AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
         GROUP BY i.id
         ORDER BY i.sort_order, i.filename");
     $stmt->execute([(int) $gallery['id']]);
     $images = $stmt->fetchAll();
+    $children = child_galleries((int) $gallery['id'], true);
 
     render_header((string) $gallery['title']);
+    render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
+    if ($children) {
+        echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
+        foreach ($children as $child) {
+            render_gallery_card($child, true);
+        }
+        echo '</div></section>';
+    }
     echo '<section class="grid">';
     foreach ($images as $image) {
         $mediaUrl = url_for('media', ['id' => $image['id']]);
@@ -57,6 +62,41 @@ function cms_gallery(): void
     echo '</section>';
     render_lightbox();
     render_footer();
+}
+
+function render_breadcrumbs(?array $gallery = null): void
+{
+    echo '<nav class="breadcrumbs" aria-label="Breadcrumbs">';
+    echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
+    if ($gallery) {
+        foreach (gallery_ancestors($gallery, true) as $ancestor) {
+            echo '<span aria-hidden="true">/</span><a href="' . e(url_for('gallery', ['slug' => $ancestor['slug']])) . '">' . e($ancestor['title']) . '</a>';
+        }
+        echo '<span aria-hidden="true">/</span><span>' . e($gallery['title']) . '</span>';
+    }
+    echo '</nav>';
+}
+
+function render_gallery_card(array $gallery, bool $publicOnly): void
+{
+    $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
+    echo '<article class="gallery-card"><a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
+    if ($cover) {
+        echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $cover['id']])) . '" alt="">';
+    } else {
+        $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
+        if ($collage) {
+            echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
+            foreach ($collage as $image) {
+                echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt="">';
+            }
+            echo '</span>';
+        }
+    }
+    echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
+    echo '<p>' . e($gallery['description']) . '</p>';
+    echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p></span>';
+    echo '</a></article>';
 }
 
 function render_vote_form(int $imageId, int $score): void
@@ -192,20 +232,25 @@ function cms_admin_logout(): void
 function cms_admin(): void
 {
     require_admin();
-    $galleries = db()->query('SELECT g.*, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN images i ON i.gallery_id = g.id GROUP BY g.id ORDER BY g.sort_order, g.title')->fetchAll();
+    sync_gallery_parent_ids();
+    $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '</nav></section>';
-    echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field();
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
+    echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '">' . csrf_field();
+    echo '<div class="bulk-row"><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button></div>';
+    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
-        echo '<tr><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td><td>' . e($gallery['title']) . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav">';
+        $depth = substr_count((string) $gallery['folder_path'], '/');
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<td><span class="tree-title" style="--depth: ' . $depth . '">' . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . e($gallery['title']) . '</span></td>';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav">';
         echo '<a href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
         echo '</td></tr>';
     }
-    echo '</tbody></table><button type="submit">Scan/import images inside selected galleries</button></form></section>';
+    echo '</tbody></table></form></section>';
     render_footer();
 }
 
@@ -237,6 +282,34 @@ function cms_admin_import(): void
     redirect_to(url_for('admin', ['imported' => $count]));
 }
 
+function cms_admin_bulk_galleries(): void
+{
+    require_admin();
+    verify_csrf();
+    $galleryIds = array_map('intval', $_POST['gallery_ids'] ?? []);
+    $action = (string) ($_POST['action'] ?? 'scan');
+    $count = 0;
+    if ($action === 'scan') {
+        foreach ($galleryIds as $galleryId) {
+            $count += scan_gallery_images($galleryId);
+        }
+        redirect_to(url_for('admin', ['scanned' => $count]));
+    }
+    if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
+        $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+        $stmt = db()->prepare('UPDATE galleries SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+        $stmt->execute(array_merge([$action, now_sql()], $galleryIds));
+        foreach ($galleryIds as $galleryId) {
+            $gallery = find_gallery($galleryId);
+            if ($gallery) {
+                write_gallery_sidecar($gallery);
+            }
+        }
+        redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
+    }
+    redirect_to(url_for('admin'));
+}
+
 function cms_admin_scan_images(): void
 {
     require_admin();
@@ -265,9 +338,14 @@ function cms_admin_edit_gallery(): void
         $title = trim((string) $_POST['title']);
         $slug = trim((string) $_POST['slug']);
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
+        $parentId = (int) ($_POST['parent_id'] ?? 0);
+        $parentId = $parentId > 0 && find_gallery($parentId) ? $parentId : null;
+        $coverImageId = (int) ($_POST['cover_image_id'] ?? 0);
+        $coverImage = $coverImageId > 0 ? find_image($coverImageId) : null;
+        $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
-        $stmt = db()->prepare('UPDATE galleries SET title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
         $gallery = find_gallery((int) $gallery['id']);
         if ($gallery) {
             write_gallery_sidecar($gallery);
@@ -281,15 +359,68 @@ function cms_admin_edit_gallery(): void
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
     echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
+    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
+    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
     echo '<button type="submit">Save gallery</button></form></section>';
-    echo '<section class="panel"><h2>Images</h2><table><thead><tr><th>Image</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+    echo '<section class="panel"><h2>Scan</h2><form method="post" action="' . e(url_for('admin_scan_images')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<button type="submit">Scan/import images in this gallery</button></form></section>';
+    echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<div class="bulk-row"><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option></select></label><button type="submit">Apply to selected</button></div>';
+    echo '<table><thead><tr><th>Select</th><th>Preview</th><th>Image</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
-        echo '<tr><td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
+        $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
+        echo '<tr><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
+        echo '<td><img class="admin-thumb" loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt=""></td>';
+        echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
-    echo '</tbody></table></section>';
+    echo '</tbody></table></form></section>';
     render_footer();
+}
+
+function cms_admin_bulk_images(): void
+{
+    require_admin();
+    verify_csrf();
+    $galleryId = (int) ($_POST['gallery_id'] ?? 0);
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    $imageIds = array_map('intval', $_POST['image_ids'] ?? []);
+    $action = (string) ($_POST['action'] ?? '');
+    if (!$imageIds) {
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
+    }
+    $ownedIds = [];
+    foreach ($imageIds as $imageId) {
+        $image = find_image($imageId);
+        if ($image && (int) $image['gallery_id'] === $galleryId) {
+            $ownedIds[] = $imageId;
+        }
+    }
+    if (!$ownedIds) {
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
+    }
+    if ($action === 'cover') {
+        $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$ownedIds[0], now_sql(), $galleryId]);
+        $updated = find_gallery($galleryId);
+        if ($updated) {
+            write_gallery_sidecar($updated);
+        }
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'saved' => 1]));
+    }
+    if (in_array($action, ['draft', 'public', 'private'], true)) {
+        $placeholders = implode(',', array_fill(0, count($ownedIds), '?'));
+        $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+        $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
+    }
+    redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
 }
 
 function cms_admin_edit_image(): void
@@ -321,7 +452,7 @@ function cms_admin_edit_image(): void
 
 function gallery_images(int $galleryId, bool $publicOnly): array
 {
-    $sql = 'SELECT * FROM images WHERE gallery_id = ?';
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
     }
@@ -336,6 +467,37 @@ function visibility_options(string $selected): string
     $html = '';
     foreach (['draft', 'public', 'private'] as $visibility) {
         $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e($visibility) . '</option>';
+    }
+    return $html;
+}
+
+function gallery_parent_options(array $currentGallery): string
+{
+    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    $html = '';
+    $currentPath = rtrim((string) $currentGallery['folder_path'], '/');
+    foreach ($galleries as $gallery) {
+        if ((int) $gallery['id'] === (int) $currentGallery['id']) {
+            continue;
+        }
+        $path = (string) $gallery['folder_path'];
+        if ($path !== '' && str_starts_with($path . '/', $currentPath . '/')) {
+            continue;
+        }
+        $selected = (int) ($currentGallery['parent_id'] ?? 0) === (int) $gallery['id'] ? ' selected' : '';
+        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+    }
+    return $html;
+}
+
+function gallery_cover_options(int $galleryId, int $selectedImageId): string
+{
+    $images = gallery_images($galleryId, false);
+    $html = '';
+    foreach ($images as $image) {
+        $selected = $selectedImageId === (int) $image['id'] ? ' selected' : '';
+        $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
+        $html .= '<option value="' . (int) $image['id'] . '"' . $selected . '>' . e($label) . '</option>';
     }
     return $html;
 }

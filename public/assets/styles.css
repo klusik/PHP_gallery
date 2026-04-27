@@ -110,11 +110,43 @@ button.secondary {
 .gallery-card a {
     display: grid;
     min-height: 12rem;
-    padding: 1rem;
     color: inherit;
     text-decoration: none;
-    align-content: end;
     background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
+}
+
+.gallery-card img {
+    display: block;
+    width: 100%;
+    height: 8rem;
+    object-fit: cover;
+}
+
+.gallery-collage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 8rem;
+    overflow: hidden;
+}
+
+.gallery-collage img {
+    height: 100%;
+    aspect-ratio: auto;
+}
+
+.gallery-collage.collage-count-1 {
+    grid-template-columns: 1fr;
+}
+
+.gallery-collage.collage-count-3 img:first-child {
+    grid-row: span 2;
+}
+
+.gallery-card-body {
+    display: grid;
+    align-content: end;
+    min-height: 10rem;
+    padding: 1rem;
 }
 
 .image-card {
@@ -140,6 +172,47 @@ button.secondary {
 .form-grid {
     display: grid;
     gap: 0.8rem;
+}
+
+.bulk-row {
+    display: flex;
+    align-items: end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.bulk-row label {
+    min-width: min(18rem, 100%);
+}
+
+.breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0 0 1rem;
+    color: var(--muted);
+}
+
+.breadcrumbs a {
+    color: var(--accent-dark);
+}
+
+.tree-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding-left: calc(var(--depth, 0) * 1.4rem);
+}
+
+.tree-branch::before {
+    content: "\21B3";
+    color: var(--muted);
+}
+
+tr.is-subgallery td {
+    background: rgba(165, 72, 28, 0.05);
 }
 
 label {
@@ -175,6 +248,13 @@ td {
     border-bottom: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
+}
+
+.admin-thumb {
+    display: block;
+    width: 5rem;
+    height: 3.75rem;
+    object-fit: cover;
 }
 
 .notice {

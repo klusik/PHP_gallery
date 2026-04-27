@@ -69,8 +69,18 @@ function discover_gallery_candidates(): array
                 break;
             }
         }
+        $hasDescendantImages = false;
+        if (!$hasImages) {
+            $descendants = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($item->getPathname(), FilesystemIterator::SKIP_DOTS));
+            foreach ($descendants as $descendant) {
+                if ($descendant->isFile() && is_supported_image_path($descendant->getFilename())) {
+                    $hasDescendantImages = true;
+                    break;
+                }
+            }
+        }
         $jsonPath = $item->getPathname() . DIRECTORY_SEPARATOR . 'gallery.json';
-        if ($hasImages || is_file($jsonPath)) {
+        if ($hasImages || $hasDescendantImages || is_file($jsonPath)) {
             $metadata = read_gallery_sidecar($jsonPath);
             $candidates[] = [
                 'folder_path' => $relative,
@@ -120,6 +130,7 @@ function import_galleries(array $folderPaths): int
         $candidates[$candidate['folder_path']] = $candidate;
     }
     $count = 0;
+    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
     foreach ($folderPaths as $folderPath) {
         $folderPath = normalize_relative_path((string) $folderPath);
         if (!isset($candidates[$folderPath])) {
@@ -147,6 +158,7 @@ function import_galleries(array $folderPaths): int
         }
         $count++;
     }
+    sync_gallery_parent_ids();
     return $count;
 }
 
@@ -163,8 +175,7 @@ function scan_gallery_images(int $galleryId): int
 
     $pdo = db();
     $count = 0;
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
-    foreach ($iterator as $file) {
+    foreach (new DirectoryIterator($root) as $file) {
         if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
             continue;
         }
@@ -212,7 +223,120 @@ function scan_gallery_images(int $galleryId): int
         }
     }
     apply_gallery_cover_from_sidecar($gallery);
+    ensure_gallery_cover((int) $gallery['id']);
     return $count;
+}
+
+function ensure_gallery_cover(int $galleryId): void
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery || !empty($gallery['cover_image_id'])) {
+        return;
+    }
+    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1");
+    $stmt->execute([$galleryId]);
+    $coverId = $stmt->fetchColumn();
+    if (!$coverId) {
+        return;
+    }
+    $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $update->execute([(int) $coverId, now_sql(), $galleryId]);
+}
+
+function sync_gallery_parent_ids(): void
+{
+    $galleries = db()->query('SELECT id, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    foreach ($galleries as $gallery) {
+        $parent = find_parent_gallery_for_path((string) $gallery['folder_path']);
+        $parentId = $parent ? (int) $parent['id'] : null;
+        if ($parentId === null) {
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
+            $stmt->execute([now_sql(), (int) $gallery['id']]);
+            continue;
+        }
+        $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
+        $stmt->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
+    }
+}
+
+function child_galleries(int $parentId, bool $publicOnly): array
+{
+    $sql = "SELECT g.*, COUNT(i.id) AS image_count
+        FROM galleries g
+        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+        WHERE g.parent_id = ?";
+    $params = [$parentId];
+    if ($publicOnly) {
+        $sql .= " AND g.visibility = 'public'";
+    }
+    $sql .= ' GROUP BY g.id ORDER BY g.sort_order, g.title';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function gallery_ancestors(array $gallery, bool $publicOnly): array
+{
+    $ancestors = [];
+    $parentId = $gallery['parent_id'] ?? null;
+    while ($parentId) {
+        $parent = find_gallery((int) $parentId);
+        if (!$parent || ($publicOnly && $parent['visibility'] !== 'public')) {
+            break;
+        }
+        array_unshift($ancestors, $parent);
+        $parentId = $parent['parent_id'] ?? null;
+    }
+    return $ancestors;
+}
+
+function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
+{
+    return gallery_direct_cover_image($galleryId, $publicOnly);
+}
+
+function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return null;
+    }
+    if (!empty($gallery['cover_image_id'])) {
+        $cover = find_image((int) $gallery['cover_image_id']);
+        if ($cover && !str_contains((string) $cover['relative_path'], '/') && (!$publicOnly || $cover['visibility'] === 'public')) {
+            return $cover;
+        }
+    }
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$galleryId]);
+    $image = $stmt->fetch();
+    return $image ?: null;
+}
+
+function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
+{
+    $images = [];
+    foreach (child_galleries($galleryId, $publicOnly) as $child) {
+        $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
+        if ($cover) {
+            $images[(int) $cover['id']] = $cover;
+        }
+        if (count($images) >= $limit) {
+            break;
+        }
+        foreach (gallery_cover_collage_images((int) $child['id'], $publicOnly, $limit - count($images)) as $descendantCover) {
+            $images[(int) $descendantCover['id']] = $descendantCover;
+            if (count($images) >= $limit) {
+                break 2;
+            }
+        }
+    }
+    return array_values($images);
 }
 
 function apply_gallery_cover_from_sidecar(array $gallery): void
@@ -305,7 +429,7 @@ function zip_cache_dir(): string
 
 function gallery_zip_signature(int $galleryId, bool $publicOnly): string
 {
-    $sql = 'SELECT relative_path, file_size, modified_at FROM images WHERE gallery_id = ?';
+    $sql = "SELECT relative_path, file_size, modified_at FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
     $params = [$galleryId];
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
@@ -318,7 +442,7 @@ function gallery_zip_signature(int $galleryId, bool $publicOnly): string
 
 function all_zip_signature(): string
 {
-    $rows = db()->query('SELECT g.folder_path, i.relative_path, i.file_size, i.modified_at FROM images i JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path')->fetchAll();
+    $rows = db()->query("SELECT g.folder_path, i.relative_path, i.file_size, i.modified_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.relative_path")->fetchAll();
     return hash('sha256', json_encode($rows, JSON_UNESCAPED_SLASHES));
 }
 
@@ -370,7 +494,7 @@ function build_all_zip(): string
 
 function gallery_zip_files(array $gallery, bool $publicOnly): array
 {
-    $sql = 'SELECT * FROM images WHERE gallery_id = ?';
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
     $params = [(int) $gallery['id']];
     if ($publicOnly) {
         $sql .= " AND visibility = 'public'";
