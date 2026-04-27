@@ -21,6 +21,11 @@ Important routes:
 - `install.php` is standalone and can create config, DB tables, folders, and the
   first admin account before the normal app is ready.
 
+The app supports two web-root layouts. The repository root can be served
+directly, in which case root `index.php` delegates to `public/index.php`; or the
+server can point directly at `public/`. Query-string routes work in both layouts,
+and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
+
 ## Files
 
 - `app/bootstrap.php`: loads the app and dispatches routes.
@@ -33,6 +38,9 @@ Important routes:
 - `database/migrations/`: ordered PHP files returning SQL statements.
 - `public/assets/styles.css`: built-in themeable stylesheet.
 - `public/assets/gallery.js`: voting AJAX, tag suggestions, and lightbox behavior.
+- `deploy.bat` and `scripts/deploy.ps1`: optional FTP/local deployment helpers.
+- `.htaccess`, `public/.htaccess`, `cache/.htaccess`, `galleries/.htaccess`:
+  routing and direct-access protection for Apache hosting.
 
 ## Data Model
 
@@ -55,6 +63,10 @@ Scores are summed from those rows, and the UI marks the current visitor's choice
 custom CSS upload is saved to `public/assets/custom.css` and loaded after the
 built-in stylesheet.
 
+Migrations are ordered PHP files that return SQL statements. The runner records
+applied versions in `schema_migrations`. MySQL DDL statements are not wrapped in
+an explicit transaction because MySQL may auto-commit schema changes.
+
 ## Filesystem Rules
 
 Gallery discovery starts at `galleries_root`. The app normalizes relative paths
@@ -75,6 +87,18 @@ metadata changes.
 6. Bulk-publish galleries or images.
 7. Edit titles, tags, cover images, hierarchy, and theme settings.
 
+## Deployment
+
+The project is designed for copy/FTP deployment. `deploy.bat` wraps the
+PowerShell deploy script and can either upload by FTP or create a local
+`deploy/` folder for manual upload. Deployment excludes local-only files such as
+`.git`, `config.php`, caches, logs, and temporary output.
+
+Production setup should create `config.php` on the target server. The browser
+installer is the intended low-friction path because it can create the database,
+run migrations, write config, and create the first admin user without console
+access.
+
 ## Security Notes
 
 All database writes use PDO prepared statements. Admin POST routes require CSRF
@@ -83,3 +107,8 @@ and image visibility unless an admin is logged in.
 
 `install.php` should be deleted or blocked after setup because it can create or
 modify database credentials.
+
+The `app/`, `database/`, `scripts/`, `cache/`, and `galleries/` directories are
+not intended to be browsed directly. Apache `.htaccess` files are included for
+common hosting setups, but server-level configuration should enforce the same
+rule where `.htaccess` is unavailable.
