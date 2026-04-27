@@ -13,6 +13,18 @@ No WordPress, Composer packages, npm build step, or framework is required.
 
 ## Setup
 
+For browser-based setup, upload the files, open:
+
+```text
+https://example.com/install.php
+```
+
+The installer can create the database, create or update the database user, write
+`config.php`, run migrations, create writable folders, and add the first admin
+user. Delete or block `install.php` after setup.
+
+For manual setup:
+
 1. Copy `config.example.php` to `config.php`.
 2. Edit database credentials, `base_url`, `galleries_root`, `zip_cache_path`, `admin_session_name`, `visitor_vote_secret`, and `setup_key`.
 3. Create the configured database in MySQL or MariaDB.
@@ -24,6 +36,19 @@ From a shell:
 php scripts/migrate.php
 php scripts/create_admin.php admin "choose-a-strong-password"
 ```
+
+If MySQL reports `Plugin 'mysql_native_password' is not loaded`, recreate or alter the
+database user to use the server's current authentication plugin. On MySQL 8/9 this is
+usually `caching_sha2_password`:
+
+```sql
+ALTER USER 'gallery_user'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'change-me';
+ALTER USER 'gallery_user'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY 'change-me';
+FLUSH PRIVILEGES;
+```
+
+Use the same password in `config.php`. If the user does not exist for one of those
+hosts, create it and grant access to the gallery database instead.
 
 On shared hosting without shell access, visit:
 
@@ -118,10 +143,10 @@ deploy.bat -Mode ftp
 
 After upload:
 
-1. Create `config.php` on the server from `config.example.php`.
-2. Create the database.
-3. Run the setup URL with your `setup_key` or run the CLI scripts if your host provides shell access.
-4. Ensure `galleries_root` and `zip_cache_path` are writable by PHP.
+1. Open `install.php` and complete the browser-based setup, or create `config.php` manually from `config.example.php`.
+2. If you use manual setup, create the database and run the setup URL with your `setup_key` or run the CLI scripts if your host provides shell access.
+3. Ensure `galleries_root` and `zip_cache_path` are writable by PHP.
+4. Delete or block `install.php` after setup.
 
 ## Security Notes
 
