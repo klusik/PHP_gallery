@@ -17,6 +17,8 @@ Important routes:
   votes, breadcrumbs, and lightbox data.
 - `page=tag&slug=...` renders a public gallery listing filtered by one tag.
 - `page=media&id=...` streams an image through PHP after visibility checks.
+- `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
+  same visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.
 - `install.php` is standalone and can create config, DB tables, folders, and the
@@ -38,7 +40,8 @@ and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
 - `app/controllers.php`: page handlers and HTML rendering for public/admin UI.
 - `database/migrations/`: ordered PHP files returning SQL statements.
 - `public/assets/styles.css`: built-in themeable stylesheet.
-- `public/assets/gallery.js`: voting AJAX, tag suggestions, and lightbox behavior.
+- `public/assets/gallery.js`: voting AJAX, tag suggestions, admin tree controls,
+  select-all controls, and lightbox behavior.
 - `deploy.bat` and `scripts/deploy.ps1`: optional FTP/local deployment helpers.
 - `.htaccess`, `public/.htaccess`, `cache/.htaccess`, `galleries/.htaccess`:
   routing and direct-access protection for Apache hosting.
@@ -67,6 +70,10 @@ Scores are summed from those rows, and the UI marks the current visitor's choice
 custom CSS upload is saved to `public/assets/custom.css` and loaded after the
 built-in stylesheet.
 
+The admin gallery tree collapse state is also stored in `app_settings` as a JSON
+list of collapsed gallery IDs. The dashboard posts updates through
+`page=admin_save_gallery_collapse`.
+
 The public JavaScript intentionally detects inline `style` attributes and shows
 a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
@@ -81,6 +88,22 @@ Gallery discovery starts at `galleries_root`. The app normalizes relative paths
 and checks that image access stays inside the configured gallery folder. Public
 media is served through `page=media`, not as raw filesystem paths.
 
+Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
+Generated files are progressive JPEGs named from the original base filename plus
+`_thumb300` or `_thumb800`, for example `photo_thumb300.jpg`. Discovery ignores
+thumbnail folders, and scans only import direct source images from the gallery
+folder. Public cards request responsive `300w` and `800w` thumbnail candidates
+through `page=thumb` so the same visibility rules apply as original media.
+Missing thumbnails fall back to the original media route until an admin
+generates them. The lightbox intentionally uses the original protected media
+route instead of thumbnails.
+
+Thumbnail creation is incremental. If a generated file exists and is newer than
+or equal to the source image, the service counts it as skipped and does not
+rewrite it. Admin thumbnail forms progressively enhance to AJAX batches by
+posting `ajax=1` to `page=admin_create_thumbnails`; the response reports total,
+processed, created, skipped, and completion state for the progress UI.
+
 Each gallery can also have a `gallery.json` sidecar. The app writes metadata such
 as title, description, visibility, sort order, and cover path there when gallery
 metadata changes.
@@ -90,10 +113,13 @@ metadata changes.
 1. Run `install.php` or manual setup.
 2. Log in at `index.php?page=admin_login`.
 3. Use `Check for new gallery folders`.
-4. Import selected folders.
-5. Scan selected galleries or scan from an individual gallery edit page.
+4. Import selected folders. Selected parent folders automatically include
+   detected descendant gallery folders.
+5. Let import scan images and optionally create thumbnails, or run scan and
+   thumbnail actions later from the dashboard/edit pages.
 6. Bulk-publish galleries or images.
-7. Edit titles, tags, cover images, hierarchy, and theme settings.
+7. Collapse or expand subgallery rows as needed; the state is persisted.
+8. Edit titles, tags, cover images, hierarchy, and theme settings.
 
 ## Deployment
 

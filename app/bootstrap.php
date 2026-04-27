@@ -48,6 +48,7 @@ function cms_run(): void
 
     $route = cms_route_from_request();
     $page = $route['page'];
+    $_GET['page'] = $page;
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
@@ -56,6 +57,7 @@ function cms_run(): void
         'gallery' => 'cms_gallery',
         'tag' => 'cms_tag',
         'media' => 'cms_media',
+        'thumb' => 'cms_thumb',
         'vote' => 'cms_vote',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
@@ -66,6 +68,8 @@ function cms_run(): void
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
+        'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',

@@ -63,9 +63,10 @@ function cms_gallery(): void
     echo '<section class="grid">';
     foreach ($images as $image) {
         $mediaUrl = url_for('media', ['id' => $image['id']]);
+        $previewUrl = thumbnail_url($image, 300);
         $imageTags = tags_for_entity('image', (int) $image['id']);
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '">';
-        echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($mediaUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '">';
+        echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" srcset="' . e(thumbnail_url($image, 300)) . ' 300w, ' . e(thumbnail_url($image, 800)) . ' 800w" sizes="(min-width: 900px) 33vw, 100vw" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
         render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
@@ -122,13 +123,13 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
     if ($cover) {
-        echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $cover['id']])) . '" alt="">';
+        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 300)) . '" srcset="' . e(thumbnail_url($cover, 300)) . ' 300w, ' . e(thumbnail_url($cover, 800)) . ' 800w" sizes="(min-width: 900px) 360px, 100vw" alt="">';
     } else {
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt="">';
+                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_url($image, 300)) . ' 300w, ' . e(thumbnail_url($image, 800)) . ' 800w" sizes="180px" alt="">';
             }
             echo '</span>';
         }
@@ -180,9 +181,41 @@ function render_lightbox(): void
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><img data-lightbox-img alt=""><figcaption><h2 data-lightbox-title></h2><p data-lightbox-description></p><p>Score: <strong data-lightbox-score>0</strong></p></figcaption></figure>';
+    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption><h2 data-lightbox-title></h2><p data-lightbox-description></p><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value=""><span>Score: <strong data-lightbox-score data-score-for="">0</strong></span><button type="submit" name="vote" value="1" aria-label="Vote up">Up</button><button type="submit" name="vote" value="-1" aria-label="Vote down">Down</button></form></figcaption></figure>';
     echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
+}
+
+/**
+ * Stream a generated thumbnail after the same visibility checks as originals.
+ */
+function cms_thumb(): void
+{
+    $image = find_image((int) ($_GET['id'] ?? 0));
+    $size = (int) ($_GET['size'] ?? 0);
+    if (!$image || !in_array($size, thumbnail_sizes(), true)) {
+        cms_not_found();
+        return;
+    }
+    $gallery = find_gallery((int) $image['gallery_id']);
+    if (!$gallery || (($gallery['visibility'] !== 'public' || $image['visibility'] !== 'public') && !current_user())) {
+        cms_not_found();
+        return;
+    }
+    try {
+        $path = thumbnail_abs_path($image, $gallery, $size);
+    } catch (RuntimeException) {
+        cms_not_found();
+        return;
+    }
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: image/jpeg');
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: public, max-age=604800');
+    readfile($path);
 }
 
 /**
@@ -358,21 +391,26 @@ function cms_admin(): void
     require_admin();
     sync_gallery_parent_ids();
     $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
+    $collapsedIds = array_flip(collapsed_gallery_ids());
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
+    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="inline-form">' . csrf_field() . '<input type="hidden" name="scope" value="all"><button type="submit" class="secondary">Create all thumbnails</button></form>';
     echo '</nav></section>';
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '">' . csrf_field();
-    echo '<div class="bulk-row"><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button></div>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
     echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
         $depth = substr_count((string) $gallery['folder_path'], '/');
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
+        $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         $depthClass = 'tree-depth-' . min($depth, 8);
-        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . e($gallery['title']) . '</span></td>';
+        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav">';
         echo '<a href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
+        echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
@@ -392,6 +430,7 @@ function cms_admin_discover(): void
         echo '<p>No new gallery folders found.</p>';
     } else {
         echo '<form method="post" action="' . e(url_for('admin_import')) . '">' . csrf_field();
+        echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails during import</label></p>';
         echo '<table><thead><tr><th>Import</th><th>Folder</th><th>Title</th><th>Visibility</th></tr></thead><tbody>';
         foreach ($candidates as $candidate) {
             echo '<tr><td><input type="checkbox" name="folders[]" value="' . e($candidate['folder_path']) . '"></td><td>' . e($candidate['folder_path']) . '</td><td>' . e($candidate['title']) . '</td><td>' . e($candidate['visibility']) . '</td></tr>';
@@ -409,8 +448,8 @@ function cms_admin_import(): void
 {
     require_admin();
     verify_csrf();
-    $count = import_galleries($_POST['folders'] ?? []);
-    redirect_to(url_for('admin', ['imported' => $count]));
+    $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
+    redirect_to(url_for('admin', $result));
 }
 
 /**
@@ -429,6 +468,12 @@ function cms_admin_bulk_galleries(): void
         }
         redirect_to(url_for('admin', ['scanned' => $count]));
     }
+    if ($action === 'thumbs') {
+        foreach ($galleryIds as $galleryId) {
+            $count += create_gallery_thumbnails($galleryId);
+        }
+        redirect_to(url_for('admin', ['thumbnails' => $count]));
+    }
     if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
         $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
         $stmt = db()->prepare('UPDATE galleries SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
@@ -442,6 +487,126 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
     }
     redirect_to(url_for('admin'));
+}
+
+/**
+ * Create thumbnails for one gallery, selected images, or every gallery.
+ */
+function cms_admin_create_thumbnails(): void
+{
+    require_admin();
+    verify_csrf();
+    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        cms_admin_create_thumbnails_batch();
+        return;
+    }
+    $count = 0;
+    if (($_POST['scope'] ?? '') === 'all') {
+        $count = create_all_thumbnails();
+        redirect_to(url_for('admin', ['thumbnails' => $count]));
+    }
+    $galleryId = (int) ($_POST['thumbnail_gallery_id'] ?? $_POST['gallery_id'] ?? 0);
+    $gallery = $galleryId > 0 ? find_gallery($galleryId) : null;
+    if ($gallery && empty($_POST['thumbnail_gallery_id']) && !empty($_POST['image_ids'])) {
+        foreach (array_map('intval', $_POST['image_ids']) as $imageId) {
+            $image = find_image($imageId);
+            if ($image && (int) $image['gallery_id'] === $galleryId) {
+                $count += create_image_thumbnails($image, $gallery);
+            }
+        }
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
+    }
+    if ($gallery) {
+        $count = create_gallery_thumbnails($galleryId);
+        redirect_to(url_for('admin', ['thumbnails' => $count]));
+    }
+    redirect_to(url_for('admin'));
+}
+
+/**
+ * Process one AJAX thumbnail batch and return enough data for a progress bar.
+ */
+function cms_admin_create_thumbnails_batch(): void
+{
+    $imageIds = thumbnail_request_image_ids($_POST);
+    $total = count($imageIds);
+    $offset = max(0, (int) ($_POST['offset'] ?? 0));
+    $batchSize = max(1, min(12, (int) ($_POST['batch_size'] ?? 6)));
+    $batch = array_slice($imageIds, $offset, $batchSize);
+    $created = 0;
+    $skipped = 0;
+    $galleryCache = [];
+    foreach ($batch as $imageId) {
+        $image = find_image((int) $imageId);
+        if (!$image) {
+            continue;
+        }
+        $galleryId = (int) $image['gallery_id'];
+        if (!array_key_exists($galleryId, $galleryCache)) {
+            $galleryCache[$galleryId] = find_gallery($galleryId);
+        }
+        if (!$galleryCache[$galleryId]) {
+            continue;
+        }
+        $result = create_image_thumbnails_result($image, $galleryCache[$galleryId]);
+        $created += (int) $result['created'];
+        $skipped += (int) $result['skipped'];
+    }
+    $processed = min($total, $offset + count($batch));
+    header('Content-Type: application/json');
+    echo json_encode([
+        'total' => $total,
+        'processed' => $processed,
+        'next_offset' => $processed,
+        'created' => $created,
+        'skipped' => $skipped,
+        'done' => $processed >= $total,
+    ]);
+}
+
+/**
+ * Resolve thumbnail target images from dashboard and gallery-edit forms.
+ */
+function thumbnail_request_image_ids(array $post): array
+{
+    if (($post['scope'] ?? '') === 'all') {
+        return all_image_ids();
+    }
+    if (!empty($post['gallery_ids']) && is_array($post['gallery_ids'])) {
+        return image_ids_for_galleries($post['gallery_ids']);
+    }
+    $thumbnailGalleryId = (int) ($post['thumbnail_gallery_id'] ?? 0);
+    if ($thumbnailGalleryId > 0) {
+        return image_ids_for_galleries([$thumbnailGalleryId]);
+    }
+    $galleryId = (int) ($post['gallery_id'] ?? 0);
+    if ($galleryId > 0 && !empty($post['image_ids']) && is_array($post['image_ids'])) {
+        $ids = [];
+        foreach (array_map('intval', $post['image_ids']) as $imageId) {
+            $image = find_image($imageId);
+            if ($image && (int) $image['gallery_id'] === $galleryId) {
+                $ids[] = $imageId;
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+    if ($galleryId > 0) {
+        return image_ids_for_galleries([$galleryId]);
+    }
+    return [];
+}
+
+/**
+ * Persist the admin gallery tree collapse state from JavaScript.
+ */
+function cms_admin_save_gallery_collapse(): void
+{
+    require_admin();
+    verify_csrf();
+    $ids = json_decode((string) ($_POST['collapsed_ids'] ?? '[]'), true);
+    set_collapsed_gallery_ids(is_array($ids) ? $ids : []);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => true]);
 }
 
 /**
@@ -512,12 +677,12 @@ function cms_admin_edit_gallery(): void
     echo '<button type="submit">Scan/import images in this gallery</button></form></section>';
     echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '">' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<div class="bulk-row"><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option></select></label><button type="submit">Apply to selected</button></div>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
     echo '<table><thead><tr><th>Select</th><th>Preview</th><th>Image</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
-        echo '<td><img class="admin-thumb" loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt=""></td>';
+        echo '<td><img class="admin-thumb" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
         echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
@@ -539,6 +704,7 @@ function cms_admin_bulk_images(): void
     }
     $imageIds = array_map('intval', $_POST['image_ids'] ?? []);
     $action = (string) ($_POST['action'] ?? '');
+    $count = 0;
     if (!$imageIds) {
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
@@ -566,6 +732,15 @@ function cms_admin_bulk_images(): void
         $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
         $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
     }
+    if ($action === 'thumbs') {
+        foreach ($ownedIds as $imageId) {
+            $image = find_image($imageId);
+            if ($image) {
+                $count += create_image_thumbnails($image, $gallery);
+            }
+        }
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
+    }
     redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
 }
 
@@ -589,7 +764,7 @@ function cms_admin_edit_image(): void
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
     render_header('Edit image');
-    echo '<section class="panel"><h1>Edit image</h1><p><img loading="lazy" src="' . e(url_for('media', ['id' => $image['id']])) . '" alt=""></p>';
+    echo '<section class="panel"><h1>Edit image</h1><p><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
@@ -600,21 +775,6 @@ function cms_admin_edit_image(): void
     render_tag_datalist();
     echo '<button type="submit">Save image</button></form></section>';
     render_footer();
-}
-
-/**
- * Fetch images for admin/public rendering, optionally public-only.
- */
-function gallery_images(int $galleryId, bool $publicOnly): array
-{
-    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
-    if ($publicOnly) {
-        $sql .= " AND visibility = 'public'";
-    }
-    $sql .= ' ORDER BY sort_order, filename';
-    $stmt = db()->prepare($sql);
-    $stmt->execute([$galleryId]);
-    return $stmt->fetchAll();
 }
 
 /**

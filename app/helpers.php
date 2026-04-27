@@ -127,7 +127,9 @@ function render_header(string $title): void
     if ($customCss) {
         echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
     }
-    echo '</head><body><header class="site-header">';
+    $page = (string) ($_GET['page'] ?? 'home');
+    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
+    echo '</head><body class="' . e($bodyClass) . '"><header class="site-header">';
     echo '<a class="brand" href="' . e(url_for('home')) . '">Gallery CMS</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {

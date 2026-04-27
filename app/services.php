@@ -147,17 +147,28 @@ function write_gallery_sidecar(array $gallery): void
 /**
  * Create gallery rows for selected discovered folders.
  */
-function import_galleries(array $folderPaths): int
+function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
     $pdo = db();
     $candidates = [];
     foreach (discover_gallery_candidates() as $candidate) {
         $candidates[$candidate['folder_path']] = $candidate;
     }
-    $count = 0;
+    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
+    $folderPaths = [];
+    foreach ($requested as $requestedPath) {
+        foreach (array_keys($candidates) as $candidatePath) {
+            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
+                $folderPaths[$candidatePath] = $candidatePath;
+            }
+        }
+    }
     usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    $imported = 0;
+    $scanned = 0;
+    $thumbs = 0;
+    $importedIds = [];
     foreach ($folderPaths as $folderPath) {
-        $folderPath = normalize_relative_path((string) $folderPath);
         if (!isset($candidates[$folderPath])) {
             continue;
         }
@@ -180,11 +191,18 @@ function import_galleries(array $folderPaths): int
         $gallery = find_gallery((int) $pdo->lastInsertId());
         if ($gallery) {
             write_gallery_sidecar($gallery);
+            $importedIds[] = (int) $gallery['id'];
         }
-        $count++;
+        $imported++;
     }
     sync_gallery_parent_ids();
-    return $count;
+    foreach ($importedIds as $galleryId) {
+        $scanned += scan_gallery_images($galleryId);
+        if ($createThumbnails) {
+            $thumbs += create_gallery_thumbnails($galleryId);
+        }
+    }
+    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs];
 }
 
 /**
@@ -256,6 +274,202 @@ function scan_gallery_images(int $galleryId): int
     apply_gallery_cover_from_sidecar($gallery);
     ensure_gallery_cover((int) $gallery['id']);
     return $count;
+}
+
+/**
+ * Thumbnail variants generated for web views.
+ */
+function thumbnail_sizes(): array
+{
+    return [300, 800];
+}
+
+/**
+ * Resolve the thumbs folder for a gallery and create it when requested.
+ */
+function gallery_thumbs_dir(array $gallery, bool $create = false): string
+{
+    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'thumbs';
+    if ($create && !is_dir($path)) {
+        mkdir($path, 0775, true);
+    }
+    if (!path_inside(gallery_abs_path((string) $gallery['folder_path']), $path)) {
+        throw new RuntimeException('Thumbnail path is outside its gallery.');
+    }
+    return $path;
+}
+
+/**
+ * Build the generated JPEG thumbnail filename for an image and size.
+ */
+function thumbnail_filename(array $image, int $size): string
+{
+    return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.jpg';
+}
+
+/**
+ * Resolve one generated thumbnail path.
+ */
+function thumbnail_abs_path(array $image, array $gallery, int $size): string
+{
+    if (!in_array($size, thumbnail_sizes(), true)) {
+        throw new RuntimeException('Unsupported thumbnail size.');
+    }
+    return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size);
+}
+
+/**
+ * Return the best public URL for an image thumbnail, falling back to the source.
+ */
+function thumbnail_url(array $image, int $size): string
+{
+    $gallery = find_gallery((int) $image['gallery_id']);
+    if ($gallery) {
+        try {
+            if (is_file(thumbnail_abs_path($image, $gallery, $size))) {
+                return url_for('thumb', ['id' => $image['id'], 'size' => $size]);
+            }
+        } catch (RuntimeException) {
+            return url_for('media', ['id' => $image['id']]);
+        }
+    }
+    return url_for('media', ['id' => $image['id']]);
+}
+
+/**
+ * Generate all configured thumbnails for direct images in one gallery.
+ */
+function create_gallery_thumbnails(int $galleryId): int
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return 0;
+    }
+    $count = 0;
+    foreach (gallery_images($galleryId, false) as $image) {
+        $count += create_image_thumbnails($image, $gallery);
+    }
+    return $count;
+}
+
+/**
+ * Generate all configured thumbnails for every imported image.
+ */
+function create_all_thumbnails(): int
+{
+    $count = 0;
+    foreach (db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $galleryId) {
+        $count += create_gallery_thumbnails((int) $galleryId);
+    }
+    return $count;
+}
+
+/**
+ * Rebuild web-optimized JPEG thumbnails for one source image.
+ */
+function create_image_thumbnails(array $image, array $gallery): int
+{
+    return create_image_thumbnails_result($image, $gallery)['created'];
+}
+
+/**
+ * Rebuild missing or stale thumbnails and report created/skipped variants.
+ */
+function create_image_thumbnails_result(array $image, array $gallery): array
+{
+    $sourcePath = image_abs_path($image, $gallery);
+    if (!is_file($sourcePath)) {
+        return ['created' => 0, 'skipped' => 0];
+    }
+    gallery_thumbs_dir($gallery, true);
+    $targets = [];
+    $skipped = 0;
+    foreach (thumbnail_sizes() as $size) {
+        $targetPath = thumbnail_abs_path($image, $gallery, $size);
+        if (is_file($targetPath) && filemtime($targetPath) >= filemtime($sourcePath)) {
+            $skipped++;
+            continue;
+        }
+        $targets[$size] = $targetPath;
+    }
+    if (!$targets) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    if (!extension_loaded('gd')) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    $info = @getimagesize($sourcePath);
+    if ($info === false || empty($info['mime'])) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    $source = image_create_from_path($sourcePath, (string) $info['mime']);
+    if (!$source) {
+        return ['created' => 0, 'skipped' => $skipped];
+    }
+    $created = 0;
+    foreach ($targets as $size => $targetPath) {
+        if (write_resized_jpeg($source, (int) $info[0], (int) $info[1], $size, $targetPath)) {
+            $created++;
+        }
+    }
+    imagedestroy($source);
+    return ['created' => $created, 'skipped' => $skipped];
+}
+
+/**
+ * Return image IDs directly owned by the selected galleries.
+ */
+function image_ids_for_galleries(array $galleryIds): array
+{
+    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if (!$galleryIds) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id IN ($placeholders) AND relative_path NOT LIKE '%/%' ORDER BY gallery_id, sort_order, filename");
+    $stmt->execute($galleryIds);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/**
+ * Return every imported direct image ID in stable dashboard order.
+ */
+function all_image_ids(): array
+{
+    $rows = db()->query("SELECT i.id FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename")->fetchAll(PDO::FETCH_COLUMN);
+    return array_map('intval', $rows);
+}
+
+/**
+ * Load a GD image resource from the supported source MIME types.
+ */
+function image_create_from_path(string $path, string $mime): GdImage|false
+{
+    return match ($mime) {
+        'image/jpeg' => imagecreatefromjpeg($path),
+        'image/png' => imagecreatefrompng($path),
+        'image/gif' => imagecreatefromgif($path),
+        'image/webp' => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
+        default => false,
+    };
+}
+
+/**
+ * Resize an image to a maximum longer side and write a progressive JPEG.
+ */
+function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
+{
+    $scale = min(1.0, $maxSide / max($width, $height));
+    $targetWidth = max(1, (int) round($width * $scale));
+    $targetHeight = max(1, (int) round($height * $scale));
+    $target = imagecreatetruecolor($targetWidth, $targetHeight);
+    $white = imagecolorallocate($target, 255, 255, 255);
+    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
+    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    imageinterlace($target, true);
+    $written = imagejpeg($target, $targetPath, 82);
+    imagedestroy($target);
+    return $written;
 }
 
 /**
@@ -483,6 +697,21 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
 }
 
 /**
+ * Fetch images for admin/public rendering, optionally public-only.
+ */
+function gallery_images(int $galleryId, bool $publicOnly): array
+{
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= ' ORDER BY sort_order, filename';
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$galleryId]);
+    return $stmt->fetchAll();
+}
+
+/**
  * Sum all votes for an image.
  */
 function vote_score(int $imageId): int
@@ -671,6 +900,27 @@ function set_app_setting(string $key, string $value): void
 {
     $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
     $stmt->execute([$key, $value, now_sql()]);
+}
+
+/**
+ * Return gallery IDs whose admin tree rows should start collapsed.
+ */
+function collapsed_gallery_ids(): array
+{
+    $decoded = json_decode((string) app_setting('admin_collapsed_gallery_ids', '[]'), true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+    return array_values(array_unique(array_map('intval', $decoded)));
+}
+
+/**
+ * Persist the admin gallery tree collapse state.
+ */
+function set_collapsed_gallery_ids(array $ids): void
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    set_app_setting('admin_collapsed_gallery_ids', json_encode($ids, JSON_THROW_ON_ERROR));
 }
 
 /**
