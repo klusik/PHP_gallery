@@ -92,11 +92,11 @@ Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
 Generated files are progressive JPEGs named from the original base filename plus
 `_thumb300` or `_thumb800`, for example `photo_thumb300.jpg`. Discovery ignores
 thumbnail folders, and scans only import direct source images from the gallery
-folder. Public cards request responsive `300w` and `800w` thumbnail candidates
-through `page=thumb` so the same visibility rules apply as original media.
-Missing thumbnails fall back to the original media route until an admin
-generates them. The lightbox intentionally uses the original protected media
-route instead of thumbnails.
+folder. Public cards and image previews request the `800` thumbnail through
+`page=thumb`; admin table previews use the `300` thumbnail. Missing thumbnails
+fall back to the original media route until an admin generates them. The
+lightbox intentionally uses the original protected media route instead of
+thumbnails.
 
 Thumbnail creation is incremental. If a generated file exists and is newer than
 or equal to the source image, the service counts it as skipped and does not
