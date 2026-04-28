@@ -84,6 +84,12 @@ in `custom_css/` can be selected in the admin theme screen; the selected file or
 a custom upload is copied to `public/assets/custom.css` and loaded after the
 built-in stylesheet.
 
+`admin_logs` stores admin-visible operational events such as failed migration
+runs and rejected admin-only actions. The dashboard renders recent entries, and
+`page=admin_logs` provides the full workflow view with status filters and
+bulk updates so admins can mark items as `todo`, `doing`, `waiting`, or `done`
+without server log access.
+
 The admin gallery tree collapse state is also stored in `app_settings` as a JSON
 list of collapsed gallery IDs. The dashboard posts updates through
 `page=admin_save_gallery_collapse`.

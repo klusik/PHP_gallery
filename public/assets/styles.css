@@ -442,6 +442,18 @@ td {
     border-radius: var(--radius, 16px);
 }
 
+.notice.is-alert {
+    border-color: #b45309;
+    background: #fff4e6;
+    box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.18) inset;
+}
+
+.notice.is-alert .inline-action-form button {
+    border-color: #9a3412;
+    background: #d97706;
+    color: #fffdf8;
+}
+
 .inline-form {
     display: inline-flex;
     flex-wrap: wrap;

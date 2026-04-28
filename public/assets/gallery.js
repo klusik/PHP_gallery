@@ -90,6 +90,7 @@
 
     setupThumbnailProgress();
     setupPictureGame();
+    setupAdminLogStatusForms();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.
@@ -431,6 +432,53 @@
                 event.preventDefault();
                 button.click();
             }
+        });
+    }
+
+    // Function `setupAdminLogStatusForms` executes this focused behavior.
+    function setupAdminLogStatusForms() {
+        document.querySelectorAll('[data-admin-log-status-select]').forEach((select) => {
+            // Variable `originalValue` stores this steps working value.
+            let originalValue = select.value;
+            select.addEventListener('change', async () => {
+                // Variable `body` stores this steps working value.
+                const body = new FormData();
+                body.set('csrf_token', select.dataset.csrfToken || '');
+                body.set('action', 'single');
+                body.set('log_id', select.dataset.logId || '');
+                body.set('status', select.value);
+                // Variable `row` stores this steps working value.
+                const row = select.closest('[data-admin-log-row]');
+                // Variable `state` stores this steps working value.
+                const state = row ? row.querySelector('[data-admin-log-state]') : null;
+                select.disabled = true;
+                try {
+                    // Variable `response` stores this steps working value.
+                    const response = await fetch(select.dataset.updateUrl || window.location.href, {
+                        method: 'POST',
+                        body,
+                        headers: {'Accept': 'application/json'},
+                    });
+                    if (!response.ok) {
+                        select.value = originalValue;
+                        return;
+                    }
+                    // Variable `result` stores this steps working value.
+                    const result = await response.json();
+                    if (!result.ok) {
+                        select.value = originalValue;
+                        return;
+                    }
+                    originalValue = select.value;
+                    if (state) {
+                        state.textContent = result.label || select.options[select.selectedIndex]?.textContent || select.value;
+                    }
+                } catch {
+                    select.value = originalValue;
+                } finally {
+                    select.disabled = false;
+                }
+            });
         });
     }
 
