@@ -1,0 +1,159 @@
+/*
+Custom CSS template for Gallery CMS.
+
+This file is a reference and starting point for your own styling work.
+
+How to use it:
+1. Open this file and read the comments next to each section.
+2. Copy the rules you want into your real custom stylesheet.
+3. Upload your finished CSS from the Admin -> Theme screen.
+
+Important:
+- The file loaded by the application is `public/assets/custom.css`.
+- This template is only documentation and example structure.
+- If you want to remove all custom styling later, use the "Reset custom CSS"
+  button in the admin theme screen.
+
+Recommended workflow:
+- Keep the comments while you experiment.
+- Change only one group of variables or selectors at a time.
+- Prefer small, targeted overrides instead of rewriting the entire site.
+- Use browser developer tools to inspect the element you want to change, then
+  copy the selector here and adjust it.
+*/
+
+/*
+SECTION 1: GLOBAL THEME TOKENS
+
+The site already exposes visual theme colors as CSS custom properties.
+If you want to keep the built-in theme controls but refine the look further,
+override the values below in your own stylesheet.
+
+Example use cases:
+- soften the page background
+- darken cards slightly
+- increase border radius for a softer look
+- change the font stack for a more editorial or modern tone
+*/
+:root {
+    /* Main accent color used for buttons, links, and highlights. */
+    --accent: #a5481c;
+
+    /* Darker accent tone used for hover states and active controls. */
+    --accent-dark: #713414;
+
+    /* Page background. Try warm off-white or cool gray tones here. */
+    --paper: #f8f4ec;
+
+    /* Panel and card background. Keep this close to --paper for subtle UI. */
+    --panel: #fffaf0;
+
+    /* Global border radius. Increase for softer, more rounded surfaces. */
+    --radius: 16px;
+
+    /*
+    Font family note:
+    - Serif gives a classic gallery / catalog feel.
+    - Sans-serif feels more modern and utilitarian.
+    - You can also use a custom font stack if your server or browser supports it.
+    */
+    --font-family: Georgia, "Times New Roman", serif;
+}
+
+/*
+SECTION 2: SITE-WIDE OVERRIDES
+
+Use this section for changes that should apply across the whole site.
+Keep the rules broad and conservative unless you want a dramatic redesign.
+*/
+body {
+    /* Adjust line height if you want the UI to feel denser or looser. */
+    line-height: 1.5;
+}
+
+a {
+    /* Links inherit the theme accent by default, but you can refine them here. */
+    text-underline-offset: 0.15em;
+}
+
+/*
+SECTION 3: HEADER AND NAVIGATION
+
+This is a good place to adjust spacing, weight, or alignment of the top bar.
+Avoid changing layout too aggressively unless you want to rework every page.
+*/
+.site-header {
+    /* Example: increase padding for a roomier header. */
+}
+
+.site-header .nav a {
+    /* Example: make navigation links feel more like tabs or pills. */
+}
+
+/*
+SECTION 4: PANELS AND CARDS
+
+Panels are used throughout admin screens and some public surfaces.
+Cards appear in gallery listings and image grids.
+*/
+.panel,
+.hero,
+.gallery-card,
+.image-card {
+    /* Example: slightly stronger shadow for more depth. */
+    /* box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08); */
+}
+
+/*
+SECTION 5: ADMIN AREA
+
+If you mainly want to customize the admin area, focus here.
+These selectors only affect pages whose body class includes `admin-page`.
+*/
+.admin-page {
+    /* Example: set a more neutral or more technical admin look. */
+}
+
+.admin-page .panel {
+    /* Example: tighten spacing for large management tables. */
+}
+
+.admin-page table th {
+    /* Example: make table headers more compact or more distinct. */
+}
+
+.admin-page .button,
+.admin-page button {
+    /*
+    Example: keep admin actions visually consistent.
+    Avoid over-styling buttons unless you also adjust hover and focus states.
+    */
+}
+
+/*
+SECTION 6: MEDIA AND IMAGE GRIDS
+
+The gallery is image-heavy. Small changes here can have a big effect.
+Use the browser to test changes with both small and large thumbnails.
+*/
+.grid {
+    /* Example: adjust spacing between cards. */
+}
+
+.image-card img,
+.gallery-card img {
+    /* Example: rounded corners or different cropping behavior. */
+}
+
+/*
+SECTION 7: CUSTOM EXPERIMENTS
+
+Put temporary tests here while designing:
+- alternate typography
+- darker admin theme
+- stronger contrast for accessibility
+- more compact metadata blocks
+
+Once the design settles, remove comments you no longer need and keep the file
+clean enough that future edits remain understandable.
+*/

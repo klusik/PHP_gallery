@@ -396,17 +396,23 @@ function cms_admin_theme(): void
     require_admin();
     if (request_method() === 'POST') {
         verify_csrf();
-        set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
-        set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
-        set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
-        set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
-        set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
-        set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
-        if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
-            // Variable $name stores this steps working value.
-            $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
-            if (str_ends_with($name, '.css')) {
-                move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+        if (!empty($_POST['reset_custom_css'])) {
+            if (is_file(custom_css_path())) {
+                unlink(custom_css_path());
+            }
+        } else {
+            set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
+            set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
+            set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
+            set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
+            set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
+            set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
+                // Variable $name stores this steps working value.
+                $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
+                if (str_ends_with($name, '.css')) {
+                    move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+                }
             }
         }
         redirect_to(url_for('admin_theme', ['saved' => 1]));
@@ -422,8 +428,8 @@ function cms_admin_theme(): void
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '"></label>';
     echo '<label>Font style<select name="theme_font"><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
-    echo '<p class="muted">Uploaded CSS is loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<button type="submit">Save theme</button></form></section>';
+    echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
+    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
     render_footer();
 }
 
