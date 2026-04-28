@@ -72,7 +72,7 @@ The installer does these jobs for you:
 - creates or updates the database user
 - writes `config.php`
 - creates the galleries and ZIP cache folders
-- runs all database migrations
+- runs all database migrations without wrapping each migration file in an explicit transaction
 - creates the first admin account
 - writes `cache/installed.lock`
 
@@ -127,7 +127,9 @@ That page runs pending migrations and lets you create or update the admin user. 
 After the application is installed, logged-in admins can also run pending
 migrations from the dashboard when a new feature needs a database change. The
 admin page shows a migration notice with a `Run database migration` button when
-the current database schema is too old for the visible feature controls.
+the current database schema is too old for the visible feature controls. The
+same migration runner applies statements directly rather than opening a manual
+transaction around each migration file.
 
 The admin dashboard also shows a small database-backed admin log with recent
 maintenance events and failures so gallery admins can inspect what happened
