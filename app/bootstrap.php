@@ -126,6 +126,8 @@ function cms_run(): void
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
+        'admin_logs' => 'cms_admin_logs',
+        'admin_log_update' => 'cms_admin_log_update',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
         'admin_edit_image' => 'cms_admin_edit_image',

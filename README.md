@@ -129,6 +129,14 @@ migrations from the dashboard when a new feature needs a database change. The
 admin page shows a migration notice with a `Run database migration` button when
 the current database schema is too old for the visible feature controls.
 
+The admin dashboard also shows a small database-backed admin log with recent
+maintenance events and failures so gallery admins can inspect what happened
+without server log access.
+
+Use `Admin dashboard -> View log` to open the full workflow screen. From there,
+admins can filter events and mark them as `To be done`, `Will be done`,
+`Waiting`, or `Done`.
+
 ## Local Run
 
 Use PHP's built-in server from the repository root:
@@ -311,6 +319,8 @@ Route names should follow these rules:
 - destructive or state-changing routes must be POST-only and CSRF-protected
 - admin-only maintenance routes, such as `admin_run_migrations`, must also be
   POST-only and CSRF-protected
+- admin-only operational logs should be stored in the database and shown only
+  to logged-in admins
 - route handler functions use the same name with the `cms_` prefix:
   `cms_admin_edit_gallery`
 

@@ -148,6 +148,9 @@ function cms_picture_game(): void
                 (int) ($_POST['winner_image_id'] ?? 0)
             );
         } catch (RuntimeException) {
+            admin_log_event('warning', 'picture_game.vote_rejected', 'Picture game vote was rejected.', [
+                'gallery_id' => (int) $gallery['id'],
+            ]);
         }
         redirect_to(url_for('picture_game', ['id' => $gallery['id']]));
     }
@@ -699,9 +702,15 @@ function cms_admin(): void
     $collapsedIds = array_flip(collapsed_gallery_ids());
     // Variable $pictureGameReady stores this steps working value.
     $pictureGameReady = picture_game_schema_ready();
+    // Variable $featureSchemaReady stores this steps working value.
+    $featureSchemaReady = admin_feature_schema_ready();
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
+    echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    echo '<button type="submit" class="secondary' . ($featureSchemaReady ? '' : ' is-alert') . '">Run database migration</button>';
+    echo '</form>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
@@ -712,10 +721,8 @@ function cms_admin(): void
     } elseif (isset($_GET['migration_failed'])) {
         echo '<div class="notice">Migration failed: ' . e((string) $_GET['migration_failed']) . '</div>';
     }
-    if (isset($_GET['migration_required'])) {
-        render_admin_migration_notice('Picture game needs the latest database migration before it can be changed.');
-    } elseif (!$pictureGameReady) {
-        render_admin_migration_notice('Picture game controls are hidden until the latest database migration is applied.');
+    if (!$featureSchemaReady) {
+        render_admin_migration_notice('Some admin features still need database migrations.');
     }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option>';
@@ -753,11 +760,156 @@ function cms_admin(): void
 }
 
 /**
+ * Render one admin-log table row for the dashboard or log page.
+ */
+function render_admin_log_row(array $entry, bool $withActions = false): string
+{
+    // Variable $context stores this steps working value.
+    $context = [];
+    if (!empty($entry['context_json'])) {
+        $decoded = json_decode((string) $entry['context_json'], true);
+        if (is_array($decoded)) {
+            $context = $decoded;
+        }
+    }
+    // Variable $stateLabel stores this steps working value.
+    $stateLabel = admin_log_status_label((string) ($entry['status'] ?? 'todo'));
+    // Variable $statusForm stores this steps working value.
+    $statusForm = '';
+    if ($withActions) {
+        $statusForm = '<form method="post" action="' . e(url_for('admin_log_update')) . '" class="inline-action-form">' . csrf_field()
+            . '<input type="hidden" name="log_id" value="' . (int) $entry['id'] . '">'
+            . '<select name="status">';
+        foreach (admin_log_status_options() as $status => $label) {
+            $statusForm .= '<option value="' . e($status) . '"' . ((string) ($entry['status'] ?? '') === $status ? ' selected' : '') . '>' . e($label) . '</option>';
+        }
+        $statusForm .= '</select><button type="submit">Update</button></form>';
+    }
+    return '<tr>'
+        . '<td>' . e((string) $entry['created_at']) . '</td>'
+        . '<td>' . e($stateLabel) . '</td>'
+        . '<td>' . e((string) $entry['event_key']) . '</td>'
+        . '<td>' . e((string) $entry['message']) . ($context ? '<div class="muted">' . e(json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</div>' : '') . '</td>'
+        . '<td>' . e((string) ($entry['username'] ?? '')) . '</td>'
+        . ($withActions ? '<td>' . $statusForm . '</td>' : '')
+        . '</tr>';
+}
+
+/**
+ * Show and manage the admin log.
+ */
+function cms_admin_logs(): void
+{
+    require_admin();
+    // Variable $status stores this steps working value.
+    $status = isset($_GET['status']) ? (string) $_GET['status'] : null;
+    // Variable $logs stores this steps working value.
+    $logs = admin_log_list($status, 100);
+    render_header('Admin log');
+    echo '<section class="hero"><h1>Admin log</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '</nav></section>';
+    echo '<section class="panel"><h2>Filter</h2><div class="nav">';
+    echo '<a class="button' . ($status === null ? '' : ' secondary') . '" href="' . e(url_for('admin_logs')) . '">All</a>';
+    foreach (admin_log_status_options() as $value => $label) {
+        echo '<a class="button' . ($status === $value ? '' : ' secondary') . '" href="' . e(url_for('admin_logs', ['status' => $value])) . '">' . e($label) . '</a>';
+    }
+    echo '</div></section>';
+    if (!$logs) {
+        echo '<section class="panel"><p>No log entries yet.</p></section>';
+        render_footer();
+        return;
+    }
+    echo '<section class="panel"><h2>Entries</h2>';
+    echo '<table><thead><tr><th>Select</th><th>When</th><th>State</th><th>Event</th><th>Message</th><th>By</th><th>Set state</th></tr></thead><tbody>';
+    foreach ($logs as $entry) {
+        echo '<tr data-admin-log-row>';
+        echo '<td><input type="checkbox" name="log_ids[]" value="' . (int) $entry['id'] . '" form="admin-log-bulk-form"></td>';
+        echo '<td>' . e((string) $entry['created_at']) . '</td>';
+        echo '<td data-admin-log-state>' . e(admin_log_status_label((string) ($entry['status'] ?? 'todo'))) . '</td>';
+        echo '<td>' . e((string) $entry['event_key']) . '</td>';
+        echo '<td>' . e((string) $entry['message']) . '</td>';
+        echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
+        echo '<td><select name="status" data-admin-log-status-select data-log-id="' . (int) $entry['id'] . '" data-update-url="' . e(url_for('admin_log_update')) . '" data-csrf-token="' . e(csrf_token()) . '">';
+        foreach (admin_log_status_options() as $value => $label) {
+            echo '<option value="' . e($value) . '"' . ((string) ($entry['status'] ?? '') === $value ? ' selected' : '') . '>' . e($label) . '</option>';
+        }
+        echo '</select></td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table><form id="admin-log-bulk-form" method="post" action="' . e(url_for('admin_log_update')) . '">' . csrf_field();
+    echo '<div class="bulk-row"><label>Bulk set selected<select name="status">';
+    foreach (admin_log_status_options() as $value => $label) {
+        echo '<option value="' . e($value) . '">' . e($label) . '</option>';
+    }
+    echo '</select></label><button type="submit" name="action" value="bulk">Apply to selected</button></div></form></section>';
+    render_footer();
+}
+
+/**
+ * Update one or more admin log entries.
+ */
+function cms_admin_log_update(): void
+{
+    require_admin();
+    verify_csrf();
+    // Variable $wantsJson stores this steps working value.
+    $wantsJson = str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    // Variable $action stores this steps working value.
+    $action = (string) ($_POST['action'] ?? '');
+    // Variable $status stores this steps working value.
+    $status = (string) ($_POST['status'] ?? '');
+    if ($action === 'single') {
+        // Variable $logId stores this steps working value.
+        $logId = (int) ($_POST['log_id'] ?? 0);
+        try {
+            admin_log_update_status($logId, $status);
+            if ($wantsJson) {
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true, 'status' => $status, 'label' => admin_log_status_label($status)]);
+                return;
+            }
+        } catch (RuntimeException $exception) {
+            admin_log_event('error', 'admin_log.update_failed', 'Admin log status update failed.', [
+                'log_id' => $logId,
+                'status' => $status,
+                'error' => $exception->getMessage(),
+            ]);
+            if ($wantsJson) {
+                http_response_code(422);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
+                return;
+            }
+        }
+        redirect_to(url_for('admin_logs'));
+    }
+    if ($action === 'bulk' && !empty($_POST['log_ids']) && is_array($_POST['log_ids'])) {
+        foreach (array_map('intval', $_POST['log_ids']) as $logId) {
+            try {
+                admin_log_update_status($logId, $status);
+            } catch (RuntimeException $exception) {
+                admin_log_event('error', 'admin_log.bulk_update_failed', 'Bulk admin log status update failed.', [
+                    'log_id' => $logId,
+                    'status' => $status,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+        redirect_to(url_for('admin_logs'));
+    }
+    cms_not_found();
+    return;
+}
+
+/**
  * Render an admin-only prompt that can run pending migrations.
  */
 function render_admin_migration_notice(string $message): void
 {
-    echo '<div class="notice"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    // Variable $highlight stores this steps working value.
+    $highlight = admin_feature_schema_ready() ? '' : ' is-alert';
+    echo '<div class="notice' . $highlight . '"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
     echo '<span>' . e($message) . '</span> ';
     echo '<button type="submit">Run database migration</button>';
     echo '</form></div>';
@@ -841,7 +993,11 @@ function cms_admin_bulk_galleries(): void
         redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
-        if (!picture_game_schema_ready()) {
+        if (!admin_feature_schema_ready()) {
+            admin_log_event('warning', 'picture_game.schema_missing', 'Attempted to change picture game before migration was applied.', [
+                'gallery_ids' => $galleryIds,
+                'action' => $action,
+            ]);
             redirect_to(url_for('admin', ['migration_required' => 1]));
         }
         // Variable $expandedIds stores this steps working value.
@@ -872,10 +1028,13 @@ function cms_admin_run_migrations(): void
     try {
         $ran = run_migrations();
         if ($ran) {
+            admin_log_event('info', 'migrations.ran', 'Admin ran pending migrations.', ['versions' => $ran]);
             redirect_to(url_for('admin', ['migrations_ran' => implode(', ', $ran)]));
         }
+        admin_log_event('info', 'migrations.current', 'Admin checked migrations and database was already current.');
         redirect_to(url_for('admin', ['migrations_current' => 1]));
     } catch (Throwable $exception) {
+        admin_log_event('error', 'migrations.failed', 'Admin migration run failed.', ['exception' => $exception->getMessage()]);
         redirect_to(url_for('admin', ['migration_failed' => $exception->getMessage()]));
     }
 }
