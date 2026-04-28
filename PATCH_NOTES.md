@@ -2,15 +2,44 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
-## Version 0.9 (Upcoming)
+## Version 0.9
 
 ### Major Changes
 
+- Added public-page admin editing:
+  - logged-in admins can edit gallery names and descriptions directly from
+    public gallery and subgallery cards
+  - logged-in admins can edit photo titles and descriptions directly from public
+    image cards
+  - inline controls can publish, hide, or remove CMS records without deleting
+    the underlying files from disk
+  - admins can see draft/private images and subgalleries while browsing public
+    gallery pages
+- Improved the public lightbox metadata and voting experience:
+  - image descriptions are visible in the overlay
+  - missing descriptions show a clear `No description.` fallback
+  - score is shown as a dedicated badge under the picture
+  - up/down vote controls and the current vote indicator are visible under the
+    picture metadata
+  - keyboard up/down voting updates the overlay vote state
+- Made the public site name configurable:
+  - the default `Gallery CMS` label can be changed from Admin -> Theme
+  - the configured name is used in the header and browser title
+  - the home page no longer renders a default `Galleries` hero block when no
+    gallery is selected
+- Added selectable custom CSS skins:
+  - the Theme screen lists `.css` files from `custom_css/`
+  - selecting a skin copies it to `public/assets/custom.css`
+  - uploaded CSS is still supported and can be reset
+  - added a new `modern.css` skin with matching active CSS output
 - Added an optional picture comparison game for gallery branches:
   - new galleries are opted out by default
   - admins can enable or disable the game from gallery edit pages
   - admins can bulk-enable or bulk-disable selected galleries and their
     subgalleries from the dashboard
+  - picture-game controls stay hidden until the required migration is applied
+  - stale databases show an admin-only `Run database migration` prompt instead
+    of throwing a fatal error
   - public gallery pages show a `Play picture game` button when enough eligible
     public images exist
 - Added side-by-side image voting:
@@ -35,11 +64,15 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 - Added `picture_game_votes` to store pair display history and selected winners
 - Picture-game winners also write into the existing `image_votes` table so game
   choices contribute to normal image scores
+- Added schema-readiness checks around picture-game admin controls so upgraded
+  code can load before the new migration has been applied
 
 ### Documentation
 
+- Added the root `PATCH_NOTES.md` file with backwards release history
 - Updated README with the picture game workflow, admin opt-in behavior, voting
-  rules, pair depletion behavior, and statistics
+  rules, pair depletion behavior, statistics, selectable CSS skins, configurable
+  site naming, and admin-run migrations
 - Updated architecture notes with the new route, pair-history table, and admin
   workflow additions
 

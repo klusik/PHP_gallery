@@ -23,6 +23,10 @@ Important routes:
   same visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.
+- `page=admin_run_migrations` runs pending migrations from an authenticated
+  admin POST when the dashboard detects a stale schema.
+- `page=admin_public_update_gallery` and `page=admin_public_update_image` save
+  admin-only inline edits submitted from public gallery pages.
 - `install.php` is standalone and can create config, DB tables, folders, and the
   first admin account before the normal app is ready.
 
@@ -92,6 +96,11 @@ Migrations are ordered PHP files that return SQL statements. The runner records
 applied versions in `schema_migrations`. MySQL DDL statements are not wrapped in
 an explicit transaction because MySQL may auto-commit schema changes.
 
+Feature code that depends on a new migration should avoid fatal errors against
+older databases. The picture game checks for its required column/table before
+rendering admin controls and shows an authenticated `Run database migration`
+prompt that posts to `page=admin_run_migrations`.
+
 ## Filesystem Rules
 
 Gallery discovery starts at `galleries_root`. The app normalizes relative paths
@@ -135,6 +144,8 @@ metadata changes.
    deletes CMS records only; filesystem folders and image files are left intact.
 10. Opt galleries or gallery branches into the picture game from gallery edit
     pages or dashboard bulk actions. New galleries remain opted out by default.
+11. If a feature migration is pending, use the dashboard migration prompt to run
+    it before enabling the related controls.
 
 ## Deployment
 
