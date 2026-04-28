@@ -112,6 +112,7 @@ function cms_run(): void
         'thumb' => 'cms_thumb',
         'vote' => 'cms_vote',
         'theme_css' => 'cms_theme_css',
+        'gallery_map_data' => 'cms_gallery_map_data',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',
