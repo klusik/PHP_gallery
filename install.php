@@ -147,7 +147,14 @@ function installer_create_or_update_user(PDO $pdo, string $appUser, string $appP
             throw $exception;
         }
     }
-    $pdo->exec('ALTER USER ' . $account . $identity);
+    try {
+        $pdo->exec('ALTER USER ' . $account . $identity);
+    } catch (PDOException $exception) {
+        if (!$isMariaDb) {
+            throw $exception;
+        }
+        $pdo->exec('SET PASSWORD FOR ' . $account . ' = PASSWORD(' . $password . ')');
+    }
 }
 
 /**
@@ -180,7 +187,7 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         $statements = require $file;
         try {
             foreach ($statements as $statement) {
-                $pdo->exec($statement);
+                installer_apply_migration_statement($pdo, $statement);
             }
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
@@ -192,6 +199,40 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
     }
 
     return $ran;
+}
+
+/**
+ * Function `installer_apply_migration_statement` handles this scoped operation.
+ */
+function installer_apply_migration_statement(PDO $pdo, string $statement): void
+{
+    try {
+        $pdo->exec($statement);
+    } catch (PDOException $exception) {
+        if (!installer_duplicate_ddl_error($exception)) {
+            throw $exception;
+        }
+    }
+}
+
+/**
+ * Function `installer_duplicate_ddl_error` handles this scoped operation.
+ */
+function installer_duplicate_ddl_error(PDOException $exception): bool
+{
+    // Variable $driverCode stores this steps working value.
+    $driverCode = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+    if (in_array($driverCode, [1050, 1060, 1061, 1826], true)) {
+        return true;
+    }
+
+    // Variable $message stores this steps working value.
+    $message = $exception->getMessage();
+    return str_contains($message, 'already exists')
+        || str_contains($message, 'Duplicate column name')
+        || str_contains($message, 'Duplicate key name')
+        || str_contains($message, 'Duplicate foreign key constraint name')
+        || str_contains($message, 'errno: 121');
 }
 
 /**

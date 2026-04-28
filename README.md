@@ -51,13 +51,18 @@ For a local Laragon example, that may look like:
 http://localhost/Galerie/install.php
 ```
 
-3. Fill in the database administrator login. On local installs this is often
-   user `root` with an empty password. On shared hosting, use the MySQL database
-   credentials from your hosting control panel.
+3. Choose the database provisioning mode:
+   - On shared hosting, keep `Use existing database and existing database user`.
+     Create the database and user in the hosting control panel first, then enter
+     those credentials in the installer.
+   - On local installs, choose `Create database and database user` if you want
+     the installer to provision them with a database administrator account such
+     as `root`.
 4. Choose the gallery database name and the database user/password the gallery
-   application should use. The installer can create or update that user.
-5. Leave `caching_sha2_password` selected for newer MySQL. If your host uses
-   MariaDB or rejects that plugin, choose `Server default`.
+   application should use.
+5. Authentication plugin is only used in create mode. Leave it on `Server default`
+   for MariaDB and most shared hosts. Use `caching_sha2_password` only when you
+   know the target MySQL server requires it.
 6. Confirm the application paths. The installer will create the galleries folder
    and ZIP cache folder if PHP has permission.
 7. Enter the first admin username and password.

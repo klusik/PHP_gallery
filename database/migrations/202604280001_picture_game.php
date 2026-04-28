@@ -2,7 +2,7 @@
 
 return [
     "ALTER TABLE galleries ADD COLUMN picture_game_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER visibility",
-    "CREATE TABLE admin_logs (
+    "CREATE TABLE IF NOT EXISTS admin_logs (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id BIGINT UNSIGNED NULL,
         level ENUM('info','warning','error') NOT NULL DEFAULT 'error',
@@ -14,7 +14,7 @@ return [
         KEY admin_logs_user_created_index (user_id, created_at),
         CONSTRAINT admin_logs_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE picture_game_votes (
+    "CREATE TABLE IF NOT EXISTS picture_game_votes (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         gallery_id BIGINT UNSIGNED NOT NULL,
         image_a_id BIGINT UNSIGNED NOT NULL,

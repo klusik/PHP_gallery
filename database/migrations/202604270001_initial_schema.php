@@ -1,7 +1,7 @@
 <?php
 
 return [
-    "CREATE TABLE users (
+    "CREATE TABLE IF NOT EXISTS users (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(190) NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
@@ -9,7 +9,7 @@ return [
         created_at DATETIME NOT NULL,
         updated_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE galleries (
+    "CREATE TABLE IF NOT EXISTS galleries (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         parent_id BIGINT UNSIGNED NULL,
         folder_path VARCHAR(1024) NOT NULL,
@@ -27,7 +27,7 @@ return [
         KEY galleries_parent_id_index (parent_id),
         KEY galleries_parent_visibility_sort_index (parent_id, visibility, sort_order, title)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE images (
+    "CREATE TABLE IF NOT EXISTS images (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         gallery_id BIGINT UNSIGNED NOT NULL,
         relative_path VARCHAR(1024) NOT NULL,
@@ -50,7 +50,7 @@ return [
         KEY images_visibility_sort_index (gallery_id, visibility, sort_order, filename),
         CONSTRAINT images_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE image_votes (
+    "CREATE TABLE IF NOT EXISTS image_votes (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         image_id BIGINT UNSIGNED NOT NULL,
         user_id BIGINT UNSIGNED NULL,
@@ -65,7 +65,7 @@ return [
         CONSTRAINT image_votes_user_id_foreign FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
         CONSTRAINT image_votes_vote_check CHECK (vote IN (-1, 1))
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE tags (
+    "CREATE TABLE IF NOT EXISTS tags (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         slug VARCHAR(120) NOT NULL,
@@ -74,26 +74,26 @@ return [
         UNIQUE KEY tags_slug_unique (slug),
         KEY tags_name_index (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE gallery_tags (
+    "CREATE TABLE IF NOT EXISTS gallery_tags (
         gallery_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (gallery_id, tag_id),
         CONSTRAINT gallery_tags_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE,
         CONSTRAINT gallery_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE image_tags (
+    "CREATE TABLE IF NOT EXISTS image_tags (
         image_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (image_id, tag_id),
         CONSTRAINT image_tags_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT image_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE app_settings (
+    "CREATE TABLE IF NOT EXISTS app_settings (
         setting_key VARCHAR(100) NOT NULL PRIMARY KEY,
         setting_value TEXT NULL,
         updated_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    "CREATE TABLE zip_archives (
+    "CREATE TABLE IF NOT EXISTS zip_archives (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         scope ENUM('gallery','all') NOT NULL,
         gallery_id BIGINT UNSIGNED NULL,

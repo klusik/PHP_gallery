@@ -38,7 +38,7 @@ function run_migrations(): array
         $statements = require $file;
         try {
             foreach ($statements as $statement) {
-                $pdo->exec($statement);
+                apply_migration_statement($pdo, $statement);
             }
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
@@ -53,5 +53,42 @@ function run_migrations(): array
     }
 
     return $ran;
+}
+
+/**
+ * Execute one migration statement, allowing safe replay of already-applied DDL.
+ *
+ * Shared hosts and interrupted browser installs can leave a database with the
+ * table/column/index already present but schema_migrations not yet recorded.
+ * MySQL and MariaDB differ on IF NOT EXISTS support for ALTER TABLE, so the
+ * portable path is to treat duplicate DDL errors as successful replays.
+ */
+function apply_migration_statement(PDO $pdo, string $statement): void
+{
+    try {
+        $pdo->exec($statement);
+    } catch (PDOException $exception) {
+        if (!migration_duplicate_ddl_error($exception)) {
+            throw $exception;
+        }
+    }
+}
+
+/**
+ * Return true when an exception is a duplicate object error from idempotent DDL.
+ */
+function migration_duplicate_ddl_error(PDOException $exception): bool
+{
+    $driverCode = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+    if (in_array($driverCode, [1050, 1060, 1061, 1826], true)) {
+        return true;
+    }
+
+    $message = $exception->getMessage();
+    return str_contains($message, 'already exists')
+        || str_contains($message, 'Duplicate column name')
+        || str_contains($message, 'Duplicate key name')
+        || str_contains($message, 'Duplicate foreign key constraint name')
+        || str_contains($message, 'errno: 121');
 }
 
