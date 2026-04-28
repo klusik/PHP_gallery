@@ -21,6 +21,7 @@ This release contains the full plain-PHP gallery application:
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
 - optional picture comparison game for admin-selected galleries
+- optional EXIF/GPS map overlays for GPS-tagged photos in enabled gallery branches
 - web-optimized JPEG thumbnails generated in each gallery's `thumbs/` folder
 - automatic scan and optional thumbnail creation during gallery import
 - visible inherited tags for galleries that contain tagged subgalleries
@@ -189,6 +190,8 @@ Admin workflow:
    underlying folder or image file from disk.
 10. Opt selected galleries or whole gallery branches into the picture game when
     you want visitors to compare images side by side.
+11. Enable EXIF GPS maps on gallery branches where you want public photo pins
+    and gallery map overlays.
 
 Discovery is explicit and does not run on public requests.
 
@@ -219,6 +222,27 @@ voting. A picture pair is recorded as soon as it is displayed, so the same pair
 is not shown again to that viewer. When no unseen pairs remain, the game shows a
 completion message. The game page also shows global top-picture statistics for
 the current gallery game.
+
+## EXIF / GPS Maps
+
+If your PHP installation has the EXIF extension enabled, image scans can store
+safe camera and GPS metadata for JPEG and TIFF files. GPS coordinates are kept
+in the database and refreshed when the image is scanned again.
+
+Admins can opt a gallery branch into GPS maps from the gallery edit page or
+with the dashboard bulk action. The setting applies recursively to subgalleries,
+so child galleries inherit map availability from any enabled ancestor.
+
+When enabled, public image cards can show a map pin for photos with GPS
+coordinates, the lightbox can open a single-photo map, and gallery pages can
+open a combined map for all GPS-enabled public photos in the current branch.
+
+Use the map controls only after running the `v_0.12` migration and rescanning
+the galleries so existing images populate the new EXIF/GPS fields.
+
+The map overlay uses Leaflet with OpenStreetMap tiles. That works without a paid
+Google Maps API key, but the default public tile service is intended for light
+usage and testing rather than heavy production traffic.
 
 ## Thumbnails
 

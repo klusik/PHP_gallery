@@ -15,6 +15,7 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
   - gallery pages can open a combined map of all GPS-enabled public photos in the current gallery branch
 - Added a migration for EXIF/GPS columns and the recursive gallery map flag.
 - Added Leaflet/OpenStreetMap-based map overlays without requiring a paid Google Maps API key.
+- Added a JSON gallery-map endpoint for the public gallery page and lightbox controls.
 
 ### Notes
 

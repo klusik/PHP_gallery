@@ -18,6 +18,8 @@ Important routes:
 - `page=tag&slug=...` renders a public gallery listing filtered by one tag.
 - `page=picture_game&id=...` runs the optional side-by-side picture comparison
   game for opted-in public gallery branches.
+- `page=gallery_map_data&id=...` returns JSON map points for the current public
+  gallery branch when GPS maps are enabled.
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
   same visibility checks.
@@ -78,6 +80,13 @@ same viewer. A row is written when a pair is displayed, and `winner_image_id` is
 filled when the viewer chooses a picture. The winning image also receives a
 normal upvote in `image_votes`; the non-selected image receives no vote.
 
+`gps_map_enabled` on `galleries` opts a branch into EXIF/GPS map support. The
+setting is recursive, so a parent gallery enables maps for its descendants.
+Image scans can populate `exif_taken_at`, camera metadata, and GPS coordinates
+when the EXIF extension is available. `gps_lat`, `gps_lng`, `gps_altitude`, and
+`gps_extracted_at` are stored separately from the source file and refreshed on
+rescan. The migration also adds an index for gallery/GPS lookups.
+
 `app_settings` stores configurable application values such as the public site
 name, theme colors, radius, font mode, and selected custom CSS preset. CSS files
 in `custom_css/` can be selected in the admin theme screen; the selected file or
@@ -97,6 +106,11 @@ list of collapsed gallery IDs. The dashboard posts updates through
 The public JavaScript intentionally detects inline `style` attributes and shows
 a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
+
+When GPS maps are enabled, the gallery page renders a pin button on each image
+with coordinates and a map button for the branch. The JavaScript loads Leaflet
+on demand, opens an overlay with OpenStreetMap tiles, and uses a small JSON
+endpoint to fetch all map points for the current gallery branch.
 
 Migrations are ordered PHP files that return SQL statements. The runner records
 applied versions in `schema_migrations`. The installer and migration runner
@@ -153,7 +167,10 @@ metadata changes.
    deletes CMS records only; filesystem folders and image files are left intact.
 10. Opt galleries or gallery branches into the picture game from gallery edit
     pages or dashboard bulk actions. New galleries remain opted out by default.
-11. If a feature migration is pending, use the dashboard migration prompt to run
+11. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
+    migration and rescanning existing images. The setting is recursive, so child
+    galleries inherit map availability from enabled ancestors.
+12. If a feature migration is pending, use the dashboard migration prompt to run
     it before enabling the related controls.
 
 ## Deployment
