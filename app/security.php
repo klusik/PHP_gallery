@@ -115,6 +115,18 @@ function cms_setup_is_locked(): bool
 }
 
 /**
+ * Return true when setup has already created at least one administrator.
+ */
+function cms_admin_user_exists(): bool
+{
+    try {
+        return (bool) db()->query("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1")->fetchColumn();
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
  * Create the one-way installation lock file after the first successful setup.
  */
 function cms_write_setup_lock(): void

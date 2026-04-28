@@ -275,6 +275,39 @@
 
     // Function `setupThumbnailProgress` executes this focused behavior.
     function setupThumbnailProgress() {
+        document.addEventListener('click', async (event) => {
+            if (!(event.target instanceof Element)) {
+                return;
+            }
+            // Variable `button` stores this steps working value.
+            const button = event.target.closest('[data-create-all-thumbnails]');
+            if (!button) {
+                return;
+            }
+            // Variable `form` stores this steps working value.
+            const form = document.querySelector('[data-gallery-bulk-form]');
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+            form.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]').forEach((checkbox) => {
+                checkbox.checked = true;
+            });
+            form.querySelectorAll('input[type="checkbox"][data-select-all="gallery_ids[]"]').forEach((checkbox) => {
+                checkbox.checked = true;
+            });
+            // Variable `action` stores this steps working value.
+            const action = form.querySelector('select[name="action"]');
+            if (action) {
+                action.value = 'thumbs';
+            }
+            button.disabled = true;
+            try {
+                await runThumbnailJob(form, null);
+            } finally {
+                button.disabled = false;
+            }
+        });
+
         document.addEventListener('submit', (event) => {
             // Variable `form` stores this steps working value.
             const form = event.target;
@@ -364,27 +397,52 @@
 
     // Function `ensureThumbnailProgress` executes this focused behavior.
     function ensureThumbnailProgress(form) {
+        // Variable `targetSelector` stores this steps working value.
+        const targetSelector = form.dataset.thumbnailProgressTarget || '';
+        if (targetSelector) {
+            // Variable `target` stores this steps working value.
+            const target = document.querySelector(targetSelector);
+            if (target) {
+                let progress = target.querySelector('[data-thumbnail-progress]');
+                if (!progress) {
+                    progress = createThumbnailProgress();
+                    target.append(progress);
+                }
+                progress.hidden = false;
+                return progress;
+            }
+        }
         // Variable `progress` stores this steps working value.
         let progress = form.classList.contains('inline-form')
             ? form.nextElementSibling?.matches('[data-thumbnail-progress]') ? form.nextElementSibling : null
             : form.querySelector('[data-thumbnail-progress]');
         if (progress) {
+            progress.hidden = false;
             return progress;
         }
-        progress = document.createElement('div');
-        progress.className = 'thumbnail-progress';
-        progress.dataset.thumbnailProgress = 'true';
-        progress.innerHTML = '<progress class="thumbnail-progress-bar" data-thumbnail-progress-fill value="0" max="100"></progress><p class="muted" data-thumbnail-progress-text></p>';
+        progress = createThumbnailProgress();
         if (form.classList.contains('inline-form')) {
             form.insertAdjacentElement('afterend', progress);
         } else {
             form.prepend(progress);
         }
+        progress.hidden = false;
+        return progress;
+    }
+
+    // Function `createThumbnailProgress` executes this focused behavior.
+    function createThumbnailProgress() {
+        // Variable `progress` stores this steps working value.
+        const progress = document.createElement('div');
+        progress.className = 'thumbnail-progress';
+        progress.dataset.thumbnailProgress = 'true';
+        progress.innerHTML = '<progress class="thumbnail-progress-bar" data-thumbnail-progress-fill value="0" max="100"></progress><p class="muted" data-thumbnail-progress-text></p>';
         return progress;
     }
 
     // Function `updateThumbnailProgress` executes this focused behavior.
     function updateThumbnailProgress(progress, processed, total, created, skipped, label) {
+        progress.hidden = false;
         // Variable `percent` stores this steps working value.
         const percent = total > 0 ? Math.round((processed / total) * 100) : 100;
         progress.querySelector('[data-thumbnail-progress-fill]').value = percent;

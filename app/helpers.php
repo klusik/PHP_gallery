@@ -155,6 +155,7 @@ function render_header(string $title): void
     if ($user) {
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
         echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
+        echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
@@ -170,7 +171,9 @@ function render_footer(): void
     echo '</main><footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="https://github.com/klusik/PHP_gallery" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
     echo '</footer>';
-    echo '<script src="' . e(asset_url('assets/gallery.js')) . '" defer></script>';
+    // Variable $scriptPath stores this steps working value.
+    $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
+    echo '<script src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '" defer></script>';
     echo '</body></html>';
 }
 

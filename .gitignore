@@ -4,6 +4,7 @@ config.php
 /logs/
 /tmp/
 /deploy/
+/galleries/
 .env
 *.log
 *.tmp

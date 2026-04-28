@@ -563,6 +563,17 @@ td {
     color: #2271b1;
 }
 
+.admin-page .gallery-row-actions {
+    gap: 0.2rem;
+    white-space: nowrap;
+}
+
+.admin-page .gallery-row-actions .gallery-row-action {
+    padding: 0.16rem 0.38rem;
+    font-size: 12px;
+    line-height: 1.05;
+}
+
 .admin-page .site-main,
 .admin-page .site-footer {
     width: min(1280px, calc(100% - 2rem));
@@ -614,7 +625,8 @@ td {
 .admin-page table {
     border: 1px solid #c3c4c7;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.25;
 }
 
 .admin-page th {
@@ -625,8 +637,15 @@ td {
 
 .admin-page th,
 .admin-page td {
-    padding: 0.4rem 0.55rem;
+    padding: 0.22rem 0.45rem;
     vertical-align: middle;
+}
+
+.admin-page td input[type="checkbox"] {
+    min-height: 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
 }
 
 .admin-page tr:hover td {
@@ -645,12 +664,16 @@ td {
 
 .admin-page .tree-toggle,
 .admin-page .tree-spacer {
-    width: 1.35rem;
-    height: 1.35rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    min-height: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1;
 }
 
 .admin-page .tree-title {
-    gap: 0.25rem;
+    gap: 0.18rem;
 }
 
 .admin-page .thumbnail-progress-bar {

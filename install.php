@@ -20,9 +20,9 @@ $errors = [];
 // Variable $installLockFile stores this steps working value.
 $installLockFile = $root . '/cache/installed.lock';
 
-if (is_file($installLockFile)) {
+if (is_file($configFile) || is_file($installLockFile)) {
     http_response_code(403);
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title></head><body><main><h1>Installer locked</h1><p>Installation is already locked. Delete cache/installed.lock manually only if you intentionally want to reinstall.</p></main></body></html>';
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title></head><body><main><h1>Installer locked</h1><p>The installer is disabled because this gallery already has a configuration or installation lock. Remove <code>config.php</code> and <code>cache/installed.lock</code> manually only if you intentionally want to reinstall from scratch.</p></main></body></html>';
     exit;
 }
 
@@ -335,6 +335,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         file_put_contents($installLockFile, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
         $messages[] = 'Installation lock was written to cache/installed.lock.';
+        $messages[] = 'The installer is now disabled for future requests.';
         $_SESSION['installer_token'] = bin2hex(random_bytes(16));
     } catch (Throwable $exception) {
         $errors[] = $exception->getMessage();
