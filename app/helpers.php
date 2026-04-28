@@ -133,11 +133,13 @@ function render_header(string $title): void
 {
     // Variable $user stores this steps working value.
     $user = current_user();
+    // Variable $siteName stores this steps working value.
+    $siteName = site_name();
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-    echo '<title>' . e($title) . '</title>';
+    echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     // Variable $customCss stores this steps working value.
@@ -150,7 +152,7 @@ function render_header(string $title): void
     // Variable $bodyClass stores this steps working value.
     $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
     echo '</head><body class="' . e($bodyClass) . '"><header class="site-header">';
-    echo '<a class="brand" href="' . e(url_for('home')) . '">Gallery CMS</a><nav class="nav">';
+    echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';

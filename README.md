@@ -20,6 +20,7 @@ This release contains the full plain-PHP gallery application:
 - admin dashboard with bulk gallery and image actions
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
+- optional picture comparison game for admin-selected galleries
 - web-optimized JPEG thumbnails generated in each gallery's `thumbs/` folder
 - automatic scan and optional thumbnail creation during gallery import
 - visible inherited tags for galleries that contain tagged subgalleries
@@ -123,6 +124,11 @@ https://example.com/index.php?page=setup&key=YOUR_SETUP_KEY
 
 That page runs pending migrations and lets you create or update the admin user. Change or remove `setup_key` after setup.
 
+After the application is installed, logged-in admins can also run pending
+migrations from the dashboard when a new feature needs a database change. The
+admin page shows a migration notice with a `Run database migration` button when
+the current database schema is too old for the visible feature controls.
+
 ## Local Run
 
 Use PHP's built-in server from the repository root:
@@ -167,12 +173,42 @@ Admin workflow:
 7. Edit gallery title, description, slug, visibility, sort order, parent gallery,
    title picture, and tags.
 8. Edit image title, description, visibility, sort order, and tags.
+9. When logged in, use the inline public-page controls to rename galleries,
+   rename photo titles, edit descriptions, publish, hide, or remove CMS records
+   without leaving the gallery view. Removing a record does not delete the
+   underlying folder or image file from disk.
+10. Opt selected galleries or whole gallery branches into the picture game when
+    you want visitors to compare images side by side.
 
 Discovery is explicit and does not run on public requests.
 
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
 subgallery cards, lightbox image browsing, keyboard left/right navigation, and
-keyboard up/down voting in the lightbox.
+visible keyboard up/down voting controls in the lightbox.
+
+## Picture Game
+
+The picture game is optional and opt-in. New galleries are excluded by default.
+Admins can enable it from a gallery edit page or with the dashboard bulk action.
+Bulk enabling or disabling applies to the selected galleries and their
+subgalleries.
+
+If the picture game migration has not been applied yet, the dashboard hides the
+picture-game bulk controls and shows an admin-only migration prompt. Use the
+`Run database migration` button there, or run `php scripts/migrate.php` from a
+shell, before enabling the game.
+
+When a public gallery branch has at least two eligible public images, the gallery
+page shows a `Play picture game` button. The game displays two pictures side by
+side at the same height. Visitors choose the image they prefer by clicking it or
+using the left/right arrow keys. The selected image receives one normal upvote;
+the other image receives no vote and is not downvoted.
+
+Each viewer has pair history based on the same visitor identity used for public
+voting. A picture pair is recorded as soon as it is displayed, so the same pair
+is not shown again to that viewer. When no unseen pairs remain, the game shows a
+completion message. The game page also shows global top-picture statistics for
+the current gallery game.
 
 ## Thumbnails
 
@@ -232,19 +268,25 @@ top-level folder only contains subfolders.
 Admins can open `index.php?page=admin_theme` to adjust the site look without
 editing code. The current theme controls include:
 
+- site name
 - accent colors
 - page and panel background colors
 - corner roundness
 - serif or sans-serif font mode
+- selectable custom CSS skins from `custom_css/`
 - optional custom CSS upload
 
 Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
 built-in stylesheet. This gives technical users a template-like override path,
 while non-technical users can use the form controls.
 
-The `custom_css/` folder contains example stylesheets only. Use
-`custom_css/css_template.css` as a commented starting point, or adapt
-`custom_css/custom.css` if you want a compact admin-oriented style.
+The `custom_css/` folder contains selectable skins and examples. Use
+`custom_css/css_template.css` as a commented starting point, choose
+`custom_css/custom.css` for a compact admin-oriented style, or select
+`custom_css/modern.css` for a cleaner modern gallery look.
+
+The site name in the header and browser title is also managed from the Theme
+screen, so the default `Gallery CMS` label can be replaced without editing code.
 
 ## Naming And Design Conventions
 
@@ -267,6 +309,8 @@ Route names should follow these rules:
   `vote`
 - admin pages start with `admin_`: `admin_edit_image`, `admin_bulk_images`
 - destructive or state-changing routes must be POST-only and CSRF-protected
+- admin-only maintenance routes, such as `admin_run_migrations`, must also be
+  POST-only and CSRF-protected
 - route handler functions use the same name with the `cms_` prefix:
   `cms_admin_edit_gallery`
 

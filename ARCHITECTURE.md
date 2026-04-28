@@ -16,11 +16,17 @@ Important routes:
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
 - `page=tag&slug=...` renders a public gallery listing filtered by one tag.
+- `page=picture_game&id=...` runs the optional side-by-side picture comparison
+  game for opted-in public gallery branches.
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
   same visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.
+- `page=admin_run_migrations` runs pending migrations from an authenticated
+  admin POST when the dashboard detects a stale schema.
+- `page=admin_public_update_gallery` and `page=admin_public_update_image` save
+  admin-only inline edits submitted from public gallery pages.
 - `install.php` is standalone and can create config, DB tables, folders, and the
   first admin account before the normal app is ready.
 
@@ -66,8 +72,16 @@ and their images.
 `image_votes` stores one vote per logged-in user or anonymous visitor hash.
 Scores are summed from those rows, and the UI marks the current visitor's choice.
 
-`app_settings` stores theme values such as colors, radius, and font mode. A
-custom CSS upload is saved to `public/assets/custom.css` and loaded after the
+`picture_game_votes` stores pair history for the optional picture game. The pair
+is normalized so the same two images cannot be repeated in reverse order for the
+same viewer. A row is written when a pair is displayed, and `winner_image_id` is
+filled when the viewer chooses a picture. The winning image also receives a
+normal upvote in `image_votes`; the non-selected image receives no vote.
+
+`app_settings` stores configurable application values such as the public site
+name, theme colors, radius, font mode, and selected custom CSS preset. CSS files
+in `custom_css/` can be selected in the admin theme screen; the selected file or
+a custom upload is copied to `public/assets/custom.css` and loaded after the
 built-in stylesheet.
 
 The admin gallery tree collapse state is also stored in `app_settings` as a JSON
@@ -81,6 +95,11 @@ CSS, not ad hoc inline HTML styling.
 Migrations are ordered PHP files that return SQL statements. The runner records
 applied versions in `schema_migrations`. MySQL DDL statements are not wrapped in
 an explicit transaction because MySQL may auto-commit schema changes.
+
+Feature code that depends on a new migration should avoid fatal errors against
+older databases. The picture game checks for its required column/table before
+rendering admin controls and shows an authenticated `Run database migration`
+prompt that posts to `page=admin_run_migrations`.
 
 ## Filesystem Rules
 
@@ -119,7 +138,14 @@ metadata changes.
    thumbnail actions later from the dashboard/edit pages.
 6. Bulk-publish galleries or images.
 7. Collapse or expand subgallery rows as needed; the state is persisted.
-8. Edit titles, tags, cover images, hierarchy, and theme settings.
+8. Edit titles, descriptions, tags, cover images, hierarchy, and theme settings.
+9. Logged-in admins can also edit gallery and image titles/descriptions directly
+   from public gallery pages through admin-only inline forms. Inline removal
+   deletes CMS records only; filesystem folders and image files are left intact.
+10. Opt galleries or gallery branches into the picture game from gallery edit
+    pages or dashboard bulk actions. New galleries remain opted out by default.
+11. If a feature migration is pending, use the dashboard migration prompt to run
+    it before enabling the related controls.
 
 ## Deployment
 

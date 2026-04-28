@@ -15,13 +15,18 @@ function cms_home(): void
         GROUP BY g.id
         ORDER BY g.sort_order, g.title");
     $stmt->execute();
-    render_header('Galleries');
-    echo '<section class="hero"><h1>Galleries</h1><p class="muted">Filesystem-backed galleries with CMS metadata.</p></section>';
-    echo '<section class="grid">';
-    foreach ($stmt->fetchAll() as $gallery) {
+    // Variable $galleries stores this steps working value.
+    $galleries = $stmt->fetchAll();
+    render_header(site_name());
+    if ($galleries) {
+        echo '<section class="grid">';
+    }
+    foreach ($galleries as $gallery) {
         render_gallery_card($gallery, true);
     }
-    echo '</section>';
+    if ($galleries) {
+        echo '</section>';
+    }
     render_footer();
 }
 
@@ -36,28 +41,39 @@ function cms_gallery(): void
         cms_not_found();
         return;
     }
+    // Variable $publicOnly stores this steps working value.
+    $publicOnly = !current_user();
 
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
+    $sql = "SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
         FROM images i
         LEFT JOIN image_votes v ON v.image_id = i.id
-        WHERE i.gallery_id = ? AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+        WHERE i.gallery_id = ? AND i.relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND i.visibility = 'public'";
+    }
+    $sql .= "
         GROUP BY i.id
-        ORDER BY i.sort_order, i.filename");
+        ORDER BY i.sort_order, i.filename";
+    $stmt = db()->prepare($sql);
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
     $images = $stmt->fetchAll();
     // Variable $children stores this steps working value.
-    $children = child_galleries((int) $gallery['id'], true);
+    $children = child_galleries((int) $gallery['id'], $publicOnly);
 
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
-        render_tag_list(contained_tags_for_gallery($gallery, true), 'Containing tags');
+        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
+    if (picture_game_available($gallery)) {
+        echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
+    }
+    render_public_gallery_admin_form($gallery);
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
         foreach ($children as $child) {
@@ -78,7 +94,9 @@ function cms_gallery(): void
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
         render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
-        echo '</div></article>';
+        echo '</div>';
+        render_public_image_admin_form($image);
+        echo '</article>';
     }
     echo '</section>';
     render_lightbox();
@@ -107,6 +125,88 @@ function cms_tag(): void
     }
     echo '</section>';
     render_footer();
+}
+
+/**
+ * Public picture comparison game for opted-in gallery branches.
+ */
+function cms_picture_game(): void
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['gallery_id'] ?? 0));
+    if (!$gallery || $gallery['visibility'] !== 'public') {
+        cms_not_found();
+        return;
+    }
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            record_picture_game_vote(
+                $gallery,
+                (int) ($_POST['left_image_id'] ?? 0),
+                (int) ($_POST['right_image_id'] ?? 0),
+                (int) ($_POST['winner_image_id'] ?? 0)
+            );
+        } catch (RuntimeException) {
+        }
+        redirect_to(url_for('picture_game', ['id' => $gallery['id']]));
+    }
+    // Variable $pair stores this steps working value.
+    $pair = next_picture_game_pair($gallery);
+    // Variable $topImages stores this steps working value.
+    $topImages = picture_game_top_images($gallery);
+    render_header('Picture game: ' . (string) $gallery['title']);
+    render_breadcrumbs($gallery);
+    echo '<section class="hero"><h1>Picture game</h1><p>Choose the picture you prefer. Your choice gives that picture one upvote; the other picture is not downvoted.</p></section>';
+    if (!$pair) {
+        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">Back to gallery</a></p></section>';
+        render_picture_game_stats($topImages);
+        render_footer();
+        return;
+    }
+    echo '<section class="picture-game" data-picture-game>';
+    echo '<form method="post" action="' . e(url_for('picture_game')) . '">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<input type="hidden" name="left_image_id" value="' . (int) $pair['left']['id'] . '">';
+    echo '<input type="hidden" name="right_image_id" value="' . (int) $pair['right']['id'] . '">';
+    echo '<div class="picture-game-pair">';
+    render_picture_game_choice($pair['left'], 'left');
+    render_picture_game_choice($pair['right'], 'right');
+    echo '</div>';
+    echo '</form>';
+    echo '<p class="muted">Remaining comparisons for you: ' . max(0, (int) $pair['remaining_pairs'] - 1) . ' of ' . (int) $pair['total_pairs'] . '</p>';
+    echo '</section>';
+    render_picture_game_stats($topImages);
+    render_footer();
+}
+
+/**
+ * Render one selectable picture-game choice.
+ */
+function render_picture_game_choice(array $image, string $side): void
+{
+    // Variable $label stores this steps working value.
+    $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
+    echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
+    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+    echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
+    echo '</button>';
+}
+
+/**
+ * Render top global picture-game winners for one gallery.
+ */
+function render_picture_game_stats(array $topImages): void
+{
+    if (!$topImages) {
+        return;
+    }
+    echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
+    foreach ($topImages as $image) {
+        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+        echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
+    }
+    echo '</div></section>';
 }
 
 /**
@@ -150,8 +250,51 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '<p>' . e($gallery['description']) . '</p>';
     echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p></span>';
     echo '</a>';
+    render_public_gallery_admin_form($gallery);
     render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     echo '</article>';
+}
+
+/**
+ * Render logged-in admin metadata controls directly on public gallery pages.
+ */
+function render_public_gallery_admin_form(array $gallery): void
+{
+    if (!current_user()) {
+        return;
+    }
+    echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<label>Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
+    echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
+    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
+    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a></div>';
+    echo '</form></details>';
+}
+
+/**
+ * Render logged-in admin metadata controls for a public image card.
+ */
+function render_public_image_admin_form(array $image): void
+{
+    if (!current_user()) {
+        return;
+    }
+    echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
+    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?: pathinfo((string) $image['filename'], PATHINFO_FILENAME))) . '"></label>';
+    echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
+    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
+    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Admin edit</a></div>';
+    echo '</form></details>';
 }
 
 /**
@@ -194,7 +337,7 @@ function render_lightbox(): void
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Esc closes</span></div><h2 data-lightbox-title></h2><p data-lightbox-description></p><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span>Score: <strong data-lightbox-score data-score-for="">0</strong></span><button type="submit" name="vote" value="1" aria-label="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down">&#9660;</button></form></figcaption></figure>';
+    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Up/Down vote, Esc closes</span></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div></figcaption></figure>';
     echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
 }
@@ -400,18 +543,31 @@ function cms_admin_theme(): void
             if (is_file(custom_css_path())) {
                 unlink(custom_css_path());
             }
+            set_app_setting('custom_css_preset', '');
         } else {
+            // Variable $siteName stores this steps working value.
+            $siteName = trim((string) ($_POST['site_name'] ?? ''));
+            set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
             set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
             set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
             set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
             set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
             set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
             set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            // Variable $preset stores this steps working value.
+            $preset = (string) ($_POST['custom_css_preset'] ?? '');
+            // Variable $presetPath stores this steps working value.
+            $presetPath = custom_css_preset_path($preset);
+            if ($presetPath !== null) {
+                copy($presetPath, custom_css_path());
+                set_app_setting('custom_css_preset', $preset);
+            }
             if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
                 // Variable $name stores this steps working value.
                 $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
                 if (str_ends_with($name, '.css')) {
                     move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+                    set_app_setting('custom_css_preset', 'uploaded');
                 }
             }
         }
@@ -421,12 +577,22 @@ function cms_admin_theme(): void
     $theme = theme_settings();
     render_header('Theme');
     echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
+    echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
     echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '"></label>';
     echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '"></label>';
     echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '"></label>';
     echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '"></label>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '"></label>';
     echo '<label>Font style<select name="theme_font"><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    // Variable $selectedPreset stores this steps working value.
+    $selectedPreset = (string) app_setting('custom_css_preset', '');
+    echo '<label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    foreach (custom_css_presets() as $filename => $path) {
+        // Variable $label stores this steps working value.
+        $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
+        echo '<option value="' . e((string) $filename) . '"' . ($selectedPreset === $filename ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
     echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
@@ -531,15 +697,37 @@ function cms_admin(): void
     $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
     // Variable $collapsedIds stores this steps working value.
     $collapsedIds = array_flip(collapsed_gallery_ids());
+    // Variable $pictureGameReady stores this steps working value.
+    $pictureGameReady = picture_game_schema_ready();
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
+    if (isset($_GET['migrations_ran'])) {
+        echo '<div class="notice">Applied migrations: ' . e((string) $_GET['migrations_ran']) . '.</div>';
+    } elseif (isset($_GET['migrations_current'])) {
+        echo '<div class="notice">Database is already current.</div>';
+    } elseif (isset($_GET['migration_failed'])) {
+        echo '<div class="notice">Migration failed: ' . e((string) $_GET['migration_failed']) . '</div>';
+    }
+    if (isset($_GET['migration_required'])) {
+        render_admin_migration_notice('Picture game needs the latest database migration before it can be changed.');
+    } elseif (!$pictureGameReady) {
+        render_admin_migration_notice('Picture game controls are hidden until the latest database migration is applied.');
+    }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option>';
+    if ($pictureGameReady) {
+        echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
+    }
+    echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
+    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
+    if ($pictureGameReady) {
+        echo '<th>Game</th>';
+    }
+    echo '<th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
         // Variable $depth stores this steps working value.
         $depth = substr_count((string) $gallery['folder_path'], '/');
@@ -551,13 +739,28 @@ function cms_admin(): void
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
+        if ($pictureGameReady) {
+            echo '<td>' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
+        }
+        echo '<td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
         echo '<a class="gallery-row-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
         echo '<button type="submit" class="secondary gallery-row-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
     render_footer();
+}
+
+/**
+ * Render an admin-only prompt that can run pending migrations.
+ */
+function render_admin_migration_notice(string $message): void
+{
+    echo '<div class="notice"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    echo '<span>' . e($message) . '</span> ';
+    echo '<button type="submit">Run database migration</button>';
+    echo '</form></div>';
 }
 
 /**
@@ -637,7 +840,44 @@ function cms_admin_bulk_galleries(): void
         }
         redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
     }
+    if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
+        if (!picture_game_schema_ready()) {
+            redirect_to(url_for('admin', ['migration_required' => 1]));
+        }
+        // Variable $expandedIds stores this steps working value.
+        $expandedIds = [];
+        foreach ($galleryIds as $galleryId) {
+            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        }
+        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
+        if ($expandedIds) {
+            // Variable $placeholders stores this steps working value.
+            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([$action === 'game_on' ? 1 : 0, now_sql()], $expandedIds));
+        }
+        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+    }
     redirect_to(url_for('admin'));
+}
+
+/**
+ * Run pending database migrations from the admin dashboard.
+ */
+function cms_admin_run_migrations(): void
+{
+    require_admin();
+    verify_csrf();
+    try {
+        $ran = run_migrations();
+        if ($ran) {
+            redirect_to(url_for('admin', ['migrations_ran' => implode(', ', $ran)]));
+        }
+        redirect_to(url_for('admin', ['migrations_current' => 1]));
+    } catch (Throwable $exception) {
+        redirect_to(url_for('admin', ['migration_failed' => $exception->getMessage()]));
+    }
 }
 
 /**
@@ -816,6 +1056,8 @@ function cms_admin_edit_gallery(): void
         cms_not_found();
         return;
     }
+    // Variable $pictureGameReady stores this steps working value.
+    $pictureGameReady = picture_game_schema_ready();
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $title stores this steps working value.
@@ -824,6 +1066,8 @@ function cms_admin_edit_gallery(): void
         $slug = trim((string) $_POST['slug']);
         // Variable $visibility stores this steps working value.
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
+        // Variable $pictureGameEnabled stores this steps working value.
+        $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
@@ -836,9 +1080,15 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        if ($pictureGameReady) {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        } else {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        }
         sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         // Variable $gallery stores this steps working value.
         $gallery = find_gallery((int) $gallery['id']);
@@ -850,6 +1100,9 @@ function cms_admin_edit_gallery(): void
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
     render_header('Edit gallery');
+    if (!$pictureGameReady) {
+        render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
+    }
     echo '<section class="panel"><h1>Edit gallery</h1><form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
@@ -857,6 +1110,9 @@ function cms_admin_edit_gallery(): void
     echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
+    if ($pictureGameReady) {
+        echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
+    }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
     echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
@@ -945,6 +1201,103 @@ function cms_admin_bulk_images(): void
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
     }
     redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
+}
+
+/**
+ * Save gallery metadata from admin controls rendered on public pages.
+ */
+function cms_admin_public_update_gallery(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    // Variable $title stores this steps working value.
+    $title = trim((string) ($_POST['title'] ?? ''));
+    if ($title === '') {
+        $title = (string) $gallery['title'];
+    }
+    // Variable $visibility stores this steps working value.
+    $visibility = (string) $gallery['visibility'];
+    // Variable $action stores this steps working value.
+    $action = (string) ($_POST['action'] ?? 'save');
+    if ($action === 'delete') {
+        // Variable $redirect stores this steps working value.
+        $redirect = url_for('home');
+        if (!empty($gallery['parent_id'])) {
+            // Variable $parent stores this steps working value.
+            $parent = find_gallery((int) $gallery['parent_id']);
+            if ($parent) {
+                $redirect = url_for('gallery', ['slug' => $parent['slug']]);
+            }
+        }
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('DELETE FROM galleries WHERE id = ?');
+        $stmt->execute([(int) $gallery['id']]);
+        redirect_to($redirect);
+    }
+    if ($action === 'publish') {
+        $visibility = 'public';
+    }
+    if ($action === 'hide') {
+        $visibility = 'private';
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('UPDATE galleries SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$title, (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $gallery['id']]);
+    // Variable $updated stores this steps working value.
+    $updated = find_gallery((int) $gallery['id']);
+    if ($updated) {
+        write_gallery_sidecar($updated);
+    }
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('gallery', ['slug' => $gallery['slug']])));
+}
+
+/**
+ * Save image metadata from admin controls rendered on public pages.
+ */
+function cms_admin_public_update_image(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    // Variable $image stores this steps working value.
+    $image = find_image((int) ($_POST['image_id'] ?? 0));
+    if (!$image) {
+        cms_not_found();
+        return;
+    }
+    // Variable $visibility stores this steps working value.
+    $visibility = (string) $image['visibility'];
+    // Variable $action stores this steps working value.
+    $action = (string) ($_POST['action'] ?? 'save');
+    if ($action === 'delete') {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('DELETE FROM images WHERE id = ?');
+        $stmt->execute([(int) $image['id']]);
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+    }
+    if ($action === 'publish') {
+        $visibility = 'public';
+    }
+    if ($action === 'hide') {
+        $visibility = 'private';
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([trim((string) ($_POST['title'] ?? '')), (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $image['id']]);
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }
 
 /**

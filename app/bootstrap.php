@@ -107,6 +107,7 @@ function cms_run(): void
         'home' => 'cms_home',
         'gallery' => 'cms_gallery',
         'tag' => 'cms_tag',
+        'picture_game' => 'cms_picture_game',
         'media' => 'cms_media',
         'thumb' => 'cms_thumb',
         'vote' => 'cms_vote',
@@ -121,12 +122,15 @@ function cms_run(): void
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
+        'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
         'admin_edit_image' => 'cms_admin_edit_image',
+        'admin_public_update_gallery' => 'cms_admin_public_update_gallery',
+        'admin_public_update_image' => 'cms_admin_public_update_image',
         'setup' => 'cms_setup',
     ];
 

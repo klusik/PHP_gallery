@@ -72,6 +72,7 @@
         const lightboxScore = document.querySelector('[data-lightbox-score]');
         if (lightbox && lightboxScore && lightbox.dataset.currentImageId === String(result.image_id)) {
             lightboxScore.textContent = String(result.score);
+            updateLightboxVoteIndicator(String(result.vote));
         }
     });
 
@@ -88,6 +89,7 @@
     });
 
     setupThumbnailProgress();
+    setupPictureGame();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.
@@ -159,6 +161,8 @@
     const counter = overlay.querySelector('[data-lightbox-counter]');
     // Variable `lightboxVoteForm` stores this steps working value.
     const lightboxVoteForm = overlay.querySelector('[data-lightbox-vote-form]');
+    // Variable `lightboxVoteIndicator` stores this steps working value.
+    const lightboxVoteIndicator = overlay.querySelector('[data-lightbox-vote-indicator]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
 
@@ -167,14 +171,27 @@
         if (!lightboxVoteForm) {
             return;
         }
+        // Variable `vote` stores this steps working value.
+        const vote = card.dataset.userVote || '0';
         lightboxVoteForm.querySelector('input[name="image_id"]').value = card.dataset.imageId || '';
         score.dataset.scoreFor = card.dataset.imageId || '';
         lightboxVoteForm.querySelectorAll('button[name="vote"]').forEach((button) => {
             // Variable `active` stores this steps working value.
-            const active = button.value === (card.dataset.userVote || '0');
+            const active = button.value === vote;
             button.classList.toggle('is-active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+        updateLightboxVoteIndicator(vote);
+    }
+
+    // Function `updateLightboxVoteIndicator` executes this focused behavior.
+    function updateLightboxVoteIndicator(vote) {
+        if (!lightboxVoteIndicator) {
+            return;
+        }
+        lightboxVoteIndicator.classList.toggle('is-up', vote === '1');
+        lightboxVoteIndicator.classList.toggle('is-down', vote === '-1');
+        lightboxVoteIndicator.textContent = vote === '1' ? 'Voted up' : vote === '-1' ? 'Voted down' : 'No vote';
     }
 
     // Function `openAt` executes this focused behavior.
@@ -191,7 +208,7 @@
             originalLink.href = card.dataset.fullSrc || '#';
         });
         title.textContent = card.dataset.title || '';
-        description.textContent = card.dataset.description || '';
+        description.textContent = card.dataset.description || 'No description.';
         score.textContent = card.dataset.score || '0';
         if (counter) {
             counter.textContent = `${index + 1} / ${cards.length}`;
@@ -216,7 +233,7 @@
 
     cards.forEach((card, index) => {
         card.addEventListener('click', (event) => {
-            if (event.target.closest('form')) {
+            if (event.target.closest('form, [data-admin-inline-editor]')) {
                 return;
             }
             event.preventDefault();
@@ -393,6 +410,28 @@
                 button.disabled = false;
             });
         }
+    }
+
+    // Function `setupPictureGame` executes this focused behavior.
+    function setupPictureGame() {
+        // Variable `game` stores this steps working value.
+        const game = document.querySelector('[data-picture-game]');
+        if (!game) {
+            return;
+        }
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                return;
+            }
+            // Variable `side` stores this steps working value.
+            const side = event.key === 'ArrowLeft' ? 'left' : 'right';
+            // Variable `button` stores this steps working value.
+            const button = game.querySelector(`[data-picture-game-choice="${side}"]`);
+            if (button) {
+                event.preventDefault();
+                button.click();
+            }
+        });
     }
 
     // Function `ensureThumbnailProgress` executes this focused behavior.
