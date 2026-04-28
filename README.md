@@ -241,15 +241,17 @@ editing code. The current theme controls include:
 - page and panel background colors
 - corner roundness
 - serif or sans-serif font mode
+- selectable custom CSS skins from `custom_css/`
 - optional custom CSS upload
 
 Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
 built-in stylesheet. This gives technical users a template-like override path,
 while non-technical users can use the form controls.
 
-The `custom_css/` folder contains example stylesheets only. Use
-`custom_css/css_template.css` as a commented starting point, or adapt
-`custom_css/custom.css` if you want a compact admin-oriented style.
+The `custom_css/` folder contains selectable skins and examples. Use
+`custom_css/css_template.css` as a commented starting point, choose
+`custom_css/custom.css` for a compact admin-oriented style, or select
+`custom_css/modern.css` for a cleaner modern gallery look.
 
 ## Naming And Design Conventions
 

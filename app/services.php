@@ -1112,6 +1112,48 @@ function custom_css_path(): string
 }
 
 /**
+ * Return the folder containing selectable custom CSS skins.
+ */
+function custom_css_preset_dir(): string
+{
+    return dirname(__DIR__) . '/custom_css';
+}
+
+/**
+ * Return selectable custom CSS files from the preset folder.
+ */
+function custom_css_presets(): array
+{
+    // Variable $dir stores this steps working value.
+    $dir = custom_css_preset_dir();
+    if (!is_dir($dir)) {
+        return [];
+    }
+    // Variable $files stores this steps working value.
+    $files = glob($dir . '/*.css') ?: [];
+    sort($files, SORT_NATURAL | SORT_FLAG_CASE);
+    // Variable $presets stores this steps working value.
+    $presets = [];
+    foreach ($files as $file) {
+        $presets[basename($file)] = $file;
+    }
+    return $presets;
+}
+
+/**
+ * Resolve one preset filename to a path inside the custom CSS preset folder.
+ */
+function custom_css_preset_path(string $filename): ?string
+{
+    if ($filename === '' || basename($filename) !== $filename || !str_ends_with(strtolower($filename), '.css')) {
+        return null;
+    }
+    // Variable $presets stores this steps working value.
+    $presets = custom_css_presets();
+    return $presets[$filename] ?? null;
+}
+
+/**
  * Return the custom CSS URL only when a custom file exists.
  */
 function custom_css_url(): ?string

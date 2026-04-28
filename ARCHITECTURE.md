@@ -67,8 +67,10 @@ and their images.
 Scores are summed from those rows, and the UI marks the current visitor's choice.
 
 `app_settings` stores configurable application values such as the public site
-name, theme colors, radius, and font mode. A custom CSS upload is saved to
-`public/assets/custom.css` and loaded after the built-in stylesheet.
+name, theme colors, radius, font mode, and selected custom CSS preset. CSS files
+in `custom_css/` can be selected in the admin theme screen; the selected file or
+a custom upload is copied to `public/assets/custom.css` and loaded after the
+built-in stylesheet.
 
 The admin gallery tree collapse state is also stored in `app_settings` as a JSON
 list of collapsed gallery IDs. The dashboard posts updates through

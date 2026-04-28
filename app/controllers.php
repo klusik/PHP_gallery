@@ -458,6 +458,7 @@ function cms_admin_theme(): void
             if (is_file(custom_css_path())) {
                 unlink(custom_css_path());
             }
+            set_app_setting('custom_css_preset', '');
         } else {
             // Variable $siteName stores this steps working value.
             $siteName = trim((string) ($_POST['site_name'] ?? ''));
@@ -468,11 +469,20 @@ function cms_admin_theme(): void
             set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
             set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
             set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            // Variable $preset stores this steps working value.
+            $preset = (string) ($_POST['custom_css_preset'] ?? '');
+            // Variable $presetPath stores this steps working value.
+            $presetPath = custom_css_preset_path($preset);
+            if ($presetPath !== null) {
+                copy($presetPath, custom_css_path());
+                set_app_setting('custom_css_preset', $preset);
+            }
             if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
                 // Variable $name stores this steps working value.
                 $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
                 if (str_ends_with($name, '.css')) {
                     move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+                    set_app_setting('custom_css_preset', 'uploaded');
                 }
             }
         }
@@ -489,6 +499,15 @@ function cms_admin_theme(): void
     echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '"></label>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '"></label>';
     echo '<label>Font style<select name="theme_font"><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    // Variable $selectedPreset stores this steps working value.
+    $selectedPreset = (string) app_setting('custom_css_preset', '');
+    echo '<label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    foreach (custom_css_presets() as $filename => $path) {
+        // Variable $label stores this steps working value.
+        $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
+        echo '<option value="' . e((string) $filename) . '"' . ($selectedPreset === $filename ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
     echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
