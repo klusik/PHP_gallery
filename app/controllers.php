@@ -266,7 +266,9 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     }
     echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
     echo '<p>' . e($gallery['description']) . '</p>';
-    echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p></span>';
+    // Variable $branchImageCount stores this steps working value.
+    $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
+    echo '<p class="muted">' . $branchImageCount . ' images</p></span>';
     echo '</a>';
     render_public_gallery_admin_form($gallery);
     render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');

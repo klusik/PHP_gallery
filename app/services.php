@@ -170,22 +170,160 @@ function write_gallery_sidecar(array $gallery): void
 }
 
 /**
+ * Return lightweight metadata for one gallery folder, using gallery.json when it exists.
+ *
+ * This helper is intentionally small and filesystem-backed because it is used by
+ * the importer and the parent-sync repair path. Empty parent folders can still
+ * become real gallery rows when they are needed to preserve a nested gallery
+ * hierarchy, even when those parent folders contain no direct photos.
+ */
+function gallery_folder_candidate_metadata(string $folderPath): array
+{
+    // Variable $folderPath stores this steps working value.
+    $folderPath = normalize_relative_path($folderPath);
+    // Variable $jsonPath stores this steps working value.
+    $jsonPath = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
+    // Variable $metadata stores this steps working value.
+    $metadata = read_gallery_sidecar($jsonPath);
+
+    return [
+        'folder_path' => $folderPath,
+        'title' => $metadata['title'] ?? basename($folderPath),
+        'description' => $metadata['description'] ?? '',
+        'visibility' => $metadata['visibility'] ?? 'draft',
+        'sort_order' => (int) ($metadata['sort_order'] ?? 0),
+    ];
+}
+
+/**
+ * Create one gallery row for a real filesystem folder when it is missing.
+ *
+ * The function is used for two related cases:
+ * 1. normal imports selected from the discovery screen;
+ * 2. automatic repair of missing parent rows for already-imported deep folders.
+ *
+ * The created row is deliberately conservative: visibility defaults to draft
+ * unless gallery.json says otherwise, and images are scanned only by the caller.
+ */
+function create_gallery_row_for_folder(string $folderPath): ?array
+{
+    // Variable $folderPath stores this steps working value.
+    $folderPath = normalize_relative_path($folderPath);
+    if ($folderPath === '' || !is_dir(gallery_abs_path($folderPath))) {
+        return null;
+    }
+
+    // Variable $existing stores this steps working value.
+    $existing = find_gallery_by_folder_path($folderPath);
+    if ($existing) {
+        return $existing;
+    }
+
+    // Variable $candidate stores this steps working value.
+    $candidate = gallery_folder_candidate_metadata($folderPath);
+    // Variable $visibility stores this steps working value.
+    $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    // Variable $parent stores this steps working value.
+    $parent = find_parent_gallery_for_path($folderPath);
+    // Variable $pdo stores this steps working value.
+    $pdo = db();
+    // Variable $stmt stores this steps working value.
+    $stmt = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([
+        $parent ? (int) $parent['id'] : null,
+        $folderPath,
+        hash('sha256', $folderPath),
+        unique_slug($pdo, (string) $candidate['title']),
+        $candidate['title'],
+        $candidate['description'],
+        (int) $candidate['sort_order'],
+        $visibility,
+        now_sql(),
+        now_sql(),
+    ]);
+
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) $pdo->lastInsertId());
+    if ($gallery) {
+        write_gallery_sidecar($gallery);
+    }
+    return $gallery;
+}
+
+/**
+ * Ensure all filesystem ancestors of one gallery folder exist as gallery rows.
+ *
+ * This prevents a third-level gallery from becoming a top-level gallery when it
+ * was imported before its intermediate parent. The hierarchy is filesystem-first:
+ * galleries/A/B/C should always be represented as A -> B -> C when the folders
+ * exist under the configured gallery root.
+ */
+function ensure_gallery_ancestors_for_path(string $folderPath): array
+{
+    // Variable $segments stores this steps working value.
+    $segments = explode('/', normalize_relative_path($folderPath));
+    // Variable $createdIds stores this steps working value.
+    $createdIds = [];
+    // Variable $currentSegments stores this steps working value.
+    $currentSegments = [];
+
+    while (count($segments) > 1) {
+        $currentSegments[] = array_shift($segments);
+        // Variable $ancestorPath stores this steps working value.
+        $ancestorPath = implode('/', $currentSegments);
+        if ($ancestorPath === '' || find_gallery_by_folder_path($ancestorPath)) {
+            continue;
+        }
+        if (!is_dir(gallery_abs_path($ancestorPath))) {
+            continue;
+        }
+        // Variable $gallery stores this steps working value.
+        $gallery = create_gallery_row_for_folder($ancestorPath);
+        if ($gallery) {
+            $createdIds[] = (int) $gallery['id'];
+        }
+    }
+
+    return $createdIds;
+}
+
+/**
  * Create gallery rows for selected discovered folders.
  */
 function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
-    // Variable $pdo stores this steps working value.
-    $pdo = db();
     // Variable $candidates stores this steps working value.
     $candidates = [];
     foreach (discover_gallery_candidates() as $candidate) {
         $candidates[$candidate['folder_path']] = $candidate;
     }
+
     // Variable $requested stores this steps working value.
     $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
     // Variable $folderPaths stores this steps working value.
     $folderPaths = [];
     foreach ($requested as $requestedPath) {
+        if ($requestedPath === '') {
+            continue;
+        }
+
+        // Import missing ancestors first. This is important when the admin
+        // selects only a deep child folder from the discovery screen. Without
+        // these rows, sync_gallery_parent_ids() has no parent record to attach
+        // the child to, so the child appears as a top-level gallery.
+        // Variable $segments stores this steps working value.
+        $segments = explode('/', $requestedPath);
+        // Variable $ancestorSegments stores this steps working value.
+        $ancestorSegments = [];
+        while (count($segments) > 1) {
+            $ancestorSegments[] = array_shift($segments);
+            // Variable $ancestorPath stores this steps working value.
+            $ancestorPath = implode('/', $ancestorSegments);
+            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
+                $folderPaths[$ancestorPath] = $ancestorPath;
+            }
+        }
+
         foreach (array_keys($candidates) as $candidatePath) {
             if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
                 $folderPaths[$candidatePath] = $candidatePath;
@@ -193,6 +331,7 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
         }
     }
     usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+
     // Variable $imported stores this steps working value.
     $imported = 0;
     // Variable $scanned stores this steps working value.
@@ -201,42 +340,28 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
     $thumbs = 0;
     // Variable $importedIds stores this steps working value.
     $importedIds = [];
+
     foreach ($folderPaths as $folderPath) {
-        if (!isset($candidates[$folderPath])) {
+        if (find_gallery_by_folder_path($folderPath)) {
             continue;
         }
-        // Variable $candidate stores this steps working value.
-        $candidate = $candidates[$folderPath];
-        // Variable $visibility stores this steps working value.
-        $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
-        // Variable $parent stores this steps working value.
-        $parent = find_parent_gallery_for_path($folderPath);
-        // Variable $stmt stores this steps working value.
-        $stmt = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([
-            $parent ? (int) $parent['id'] : null,
-            $folderPath,
-            hash('sha256', $folderPath),
-            unique_slug($pdo, (string) $candidate['title']),
-            $candidate['title'],
-            $candidate['description'],
-            (int) $candidate['sort_order'],
-            $visibility,
-            now_sql(),
-            now_sql(),
-        ]);
         // Variable $gallery stores this steps working value.
-        $gallery = find_gallery((int) $pdo->lastInsertId());
-        if ($gallery) {
-            write_gallery_sidecar($gallery);
-            $importedIds[] = (int) $gallery['id'];
+        $gallery = create_gallery_row_for_folder($folderPath);
+        if (!$gallery) {
+            continue;
         }
+        $importedIds[] = (int) $gallery['id'];
         $imported++;
     }
+
     sync_gallery_parent_ids();
     foreach ($importedIds as $galleryId) {
         $scanned += scan_gallery_images($galleryId);
-        if ($createThumbnails) {
+    }
+    if ($createThumbnails) {
+        foreach ($importedIds as $galleryId) {
+            // Thumbnail creation is recursive, so parent folders that only
+            // contain subgalleries still produce usable gallery-card covers.
             $thumbs += create_gallery_thumbnails($galleryId);
         }
     }
@@ -455,15 +580,23 @@ function thumbnail_url(array $image, int $size): string
  */
 function create_gallery_thumbnails(int $galleryId): int
 {
-    // Variable $gallery stores this steps working value.
-    $gallery = find_gallery($galleryId);
-    if (!$gallery) {
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = gallery_subtree_ids($galleryId);
+    if (!$galleryIds) {
         return 0;
     }
+
     // Variable $count stores this steps working value.
     $count = 0;
-    foreach (gallery_images($galleryId, false) as $image) {
-        $count += create_image_thumbnails($image, $gallery);
+    foreach ($galleryIds as $currentGalleryId) {
+        // Variable $gallery stores this steps working value.
+        $gallery = find_gallery((int) $currentGalleryId);
+        if (!$gallery) {
+            continue;
+        }
+        foreach (gallery_images((int) $currentGalleryId, false) as $image) {
+            $count += create_image_thumbnails($image, $gallery);
+        }
     }
     return $count;
 }
@@ -637,6 +770,11 @@ function sync_gallery_parent_ids(): void
     // Variable $galleries stores this steps working value.
     $galleries = db()->query('SELECT id, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
+        // Missing intermediate gallery rows are repaired before parent lookup.
+        // This fixes older imports where a deep folder was imported without its
+        // parent and therefore appeared on the public homepage as a root gallery.
+        ensure_gallery_ancestors_for_path((string) $gallery['folder_path']);
+
         // Variable $parent stores this steps working value.
         $parent = find_parent_gallery_for_path((string) $gallery['folder_path']);
         // Variable $parentId stores this steps working value.
@@ -881,6 +1019,38 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
         $parentId = $parent['parent_id'] ?? null;
     }
     return $ancestors;
+}
+
+/**
+ * Count visible images in one gallery branch.
+ *
+ * Public gallery cards are usually summaries of a whole folder branch. Counting
+ * descendants makes parent/subgallery cards less misleading when a gallery node
+ * contains only nested subgalleries and no direct pictures of its own.
+ */
+function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
+{
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = gallery_subtree_ids($galleryId);
+    if (!$galleryIds) {
+        return 0;
+    }
+
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $sql stores this steps working value.
+    $sql = 'SELECT COUNT(*) FROM images WHERE gallery_id IN (' . $placeholders . ')';
+    // Variable $params stores this steps working value.
+    $params = $galleryIds;
+    if ($publicOnly) {
+        $sql .= ' AND visibility = ?';
+        $params[] = 'public';
+    }
+
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return (int) $stmt->fetchColumn();
 }
 
 /**
