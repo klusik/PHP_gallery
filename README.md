@@ -167,12 +167,16 @@ Admin workflow:
 7. Edit gallery title, description, slug, visibility, sort order, parent gallery,
    title picture, and tags.
 8. Edit image title, description, visibility, sort order, and tags.
+9. When logged in, use the inline public-page controls to rename galleries,
+   rename photo titles, edit descriptions, publish, hide, or remove CMS records
+   without leaving the gallery view. Removing a record does not delete the
+   underlying folder or image file from disk.
 
 Discovery is explicit and does not run on public requests.
 
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
 subgallery cards, lightbox image browsing, keyboard left/right navigation, and
-keyboard up/down voting in the lightbox.
+visible keyboard up/down voting controls in the lightbox.
 
 ## Thumbnails
 

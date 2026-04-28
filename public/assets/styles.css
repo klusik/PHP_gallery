@@ -183,6 +183,32 @@ button.secondary {
     padding: 0.75rem;
 }
 
+.inline-editor {
+    margin: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 253, 248, 0.78);
+    border-radius: var(--radius, 16px);
+}
+
+.hero + .inline-editor {
+    margin: 0 0 1rem;
+}
+
+.inline-editor summary {
+    cursor: pointer;
+    color: var(--accent-dark);
+    font-weight: 700;
+}
+
+.inline-editor[open] summary {
+    margin-bottom: 0.75rem;
+}
+
+.image-inline-editor textarea {
+    min-height: 5rem;
+}
+
 .muted {
     color: var(--muted);
 }
@@ -457,6 +483,82 @@ td {
 
 .lightbox button {
     border-color: #fffdf8;
+}
+
+.lightbox-vote {
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+}
+
+.lightbox-vote-label {
+    min-width: auto;
+    color: #2a2118;
+    font-weight: 700;
+}
+
+.lightbox-vote-panel {
+    width: min(34rem, 100%);
+    padding: 0.7rem;
+    border: 2px solid #fffdf8;
+    background: #fffdf8;
+    color: #2a2118;
+    border-radius: var(--radius, 16px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.lightbox-score-badge {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 9rem;
+    padding: 0.35rem 0.85rem;
+    border: 2px solid #fffdf8;
+    background: #fffdf8;
+    color: #2a2118;
+    border-radius: var(--radius, 16px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+    font-weight: 800;
+}
+
+.lightbox-score-badge strong {
+    color: var(--accent-dark);
+    font-size: 1.45rem;
+    line-height: 1;
+}
+
+.lightbox-vote-panel .vote-row {
+    flex-wrap: wrap;
+}
+
+.lightbox-vote-panel .vote-row span {
+    min-width: auto;
+}
+
+.lightbox-vote-panel button {
+    border-color: var(--accent-dark);
+    background: var(--accent);
+    color: #fffdf8;
+}
+
+.lightbox-vote-indicator {
+    min-width: 6.75rem;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: var(--radius, 16px);
+    font-weight: 700;
+}
+
+.lightbox-vote-indicator.is-up {
+    border-color: #1d7f39;
+    color: #1d7f39;
+}
+
+.lightbox-vote-indicator.is-down {
+    border-color: #a73333;
+    color: #a73333;
 }
 
 .lightbox button[data-lightbox-action="previous"],
@@ -775,6 +877,14 @@ td {
     display: grid;
     gap: 0.45rem;
     justify-items: center;
+    max-width: min(58rem, 100%);
+}
+
+.lightbox-description {
+    max-width: min(52rem, 100%);
+    margin: 0;
+    color: rgba(255, 253, 248, 0.9);
+    overflow-wrap: anywhere;
 }
 
 .lightbox-toolbar {

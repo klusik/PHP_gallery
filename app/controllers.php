@@ -41,28 +41,36 @@ function cms_gallery(): void
         cms_not_found();
         return;
     }
+    // Variable $publicOnly stores this steps working value.
+    $publicOnly = !current_user();
 
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
+    $sql = "SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
         FROM images i
         LEFT JOIN image_votes v ON v.image_id = i.id
-        WHERE i.gallery_id = ? AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+        WHERE i.gallery_id = ? AND i.relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND i.visibility = 'public'";
+    }
+    $sql .= "
         GROUP BY i.id
-        ORDER BY i.sort_order, i.filename");
+        ORDER BY i.sort_order, i.filename";
+    $stmt = db()->prepare($sql);
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
     $images = $stmt->fetchAll();
     // Variable $children stores this steps working value.
-    $children = child_galleries((int) $gallery['id'], true);
+    $children = child_galleries((int) $gallery['id'], $publicOnly);
 
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
-        render_tag_list(contained_tags_for_gallery($gallery, true), 'Containing tags');
+        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
+    render_public_gallery_admin_form($gallery);
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
         foreach ($children as $child) {
@@ -83,7 +91,9 @@ function cms_gallery(): void
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
         render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
-        echo '</div></article>';
+        echo '</div>';
+        render_public_image_admin_form($image);
+        echo '</article>';
     }
     echo '</section>';
     render_lightbox();
@@ -155,8 +165,51 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '<p>' . e($gallery['description']) . '</p>';
     echo '<p class="muted">' . (int) $gallery['image_count'] . ' images</p></span>';
     echo '</a>';
+    render_public_gallery_admin_form($gallery);
     render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     echo '</article>';
+}
+
+/**
+ * Render logged-in admin metadata controls directly on public gallery pages.
+ */
+function render_public_gallery_admin_form(array $gallery): void
+{
+    if (!current_user()) {
+        return;
+    }
+    echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<label>Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
+    echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
+    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
+    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a></div>';
+    echo '</form></details>';
+}
+
+/**
+ * Render logged-in admin metadata controls for a public image card.
+ */
+function render_public_image_admin_form(array $image): void
+{
+    if (!current_user()) {
+        return;
+    }
+    echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
+    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?: pathinfo((string) $image['filename'], PATHINFO_FILENAME))) . '"></label>';
+    echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
+    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
+    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Admin edit</a></div>';
+    echo '</form></details>';
 }
 
 /**
@@ -199,7 +252,7 @@ function render_lightbox(): void
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Esc closes</span></div><h2 data-lightbox-title></h2><p data-lightbox-description></p><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span>Score: <strong data-lightbox-score data-score-for="">0</strong></span><button type="submit" name="vote" value="1" aria-label="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down">&#9660;</button></form></figcaption></figure>';
+    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Up/Down vote, Esc closes</span></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div></figcaption></figure>';
     echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
 }
@@ -954,6 +1007,103 @@ function cms_admin_bulk_images(): void
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
     }
     redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
+}
+
+/**
+ * Save gallery metadata from admin controls rendered on public pages.
+ */
+function cms_admin_public_update_gallery(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    // Variable $title stores this steps working value.
+    $title = trim((string) ($_POST['title'] ?? ''));
+    if ($title === '') {
+        $title = (string) $gallery['title'];
+    }
+    // Variable $visibility stores this steps working value.
+    $visibility = (string) $gallery['visibility'];
+    // Variable $action stores this steps working value.
+    $action = (string) ($_POST['action'] ?? 'save');
+    if ($action === 'delete') {
+        // Variable $redirect stores this steps working value.
+        $redirect = url_for('home');
+        if (!empty($gallery['parent_id'])) {
+            // Variable $parent stores this steps working value.
+            $parent = find_gallery((int) $gallery['parent_id']);
+            if ($parent) {
+                $redirect = url_for('gallery', ['slug' => $parent['slug']]);
+            }
+        }
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('DELETE FROM galleries WHERE id = ?');
+        $stmt->execute([(int) $gallery['id']]);
+        redirect_to($redirect);
+    }
+    if ($action === 'publish') {
+        $visibility = 'public';
+    }
+    if ($action === 'hide') {
+        $visibility = 'private';
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('UPDATE galleries SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$title, (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $gallery['id']]);
+    // Variable $updated stores this steps working value.
+    $updated = find_gallery((int) $gallery['id']);
+    if ($updated) {
+        write_gallery_sidecar($updated);
+    }
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('gallery', ['slug' => $gallery['slug']])));
+}
+
+/**
+ * Save image metadata from admin controls rendered on public pages.
+ */
+function cms_admin_public_update_image(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    // Variable $image stores this steps working value.
+    $image = find_image((int) ($_POST['image_id'] ?? 0));
+    if (!$image) {
+        cms_not_found();
+        return;
+    }
+    // Variable $visibility stores this steps working value.
+    $visibility = (string) $image['visibility'];
+    // Variable $action stores this steps working value.
+    $action = (string) ($_POST['action'] ?? 'save');
+    if ($action === 'delete') {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('DELETE FROM images WHERE id = ?');
+        $stmt->execute([(int) $image['id']]);
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+    }
+    if ($action === 'publish') {
+        $visibility = 'public';
+    }
+    if ($action === 'hide') {
+        $visibility = 'private';
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([trim((string) ($_POST['title'] ?? '')), (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $image['id']]);
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }
 
 /**

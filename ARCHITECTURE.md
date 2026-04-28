@@ -119,7 +119,10 @@ metadata changes.
    thumbnail actions later from the dashboard/edit pages.
 6. Bulk-publish galleries or images.
 7. Collapse or expand subgallery rows as needed; the state is persisted.
-8. Edit titles, tags, cover images, hierarchy, and theme settings.
+8. Edit titles, descriptions, tags, cover images, hierarchy, and theme settings.
+9. Logged-in admins can also edit gallery and image titles/descriptions directly
+   from public gallery pages through admin-only inline forms. Inline removal
+   deletes CMS records only; filesystem folders and image files are left intact.
 
 ## Deployment
 
