@@ -187,11 +187,11 @@ thumbs/some_picture_thumb300.jpg
 thumbs/some_picture_thumb800.jpg
 ```
 
-Cards advertise both `300` and `800` variants through responsive image sources,
-so the browser can pick the right file for the rendered size. Admin previews use
-the smaller variant. Both sizes mean "maximum longer side"; smaller source
-images are not enlarged. The public lightbox loads the original protected media
-route and links the displayed image to that same original route.
+Public gallery cards and image previews use the `800` variant so title pictures
+do not fall back to small admin thumbnails. Admin table previews use the smaller
+`300` variant. Both sizes mean "maximum longer side"; smaller source images are
+not enlarged. The public lightbox loads the original protected media route and
+links the displayed image to that same original route.
 
 Admins can create or rebuild thumbnails in several places:
 
@@ -206,7 +206,8 @@ so gallery and image visibility checks still apply.
 Existing thumbnails are not regenerated when they are already newer than the
 source image. Thumbnail actions run in AJAX batches when JavaScript is enabled,
 showing a progress bar with checked images plus created and skipped file counts.
-Without JavaScript, the same buttons fall back to the normal form submit.
+Gallery row and edit-page thumbnail buttons still submit normally without
+JavaScript.
 
 ## Tags
 
@@ -240,6 +241,10 @@ editing code. The current theme controls include:
 Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
 built-in stylesheet. This gives technical users a template-like override path,
 while non-technical users can use the form controls.
+
+The `custom_css/` folder contains example stylesheets only. Use
+`custom_css/css_template.css` as a commented starting point, or adapt
+`custom_css/custom.css` if you want a compact admin-oriented style.
 
 ## Naming And Design Conventions
 
