@@ -70,11 +70,11 @@ function cms_gallery(): void
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 300);
+        $previewUrl = thumbnail_url($image, 800);
         // Variable $imageTags stores this steps working value.
         $imageTags = tags_for_entity('image', (int) $image['id']);
         echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '">';
-        echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" srcset="' . e(thumbnail_url($image, 300)) . ' 300w, ' . e(thumbnail_url($image, 800)) . ' 800w" sizes="(min-width: 900px) 33vw, 100vw" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
+        echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
         render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
@@ -134,14 +134,14 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
     if ($cover) {
-        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 300)) . '" srcset="' . e(thumbnail_url($cover, 300)) . ' 300w, ' . e(thumbnail_url($cover, 800)) . ' 800w" sizes="(min-width: 900px) 360px, 100vw" alt="">';
+        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" alt="">';
     } else {
         // Variable $collage stores this steps working value.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_url($image, 300)) . ' 300w, ' . e(thumbnail_url($image, 800)) . ' 800w" sizes="180px" alt="">';
+                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="">';
             }
             echo '</span>';
         }
@@ -535,9 +535,9 @@ function cms_admin(): void
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
-    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="inline-form">' . csrf_field() . '<input type="hidden" name="scope" value="all"><button type="submit" class="secondary">Create all thumbnails</button></form>';
+    echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
-    echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '">' . csrf_field();
+    echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
     echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
@@ -551,9 +551,9 @@ function cms_admin(): void
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav">';
-        echo '<a href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
-        echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
+        echo '<a class="gallery-row-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
+        echo '<button type="submit" class="secondary gallery-row-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
