@@ -1110,6 +1110,14 @@ function cms_setup(): void
     }
     // Variable $ran stores this steps working value.
     $ran = run_migrations();
+    if (cms_admin_user_exists()) {
+        cms_write_setup_lock();
+        http_response_code(403);
+        render_header('Setup locked');
+        echo '<section class="panel"><h1>Setup locked</h1><p>The setup endpoint is locked because an administrator already exists.</p></section>';
+        render_footer();
+        return;
+    }
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $username stores this steps working value.

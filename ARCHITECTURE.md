@@ -139,8 +139,10 @@ All database writes use PDO prepared statements. Admin POST routes require CSRF
 tokens. Passwords use PHP password hashing. Public image access checks gallery
 and image visibility unless an admin is logged in.
 
-`install.php` should be deleted or blocked after setup because it can create or
-modify database credentials.
+`install.php` is a first-run endpoint. It refuses to run after either
+`config.php` or `cache/installed.lock` exists, and successful browser installs
+write both files. Deleting or server-blocking the installer after setup is still
+reasonable defense in depth on public hosts.
 
 The `app/`, `database/`, `scripts/`, `cache/`, and `galleries/` directories are
 not intended to be browsed directly. Apache `.htaccess` files are included for

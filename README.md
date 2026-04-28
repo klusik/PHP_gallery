@@ -73,9 +73,12 @@ The installer does these jobs for you:
 - creates the galleries and ZIP cache folders
 - runs all database migrations
 - creates the first admin account
+- writes `cache/installed.lock`
 
-After setup, delete `install.php` from the server or block access to it. Keeping
-it online is unnecessary and should not be done on a public website.
+After setup, the installer disables itself automatically. Future requests to
+`install.php` are rejected when either `config.php` or `cache/installed.lock`
+exists. You can still delete or server-block `install.php` as an extra hardening
+step on public websites.
 
 If the installer says a folder is not writable, change the folder permissions in
 your hosting control panel or create the folder manually. If database user
@@ -447,7 +450,8 @@ After upload:
 1. Open `install.php` and complete the browser-based setup, or create `config.php` manually from `config.example.php`.
 2. If you use manual setup, create the database and run the setup URL with your `setup_key` or run the CLI scripts if your host provides shell access.
 3. Ensure `galleries_root` and `zip_cache_path` are writable by PHP.
-4. Delete or block `install.php` after setup.
+4. Optionally delete or block `install.php` after setup. The script also refuses
+   to run once `config.php` or `cache/installed.lock` exists.
 
 The deployment helper intentionally does not upload `config.php`, cache files,
 logs, Git metadata, or local development artifacts. Create production

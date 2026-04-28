@@ -10,11 +10,43 @@ require __DIR__ . '/services.php';
 require __DIR__ . '/controllers.php';
 
 /**
+ * Return the expected application config path.
+ */
+function cms_config_path(): string
+{
+    return dirname(__DIR__) . '/config.php';
+}
+
+/**
+ * Return true when the application has a real local configuration file.
+ */
+function cms_has_config(): bool
+{
+    return is_file(cms_config_path());
+}
+
+/**
+ * Send first-run browser requests to the one-time installer.
+ */
+function cms_redirect_to_installer(): void
+{
+    $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
+    if ($base === '/public') {
+        $base = '';
+    } elseif (str_ends_with($base, '/public')) {
+        $base = substr($base, 0, -7);
+    }
+    $target = ($base === '' ? '' : $base) . '/install.php';
+    header('Location: ' . ($target === '/install.php' ? 'install.php' : $target));
+    exit;
+}
+
+/**
  * Load the application configuration once per request.
  *
- * Production installs should provide config.php. The example config is used as
- * a fallback so installer/setup pages can render before final configuration is
- * written.
+ * Production installs should provide config.php. The example config remains a
+ * fallback for manual tooling, while browser requests without config.php are
+ * redirected to the one-time installer before this function is called.
  */
 function cms_config(): array
 {
@@ -24,7 +56,7 @@ function cms_config(): array
     }
 
     // Variable $configFile stores this steps working value.
-    $configFile = dirname(__DIR__) . '/config.php';
+    $configFile = cms_config_path();
     if (!is_file($configFile)) {
         // Variable $configFile stores this steps working value.
         $configFile = dirname(__DIR__) . '/config.example.php';
@@ -43,6 +75,10 @@ function cms_config(): array
  */
 function cms_run(): void
 {
+    if (!cms_has_config()) {
+        cms_redirect_to_installer();
+    }
+
     // Variable $config stores this steps working value.
     $config = cms_config();
     session_name((string) $config['admin_session_name']);
