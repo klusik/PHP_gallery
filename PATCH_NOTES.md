@@ -2,6 +2,42 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.11
+
+### Major Changes
+
+- Simplified the browser installer migration runner:
+  - `install.php` no longer wraps each migration file in an explicit database transaction
+  - migration statements now run directly, which avoids redundant transaction handling during schema setup
+
+### Documentation
+
+- Updated `README.md` and `ARCHITECTURE.md` to describe the installer migration flow accurately
+
+## Version 0.10
+
+### Major Changes
+
+- Added the optional picture comparison game for opt-in gallery branches:
+  - pair history prevents the same viewer from seeing the same image pair again in the same gallery game
+  - visitors can choose the left or right image with clicks or arrow keys
+  - the chosen image receives a normal upvote
+  - the game shows global top-picture statistics for the current gallery
+  - admins can enable or disable the game across gallery trees
+- Added a database-backed admin log:
+  - admins can record operational events and failures without server log access
+  - the log page supports workflow states, filtering, and bulk status updates
+- Hardened migration-aware admin behavior:
+  - admin features detect missing schema more safely
+  - the dashboard shows a clear migration prompt when the schema is stale
+  - admins can run migrations from the dashboard when needed
+  - migration attempts and rejected admin actions are logged
+- Kept the earlier public-page admin editing, lightbox vote display, custom CSS skins, and site-name configuration in the same release branch
+
+### Documentation
+
+- Updated the public UI documentation for admin log workflow, migration prompts, and picture-game admin flow
+
 ## Version 0.9
 
 ### Major Changes

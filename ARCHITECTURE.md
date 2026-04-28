@@ -99,8 +99,11 @@ a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
 
 Migrations are ordered PHP files that return SQL statements. The runner records
-applied versions in `schema_migrations`. MySQL DDL statements are not wrapped in
-an explicit transaction because MySQL may auto-commit schema changes.
+applied versions in `schema_migrations`. The installer and migration runner
+apply each migration file directly and do not open an explicit transaction
+around the file. MySQL DDL statements may auto-commit schema changes, so the
+application relies on statement ordering and the migration record table instead
+of transaction wrapping.
 
 Feature code that depends on a new migration should avoid fatal errors against
 older databases. The picture game checks for its required column/table before
