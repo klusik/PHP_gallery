@@ -155,6 +155,7 @@ function render_header(string $title): void
     if ($user) {
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
         echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
+        echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';

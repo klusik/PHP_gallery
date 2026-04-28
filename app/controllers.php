@@ -428,6 +428,93 @@ function cms_admin_theme(): void
 }
 
 /**
+ * Render and process the logged-in admin account settings.
+ */
+function cms_admin_account(): void
+{
+    require_admin();
+    // Variable $user stores this steps working value.
+    $user = current_user();
+    if (!$user) {
+        redirect_to(url_for('admin_login'));
+    }
+    if (request_method() === 'POST') {
+        verify_csrf();
+        // Variable $currentPassword stores this steps working value.
+        $currentPassword = (string) ($_POST['current_password'] ?? '');
+        // Variable $newUsername stores this steps working value.
+        $newUsername = trim((string) ($_POST['username'] ?? ''));
+        // Variable $newPassword stores this steps working value.
+        $newPassword = (string) ($_POST['new_password'] ?? '');
+        // Variable $confirmPassword stores this steps working value.
+        $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+        // Variable $errors stores this steps working value.
+        $errors = [];
+
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('SELECT username, password_hash FROM users WHERE id = ?');
+        $stmt->execute([(int) $user['id']]);
+        // Variable $account stores this steps working value.
+        $account = $stmt->fetch();
+        if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+            $errors[] = 'Current password is incorrect.';
+        }
+        if ($newUsername === '') {
+            $errors[] = 'Username is required.';
+        }
+        if ($newPassword !== '' && $newPassword !== $confirmPassword) {
+            $errors[] = 'New password confirmation does not match.';
+        }
+        if ($newPassword !== '' && strlen($newPassword) < 8) {
+            $errors[] = 'New password must be at least 8 characters long.';
+        }
+        if ($newUsername !== '') {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('SELECT id FROM users WHERE username = ? AND id <> ?');
+            $stmt->execute([$newUsername, (int) $user['id']]);
+            if ($stmt->fetch()) {
+                $errors[] = 'That username is already in use.';
+            }
+        }
+        if (!$errors) {
+            $sql = 'UPDATE users SET username = ?, updated_at = ?';
+            // Variable $params stores this steps working value.
+            $params = [$newUsername, now_sql()];
+            if ($newPassword !== '') {
+                $sql .= ', password_hash = ?';
+                $params[] = password_hash($newPassword, PASSWORD_DEFAULT);
+            }
+            $sql .= ' WHERE id = ?';
+            $params[] = (int) $user['id'];
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare($sql);
+            $stmt->execute($params);
+            session_regenerate_id(true);
+            $_SESSION['user_id'] = (int) $user['id'];
+            redirect_to(url_for('admin_account', ['saved' => 1]));
+        }
+        // Variable $error stores this steps working value.
+        $error = implode(' ', $errors);
+    }
+    render_header('Account');
+    if (isset($_GET['saved'])) {
+        echo '<div class="notice">Account updated.</div>';
+    }
+    if (isset($error)) {
+        echo '<div class="notice">' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><h1>Account</h1><form method="post" class="form-grid">';
+    echo csrf_field();
+    echo '<label>Username<input name="username" required autocomplete="username" value="' . e((string) $user['username']) . '"></label>';
+    echo '<label>Current password<input name="current_password" type="password" required autocomplete="current-password"></label>';
+    echo '<label>New password<input name="new_password" type="password" autocomplete="new-password"></label>';
+    echo '<label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password"></label>';
+    echo '<p class="muted">Leave the new password fields empty to keep the current password.</p>';
+    echo '<button type="submit">Save account</button></form></section>';
+    render_footer();
+}
+
+/**
  * Admin dashboard for gallery scanning, publishing, and bulk actions.
  */
 function cms_admin(): void
