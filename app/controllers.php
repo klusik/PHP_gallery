@@ -70,6 +70,9 @@ function cms_gallery(): void
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
+    if (picture_game_available($gallery)) {
+        echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
+    }
     render_public_gallery_admin_form($gallery);
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
@@ -122,6 +125,88 @@ function cms_tag(): void
     }
     echo '</section>';
     render_footer();
+}
+
+/**
+ * Public picture comparison game for opted-in gallery branches.
+ */
+function cms_picture_game(): void
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['gallery_id'] ?? 0));
+    if (!$gallery || $gallery['visibility'] !== 'public') {
+        cms_not_found();
+        return;
+    }
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            record_picture_game_vote(
+                $gallery,
+                (int) ($_POST['left_image_id'] ?? 0),
+                (int) ($_POST['right_image_id'] ?? 0),
+                (int) ($_POST['winner_image_id'] ?? 0)
+            );
+        } catch (RuntimeException) {
+        }
+        redirect_to(url_for('picture_game', ['id' => $gallery['id']]));
+    }
+    // Variable $pair stores this steps working value.
+    $pair = next_picture_game_pair($gallery);
+    // Variable $topImages stores this steps working value.
+    $topImages = picture_game_top_images($gallery);
+    render_header('Picture game: ' . (string) $gallery['title']);
+    render_breadcrumbs($gallery);
+    echo '<section class="hero"><h1>Picture game</h1><p>Choose the picture you prefer. Your choice gives that picture one upvote; the other picture is not downvoted.</p></section>';
+    if (!$pair) {
+        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">Back to gallery</a></p></section>';
+        render_picture_game_stats($topImages);
+        render_footer();
+        return;
+    }
+    echo '<section class="picture-game" data-picture-game>';
+    echo '<form method="post" action="' . e(url_for('picture_game')) . '">' . csrf_field();
+    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+    echo '<input type="hidden" name="left_image_id" value="' . (int) $pair['left']['id'] . '">';
+    echo '<input type="hidden" name="right_image_id" value="' . (int) $pair['right']['id'] . '">';
+    echo '<div class="picture-game-pair">';
+    render_picture_game_choice($pair['left'], 'left');
+    render_picture_game_choice($pair['right'], 'right');
+    echo '</div>';
+    echo '</form>';
+    echo '<p class="muted">Remaining comparisons for you: ' . max(0, (int) $pair['remaining_pairs'] - 1) . ' of ' . (int) $pair['total_pairs'] . '</p>';
+    echo '</section>';
+    render_picture_game_stats($topImages);
+    render_footer();
+}
+
+/**
+ * Render one selectable picture-game choice.
+ */
+function render_picture_game_choice(array $image, string $side): void
+{
+    // Variable $label stores this steps working value.
+    $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
+    echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
+    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+    echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
+    echo '</button>';
+}
+
+/**
+ * Render top global picture-game winners for one gallery.
+ */
+function render_picture_game_stats(array $topImages): void
+{
+    if (!$topImages) {
+        return;
+    }
+    echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
+    foreach ($topImages as $image) {
+        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+        echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
+    }
+    echo '</div></section>';
 }
 
 /**
@@ -612,15 +697,37 @@ function cms_admin(): void
     $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
     // Variable $collapsedIds stores this steps working value.
     $collapsedIds = array_flip(collapsed_gallery_ids());
+    // Variable $pictureGameReady stores this steps working value.
+    $pictureGameReady = picture_game_schema_ready();
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
+    if (isset($_GET['migrations_ran'])) {
+        echo '<div class="notice">Applied migrations: ' . e((string) $_GET['migrations_ran']) . '.</div>';
+    } elseif (isset($_GET['migrations_current'])) {
+        echo '<div class="notice">Database is already current.</div>';
+    } elseif (isset($_GET['migration_failed'])) {
+        echo '<div class="notice">Migration failed: ' . e((string) $_GET['migration_failed']) . '</div>';
+    }
+    if (isset($_GET['migration_required'])) {
+        render_admin_migration_notice('Picture game needs the latest database migration before it can be changed.');
+    } elseif (!$pictureGameReady) {
+        render_admin_migration_notice('Picture game controls are hidden until the latest database migration is applied.');
+    }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option></select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Images</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option>';
+    if ($pictureGameReady) {
+        echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
+    }
+    echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
+    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
+    if ($pictureGameReady) {
+        echo '<th>Game</th>';
+    }
+    echo '<th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
         // Variable $depth stores this steps working value.
         $depth = substr_count((string) $gallery['folder_path'], '/');
@@ -632,13 +739,28 @@ function cms_admin(): void
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
+        if ($pictureGameReady) {
+            echo '<td>' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
+        }
+        echo '<td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
         echo '<a class="gallery-row-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
         echo '<button type="submit" class="secondary gallery-row-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
     render_footer();
+}
+
+/**
+ * Render an admin-only prompt that can run pending migrations.
+ */
+function render_admin_migration_notice(string $message): void
+{
+    echo '<div class="notice"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    echo '<span>' . e($message) . '</span> ';
+    echo '<button type="submit">Run database migration</button>';
+    echo '</form></div>';
 }
 
 /**
@@ -718,7 +840,44 @@ function cms_admin_bulk_galleries(): void
         }
         redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
     }
+    if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
+        if (!picture_game_schema_ready()) {
+            redirect_to(url_for('admin', ['migration_required' => 1]));
+        }
+        // Variable $expandedIds stores this steps working value.
+        $expandedIds = [];
+        foreach ($galleryIds as $galleryId) {
+            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        }
+        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
+        if ($expandedIds) {
+            // Variable $placeholders stores this steps working value.
+            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([$action === 'game_on' ? 1 : 0, now_sql()], $expandedIds));
+        }
+        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+    }
     redirect_to(url_for('admin'));
+}
+
+/**
+ * Run pending database migrations from the admin dashboard.
+ */
+function cms_admin_run_migrations(): void
+{
+    require_admin();
+    verify_csrf();
+    try {
+        $ran = run_migrations();
+        if ($ran) {
+            redirect_to(url_for('admin', ['migrations_ran' => implode(', ', $ran)]));
+        }
+        redirect_to(url_for('admin', ['migrations_current' => 1]));
+    } catch (Throwable $exception) {
+        redirect_to(url_for('admin', ['migration_failed' => $exception->getMessage()]));
+    }
 }
 
 /**
@@ -897,6 +1056,8 @@ function cms_admin_edit_gallery(): void
         cms_not_found();
         return;
     }
+    // Variable $pictureGameReady stores this steps working value.
+    $pictureGameReady = picture_game_schema_ready();
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $title stores this steps working value.
@@ -905,6 +1066,8 @@ function cms_admin_edit_gallery(): void
         $slug = trim((string) $_POST['slug']);
         // Variable $visibility stores this steps working value.
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
+        // Variable $pictureGameEnabled stores this steps working value.
+        $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
@@ -917,9 +1080,15 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        if ($pictureGameReady) {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        } else {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        }
         sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         // Variable $gallery stores this steps working value.
         $gallery = find_gallery((int) $gallery['id']);
@@ -931,6 +1100,9 @@ function cms_admin_edit_gallery(): void
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
     render_header('Edit gallery');
+    if (!$pictureGameReady) {
+        render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
+    }
     echo '<section class="panel"><h1>Edit gallery</h1><form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
@@ -938,6 +1110,9 @@ function cms_admin_edit_gallery(): void
     echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
+    if ($pictureGameReady) {
+        echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
+    }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
     echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';

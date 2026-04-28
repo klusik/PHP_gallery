@@ -2,6 +2,47 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.9 (Upcoming)
+
+### Major Changes
+
+- Added an optional picture comparison game for gallery branches:
+  - new galleries are opted out by default
+  - admins can enable or disable the game from gallery edit pages
+  - admins can bulk-enable or bulk-disable selected galleries and their
+    subgalleries from the dashboard
+  - public gallery pages show a `Play picture game` button when enough eligible
+    public images exist
+- Added side-by-side image voting:
+  - two pictures are shown at the same visual height
+  - visitors choose the picture they prefer by clicking it
+  - left and right arrow keys can select the left or right picture
+  - the selected picture receives a normal upvote
+  - the non-selected picture receives no vote and is not downvoted
+- Added per-viewer pair history:
+  - image pairs are normalized so A/B and B/A are treated as the same pair
+  - a pair is recorded as soon as it is displayed
+  - the same viewer does not see the same pair again in that gallery game
+  - when all pairs are depleted, the game shows a completion message
+- Added global game statistics:
+  - the game page shows the top three pictures for the current gallery game
+  - stats are global, not per-user
+  - top pictures show game wins and normal score
+
+### Data Model
+
+- Added `galleries.picture_game_enabled`
+- Added `picture_game_votes` to store pair display history and selected winners
+- Picture-game winners also write into the existing `image_votes` table so game
+  choices contribute to normal image scores
+
+### Documentation
+
+- Updated README with the picture game workflow, admin opt-in behavior, voting
+  rules, pair depletion behavior, and statistics
+- Updated architecture notes with the new route, pair-history table, and admin
+  workflow additions
+
 ## Version 0.8
 
 ### Major Changes

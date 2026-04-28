@@ -89,6 +89,7 @@
     });
 
     setupThumbnailProgress();
+    setupPictureGame();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.
@@ -409,6 +410,28 @@
                 button.disabled = false;
             });
         }
+    }
+
+    // Function `setupPictureGame` executes this focused behavior.
+    function setupPictureGame() {
+        // Variable `game` stores this steps working value.
+        const game = document.querySelector('[data-picture-game]');
+        if (!game) {
+            return;
+        }
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                return;
+            }
+            // Variable `side` stores this steps working value.
+            const side = event.key === 'ArrowLeft' ? 'left' : 'right';
+            // Variable `button` stores this steps working value.
+            const button = game.querySelector(`[data-picture-game-choice="${side}"]`);
+            if (button) {
+                event.preventDefault();
+                button.click();
+            }
+        });
     }
 
     // Function `ensureThumbnailProgress` executes this focused behavior.

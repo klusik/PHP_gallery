@@ -16,6 +16,8 @@ Important routes:
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
 - `page=tag&slug=...` renders a public gallery listing filtered by one tag.
+- `page=picture_game&id=...` runs the optional side-by-side picture comparison
+  game for opted-in public gallery branches.
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
   same visibility checks.
@@ -65,6 +67,12 @@ and their images.
 
 `image_votes` stores one vote per logged-in user or anonymous visitor hash.
 Scores are summed from those rows, and the UI marks the current visitor's choice.
+
+`picture_game_votes` stores pair history for the optional picture game. The pair
+is normalized so the same two images cannot be repeated in reverse order for the
+same viewer. A row is written when a pair is displayed, and `winner_image_id` is
+filled when the viewer chooses a picture. The winning image also receives a
+normal upvote in `image_votes`; the non-selected image receives no vote.
 
 `app_settings` stores configurable application values such as the public site
 name, theme colors, radius, font mode, and selected custom CSS preset. CSS files
@@ -125,6 +133,8 @@ metadata changes.
 9. Logged-in admins can also edit gallery and image titles/descriptions directly
    from public gallery pages through admin-only inline forms. Inline removal
    deletes CMS records only; filesystem folders and image files are left intact.
+10. Opt galleries or gallery branches into the picture game from gallery edit
+    pages or dashboard bulk actions. New galleries remain opted out by default.
 
 ## Deployment
 

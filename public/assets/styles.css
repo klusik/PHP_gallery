@@ -205,6 +205,63 @@ button.secondary {
     margin-bottom: 0.75rem;
 }
 
+.game-entry {
+    margin: -0.25rem 0 1rem;
+}
+
+.picture-game {
+    margin-bottom: 1rem;
+}
+
+.picture-game form {
+    margin: 0;
+}
+
+.picture-game-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.picture-game-choice {
+    display: grid;
+    grid-template-rows: minmax(18rem, 58vh) auto;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 0;
+    padding: 0.75rem;
+    border: 2px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    text-align: left;
+    border-radius: var(--radius, 16px);
+}
+
+.picture-game-choice:hover,
+.picture-game-choice:focus {
+    border-color: var(--accent);
+    background: var(--field);
+}
+
+.picture-game-choice img {
+    width: 100%;
+    height: 100%;
+    min-height: 18rem;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: calc(var(--radius, 16px) * 0.75);
+}
+
+.picture-game-choice span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.picture-game-choice small {
+    color: var(--muted);
+}
+
 .image-inline-editor textarea {
     min-height: 5rem;
 }
@@ -230,6 +287,14 @@ button.secondary {
 
 .bulk-row label {
     min-width: min(18rem, 100%);
+}
+
+.inline-action-form {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0;
 }
 
 .breadcrumbs {
@@ -791,6 +856,14 @@ td {
 
     .lightbox {
         grid-template-columns: 1fr;
+    }
+
+    .picture-game-pair {
+        grid-template-columns: 1fr;
+    }
+
+    .picture-game-choice {
+        grid-template-rows: minmax(15rem, 48vh) auto;
     }
 }
 
