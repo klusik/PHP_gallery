@@ -87,7 +87,7 @@ function send_security_headers(): void
     }
     header('X-Frame-Options: SAMEORIGIN');
     header('X-Content-Type-Options: nosniff');
-    header('Referrer-Policy: same-origin');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
 }
 
 /**

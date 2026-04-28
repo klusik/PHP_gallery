@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
     // Inline styles bypass the theme/custom CSS workflow. If somebody edits the
     // rendered HTML directly, make the tampering obvious to public visitors.
     function showCompromiseWarning() {
@@ -13,9 +13,26 @@
         document.body.append(warning);
     }
 
+    // Function `isAllowedRuntimeInlineStyle` executes this focused behavior.
+    // Leaflet is allowed to use inline styles inside the trusted map overlay
+    // because its pan, zoom, tile, marker and popup positioning logic depends
+    // on runtime-calculated transform and size attributes. The gallery still
+    // treats inline styles everywhere else as page tampering.
+    function isAllowedRuntimeInlineStyle(node) {
+        if (!(node instanceof Element)) {
+            return false;
+        }
+        return Boolean(node.closest('[data-inline-style-allowed]'));
+    }
+
+    // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
+    function hasUnauthorizedInlineStyle() {
+        return Array.from(document.querySelectorAll('[style]')).some((node) => !isAllowedRuntimeInlineStyle(node));
+    }
+
     // Function `detectInlineStyleTampering` executes this focused behavior.
     function detectInlineStyleTampering() {
-        if (document.querySelector('[style]')) {
+        if (hasUnauthorizedInlineStyle()) {
             showCompromiseWarning();
         }
     }
@@ -91,6 +108,7 @@
     setupThumbnailProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
+    setupGpsMaps();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.
@@ -164,6 +182,8 @@
     const lightboxVoteForm = overlay.querySelector('[data-lightbox-vote-form]');
     // Variable `lightboxVoteIndicator` stores this steps working value.
     const lightboxVoteIndicator = overlay.querySelector('[data-lightbox-vote-indicator]');
+    // Variable `lightboxMapButton` stores this steps working value.
+    const lightboxMapButton = overlay.querySelector('[data-lightbox-map]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
 
@@ -216,6 +236,10 @@
         }
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         syncLightboxVote(card);
+        if (lightboxMapButton) {
+            lightboxMapButton.hidden = !card.dataset.mapPoint;
+            lightboxMapButton.dataset.mapPoint = card.dataset.mapPoint || '';
+        }
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
     }
@@ -234,7 +258,7 @@
 
     cards.forEach((card, index) => {
         card.addEventListener('click', (event) => {
-            if (event.target.closest('form, [data-admin-inline-editor]')) {
+            if (event.target.closest('form, [data-admin-inline-editor], [data-photo-map], [data-gallery-map-url]')) {
                 return;
             }
             event.preventDefault();
@@ -253,6 +277,10 @@
         }
         if (action === 'next') {
             step(1);
+        }
+        if (event.target.closest('[data-lightbox-map]')) {
+            event.preventDefault();
+            openPhotoMapFromJson(event.target.closest('[data-lightbox-map]').dataset.mapPoint || '');
         }
     });
 
@@ -289,6 +317,226 @@
         if (button) {
             button.click();
         }
+    }
+
+
+    // Function `setupGpsMaps` executes this focused behavior.
+    function setupGpsMaps() {
+        document.addEventListener('click', async (event) => {
+            if (!(event.target instanceof Element)) {
+                return;
+            }
+            // Variable `photoButton` stores this steps working value.
+            const photoButton = event.target.closest('[data-photo-map]');
+            if (photoButton) {
+                // The photo pin is rendered inside the clickable image card.
+                // Stop the card click handler as early as possible so the pin
+                // opens the map directly instead of opening the photo lightbox.
+                event.preventDefault();
+                event.stopPropagation();
+                // Variable `card` stores this steps working value.
+                const card = photoButton.closest('[data-lightbox-image]');
+                openPhotoMapFromJson(photoButton.dataset.mapPoint || card?.dataset.mapPoint || '');
+                return;
+            }
+            // Variable `galleryButton` stores this steps working value.
+            const galleryButton = event.target.closest('[data-gallery-map-url]');
+            if (galleryButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                await openGalleryMap(galleryButton.dataset.galleryMapUrl || '', galleryButton.dataset.galleryMapTitle || 'Gallery map');
+            }
+        }, true);
+    }
+
+    // Function `openPhotoMapFromJson` executes this focused behavior.
+    function openPhotoMapFromJson(json) {
+        if (!json) {
+            return;
+        }
+        try {
+            // Variable `point` stores this steps working value.
+            const point = JSON.parse(json);
+            openMapOverlay(point.title || 'Photo location', [point]);
+        } catch {
+            // Invalid rendered JSON should not break the gallery UI.
+        }
+    }
+
+    // Function `openGalleryMap` executes this focused behavior.
+    async function openGalleryMap(url, title) {
+        if (!url) {
+            return;
+        }
+        try {
+            // Variable `response` stores this steps working value.
+            const response = await fetch(url, {headers: {'Accept': 'application/json'}});
+            if (!response.ok) {
+                return;
+            }
+            // Variable `payload` stores this steps working value.
+            const payload = await response.json();
+            openMapOverlay(payload.title || title, payload.points || []);
+        } catch {
+            // Network and JSON errors are ignored so the normal gallery remains usable.
+        }
+    }
+
+    // Function `ensureLeaflet` executes this focused behavior.
+    function ensureLeaflet() {
+        if (window.L) {
+            return Promise.resolve();
+        }
+        if (window.galleryLeafletLoading) {
+            return window.galleryLeafletLoading;
+        }
+
+        // The local stylesheet now contains the required Leaflet layout rules.
+        // Only the JavaScript library is loaded dynamically so the map button
+        // does not wait on stylesheet load events that can be unreliable after
+        // cache restores or browser hard-refreshes.
+        window.galleryLeafletLoading = ensureLeafletScript().then(() => undefined);
+
+        return window.galleryLeafletLoading;
+    }
+
+    // Function `ensureLeafletScript` executes this focused behavior.
+    function ensureLeafletScript() {
+        if (window.L) {
+            return Promise.resolve();
+        }
+
+        return new Promise((resolve, reject) => {
+            // Variable `existingScript` stores this steps working value.
+            const existingScript = document.querySelector('script[data-gallery-leaflet-js]');
+            if (existingScript) {
+                existingScript.addEventListener('load', () => resolve(), {once: true});
+                existingScript.addEventListener('error', () => reject(new Error('Leaflet failed to load.')), {once: true});
+                return;
+            }
+
+            // Variable `script` stores this steps working value.
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+            script.crossOrigin = '';
+            script.dataset.galleryLeafletJs = 'true';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Leaflet failed to load.'));
+            document.head.append(script);
+        });
+    }
+
+    // Function `afterNextPaint` executes this focused behavior.
+    function afterNextPaint() {
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(resolve);
+            });
+        });
+    }
+
+    // Function `openMapOverlay` executes this focused behavior.
+    async function openMapOverlay(title, points) {
+        if (!Array.isArray(points) || points.length === 0) {
+            return;
+        }
+        await ensureLeaflet();
+        // Variable `overlay` stores this steps working value.
+        let overlay = document.querySelector('[data-map-overlay]');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'map-overlay';
+            overlay.dataset.mapOverlay = 'true';
+            overlay.dataset.inlineStyleAllowed = 'true';
+            overlay.innerHTML = '<div class="map-dialog"><button type="button" class="map-close" data-map-close>Close</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.</p></div>';
+            document.body.append(overlay);
+            overlay.addEventListener('click', (event) => {
+                if (event.target === overlay || event.target.closest('[data-map-close]')) {
+                    overlay.hidden = true;
+                    document.body.classList.remove('has-map-overlay');
+                }
+            });
+        }
+        overlay.hidden = false;
+        document.body.classList.add('has-map-overlay');
+        overlay.querySelector('[data-map-title]').textContent = title;
+
+        // Wait until the overlay is painted. Leaflet reads the canvas size at
+        // startup, so initializing it in the same task that unhides the modal
+        // can produce partially offset tiles in Chromium-based browsers.
+        await afterNextPaint();
+
+        // Variable `canvas` stores this steps working value.
+        const canvas = overlay.querySelector('[data-map-canvas]');
+        if (overlay.galleryLeafletMap) {
+            overlay.galleryLeafletMap.remove();
+            overlay.galleryLeafletMap = null;
+        }
+        canvas.innerHTML = '';
+
+        // Variable `map` stores this steps working value.
+        const map = L.map(canvas);
+        overlay.galleryLeafletMap = map;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        // Variable `bounds` stores this steps working value.
+        const bounds = [];
+        points.forEach((point) => {
+            if (typeof point.lat !== 'number' || typeof point.lng !== 'number') {
+                return;
+            }
+            // Variable `marker` stores this steps working value.
+            const marker = L.marker([point.lat, point.lng]).addTo(map);
+            marker.bindPopup(mapPopupHtml(point));
+            bounds.push([point.lat, point.lng]);
+        });
+
+        map.invalidateSize(false);
+        if (bounds.length === 1) {
+            map.setView(bounds[0], 15);
+        } else {
+            map.fitBounds(bounds, {padding: [30, 30]});
+        }
+
+        // Recheck size once more after tile panes and markers are attached.
+        // This keeps the map stable after font loading, scrollbar changes or
+        // custom CSS skins that slightly alter dialog dimensions.
+        setTimeout(() => {
+            map.invalidateSize(false);
+            if (bounds.length === 1) {
+                map.setView(bounds[0], map.getZoom());
+            } else {
+                map.fitBounds(bounds, {padding: [30, 30]});
+            }
+        }, 150);
+    }
+
+    // Function `mapPopupHtml` executes this focused behavior.
+    function mapPopupHtml(point) {
+        // Variable `title` stores this steps working value.
+        const title = escapeHtml(point.title || 'Photo');
+        // Variable `description` stores this steps working value.
+        const description = point.description ? `<p>${escapeHtml(point.description)}</p>` : '';
+        // Variable `thumb` stores this steps working value.
+        const thumb = point.thumb ? `<img src="${escapeAttribute(point.thumb)}" alt="">` : '';
+        // Variable `image` stores this steps working value.
+        const image = point.image ? `<p><a href="${escapeAttribute(point.image)}">Open photo</a></p>` : '';
+        return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${image}</div>`;
+    }
+
+    // Function `escapeHtml` executes this focused behavior.
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"]/g, (character) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[character]));
+    }
+
+    // Function `escapeAttribute` executes this focused behavior.
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/'/g, '&#039;');
     }
 
     // Function `setupThumbnailProgress` executes this focused behavior.

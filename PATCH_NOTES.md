@@ -2,6 +2,27 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.12
+
+### Major Changes
+
+- Added optional EXIF/GPS map support for gallery branches:
+  - image scans extract safe EXIF fields when the PHP EXIF extension is available
+  - GPS coordinates are stored separately from the source file and refreshed on rescan
+  - admins can enable EXIF GPS maps on a gallery branch, recursively including subgalleries
+  - public image cards show a map pin only when the branch allows GPS maps and the photo has GPS coordinates
+  - the lightbox shows a map button for GPS-enabled photos
+  - gallery pages can open a combined map of all GPS-enabled public photos in the current gallery branch
+- Added a migration for EXIF/GPS columns and the recursive gallery map flag.
+- Added Leaflet/OpenStreetMap-based map overlays without requiring a paid Google Maps API key.
+- Added a JSON gallery-map endpoint for the public gallery page and lightbox controls.
+
+### Notes
+
+- Run database migrations after uploading this version.
+- Rescan galleries after migration so existing images receive EXIF/GPS metadata.
+- OpenStreetMap public tiles are suitable for light usage and testing. For heavy public traffic, configure a dedicated tile provider later.
+
 ## Version 0.11
 
 ### Major Changes

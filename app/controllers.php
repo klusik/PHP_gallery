@@ -61,6 +61,10 @@ function cms_gallery(): void
     $images = $stmt->fetchAll();
     // Variable $children stores this steps working value.
     $children = child_galleries((int) $gallery['id'], $publicOnly);
+    // Variable $mapsAllowed stores this steps working value.
+    $mapsAllowed = gallery_allows_gps_maps($gallery);
+    // Variable $galleryMapPoints stores this steps working value.
+    $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
 
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
@@ -69,7 +73,11 @@ function cms_gallery(): void
     if ($children) {
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
-    echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a></section>';
+    echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a>';
+    if ($galleryMapPoints) {
+        echo ' <button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
+    }
+    echo '</section>';
     if (picture_game_available($gallery)) {
         echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
     }
@@ -89,8 +97,15 @@ function cms_gallery(): void
         $previewUrl = thumbnail_url($image, 800);
         // Variable $imageTags stores this steps working value.
         $imageTags = tags_for_entity('image', (int) $image['id']);
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '">';
-        echo '<a href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
+        // Variable $imageHasPublicGps stores this steps working value.
+        $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
+        // Variable $imageMapPoint stores this steps working value.
+        $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
+        if ($imageMapPoint) {
+            echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
+        }
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
         render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
@@ -340,7 +355,7 @@ function render_lightbox(): void
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Up/Down vote, Esc closes</span></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div></figcaption></figure>';
+    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Up/Down vote, Esc closes</span><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; Map</button></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div></figcaption></figure>';
     echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
 }
@@ -701,7 +716,10 @@ function cms_admin(): void
     // Variable $collapsedIds stores this steps working value.
     $collapsedIds = array_flip(collapsed_gallery_ids());
     // Variable $pictureGameReady stores this steps working value.
+
     $pictureGameReady = picture_game_schema_ready();
+    // Variable $gpsMapReady stores this steps working value.
+    $gpsMapReady = exif_gps_schema_ready();
     // Variable $featureSchemaReady stores this steps working value.
     $featureSchemaReady = admin_feature_schema_ready();
     render_header('Admin dashboard');
@@ -725,12 +743,12 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
     if ($pictureGameReady) {
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
     echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
+    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Maps</th>';
     if ($pictureGameReady) {
         echo '<th>Game</th>';
     }
@@ -746,7 +764,7 @@ function cms_admin(): void
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
         if ($pictureGameReady) {
             echo '<td>' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
         }
@@ -992,6 +1010,29 @@ function cms_admin_bulk_galleries(): void
         }
         redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
     }
+    if (in_array($action, ['maps_on', 'maps_off'], true) && $galleryIds) {
+        if (!exif_gps_schema_ready()) {
+            admin_log_event('warning', 'gps_maps.schema_missing', 'Attempted to change GPS maps before migration was applied.', [
+                'gallery_ids' => $galleryIds,
+                'action' => $action,
+            ]);
+            redirect_to(url_for('admin', ['migration_required' => 1]));
+        }
+        // Variable $expandedIds stores this steps working value.
+        $expandedIds = [];
+        foreach ($galleryIds as $galleryId) {
+            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        }
+        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
+        if ($expandedIds) {
+            // Variable $placeholders stores this steps working value.
+            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([$action === 'maps_on' ? 1 : 0, now_sql()], $expandedIds));
+        }
+        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+    }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
         if (!admin_feature_schema_ready()) {
             admin_log_event('warning', 'picture_game.schema_missing', 'Attempted to change picture game before migration was applied.', [
@@ -1216,7 +1257,10 @@ function cms_admin_edit_gallery(): void
         return;
     }
     // Variable $pictureGameReady stores this steps working value.
+
     $pictureGameReady = picture_game_schema_ready();
+    // Variable $gpsMapReady stores this steps working value.
+    $gpsMapReady = exif_gps_schema_ready();
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $title stores this steps working value.
@@ -1227,6 +1271,8 @@ function cms_admin_edit_gallery(): void
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
         // Variable $pictureGameEnabled stores this steps working value.
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
+        // Variable $gpsMapEnabled stores this steps working value.
+        $gpsMapEnabled = $gpsMapReady && !empty($_POST['gps_map_enabled']) ? 1 : 0;
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
@@ -1239,7 +1285,11 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
-        if ($pictureGameReady) {
+        if ($pictureGameReady && $gpsMapReady) {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, gps_map_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, $gpsMapEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        } elseif ($pictureGameReady) {
             // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
             $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
@@ -1271,6 +1321,10 @@ function cms_admin_edit_gallery(): void
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     if ($pictureGameReady) {
         echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
+    }
+    if ($gpsMapReady) {
+        echo '<label><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label>';
+        echo '<p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
     echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
@@ -1491,6 +1545,15 @@ function cms_admin_edit_image(): void
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
+    if (exif_gps_schema_ready()) {
+        echo '<div class="exif-admin-summary"><h2>EXIF / GPS</h2><dl>';
+        echo '<dt>Taken</dt><dd>' . e((string) ($image['exif_taken_at'] ?? '')) . '</dd>';
+        echo '<dt>Camera</dt><dd>' . e(trim((string) ($image['exif_camera_make'] ?? '') . ' ' . (string) ($image['exif_camera_model'] ?? ''))) . '</dd>';
+        echo '<dt>Lens</dt><dd>' . e((string) ($image['exif_lens_model'] ?? '')) . '</dd>';
+        echo '<dt>Exposure</dt><dd>' . e(trim((string) ($image['exif_focal_length'] ?? '') . ' ' . (string) ($image['exif_aperture'] ?? '') . ' ' . (string) ($image['exif_exposure_time'] ?? '') . ' ISO ' . (string) ($image['exif_iso'] ?? ''))) . '</dd>';
+        echo '<dt>GPS</dt><dd>' . (image_has_gps($image) ? e((string) $image['gps_lat'] . ', ' . (string) $image['gps_lng']) : 'No GPS coordinates found') . '</dd>';
+        echo '</dl><p class="muted">EXIF and GPS values are refreshed when the image is scanned again.</p></div>';
+    }
     echo '<button type="submit">Save image</button></form></section>';
     render_footer();
 }
@@ -1656,6 +1719,33 @@ function cms_setup(): void
 /**
  * Render dynamic theme CSS without using HTML style attributes.
  */
+
+/**
+ * Return JSON map points for a gallery branch.
+ *
+ * The endpoint uses the same public/private access rules as the gallery page and
+ * only returns points when GPS maps are enabled on this gallery or an ancestor.
+ */
+function cms_gallery_map_data(): void
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
+        cms_not_found();
+        return;
+    }
+    // Variable $publicOnly stores this steps working value.
+    $publicOnly = !current_user();
+    // Variable $points stores this steps working value.
+    $points = gallery_map_points($gallery, $publicOnly, true);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'gallery_id' => (int) $gallery['id'],
+        'title' => (string) $gallery['title'],
+        'points' => $points,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 function cms_theme_css(): void
 {
     $theme = theme_settings();
