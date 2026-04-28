@@ -66,9 +66,9 @@ and their images.
 `image_votes` stores one vote per logged-in user or anonymous visitor hash.
 Scores are summed from those rows, and the UI marks the current visitor's choice.
 
-`app_settings` stores theme values such as colors, radius, and font mode. A
-custom CSS upload is saved to `public/assets/custom.css` and loaded after the
-built-in stylesheet.
+`app_settings` stores configurable application values such as the public site
+name, theme colors, radius, and font mode. A custom CSS upload is saved to
+`public/assets/custom.css` and loaded after the built-in stylesheet.
 
 The admin gallery tree collapse state is also stored in `app_settings` as a JSON
 list of collapsed gallery IDs. The dashboard posts updates through

@@ -1055,6 +1055,16 @@ function set_app_setting(string $key, string $value): void
 }
 
 /**
+ * Public site name shown in the header and browser title.
+ */
+function site_name(): string
+{
+    // Variable $name stores this steps working value.
+    $name = trim((string) app_setting('site_name', 'Gallery CMS'));
+    return $name !== '' ? $name : 'Gallery CMS';
+}
+
+/**
  * Return gallery IDs whose admin tree rows should start collapsed.
  */
 function collapsed_gallery_ids(): array

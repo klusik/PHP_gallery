@@ -232,6 +232,7 @@ top-level folder only contains subfolders.
 Admins can open `index.php?page=admin_theme` to adjust the site look without
 editing code. The current theme controls include:
 
+- site name
 - accent colors
 - page and panel background colors
 - corner roundness

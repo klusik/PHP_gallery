@@ -15,13 +15,18 @@ function cms_home(): void
         GROUP BY g.id
         ORDER BY g.sort_order, g.title");
     $stmt->execute();
-    render_header('Galleries');
-    echo '<section class="hero"><h1>Galleries</h1><p class="muted">Filesystem-backed galleries with CMS metadata.</p></section>';
-    echo '<section class="grid">';
-    foreach ($stmt->fetchAll() as $gallery) {
+    // Variable $galleries stores this steps working value.
+    $galleries = $stmt->fetchAll();
+    render_header(site_name());
+    if ($galleries) {
+        echo '<section class="grid">';
+    }
+    foreach ($galleries as $gallery) {
         render_gallery_card($gallery, true);
     }
-    echo '</section>';
+    if ($galleries) {
+        echo '</section>';
+    }
     render_footer();
 }
 
@@ -401,6 +406,9 @@ function cms_admin_theme(): void
                 unlink(custom_css_path());
             }
         } else {
+            // Variable $siteName stores this steps working value.
+            $siteName = trim((string) ($_POST['site_name'] ?? ''));
+            set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
             set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
             set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
             set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
@@ -421,6 +429,7 @@ function cms_admin_theme(): void
     $theme = theme_settings();
     render_header('Theme');
     echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
+    echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
     echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '"></label>';
     echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '"></label>';
     echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '"></label>';
