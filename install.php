@@ -133,8 +133,12 @@ function installer_create_or_update_user(PDO $pdo, string $appUser, string $appP
     $account = installer_mysql_account($appUser, $appHost);
     // Variable $password stores this steps working value.
     $password = $pdo->quote($appPassword);
-    // Variable $identity stores this steps working value.
-    $identity = $plugin === '' ? ' IDENTIFIED BY ' . $password : ' IDENTIFIED WITH ' . $plugin . ' BY ' . $password;
+    // Variable $serverVersion stores this steps working value.
+    $serverVersion = (string) $pdo->getAttribute(PDO::ATTR_SERVER_VERSION);
+    // Variable $isMariaDb stores this steps working value.
+    $isMariaDb = stripos($serverVersion, 'mariadb') !== false;
+    // Variable $identity stores this steps working value. MariaDB rejects MySQL plugin syntax such as IDENTIFIED WITH mysql_native_password BY ... on many shared hosts.
+    $identity = ($plugin === '' || $isMariaDb) ? ' IDENTIFIED BY ' . $password : ' IDENTIFIED WITH ' . $plugin . ' BY ' . $password;
 
     try {
         $pdo->exec('CREATE USER IF NOT EXISTS ' . $account . $identity);
@@ -213,7 +217,8 @@ $defaults = [
     'db_name' => 'gallery_cms',
     'db_user' => 'gallery_user',
     'db_user_host' => '',
-    'auth_plugin' => 'caching_sha2_password',
+    'auth_plugin' => '',
+    'db_provisioning_mode' => 'existing_database_user',
     'base_url' => installer_default_base_url(),
     'galleries_root' => $root . '/galleries',
     'zip_cache_path' => $root . '/cache/zips',
@@ -243,6 +248,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dbUserHost = installer_post('db_user_host', $defaults['db_user_host']);
         // Variable $authPlugin stores this steps working value.
         $authPlugin = installer_post('auth_plugin', $defaults['auth_plugin']);
+        // Variable $dbProvisioningMode stores this steps working value.
+        $dbProvisioningMode = installer_post('db_provisioning_mode', $defaults['db_provisioning_mode']);
         // Variable $adminUser stores this steps working value.
         $adminUser = installer_post('admin_username', $defaults['admin_username']);
         // Variable $adminPassword stores this steps working value.
@@ -257,6 +264,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($dbHost === '' || $dbName === '' || $dbUser === '' || $dbPassword === '') {
             throw new RuntimeException('Database host, name, app user, and app user password are required.');
         }
+        if (!in_array($dbProvisioningMode, ['existing_database_user', 'create_database_and_user'], true)) {
+            throw new RuntimeException('Unsupported database provisioning mode.');
+        }
         if ($adminUser === '' || $adminPassword === '') {
             throw new RuntimeException('Admin username and password are required.');
         }
@@ -264,25 +274,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('Database port must be a number between 1 and 65535.');
         }
 
-        // Variable $adminPdo stores this steps working value.
-        $adminPdo = new PDO(installer_mysql_dsn($dbHost, $dbPort), (string) ($_POST['db_admin_user'] ?? ''), (string) ($_POST['db_admin_password'] ?? ''), [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-
         // Variable $dbIdentifier stores this steps working value.
         $dbIdentifier = installer_mysql_identifier($dbName);
-        $adminPdo->exec('CREATE DATABASE IF NOT EXISTS ' . $dbIdentifier . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-        $messages[] = 'Database is ready.';
 
-        // Variable $accountHosts stores this steps working value.
-        $accountHosts = installer_account_hosts($dbHost, $dbUserHost);
-        foreach ($accountHosts as $accountHost) {
-            installer_create_or_update_user($adminPdo, $dbUser, $dbPassword, $accountHost, $authPlugin);
-            $adminPdo->exec('GRANT ALL PRIVILEGES ON ' . $dbIdentifier . '.* TO ' . installer_mysql_account($dbUser, $accountHost));
+        if ($dbProvisioningMode === 'create_database_and_user') {
+            // Variable $dbAdminUser stores this steps working value.
+            $dbAdminUser = installer_post('db_admin_user', '');
+            if ($dbAdminUser === '') {
+                throw new RuntimeException('Database admin user is required when the installer creates the database or database user.');
+            }
+
+            // Variable $adminPdo stores this steps working value.
+            $adminPdo = new PDO(installer_mysql_dsn($dbHost, $dbPort), $dbAdminUser, (string) ($_POST['db_admin_password'] ?? ''), [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+
+            $adminPdo->exec('CREATE DATABASE IF NOT EXISTS ' . $dbIdentifier . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+            $messages[] = 'Database is ready.';
+
+            // Variable $accountHosts stores this steps working value.
+            $accountHosts = installer_account_hosts($dbHost, $dbUserHost);
+            foreach ($accountHosts as $accountHost) {
+                installer_create_or_update_user($adminPdo, $dbUser, $dbPassword, $accountHost, $authPlugin);
+                $adminPdo->exec('GRANT ALL PRIVILEGES ON ' . $dbIdentifier . '.* TO ' . installer_mysql_account($dbUser, $accountHost));
+            }
+            $adminPdo->exec('FLUSH PRIVILEGES');
+            $messages[] = 'Database user is ready.';
+        } else {
+            $messages[] = 'Using existing database and existing database user. User creation and GRANT statements were skipped.';
         }
-        $adminPdo->exec('FLUSH PRIVILEGES');
-        $messages[] = 'Database user is ready.';
 
         foreach ([$galleriesRoot, $zipCachePath] as $path) {
             if (!is_dir($path) && !mkdir($path, 0775, true)) {
@@ -396,7 +417,7 @@ $value = static function (string $name) use ($defaults): string {
     <form method="post" class="panel">
         <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
 
-        <h2>Database Admin Login</h2>
+        <h2>Database Connection</h2>
         <div class="grid">
             <label>Host
                 <input name="db_host" value="<?php echo $value('db_host'); ?>" required>
@@ -404,11 +425,21 @@ $value = static function (string $name) use ($defaults): string {
             <label>Port
                 <input name="db_port" value="<?php echo $value('db_port'); ?>" inputmode="numeric">
             </label>
-            <label>Admin user
-                <input name="db_admin_user" value="<?php echo installer_e((string) ($_POST['db_admin_user'] ?? 'root')); ?>" required>
+            <label class="full">Database provisioning mode
+                <?php $selectedProvisioningMode = (string) ($_POST['db_provisioning_mode'] ?? $defaults['db_provisioning_mode']); ?>
+                <select name="db_provisioning_mode">
+                    <option value="existing_database_user"<?php echo $selectedProvisioningMode === 'existing_database_user' ? ' selected' : ''; ?>>Use existing database and existing database user</option>
+                    <option value="create_database_and_user"<?php echo $selectedProvisioningMode === 'create_database_and_user' ? ' selected' : ''; ?>>Create database and database user</option>
+                </select>
+                <span class="help">Use the existing-user mode on shared hosting. It skips <code>CREATE USER</code>, <code>GRANT</code>, and <code>FLUSH PRIVILEGES</code>, because those privileges are commonly blocked by hosting providers.</span>
             </label>
-            <label>Admin password
+            <label>Database admin user
+                <input name="db_admin_user" value="<?php echo installer_e((string) ($_POST['db_admin_user'] ?? 'root')); ?>">
+                <span class="help">Only needed when the installer creates the database or database user.</span>
+            </label>
+            <label>Database admin password
                 <input name="db_admin_password" type="password">
+                <span class="help">Only needed when the installer creates the database or database user.</span>
             </label>
         </div>
 
@@ -426,7 +457,7 @@ $value = static function (string $name) use ($defaults): string {
                 </label>
                 <label>MySQL account host
                     <input name="db_user_host" value="<?php echo $value('db_user_host'); ?>" placeholder="Auto">
-                    <span class="help">Leave empty for local installs. The installer will create both <code>127.0.0.1</code> and <code>localhost</code> users.</span>
+                    <span class="help">Only used in create mode. Leave empty for local installs. The installer will create both <code>127.0.0.1</code> and <code>localhost</code> users.</span>
                 </label>
                 <label class="full">Authentication plugin
                     <select name="auth_plugin">
@@ -435,7 +466,7 @@ $value = static function (string $name) use ($defaults): string {
                         <option value="caching_sha2_password"<?php echo $selectedPlugin === 'caching_sha2_password' ? ' selected' : ''; ?>>caching_sha2_password</option>
                         <option value="mysql_native_password"<?php echo $selectedPlugin === 'mysql_native_password' ? ' selected' : ''; ?>>mysql_native_password</option>
                     </select>
-                    <span class="help">Use <code>caching_sha2_password</code> for newer MySQL. Use server default for MariaDB if the selected plugin is unavailable.</span>
+                    <span class="help">Only used in create mode. Use <code>caching_sha2_password</code> for newer MySQL. MariaDB is automatically forced to server-default password syntax.</span>
                 </label>
             </div>
         </div>
