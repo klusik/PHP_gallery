@@ -174,7 +174,6 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         }
         // Variable $statements stores this steps working value.
         $statements = require $file;
-        $pdo->beginTransaction();
         try {
             foreach ($statements as $statement) {
                 $pdo->exec($statement);
@@ -182,10 +181,8 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
             $stmt->execute([$version, date('Y-m-d H:i:s')]);
-            $pdo->commit();
             $ran[] = $version;
         } catch (Throwable $exception) {
-            $pdo->rollBack();
             throw $exception;
         }
     }
