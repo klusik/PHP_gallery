@@ -15,6 +15,10 @@ Important routes:
 - `page=home` lists public top-level galleries.
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
+- `page=gallery_access` validates a protected-gallery password and records a
+  short public unlock in the visitor session.
+- `page=share&id=...&token=...` validates a share token for one protected
+  gallery and redirects to that gallery.
 - `page=tag&slug=...` renders a public gallery listing filtered by one tag.
 - `page=picture_game&id=...` runs the optional side-by-side picture comparison
   game for opted-in public gallery branches.
@@ -64,6 +68,14 @@ parent gallery.
 `cover_image_id` stores an editable title picture. If a gallery has no direct
 cover image, public gallery cards can compose a small cover from child gallery
 covers.
+
+Protected-gallery access is stored on `galleries` separately from visibility.
+`access_mode` determines whether public access is normal or protected,
+`access_listing` determines whether a protected public gallery appears in public
+listings, `access_password_hash` stores the optional gallery password hash, and
+`access_token_hash`, `access_share_token`, and `access_token_expires_at` manage
+admin-generated share links. Protected access is inherited from ancestors at
+runtime. Password unlocks are session-scoped and expire after 10 minutes.
 
 `tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as
 comma-separated text; the UI recommends existing tags while typing. Public tag
@@ -145,6 +157,9 @@ or equal to the source image, the service counts it as skipped and does not
 rewrite it. Admin thumbnail forms progressively enhance to AJAX batches by
 posting `ajax=1` to `page=admin_create_thumbnails`; the response reports total,
 processed, created, skipped, and completion state for the progress UI.
+Gallery import with `Create optimized thumbnails during import` checked uses an
+AJAX import phase followed by the same thumbnail batch endpoint, so progress is
+visible while thumbnails are created for newly imported galleries.
 
 Each gallery can also have a `gallery.json` sidecar. The app writes metadata such
 as title, description, visibility, sort order, and cover path there when gallery
@@ -185,11 +200,19 @@ installer is the intended low-friction path because it can create the database,
 run migrations, write config, and create the first admin user without console
 access.
 
+URL generation starts from `base_url` but corrects same-host HTTPS requests and
+shared-hosting path mismatches against the current front-controller path. This
+keeps generated CSS, JavaScript, media, and share-link URLs aligned with the
+public URL even when a host exposes an internal folder such as `/subdom/name` as
+the domain root.
+
 ## Security Notes
 
 All database writes use PDO prepared statements. Admin POST routes require CSRF
 tokens. Passwords use PHP password hashing. Public image access checks gallery
-and image visibility unless an admin is logged in.
+and image visibility unless an admin is logged in. Protected-gallery helpers are
+centralized and used by public gallery pages, thumbnails, media, downloads, map
+JSON, tags, votes, and the picture game.
 
 `install.php` is a first-run endpoint. It refuses to run after either
 `config.php` or `cache/installed.lock` exists, and successful browser installs

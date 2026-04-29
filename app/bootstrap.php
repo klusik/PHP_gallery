@@ -86,7 +86,7 @@ function cms_run(): void
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
-            'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+            'secure' => request_is_https(),
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
@@ -106,6 +106,8 @@ function cms_run(): void
     $routes = [
         'home' => 'cms_home',
         'gallery' => 'cms_gallery',
+        'gallery_access' => 'cms_gallery_access',
+        'share' => 'cms_share',
         'tag' => 'cms_tag',
         'picture_game' => 'cms_picture_game',
         'media' => 'cms_media',
@@ -174,6 +176,9 @@ function cms_route_from_request(): array
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
         return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+    }
+    if ($segments[0] === 'share' && isset($segments[1])) {
+        return ['page' => 'share', 'params' => ['token' => rawurldecode($segments[1])]];
     }
     if ($segments[0] === 'tag' && isset($segments[1])) {
         return ['page' => 'tag', 'params' => ['slug' => rawurldecode($segments[1])]];

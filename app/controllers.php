@@ -7,11 +7,12 @@ declare(strict_types=1);
  */
 function cms_home(): void
 {
+    $listingCondition = public_gallery_listing_condition('g');
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE g.visibility = 'public' AND g.parent_id IS NULL
+        WHERE $listingCondition AND g.parent_id IS NULL
         GROUP BY g.id
         ORDER BY g.sort_order, g.title");
     $stmt->execute();
@@ -39,6 +40,10 @@ function cms_gallery(): void
     $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
         cms_not_found();
+        return;
+    }
+    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+        render_gallery_access_gate($gallery);
         return;
     }
     // Variable $publicOnly stores this steps working value.
@@ -149,7 +154,7 @@ function cms_picture_game(): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['gallery_id'] ?? 0));
-    if (!$gallery || $gallery['visibility'] !== 'public') {
+    if (!$gallery || !visitor_can_access_gallery($gallery)) {
         cms_not_found();
         return;
     }
@@ -244,14 +249,107 @@ function render_breadcrumbs(?array $gallery = null): void
 }
 
 /**
+ * Render the password prompt for a protected public gallery.
+ */
+function render_gallery_access_gate(array $gallery, string $error = ''): void
+{
+    $requirement = gallery_access_requirement($gallery) ?: $gallery;
+    render_header((string) $gallery['title']);
+    render_breadcrumbs($gallery);
+    echo '<section class="panel"><h1>' . e($gallery['title']) . '</h1>';
+    if ($error !== '') {
+        echo '<div class="notice">' . e($error) . '</div>';
+    }
+    if (empty($requirement['access_password_hash'])) {
+        echo '<p>This gallery is available only through its share link.</p>';
+    } else {
+        echo '<p>This gallery is password protected. Access closes after ' . (int) (gallery_access_lifetime_seconds() / 60) . ' minutes of session time.</p>';
+        echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
+        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+        echo '<input type="hidden" name="requirement_id" value="' . (int) $requirement['id'] . '">';
+        echo '<label>Password<input name="gallery_password" type="password" required autocomplete="current-password"></label>';
+        echo '<button type="submit">Open gallery</button></form>';
+    }
+    echo '</section>';
+    render_footer();
+}
+
+/**
+ * Process a public protected-gallery password unlock.
+ */
+function cms_gallery_access(): void
+{
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
+    if (!$gallery || (string) $gallery['visibility'] !== 'public') {
+        cms_not_found();
+        return;
+    }
+    $requirement = gallery_access_requirement($gallery);
+    if (!$requirement || empty($requirement['access_password_hash'])) {
+        render_gallery_access_gate($gallery, 'This gallery does not have a password login configured.');
+        return;
+    }
+    $password = (string) ($_POST['gallery_password'] ?? '');
+    if (!password_verify($password, (string) $requirement['access_password_hash'])) {
+        render_gallery_access_gate($gallery, 'The password is incorrect.');
+        return;
+    }
+    grant_gallery_public_access((int) $requirement['id']);
+    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+}
+
+/**
+ * Resolve a share token and redirect to its protected gallery.
+ */
+function cms_share(): void
+{
+    $token = trim((string) ($_GET['token'] ?? ''));
+    if ($token === '' || !gallery_access_schema_ready()) {
+        cms_not_found();
+        return;
+    }
+    $galleryId = (int) ($_GET['id'] ?? 0);
+    if ($galleryId > 0) {
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? AND visibility = 'public' LIMIT 1");
+        $stmt->execute([$galleryId, hash('sha256', $token)]);
+    } else {
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? AND visibility = 'public' ORDER BY updated_at DESC, id DESC LIMIT 1");
+        $stmt->execute([hash('sha256', $token)]);
+    }
+    $gallery = $stmt->fetch();
+    if (!$gallery || (!empty($gallery['access_token_expires_at']) && strtotime((string) $gallery['access_token_expires_at']) < time())) {
+        cms_not_found();
+        return;
+    }
+    grant_gallery_public_access((int) $gallery['id']);
+    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+}
+
+/**
+ * Build the canonical copyable share URL for one gallery/token pair.
+ */
+function gallery_share_url(int $galleryId, string $token): string
+{
+    return url_for('share', ['id' => $galleryId, 'token' => $token]);
+}
+
+/**
  * Render one gallery card, including direct cover or child-cover collage.
  */
 function render_gallery_card(array $gallery, bool $publicOnly): void
 {
+    $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
-    $cover = gallery_cover_image((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
-    if ($cover) {
+    $cover = $isProtectedPublicCard ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
+    if ($isProtectedPublicCard) {
+        echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
+    } elseif ($cover) {
         echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" alt="">';
     } else {
         // Variable $collage stores this steps working value.
@@ -266,12 +364,18 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     }
     echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
     echo '<p>' . e($gallery['description']) . '</p>';
-    // Variable $branchImageCount stores this steps working value.
-    $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
-    echo '<p class="muted">' . $branchImageCount . ' images</p></span>';
+    if ($isProtectedPublicCard) {
+        echo '<p class="muted">Protected gallery</p></span>';
+    } else {
+        // Variable $branchImageCount stores this steps working value.
+        $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
+        echo '<p class="muted">' . $branchImageCount . ' images</p></span>';
+    }
     echo '</a>';
     render_public_gallery_admin_form($gallery);
-    render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+    if (!$isProtectedPublicCard) {
+        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+    }
     echo '</article>';
 }
 
@@ -377,7 +481,7 @@ function cms_thumb(): void
     }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || (($gallery['visibility'] !== 'public' || $image['visibility'] !== 'public') && !current_user())) {
+    if (!$gallery || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         cms_not_found();
         return;
     }
@@ -396,7 +500,7 @@ function cms_thumb(): void
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     header('Content-Length: ' . filesize($path));
-    header('Cache-Control: public, max-age=604800');
+    header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
     readfile($path);
 }
 
@@ -413,7 +517,7 @@ function cms_media(): void
     }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery || (($gallery['visibility'] !== 'public' || $image['visibility'] !== 'public') && !current_user())) {
+    if (!$gallery || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         cms_not_found();
         return;
     }
@@ -435,7 +539,7 @@ function cms_media(): void
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
     header('Content-Length: ' . filesize($path));
-    header('Cache-Control: public, max-age=604800');
+    header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
     readfile($path);
 }
 
@@ -454,7 +558,9 @@ function cms_vote(): void
     verify_vote_rate_limit($imageId);
     // Variable $vote stores this steps working value.
     $vote = (int) ($_POST['vote'] ?? 0);
-    if (!in_array($vote, [-1, 1], true) || !find_image($imageId)) {
+    $image = find_image($imageId);
+    $gallery = $image ? find_gallery((int) $image['gallery_id']) : null;
+    if (!in_array($vote, [-1, 1], true) || !$image || !$gallery || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         http_response_code(422);
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Invalid vote.']);
@@ -490,7 +596,7 @@ function cms_download_gallery(): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
-    if (!$gallery || $gallery['visibility'] !== 'public') {
+    if (!$gallery || !visitor_can_access_gallery($gallery)) {
         cms_not_found();
         return;
     }
@@ -724,6 +830,8 @@ function cms_admin(): void
     $gpsMapReady = exif_gps_schema_ready();
     // Variable $featureSchemaReady stores this steps working value.
     $featureSchemaReady = admin_feature_schema_ready();
+    // Variable $accessReady stores this steps working value.
+    $accessReady = gallery_access_schema_ready();
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
@@ -750,7 +858,11 @@ function cms_admin(): void
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
     echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th><th>Maps</th>';
+    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
+    if ($accessReady) {
+        echo '<th>Access</th>';
+    }
+    echo '<th>Maps</th>';
     if ($pictureGameReady) {
         echo '<th>Game</th>';
     }
@@ -766,7 +878,12 @@ function cms_admin(): void
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td><td>' . (exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
+        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
+        if ($accessReady) {
+            $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
+            echo '<td>' . e($accessLabel) . '</td>';
+        }
+        echo '<td>' . (exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
         if ($pictureGameReady) {
             echo '<td>' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
         }
@@ -948,7 +1065,7 @@ function cms_admin_discover(): void
     if (!$candidates) {
         echo '<p>No new gallery folders found.</p>';
     } else {
-        echo '<form method="post" action="' . e(url_for('admin_import')) . '">' . csrf_field();
+        echo '<form method="post" action="' . e(url_for('admin_import')) . '" data-import-galleries-form>' . csrf_field();
         echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails during import</label></p>';
         echo '<table><thead><tr><th>Import</th><th>Folder</th><th>Title</th><th>Visibility</th></tr></thead><tbody>';
         foreach ($candidates as $candidate) {
@@ -967,6 +1084,13 @@ function cms_admin_import(): void
 {
     require_admin();
     verify_csrf();
+    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        // Variable $result stores this steps working value.
+        $result = import_galleries_without_thumbnails($_POST['folders'] ?? []);
+        header('Content-Type: application/json');
+        echo json_encode($result);
+        return;
+    }
     // Variable $result stores this steps working value.
     $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
     redirect_to(url_for('admin', $result));
@@ -1263,6 +1387,8 @@ function cms_admin_edit_gallery(): void
     $pictureGameReady = picture_game_schema_ready();
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready();
+    // Variable $accessReady stores this steps working value.
+    $accessReady = gallery_access_schema_ready();
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $title stores this steps working value.
@@ -1275,6 +1401,25 @@ function cms_admin_edit_gallery(): void
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $gpsMapEnabled stores this steps working value.
         $gpsMapEnabled = $gpsMapReady && !empty($_POST['gps_map_enabled']) ? 1 : 0;
+        // Variable $accessType stores this steps working value.
+        $accessType = $accessReady && in_array($_POST['access_type'] ?? '', ['password', 'share'], true) ? (string) $_POST['access_type'] : 'normal';
+        // Variable $accessMode stores this steps working value.
+        $accessMode = $accessType === 'normal' ? 'normal' : 'password';
+        // Variable $accessListing stores this steps working value.
+        $accessListing = $accessType === 'share' || ($accessReady && ($_POST['access_listing'] ?? '') === 'unlisted') ? 'unlisted' : 'listed';
+        // Variable $accessPasswordHash stores this steps working value.
+        $accessPasswordHash = $accessReady ? ($gallery['access_password_hash'] ?? null) : null;
+        if ($accessType === 'share') {
+            $accessPasswordHash = null;
+        }
+        if ($accessReady && !empty($_POST['clear_access_password'])) {
+            $accessPasswordHash = null;
+        }
+        // Variable $newAccessPassword stores this steps working value.
+        $newAccessPassword = trim((string) ($_POST['access_password'] ?? ''));
+        if ($accessReady && $accessType === 'password' && $newAccessPassword !== '') {
+            $accessPasswordHash = password_hash($newAccessPassword, PASSWORD_DEFAULT);
+        }
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
@@ -1287,18 +1432,50 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
-        if ($pictureGameReady && $gpsMapReady) {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, gps_map_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, $gpsMapEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
-        } elseif ($pictureGameReady) {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, picture_game_enabled = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, $pictureGameEnabled, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
-        } else {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, cover_image_id = ?, title = ?, description = ?, slug = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-            $stmt->execute([$parentId, $coverImageId, $title, (string) $_POST['description'], unique_slug_for_value($slug, (int) $gallery['id']), $visibility, (int) $_POST['sort_order'], now_sql(), (int) $gallery['id']]);
+        $fields = [
+            'parent_id = ?' => $parentId,
+            'cover_image_id = ?' => $coverImageId,
+            'title = ?' => $title,
+            'description = ?' => (string) $_POST['description'],
+            'slug = ?' => unique_slug_for_value($slug, (int) $gallery['id']),
+            'visibility = ?' => $visibility,
+            'sort_order = ?' => (int) $_POST['sort_order'],
+        ];
+        if ($pictureGameReady) {
+            $fields['picture_game_enabled = ?'] = $pictureGameEnabled;
+        }
+        if ($gpsMapReady) {
+            $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
+        }
+        if ($accessReady) {
+            $fields['access_mode = ?'] = $accessMode;
+            $fields['access_listing = ?'] = $accessMode === 'password' ? $accessListing : 'listed';
+            $fields['access_password_hash = ?'] = $accessMode === 'password' ? $accessPasswordHash : null;
+            if ($accessMode !== 'password') {
+                if (gallery_access_share_token_schema_ready()) {
+                    $fields['access_share_token = ?'] = null;
+                }
+                $fields['access_token_hash = ?'] = null;
+                $fields['access_token_expires_at = ?'] = null;
+            }
+        }
+        $fields['updated_at = ?'] = now_sql();
+        $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
+        $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
+        if ($accessReady) {
+            $accessAction = (string) ($_POST['access_action'] ?? 'save');
+            if ($accessAction === 'revoke_link') {
+                revoke_gallery_share_token((int) $gallery['id']);
+            }
+        }
+        if ($accessReady && $accessMode === 'password') {
+            $needsShareLink = $accessType === 'share' && empty($gallery['access_token_hash']);
+            if ($accessAction === 'generate_link' || $needsShareLink) {
+                $expires = trim((string) ($_POST['access_token_expires_at'] ?? ''));
+                $expiresTimestamp = $expires !== '' ? strtotime($expires) : false;
+                $expiresAt = $expiresTimestamp !== false ? date('Y-m-d H:i:s', $expiresTimestamp) : null;
+                $_SESSION['new_gallery_share_token_' . (int) $gallery['id']] = regenerate_gallery_share_token((int) $gallery['id'], $expiresAt);
+            }
         }
         sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         // Variable $gallery stores this steps working value.
@@ -1321,6 +1498,36 @@ function cms_admin_edit_gallery(): void
     echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
+    if ($accessReady) {
+        $newShareToken = (string) ($_SESSION['new_gallery_share_token_' . (int) $gallery['id']] ?? '');
+        unset($_SESSION['new_gallery_share_token_' . (int) $gallery['id']]);
+        $currentAccessType = 'normal';
+        if ((string) ($gallery['access_mode'] ?? 'normal') === 'password') {
+            $currentAccessType = empty($gallery['access_password_hash']) ? 'share' : 'password';
+        }
+        echo '<fieldset class="form-grid"><legend>Protected access</legend>';
+        echo '<label>Access<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>Normal public access</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Password protected</option><option value="share"' . ($currentAccessType === 'share' ? ' selected' : '') . '>Share link only</option></select></label>';
+        echo '<label>Public listing<select name="access_listing"><option value="listed"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'listed' ? ' selected' : '') . '>Listed without thumbnail</option><option value="unlisted"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ' selected' : '') . '>Unlisted, direct link only</option></select></label>';
+        echo '<label>New gallery password<input name="access_password" type="password" autocomplete="new-password"><span class="muted">Leave empty to keep the current gallery password.</span></label>';
+        if (!empty($gallery['access_password_hash'])) {
+            echo '<label><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
+        }
+        echo '<label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
+        if ($newShareToken !== '') {
+            echo '<label>Generated share link<input readonly value="' . e(gallery_share_url((int) $gallery['id'], $newShareToken)) . '"></label>';
+        } elseif (!empty($gallery['access_share_token'])) {
+            echo '<label>Active share link<input readonly value="' . e(gallery_share_url((int) $gallery['id'], (string) $gallery['access_share_token'])) . '"></label>';
+        } elseif (!empty($gallery['access_token_hash'])) {
+            echo '<p class="muted">A legacy share link is active' . (!empty($gallery['access_token_expires_at']) ? ' until ' . e((string) $gallery['access_token_expires_at']) : ' with no expiry') . ', but the original token cannot be displayed because earlier versions stored only its hash. Run migrations, then regenerate the link once to make future links visible here.</p>';
+        } else {
+            echo '<p class="muted">No share link is active.</p>';
+        }
+        echo '<p class="muted">Share-link-only galleries are hidden from public listings and get a link automatically when saved.</p>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">Generate/regenerate share link</button><button type="submit" class="secondary" name="access_action" value="revoke_link">Revoke share link</button></div>';
+        echo '</fieldset>';
+    } else {
+        echo '<p class="notice">Protected gallery settings are hidden until the v0.13 database migration is applied.</p>';
+    }
     if ($pictureGameReady) {
         echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
     }
@@ -1732,7 +1939,7 @@ function cms_gallery_map_data(): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
-    if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
+    if (!$gallery || (!visitor_can_access_gallery($gallery) && !current_user())) {
         cms_not_found();
         return;
     }

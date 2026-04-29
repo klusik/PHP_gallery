@@ -583,6 +583,94 @@
             event.preventDefault();
             runThumbnailJob(form, event.submitter);
         });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement) || !form.matches('[data-import-galleries-form]')) {
+                return;
+            }
+            if (!form.querySelector('input[name="create_thumbnails"]')?.checked) {
+                return;
+            }
+            event.preventDefault();
+            runImportWithThumbnailProgress(form);
+        });
+    }
+
+    async function runImportWithThumbnailProgress(form) {
+        const progress = ensureThumbnailProgress(form);
+        const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+        buttons.forEach((button) => {
+            button.disabled = true;
+        });
+        updateThumbnailProgress(progress, 0, 0, 0, 0, 'Importing selected galleries...');
+        try {
+            const importBody = new FormData(form);
+            importBody.set('ajax', '1');
+            const importResponse = await fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: importBody,
+                headers: {'Accept': 'application/json'},
+            });
+            if (!importResponse.ok) {
+                throw new Error('Import request failed.');
+            }
+            const importResult = await importResponse.json();
+            const galleryIds = Array.isArray(importResult.gallery_ids) ? importResult.gallery_ids : [];
+            if (galleryIds.length === 0) {
+                updateThumbnailProgress(progress, 0, 0, 0, 0, `Import complete. ${importResult.imported || 0} galleries imported, ${importResult.scanned || 0} images scanned.`);
+                window.location.href = adminUrlWithParams({imported: importResult.imported || 0, scanned: importResult.scanned || 0, thumbnails: 0});
+                return;
+            }
+            let offset = 0;
+            let total = 0;
+            let created = 0;
+            let skipped = 0;
+            while (true) {
+                const thumbBody = new FormData();
+                thumbBody.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
+                thumbBody.set('ajax', '1');
+                thumbBody.set('offset', String(offset));
+                thumbBody.set('batch_size', '6');
+                galleryIds.forEach((galleryId) => {
+                    thumbBody.append('gallery_ids[]', String(galleryId));
+                });
+                const response = await fetch(thumbnailEndpoint(form, null), {
+                    method: 'POST',
+                    body: thumbBody,
+                    headers: {'Accept': 'application/json'},
+                });
+                if (!response.ok) {
+                    throw new Error('Thumbnail request failed.');
+                }
+                const result = await response.json();
+                total = result.total || 0;
+                offset = result.next_offset || 0;
+                created += result.created || 0;
+                skipped += result.skipped || 0;
+                updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Imported ${importResult.imported || 0} galleries, scanned ${importResult.scanned || 0} images. Creating thumbnails...`);
+                if (result.done) {
+                    updateThumbnailProgress(progress, total, total, created, skipped, 'Import and thumbnail job complete.');
+                    window.location.href = adminUrlWithParams({imported: importResult.imported || 0, scanned: importResult.scanned || 0, thumbnails: created});
+                    break;
+                }
+            }
+        } catch (error) {
+            updateThumbnailProgress(progress, 0, 0, 0, 0, 'Import or thumbnail job failed.');
+        } finally {
+            buttons.forEach((button) => {
+                button.disabled = false;
+            });
+        }
+    }
+
+    function adminUrlWithParams(params) {
+        const url = new URL(window.location.href);
+        url.search = '?page=admin';
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.set(key, String(value));
+        });
+        return url.toString();
     }
 
     // Function `isThumbnailSubmission` executes this focused behavior.

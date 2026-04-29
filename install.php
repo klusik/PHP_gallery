@@ -56,7 +56,11 @@ function installer_random_secret(): string
 function installer_default_base_url(): string
 {
     // Variable $https stores this steps working value.
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+        || $forwardedProto === 'https'
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
     // Variable $scheme stores this steps working value.
     $scheme = $https ? 'https' : 'http';
     // Variable $host stores this steps working value.
@@ -147,7 +151,14 @@ function installer_create_or_update_user(PDO $pdo, string $appUser, string $appP
             throw $exception;
         }
     }
-    $pdo->exec('ALTER USER ' . $account . $identity);
+    try {
+        $pdo->exec('ALTER USER ' . $account . $identity);
+    } catch (PDOException $exception) {
+        if (!$isMariaDb) {
+            throw $exception;
+        }
+        $pdo->exec('SET PASSWORD FOR ' . $account . ' = PASSWORD(' . $password . ')');
+    }
 }
 
 /**
@@ -180,7 +191,7 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         $statements = require $file;
         try {
             foreach ($statements as $statement) {
-                $pdo->exec($statement);
+                installer_apply_migration_statement($pdo, $statement);
             }
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
@@ -192,6 +203,40 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
     }
 
     return $ran;
+}
+
+/**
+ * Function `installer_apply_migration_statement` handles this scoped operation.
+ */
+function installer_apply_migration_statement(PDO $pdo, string $statement): void
+{
+    try {
+        $pdo->exec($statement);
+    } catch (PDOException $exception) {
+        if (!installer_duplicate_ddl_error($exception)) {
+            throw $exception;
+        }
+    }
+}
+
+/**
+ * Function `installer_duplicate_ddl_error` handles this scoped operation.
+ */
+function installer_duplicate_ddl_error(PDOException $exception): bool
+{
+    // Variable $driverCode stores this steps working value.
+    $driverCode = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+    if (in_array($driverCode, [1050, 1060, 1061, 1826], true)) {
+        return true;
+    }
+
+    // Variable $message stores this steps working value.
+    $message = $exception->getMessage();
+    return str_contains($message, 'already exists')
+        || str_contains($message, 'Duplicate column name')
+        || str_contains($message, 'Duplicate key name')
+        || str_contains($message, 'Duplicate foreign key constraint name')
+        || str_contains($message, 'errno: 121');
 }
 
 /**
@@ -370,7 +415,7 @@ $value = static function (string $name) use ($defaults): string {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gallery CMS Installer</title>
+    <title>Gallery CMS Installer 0.13</title>
     <style>
         :root { color-scheme: light; font-family: Arial, sans-serif; color: #1f2933; background: #f5f7fa; }
         body { margin: 0; }
@@ -398,8 +443,8 @@ $value = static function (string $name) use ($defaults): string {
 </head>
 <body>
 <main>
-    <h1>Gallery CMS Installer</h1>
-    <p>Use this once to create the database, write <code>config.php</code>, run migrations, create folders, and add the first admin user.</p>
+    <h1>Gallery CMS Installer 0.13</h1>
+    <p>Use this once to create the database, write <code>config.php</code>, run migrations, create folders, and add the first admin user. This installer applies the protected-gallery migrations, including passwords, listed/unlisted access, and share links.</p>
 
     <?php foreach ($errors as $error): ?>
         <div class="notice bad"><?php echo installer_e($error); ?></div>

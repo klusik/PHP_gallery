@@ -11,12 +11,94 @@ function e(?string $value): string
 }
 
 /**
+ * Return whether the current request reached the app through HTTPS.
+ */
+function request_is_https(): bool
+{
+    $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
+    if ($https !== '' && $https !== 'off') {
+        return true;
+    }
+    if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
+        return true;
+    }
+    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    if ($forwardedProto === 'https') {
+        return true;
+    }
+    return strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
+}
+
+/**
+ * Return the current request host without a port.
+ */
+function request_host_name(): string
+{
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    return preg_replace('/:\d+$/', '', $host) ?: '';
+}
+
+/**
+ * Return the base path implied by the current front controller request.
+ */
+function request_script_base_path(): string
+{
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $dir = rtrim(str_replace('/index.php', '', $script), '/');
+    if ($dir === '/public') {
+        return '';
+    }
+    if (str_ends_with($dir, '/public')) {
+        return substr($dir, 0, -7);
+    }
+    return $dir === '/' ? '' : $dir;
+}
+
+/**
+ * Keep configured absolute URLs compatible with the current HTTPS request.
+ */
+function request_aware_base_url(string $base): string
+{
+    if ($base === '') {
+        return $base;
+    }
+    $parts = parse_url($base);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return $base;
+    }
+    $configuredHost = strtolower((string) ($parts['host'] ?? ''));
+    if ($configuredHost === '' || $configuredHost !== request_host_name()) {
+        return $base;
+    }
+
+    $scheme = strtolower((string) ($parts['scheme'] ?? 'http'));
+    if (request_is_https() && $scheme === 'http') {
+        $scheme = 'https';
+    }
+
+    $configuredPath = rtrim((string) ($parts['path'] ?? ''), '/');
+    $scriptBasePath = request_script_base_path();
+    if ($configuredPath !== '' && $scriptBasePath !== '' && !str_starts_with($scriptBasePath . '/', $configuredPath . '/')) {
+        $configuredPath = $scriptBasePath;
+    } elseif ($configuredPath !== '' && $scriptBasePath === '') {
+        $configuredPath = '';
+    }
+
+    $url = $scheme . '://' . $configuredHost;
+    if (!empty($parts['port']) && (int) $parts['port'] !== 80 && (int) $parts['port'] !== 443) {
+        $url .= ':' . (int) $parts['port'];
+    }
+    $url .= $configuredPath;
+    return rtrim($url, '/');
+}
+
+/**
  * Build an absolute or root-relative URL using the configured base URL.
  */
 function base_url(string $path = ''): string
 {
     // Variable $base stores this steps working value.
-    $base = rtrim((string) cms_config()['base_url'], '/');
+    $base = request_aware_base_url(rtrim((string) cms_config()['base_url'], '/'));
     if ($path === '') {
         return $base === '' ? 'index.php' : $base . '/';
     }
