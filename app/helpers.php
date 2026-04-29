@@ -219,7 +219,7 @@ function render_header(string $title): void
     $siteName = site_name();
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
+    echo '<!doctype html><html lang="cs" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';

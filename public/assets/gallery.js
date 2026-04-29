@@ -22,7 +22,22 @@
         if (!(node instanceof Element)) {
             return false;
         }
-        return Boolean(node.closest('[data-inline-style-allowed]'));
+        return Boolean(node.closest('[data-inline-style-allowed]')) || isBrowserTranslationInlineStyle(node);
+    }
+
+    // Function `isBrowserTranslationInlineStyle` executes this focused behavior.
+    function isBrowserTranslationInlineStyle(node) {
+        if (!(node instanceof Element)) {
+            return false;
+        }
+        if (node.closest('.skiptranslate, .goog-te-gadget, [id^="goog-gt-"], [class^="VIpgJd-"]')) {
+            return true;
+        }
+        if (node.tagName !== 'FONT') {
+            return false;
+        }
+        const style = (node.getAttribute('style') || '').replace(/\s+/g, '').toLowerCase();
+        return style === 'vertical-align:inherit;' || style === 'vertical-align:inherit';
     }
 
     // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
