@@ -230,8 +230,10 @@ index.php?page=share&id=123&token=...
 
 Admins can generate, regenerate, expire, and revoke share links from the gallery
 edit page. Current share links remain visible there after the persistent share
-link migration has run. Older hash-only links can still be revoked or replaced,
-but their original token cannot be displayed.
+link migration has run; the admin-display copy is encrypted at rest with the
+local application secret, while link validation still uses only a token hash.
+Older hash-only links can still be revoked or replaced, but their original token
+cannot be displayed.
 
 ## Picture Game
 

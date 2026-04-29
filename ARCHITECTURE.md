@@ -73,8 +73,10 @@ Protected-gallery access is stored on `galleries` separately from visibility.
 `access_mode` determines whether public access is normal or protected,
 `access_listing` determines whether a protected public gallery appears in public
 listings, `access_password_hash` stores the optional gallery password hash, and
-`access_token_hash`, `access_share_token`, and `access_token_expires_at` manage
-admin-generated share links. Protected access is inherited from ancestors at
+`access_token_hash`, encrypted `access_share_token`, and
+`access_token_expires_at` manage admin-generated share links. Share-link
+validation uses the hash; the encrypted token copy exists only so admins can see
+and revoke the active URL later. Protected access is inherited from ancestors at
 runtime. Password unlocks are session-scoped and expire after 10 minutes.
 
 `tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as

@@ -1070,15 +1070,16 @@ function public_gallery_listing_condition(string $alias = 'g'): string
 }
 
 /**
- * Create a raw share token and persist only its hash.
+ * Create a share token, store its lookup hash, and keep an encrypted admin copy.
  */
 function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): string
 {
     $token = bin2hex(random_bytes(24));
+    $storedToken = encrypt_gallery_share_token($token);
     $shareColumn = gallery_access_share_token_schema_ready() ? 'access_share_token = ?, ' : '';
     $stmt = db()->prepare('UPDATE galleries SET ' . $shareColumn . 'access_token_hash = ?, access_token_expires_at = ?, updated_at = ? WHERE id = ?');
     $params = gallery_access_share_token_schema_ready()
-        ? [$token, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]
+        ? [$storedToken, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]
         : [hash('sha256', $token), $expiresAt, now_sql(), $galleryId];
     $stmt->execute($params);
     return $token;
@@ -1095,7 +1096,7 @@ function revoke_gallery_share_token(int $galleryId): void
 }
 
 /**
- * Return whether the raw share token display column exists.
+ * Return whether the encrypted share token display column exists.
  */
 function gallery_access_share_token_schema_ready(): bool
 {
@@ -1105,6 +1106,79 @@ function gallery_access_share_token_schema_ready(): bool
     } catch (PDOException) {
         return false;
     }
+}
+
+/**
+ * Return the current share token for admin display, upgrading legacy plaintext rows.
+ */
+function gallery_share_token_for_admin(array $gallery): ?string
+{
+    $stored = (string) ($gallery['access_share_token'] ?? '');
+    $hash = (string) ($gallery['access_token_hash'] ?? '');
+    if ($stored === '' || $hash === '') {
+        return null;
+    }
+
+    $token = decrypt_gallery_share_token($stored);
+    if ($token !== null && hash_equals($hash, hash('sha256', $token))) {
+        return $token;
+    }
+
+    if (hash_equals($hash, hash('sha256', $stored))) {
+        $encrypted = encrypt_gallery_share_token($stored);
+        if ($encrypted === null) {
+            return null;
+        }
+        $stmt = db()->prepare('UPDATE galleries SET access_share_token = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$encrypted, now_sql(), (int) $gallery['id']]);
+        return $stored;
+    }
+
+    return null;
+}
+
+/**
+ * Encrypt one share token using the local config secret.
+ */
+function encrypt_gallery_share_token(string $token): ?string
+{
+    if (!function_exists('openssl_encrypt')) {
+        return null;
+    }
+    $iv = random_bytes(12);
+    $tag = '';
+    $ciphertext = openssl_encrypt($token, 'aes-256-gcm', gallery_share_token_key(), OPENSSL_RAW_DATA, $iv, $tag);
+    if ($ciphertext === false || $tag === '') {
+        return null;
+    }
+    return 'enc:v1:' . base64_encode($iv . $tag . $ciphertext);
+}
+
+/**
+ * Decrypt one stored share token, or null when it is not an encrypted value.
+ */
+function decrypt_gallery_share_token(string $stored): ?string
+{
+    if (!str_starts_with($stored, 'enc:v1:') || !function_exists('openssl_decrypt')) {
+        return null;
+    }
+    $payload = base64_decode(substr($stored, 7), true);
+    if ($payload === false || strlen($payload) <= 28) {
+        return null;
+    }
+    $iv = substr($payload, 0, 12);
+    $tag = substr($payload, 12, 16);
+    $ciphertext = substr($payload, 28);
+    $token = openssl_decrypt($ciphertext, 'aes-256-gcm', gallery_share_token_key(), OPENSSL_RAW_DATA, $iv, $tag);
+    return $token === false ? null : $token;
+}
+
+/**
+ * Derive a stable encryption key from the local application secret.
+ */
+function gallery_share_token_key(): string
+{
+    return hash('sha256', 'gallery-share-token|' . (string) cms_config()['visitor_vote_secret'], true);
 }
 
 /**

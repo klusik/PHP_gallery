@@ -1513,12 +1513,12 @@ function cms_admin_edit_gallery(): void
             echo '<label><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
         }
         echo '<label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
-        if ($newShareToken !== '') {
-            echo '<label>Generated share link<input readonly value="' . e(gallery_share_url((int) $gallery['id'], $newShareToken)) . '"></label>';
-        } elseif (!empty($gallery['access_share_token'])) {
-            echo '<label>Active share link<input readonly value="' . e(gallery_share_url((int) $gallery['id'], (string) $gallery['access_share_token'])) . '"></label>';
+        $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
+        if ($visibleShareToken !== null && $visibleShareToken !== '') {
+            $shareLabel = $newShareToken !== '' ? 'Generated share link' : 'Active share link';
+            echo '<label>' . $shareLabel . '<input readonly value="' . e(gallery_share_url((int) $gallery['id'], $visibleShareToken)) . '"></label>';
         } elseif (!empty($gallery['access_token_hash'])) {
-            echo '<p class="muted">A legacy share link is active' . (!empty($gallery['access_token_expires_at']) ? ' until ' . e((string) $gallery['access_token_expires_at']) : ' with no expiry') . ', but the original token cannot be displayed because earlier versions stored only its hash. Run migrations, then regenerate the link once to make future links visible here.</p>';
+            echo '<p class="muted">A share link is active' . (!empty($gallery['access_token_expires_at']) ? ' until ' . e((string) $gallery['access_token_expires_at']) : ' with no expiry') . ', but the original token cannot be displayed because it is stored as hash-only or cannot be decrypted on this server. Regenerate the link once to make a new copyable link visible here.</p>';
         } else {
             echo '<p class="muted">No share link is active.</p>';
         }
