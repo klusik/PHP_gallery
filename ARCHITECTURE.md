@@ -29,6 +29,8 @@ Important routes:
   same visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
 - `page=admin_theme` stores theme controls and optional custom CSS.
+- `page=admin_update` checks GitHub for newer releases and can install the
+  configured branch archive after creating a backup of overwritten files.
 - `page=admin_run_migrations` runs pending migrations from an authenticated
   admin POST when the dashboard detects a stale schema.
 - `page=admin_public_update_gallery` and `page=admin_public_update_image` save
@@ -73,8 +75,10 @@ Protected-gallery access is stored on `galleries` separately from visibility.
 `access_mode` determines whether public access is normal or protected,
 `access_listing` determines whether a protected public gallery appears in public
 listings, `access_password_hash` stores the optional gallery password hash, and
-`access_token_hash`, `access_share_token`, and `access_token_expires_at` manage
-admin-generated share links. Protected access is inherited from ancestors at
+`access_token_hash`, encrypted `access_share_token`, and
+`access_token_expires_at` manage admin-generated share links. Share-link
+validation uses the hash; the encrypted token copy exists only so admins can see
+and revoke the active URL later. Protected access is inherited from ancestors at
 runtime. Password unlocks are session-scoped and expire after 10 minutes.
 
 `tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as
@@ -110,6 +114,13 @@ runs and rejected admin-only actions. The dashboard renders recent entries, and
 `page=admin_logs` provides the full workflow view with status filters and
 bulk updates so admins can mark items as `todo`, `doing`, `waiting`, or `done`
 without server log access.
+
+The application updater is file-based so it can run on shared hosting without
+Git. It reads the latest version from GitHub `PATCH_NOTES.md`, downloads a
+branch zip, copies application-managed files, and backs up overwritten files
+under `cache/updates/backups`. Local-only paths such as `config.php`,
+`galleries/`, `cache/`, `custom_css/`, and `public/assets/custom.css` are
+skipped.
 
 The admin gallery tree collapse state is also stored in `app_settings` as a JSON
 list of collapsed gallery IDs. The dashboard posts updates through

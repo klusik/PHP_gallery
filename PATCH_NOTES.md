@@ -2,6 +2,22 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.14
+
+### Major Changes
+
+- Added an admin-only application updater:
+  - the Updates page checks GitHub `PATCH_NOTES.md` for a newer version
+  - admins can install newer branch archives with one button when PHP `ZipArchive` and outbound HTTPS are available
+  - overwritten application files are backed up under `cache/updates/backups`
+  - local `config.php`, galleries, cache files, and active custom CSS are left untouched
+- Share-link display tokens are encrypted at rest while link validation continues to use token hashes.
+
+### Notes
+
+- The updater does not delete obsolete files from older releases; remove those manually if a future release note asks for it.
+- Keep a normal hosting backup before using one-button updates on production sites.
+
 ## Version 0.13
 
 ### Major Changes
@@ -13,7 +29,7 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
   - admins can generate, regenerate, expire, or revoke share links
   - share-link-only galleries are an explicit admin access mode and generate a usable link when saved
   - generated share links use the canonical query route with the gallery id and token so the token cannot resolve to the wrong gallery
-  - active share links remain visible in the admin edit form and can be revoked later
+  - active share links remain visible in the admin edit form and can be revoked later, with the display token encrypted at rest
   - share links use `page=share&id=...&token=...` so they work without rewrite rules
 - Added a follow-up migration for existing v0.13 installs so the persistent share-link token column is applied even when the first v0.13 migration already ran.
 - Made configured `http://` base URLs upgrade to `https://` automatically on same-host HTTPS requests, including common reverse-proxy headers, so CSS and JavaScript are not blocked as mixed content after enabling HTTPS.

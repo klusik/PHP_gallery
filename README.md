@@ -146,6 +146,13 @@ Use `Admin dashboard -> View log` to open the full workflow screen. From there,
 admins can filter events and mark them as `To be done`, `Will be done`,
 `Waiting`, or `Done`.
 
+Logged-in admins can use `Admin dashboard -> Updates` to check GitHub for newer
+versions. The updater reads the newest version from `PATCH_NOTES.md`, downloads
+the configured GitHub branch archive, backs up overwritten files under
+`cache/updates/backups`, and leaves local `config.php`, galleries, cache files,
+and active custom CSS untouched. One-button installation requires outbound HTTPS
+from the server and PHP `ZipArchive`.
+
 ## Local Run
 
 Use PHP's built-in server from the repository root:
@@ -230,8 +237,10 @@ index.php?page=share&id=123&token=...
 
 Admins can generate, regenerate, expire, and revoke share links from the gallery
 edit page. Current share links remain visible there after the persistent share
-link migration has run. Older hash-only links can still be revoked or replaced,
-but their original token cannot be displayed.
+link migration has run; the admin-display copy is encrypted at rest with the
+local application secret, while link validation still uses only a token hash.
+Older hash-only links can still be revoked or replaced, but their original token
+cannot be displayed.
 
 ## Picture Game
 
