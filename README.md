@@ -40,18 +40,20 @@ run console commands.
 ### Browser Installer
 
 1. Upload or copy all project files to your webserver.
-2. Open the installer in your browser:
+2. Open the site in your browser. The application automatically redirects the
+   first request to the installer while `config.php` does not exist:
 
 ```text
-https://example.com/install.php
+https://example.com/
 ```
 
 For a local Laragon example, that may look like:
 
 ```text
-http://localhost/Galerie/install.php
+http://localhost/Galerie/
 ```
 
+You can also open `install.php` directly, but it is not required.
 3. Choose the database provisioning mode:
    - On shared hosting, keep `Use existing database and existing database user`.
      Create the database and user in the hosting control panel first, then enter
@@ -67,11 +69,23 @@ http://localhost/Galerie/install.php
 6. Confirm the application paths. The installer will create the galleries folder
    and ZIP cache folder if PHP has permission.
 7. Enter the first admin username and password.
-8. Submit the form, then open:
+8. Submit the form. The installer then:
+   - writes `config.php`
+   - creates the galleries and ZIP cache folders
+   - runs all database migrations without wrapping each migration file in an explicit transaction
+   - creates the first admin account
+   - writes `cache/installed.lock`
+
+After setup, open the admin login page:
 
 ```text
 https://example.com/index.php?page=admin_login
 ```
+
+If the installer says a folder is not writable, change the folder permissions in
+your hosting control panel or create the folder manually. If database user
+creation is not allowed by your host, create the database and user in the hosting
+control panel first, then enter those credentials in the installer.
 
 The installer does these jobs for you:
 
@@ -87,11 +101,6 @@ After setup, the installer disables itself automatically. Future requests to
 `install.php` are rejected when either `config.php` or `cache/installed.lock`
 exists. You can still delete or server-block `install.php` as an extra hardening
 step on public websites.
-
-If the installer says a folder is not writable, change the folder permissions in
-your hosting control panel or create the folder manually. If database user
-creation is not allowed by your host, create the database and user in the hosting
-control panel first, then enter those credentials in the installer.
 
 ### Manual Setup
 

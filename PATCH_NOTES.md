@@ -2,6 +2,19 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.15
+
+### Major Changes
+
+- Clarified the browser installation flow in the README so setup starts from the
+  site root and redirects automatically to the installer when `config.php` is
+  missing.
+
+### Notes
+
+- The installer still supports opening `install.php` directly, but that is not
+  required for a normal first-time setup.
+
 ## Version 0.14
 
 ### Major Changes
