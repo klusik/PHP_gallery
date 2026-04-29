@@ -2,6 +2,22 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.14
+
+### Major Changes
+
+- Added an admin-only application updater:
+  - the Updates page checks GitHub `PATCH_NOTES.md` for a newer version
+  - admins can install newer branch archives with one button when PHP `ZipArchive` and outbound HTTPS are available
+  - overwritten application files are backed up under `cache/updates/backups`
+  - local `config.php`, galleries, cache files, and active custom CSS are left untouched
+- Share-link display tokens are encrypted at rest while link validation continues to use token hashes.
+
+### Notes
+
+- The updater does not delete obsolete files from older releases; remove those manually if a future release note asks for it.
+- Keep a normal hosting backup before using one-button updates on production sites.
+
 ## Version 0.13
 
 ### Major Changes

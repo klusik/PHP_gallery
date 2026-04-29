@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+const CMS_VERSION = '0.14';
+const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
+const CMS_UPDATE_BRANCH = 'main';
+
 require __DIR__ . '/helpers.php';
 require __DIR__ . '/database.php';
 require __DIR__ . '/security.php';
@@ -122,6 +126,7 @@ function cms_run(): void
         'admin_logout' => 'cms_admin_logout',
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',
+        'admin_update' => 'cms_admin_update',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',

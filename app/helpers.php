@@ -240,6 +240,7 @@ function render_header(string $title): void
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
         echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
         echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
+        echo '<a href="' . e(url_for('admin_update')) . '">Updates</a>';
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
@@ -253,7 +254,7 @@ function render_header(string $title): void
 function render_footer(): void
 {
     echo '</main><footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="https://github.com/klusik/PHP_gallery" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
+    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';

@@ -1182,6 +1182,285 @@ function gallery_share_token_key(): string
 }
 
 /**
+ * Return the configured upstream project URL.
+ */
+function cms_github_project_url(): string
+{
+    return 'https://github.com/' . CMS_GITHUB_REPOSITORY;
+}
+
+/**
+ * Check GitHub PATCH_NOTES.md for the newest published version.
+ */
+function check_application_update(): array
+{
+    $lastError = null;
+    foreach (application_update_branch_candidates() as $branch) {
+        try {
+            $notes = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 12);
+            $latestVersion = application_update_latest_version_from_notes($notes);
+            if ($latestVersion === null) {
+                $lastError = 'PATCH_NOTES.md did not contain a version heading on branch ' . $branch . '.';
+                continue;
+            }
+            return [
+                'current_version' => CMS_VERSION,
+                'latest_version' => $latestVersion,
+                'branch' => $branch,
+                'repository' => CMS_GITHUB_REPOSITORY,
+                'update_available' => version_compare($latestVersion, CMS_VERSION, '>'),
+                'error' => null,
+            ];
+        } catch (Throwable $exception) {
+            $lastError = $exception->getMessage();
+        }
+    }
+
+    return [
+        'current_version' => CMS_VERSION,
+        'latest_version' => null,
+        'branch' => CMS_UPDATE_BRANCH,
+        'repository' => CMS_GITHUB_REPOSITORY,
+        'update_available' => false,
+        'error' => $lastError ?? 'Could not contact GitHub.',
+    ];
+}
+
+/**
+ * Install the newest GitHub branch archive over application-managed files.
+ */
+function install_application_update(): array
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
+    }
+
+    $status = check_application_update();
+    if (!empty($status['error'])) {
+        throw new RuntimeException((string) $status['error']);
+    }
+    if (empty($status['update_available'])) {
+        throw new RuntimeException('No newer version is available.');
+    }
+
+    $root = dirname(__DIR__);
+    $updateDir = $root . '/cache/updates';
+    $backupDir = $updateDir . '/backups';
+    application_update_ensure_dir($updateDir);
+    application_update_ensure_dir($backupDir);
+
+    $stamp = date('Ymd-His');
+    $zipPath = $updateDir . '/update-' . $stamp . '.zip';
+    $extractDir = $updateDir . '/extract-' . $stamp;
+    application_update_ensure_dir($extractDir);
+
+    $archive = http_fetch(application_update_zip_url((string) $status['branch']), 60);
+    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
+        throw new RuntimeException('Could not write update archive into cache/updates.');
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        throw new RuntimeException('Downloaded update archive could not be opened.');
+    }
+    if (!$zip->extractTo($extractDir)) {
+        $zip->close();
+        throw new RuntimeException('Downloaded update archive could not be extracted.');
+    }
+    $zip->close();
+
+    $sourceRoot = application_update_extracted_root($extractDir);
+    $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
+    $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    $migrations = run_migrations();
+
+    return [
+        'version' => (string) $status['latest_version'],
+        'branch' => (string) $status['branch'],
+        'files_copied' => $copied,
+        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
+        'migrations' => $migrations,
+    ];
+}
+
+/**
+ * Return the branch names the updater should try, newest preference first.
+ */
+function application_update_branch_candidates(): array
+{
+    return array_values(array_unique([CMS_UPDATE_BRANCH, 'master']));
+}
+
+/**
+ * Build a GitHub raw-content URL for a branch file.
+ */
+function application_update_raw_url(string $branch, string $path): string
+{
+    return 'https://raw.githubusercontent.com/' . CMS_GITHUB_REPOSITORY . '/' . rawurlencode($branch) . '/' . ltrim($path, '/');
+}
+
+/**
+ * Build a GitHub branch zip URL.
+ */
+function application_update_zip_url(string $branch): string
+{
+    [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
+    return 'https://codeload.github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/zip/refs/heads/' . rawurlencode($branch);
+}
+
+/**
+ * Parse the first release heading from patch notes.
+ */
+function application_update_latest_version_from_notes(string $notes): ?string
+{
+    if (preg_match('/^##\s+Version\s+([0-9]+(?:\.[0-9]+){1,2})\s*$/mi', $notes, $match)) {
+        return $match[1];
+    }
+    return null;
+}
+
+/**
+ * Fetch a small trusted remote URL with a bounded timeout.
+ */
+function http_fetch(string $url, int $timeoutSeconds): string
+{
+    if (function_exists('curl_init')) {
+        $handle = curl_init($url);
+        if ($handle === false) {
+            throw new RuntimeException('Could not initialize HTTP client.');
+        }
+        curl_setopt_array($handle, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
+            CURLOPT_TIMEOUT => $timeoutSeconds,
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . CMS_VERSION,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+        $body = curl_exec($handle);
+        $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($handle);
+        curl_close($handle);
+        if ($body === false || $status >= 400) {
+            throw new RuntimeException($error !== '' ? $error : 'HTTP request failed with status ' . $status . '.');
+        }
+        return (string) $body;
+    }
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => $timeoutSeconds,
+            'header' => "User-Agent: PHP-Gallery-CMS/" . CMS_VERSION . "\r\n",
+        ],
+    ]);
+    $body = @file_get_contents($url, false, $context);
+    if ($body === false) {
+        throw new RuntimeException('HTTP request failed. Enable curl or allow_url_fopen for update checks.');
+    }
+    return $body;
+}
+
+/**
+ * Create an updater working directory when needed.
+ */
+function application_update_ensure_dir(string $path): void
+{
+    if (!is_dir($path) && !mkdir($path, 0775, true)) {
+        throw new RuntimeException('Could not create update directory: ' . $path);
+    }
+    if (!is_writable($path)) {
+        throw new RuntimeException('Update directory is not writable: ' . $path);
+    }
+}
+
+/**
+ * Find the single root directory produced by GitHub zip extraction.
+ */
+function application_update_extracted_root(string $extractDir): string
+{
+    $entries = array_values(array_filter(scandir($extractDir) ?: [], static fn (string $entry): bool => $entry !== '.' && $entry !== '..'));
+    foreach ($entries as $entry) {
+        $path = $extractDir . '/' . $entry;
+        if (is_dir($path)) {
+            return $path;
+        }
+    }
+    throw new RuntimeException('Extracted update archive did not contain an application directory.');
+}
+
+/**
+ * Copy update files, backing up overwritten files and preserving local data.
+ */
+function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath): int
+{
+    $backup = new ZipArchive();
+    if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Could not create update backup archive.');
+    }
+
+    $copied = 0;
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $item) {
+        if ($item->isLink()) {
+            continue;
+        }
+        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
+        if (application_update_path_is_protected($relativePath)) {
+            continue;
+        }
+
+        $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if ($item->isDir()) {
+            application_update_ensure_dir($destination);
+            continue;
+        }
+        if (is_dir($destination)) {
+            throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
+        }
+        $parent = dirname($destination);
+        application_update_ensure_dir($parent);
+        if (is_file($destination)) {
+            $backup->addFile($destination, $relativePath);
+        }
+        if (!copy($item->getPathname(), $destination)) {
+            throw new RuntimeException('Could not copy update file: ' . $relativePath);
+        }
+        $copied++;
+    }
+
+    $backup->close();
+    return $copied;
+}
+
+/**
+ * Keep local-only files and directories out of automated updates.
+ */
+function application_update_path_is_protected(string $relativePath): bool
+{
+    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    $protectedFiles = [
+        'config.php',
+        'public/assets/custom.css',
+    ];
+    if (in_array($relativePath, $protectedFiles, true)) {
+        return true;
+    }
+    foreach (['.git', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {
+        if ($relativePath === $directory || str_starts_with($relativePath, $directory . '/')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Return whether the admin log table exists.
  */
 function admin_log_schema_ready(): bool

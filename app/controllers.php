@@ -813,6 +813,61 @@ function cms_admin_account(): void
 }
 
 /**
+ * Check GitHub for newer application versions and install them on request.
+ */
+function cms_admin_update(): void
+{
+    require_admin();
+    $error = null;
+
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            $result = install_application_update();
+            admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
+            $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+            redirect_to(url_for('admin_update'));
+        } catch (Throwable $exception) {
+            admin_log_event('warning', 'update.failed', 'Application update failed.', ['error' => $exception->getMessage()]);
+            $error = $exception->getMessage();
+        }
+    }
+
+    $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
+    unset($_SESSION['admin_update_notice']);
+    $status = check_application_update();
+    render_header('Application updates');
+    echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">Open GitHub</a>';
+    echo '</nav></section>';
+    if ($notice !== '') {
+        echo '<div class="notice">' . e($notice) . '</div>';
+    }
+    if ($error !== null) {
+        echo '<div class="notice">Update failed: ' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><h2>Status</h2>';
+    echo '<p>Installed version: <strong>' . e(CMS_VERSION) . '</strong></p>';
+    echo '<p>Repository: <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
+    if (!empty($status['error'])) {
+        echo '<p class="muted">Could not check for updates: ' . e((string) $status['error']) . '</p>';
+    } else {
+        echo '<p>Latest version on GitHub: <strong>' . e((string) $status['latest_version']) . '</strong></p>';
+        echo '<p class="muted">Checked branch: ' . e((string) $status['branch']) . '</p>';
+        if (!empty($status['update_available'])) {
+            echo '<form method="post" class="form-grid">' . csrf_field();
+            echo '<p>A newer version is available. The updater will download the GitHub branch archive, back up overwritten files under <code>cache/updates/backups</code>, and keep local config, galleries, cache, and custom CSS untouched.</p>';
+            echo '<button type="submit">Install update</button></form>';
+        } else {
+            echo '<p class="muted">This installation is current.</p>';
+        }
+    }
+    echo '</section>';
+    render_footer();
+}
+
+/**
  * Admin dashboard for gallery scanning, publishing, and bulk actions.
  */
 function cms_admin(): void
@@ -836,6 +891,7 @@ function cms_admin(): void
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">Updates</a>';
     echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
     echo '<button type="submit" class="secondary' . ($featureSchemaReady ? '' : ' is-alert') . '">Run database migration</button>';
     echo '</form>';
