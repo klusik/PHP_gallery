@@ -19,6 +19,7 @@ This release contains the full plain-PHP gallery application:
 - filesystem gallery discovery with nested subgalleries
 - admin dashboard with bulk gallery and image actions
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
+- password-protected galleries with listed, unlisted, and share-link-only access
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
 - optional picture comparison game for admin-selected galleries
 - optional EXIF/GPS map overlays for GPS-tagged photos in enabled gallery branches
@@ -182,7 +183,9 @@ Admin workflow:
 3. Review detected folders and import selected galleries. Importing a parent
    folder also imports its detected subgallery folders.
 4. Leave `Create optimized thumbnails during import` checked unless you want to
-   generate thumbnails later from the admin dashboard.
+   generate thumbnails later from the admin dashboard. With JavaScript enabled,
+   import thumbnail creation shows a progress bar with processed, created, and
+   skipped counts.
 5. Use bulk actions to scan, publish, draft, or privatize selected galleries.
 6. Use the gallery or image thumbnail buttons when you need to rebuild generated
    thumbnails after replacing source files.
@@ -197,12 +200,38 @@ Admin workflow:
     you want visitors to compare images side by side.
 11. Enable EXIF GPS maps on gallery branches where you want public photo pins
     and gallery map overlays.
+12. Use protected access controls on a gallery edit page when a public gallery
+    should require a password, disappear from listings, or be opened only by a
+    share link.
 
 Discovery is explicit and does not run on public requests.
 
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
 subgallery cards, lightbox image browsing, keyboard left/right navigation, and
 visible keyboard up/down voting controls in the lightbox.
+
+## Protected Galleries
+
+Gallery visibility and access are separate controls. `public` galleries can use
+normal public access, password-protected access, or share-link-only access.
+Draft and private galleries remain admin-only.
+
+Password-protected galleries can stay listed publicly, but their public cards do
+not show thumbnails or descendant cover collages. Visitors enter the configured
+gallery password to unlock the gallery branch for 10 minutes. Protection is
+inherited by subgalleries, so a protected parent also protects its descendants.
+
+Share-link-only galleries are unlisted by default and are reachable only through
+the generated share URL, such as:
+
+```text
+index.php?page=share&id=123&token=...
+```
+
+Admins can generate, regenerate, expire, and revoke share links from the gallery
+edit page. Current share links remain visible there after the persistent share
+link migration has run. Older hash-only links can still be revoked or replaced,
+but their original token cannot be displayed.
 
 ## Picture Game
 
@@ -279,10 +308,10 @@ Generated thumbnails are served through `index.php?page=thumb&id=...&size=...`
 so gallery and image visibility checks still apply.
 
 Existing thumbnails are not regenerated when they are already newer than the
-source image. Thumbnail actions run in AJAX batches when JavaScript is enabled,
-showing a progress bar with checked images plus created and skipped file counts.
-Gallery row and edit-page thumbnail buttons still submit normally without
-JavaScript.
+source image. Dashboard and import thumbnail actions run in AJAX batches when
+JavaScript is enabled, showing a progress bar with checked images plus created
+and skipped file counts. Gallery row and edit-page thumbnail buttons still
+submit normally without JavaScript.
 
 ## Tags
 
@@ -493,6 +522,7 @@ Pretty URLs are attempted through `.htaccess`, but every route also works by que
 ```text
 index.php?page=home
 index.php?page=gallery&slug=my-gallery
+index.php?page=share&id=1&token=...
 index.php?page=admin
 index.php?page=download_gallery&id=1
 ```
@@ -552,6 +582,8 @@ configuration on the target server through `install.php` or by copying
 
 - `config.php`, `app/`, `database/`, `scripts/`, and cache paths should not be publicly accessible.
 - Media is served through `index.php?page=media&id=...`, not by raw folder path.
+- Protected gallery checks also apply to thumbnails, media, downloads, maps,
+  votes, tags, and the picture game.
 - Folder names can contain spaces and non-ASCII characters; public URLs use generated slugs.
 - Only `jpg`, `jpeg`, `png`, `gif`, and `webp` files are imported.
 - Image MIME data is validated with `getimagesize` during scans.

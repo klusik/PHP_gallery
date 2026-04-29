@@ -14,10 +14,11 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
   - share-link-only galleries are an explicit admin access mode and generate a usable link when saved
   - generated share links use the canonical query route with the gallery id and token so the token cannot resolve to the wrong gallery
   - active share links remain visible in the admin edit form and can be revoked later
+  - share links use `page=share&id=...&token=...` so they work without rewrite rules
 - Added a follow-up migration for existing v0.13 installs so the persistent share-link token column is applied even when the first v0.13 migration already ran.
 - Made configured `http://` base URLs upgrade to `https://` automatically on same-host HTTPS requests, including common reverse-proxy headers, so CSS and JavaScript are not blocked as mixed content after enabling HTTPS.
 - Made same-host `base_url` paths self-correct when the configured path does not match the current front-controller path, which helps shared-hosting deployments where `/subdom/name` is an internal folder but the public site is served from the domain root.
-  - share links use `/share/{token}` and only store token hashes in the database
+- Added progress feedback to the gallery import flow when `Create optimized thumbnails during import` is checked.
 - Centralized protected-gallery access checks across public gallery pages, thumbnails, original media, downloads, maps, tags, votes, and the picture game.
 - Added admin edit controls and dashboard access labels for protected/listed/unlisted galleries.
 - Updated the installer and initial schema for the v0.13 protected-gallery fields.
