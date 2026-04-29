@@ -152,6 +152,16 @@ button.secondary {
     aspect-ratio: auto;
 }
 
+.gallery-locked-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 8rem;
+    background: #1f2937;
+    color: #ffffff;
+    font-weight: 700;
+}
+
 .gallery-collage.collage-count-1 {
     grid-template-columns: 1fr;
 }

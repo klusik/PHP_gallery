@@ -124,6 +124,8 @@ function discover_gallery_candidates(): array
                 'title' => $metadata['title'] ?? basename($relative),
                 'description' => $metadata['description'] ?? '',
                 'visibility' => $metadata['visibility'] ?? 'draft',
+                'access_mode' => $metadata['access_mode'] ?? 'normal',
+                'access_listing' => $metadata['access_listing'] ?? 'listed',
                 'sort_order' => (int) ($metadata['sort_order'] ?? 0),
             ];
         }
@@ -159,6 +161,10 @@ function write_gallery_sidecar(array $gallery): void
         'visibility' => $gallery['visibility'],
         'sort_order' => (int) $gallery['sort_order'],
     ];
+    if (gallery_access_schema_ready()) {
+        $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
+        $data['access_listing'] = $gallery['access_listing'] ?? 'listed';
+    }
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id']);
@@ -191,6 +197,8 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
         'visibility' => $metadata['visibility'] ?? 'draft',
+        'access_mode' => $metadata['access_mode'] ?? 'normal',
+        'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
     ];
 }
@@ -223,13 +231,15 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $candidate = gallery_folder_candidate_metadata($folderPath);
     // Variable $visibility stores this steps working value.
     $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
+    $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
     $parent = find_parent_gallery_for_path($folderPath);
     // Variable $pdo stores this steps working value.
     $pdo = db();
     // Variable $stmt stores this steps working value.
-    $stmt = $pdo->prepare('INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug, title, description, sort_order, visibility, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([
+    $columns = ['parent_id', 'folder_path', 'folder_path_hash', 'slug', 'title', 'description', 'sort_order', 'visibility'];
+    $values = [
         $parent ? (int) $parent['id'] : null,
         $folderPath,
         hash('sha256', $folderPath),
@@ -238,9 +248,19 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $candidate['description'],
         (int) $candidate['sort_order'],
         $visibility,
-        now_sql(),
-        now_sql(),
-    ]);
+    ];
+    if (gallery_access_schema_ready()) {
+        $columns[] = 'access_mode';
+        $columns[] = 'access_listing';
+        $values[] = $accessMode;
+        $values[] = $accessMode === 'password' ? $accessListing : 'listed';
+    }
+    $columns[] = 'created_at';
+    $columns[] = 'updated_at';
+    $values[] = now_sql();
+    $values[] = now_sql();
+    $stmt = $pdo->prepare('INSERT INTO galleries (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
+    $stmt->execute($values);
 
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $pdo->lastInsertId());
@@ -831,7 +851,203 @@ function picture_game_schema_ready(): bool
  */
 function admin_feature_schema_ready(): bool
 {
-    return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready();
+    return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready();
+}
+
+/**
+ * Return whether password-protected gallery columns are available.
+ */
+function gallery_access_schema_ready(): bool
+{
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_mode'");
+        if (!$stmt || !$stmt->fetch()) {
+            return false;
+        }
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_token_hash'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (PDOException) {
+        return false;
+    }
+}
+
+/**
+ * Return true when one gallery has its own password policy.
+ */
+function gallery_has_password_policy(array $gallery): bool
+{
+    return gallery_access_schema_ready() && (string) ($gallery['access_mode'] ?? 'normal') === 'password';
+}
+
+/**
+ * Return the protected gallery that controls public access to this gallery.
+ */
+function gallery_access_requirement(array $gallery): ?array
+{
+    if (!gallery_access_schema_ready()) {
+        return null;
+    }
+    $current = $gallery;
+    while ($current) {
+        if ((string) ($current['access_mode'] ?? 'normal') === 'password') {
+            return $current;
+        }
+        if (empty($current['parent_id'])) {
+            return null;
+        }
+        $current = find_gallery((int) $current['parent_id']);
+    }
+    return null;
+}
+
+/**
+ * Build the session key that records a public gallery unlock.
+ */
+function gallery_access_session_key(int $galleryId): string
+{
+    return 'gallery_access_' . $galleryId;
+}
+
+/**
+ * Return how long a public gallery unlock should last in this browser session.
+ */
+function gallery_access_lifetime_seconds(): int
+{
+    return 600;
+}
+
+/**
+ * Store a successful public unlock for this browser session.
+ */
+function grant_gallery_public_access(int $galleryId): void
+{
+    $_SESSION[gallery_access_session_key($galleryId)] = time();
+}
+
+/**
+ * Return true while a public gallery unlock is still fresh.
+ */
+function gallery_public_access_session_is_valid(int $galleryId): bool
+{
+    $key = gallery_access_session_key($galleryId);
+    $unlockedAt = (int) ($_SESSION[$key] ?? 0);
+    if ($unlockedAt <= 0) {
+        return false;
+    }
+    if ((time() - $unlockedAt) > gallery_access_lifetime_seconds()) {
+        unset($_SESSION[$key]);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Return true when the current request token unlocks the controlling gallery.
+ */
+function request_share_token_allows_gallery(array $gallery): bool
+{
+    $token = trim((string) ($_GET['share'] ?? $_GET['token'] ?? ''));
+    if ($token === '') {
+        return false;
+    }
+    $requirement = gallery_access_requirement($gallery);
+    if (!$requirement || empty($requirement['access_token_hash'])) {
+        return false;
+    }
+    if (!empty($requirement['access_token_expires_at']) && strtotime((string) $requirement['access_token_expires_at']) < time()) {
+        return false;
+    }
+    if (!hash_equals((string) $requirement['access_token_hash'], hash('sha256', $token))) {
+        return false;
+    }
+    grant_gallery_public_access((int) $requirement['id']);
+    return true;
+}
+
+/**
+ * Return whether an anonymous visitor may view one gallery branch now.
+ */
+function visitor_can_access_gallery(array $gallery): bool
+{
+    if (current_user()) {
+        return true;
+    }
+    if ((string) $gallery['visibility'] !== 'public') {
+        return false;
+    }
+    $requirement = gallery_access_requirement($gallery);
+    if (!$requirement) {
+        return true;
+    }
+    if (gallery_public_access_session_is_valid((int) $requirement['id'])) {
+        return true;
+    }
+    return request_share_token_allows_gallery($gallery);
+}
+
+/**
+ * Return true when a public listing may include this gallery.
+ */
+function gallery_is_public_listed(array $gallery): bool
+{
+    if ((string) $gallery['visibility'] !== 'public') {
+        return false;
+    }
+    if (!gallery_access_schema_ready()) {
+        return true;
+    }
+    return (string) ($gallery['access_listing'] ?? 'listed') === 'listed';
+}
+
+/**
+ * SQL condition used by public gallery listing queries.
+ */
+function public_gallery_listing_condition(string $alias = 'g'): string
+{
+    $prefix = $alias . '.';
+    $sql = $prefix . "visibility = 'public'";
+    if (gallery_access_schema_ready()) {
+        $sql .= ' AND ' . $prefix . "access_listing = 'listed'";
+    }
+    return $sql;
+}
+
+/**
+ * Create a raw share token and persist only its hash.
+ */
+function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): string
+{
+    $token = bin2hex(random_bytes(24));
+    $shareColumn = gallery_access_share_token_schema_ready() ? 'access_share_token = ?, ' : '';
+    $stmt = db()->prepare('UPDATE galleries SET ' . $shareColumn . 'access_token_hash = ?, access_token_expires_at = ?, updated_at = ? WHERE id = ?');
+    $params = gallery_access_share_token_schema_ready()
+        ? [$token, hash('sha256', $token), $expiresAt, now_sql(), $galleryId]
+        : [hash('sha256', $token), $expiresAt, now_sql(), $galleryId];
+    $stmt->execute($params);
+    return $token;
+}
+
+/**
+ * Revoke the share token for one gallery.
+ */
+function revoke_gallery_share_token(int $galleryId): void
+{
+    $shareColumn = gallery_access_share_token_schema_ready() ? 'access_share_token = NULL, ' : '';
+    $stmt = db()->prepare('UPDATE galleries SET ' . $shareColumn . 'access_token_hash = NULL, access_token_expires_at = NULL, updated_at = ? WHERE id = ?');
+    $stmt->execute([now_sql(), $galleryId]);
+}
+
+/**
+ * Return whether the raw share token display column exists.
+ */
+function gallery_access_share_token_schema_ready(): bool
+{
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'access_share_token'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (PDOException) {
+        return false;
+    }
 }
 
 /**
@@ -990,7 +1206,7 @@ function child_galleries(int $parentId, bool $publicOnly): array
     // Variable $params stores this steps working value.
     $params = [$parentId];
     if ($publicOnly) {
-        $sql .= " AND g.visibility = 'public'";
+        $sql .= ' AND ' . public_gallery_listing_condition('g');
     }
     $sql .= ' GROUP BY g.id ORDER BY g.sort_order, g.title';
     // Variable $stmt stores this steps working value.
@@ -1011,7 +1227,7 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
     while ($parentId) {
         // Variable $parent stores this steps working value.
         $parent = find_gallery((int) $parentId);
-        if (!$parent || ($publicOnly && $parent['visibility'] !== 'public')) {
+        if (!$parent || ($publicOnly && !gallery_is_public_listed($parent))) {
             break;
         }
         array_unshift($ancestors, $parent);
@@ -1035,15 +1251,28 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
     if (!$galleryIds) {
         return 0;
     }
+    if ($publicOnly) {
+        $galleryIds = array_values(array_filter($galleryIds, static function (int $candidateId): bool {
+            $candidate = find_gallery($candidateId);
+            return $candidate && visitor_can_access_gallery($candidate);
+        }));
+        if (!$galleryIds) {
+            return 0;
+        }
+    }
 
     // Variable $placeholders stores this steps working value.
     $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
     // Variable $sql stores this steps working value.
-    $sql = 'SELECT COUNT(*) FROM images WHERE gallery_id IN (' . $placeholders . ')';
+    $sql = 'SELECT COUNT(*) FROM images i';
+    if ($publicOnly) {
+        $sql .= ' JOIN galleries g ON g.id = i.gallery_id';
+    }
+    $sql .= ' WHERE i.gallery_id IN (' . $placeholders . ')';
     // Variable $params stores this steps working value.
     $params = $galleryIds;
     if ($publicOnly) {
-        $sql .= ' AND visibility = ?';
+        $sql .= ' AND i.visibility = ? AND ' . public_gallery_listing_condition('g');
         $params[] = 'public';
     }
 
@@ -1101,6 +1330,9 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
     $images = [];
     // Parent galleries without direct images borrow covers from child galleries.
     foreach (child_galleries($galleryId, $publicOnly) as $child) {
+        if ($publicOnly && gallery_access_requirement($child) !== null) {
+            continue;
+        }
         // Variable $cover stores this steps working value.
         $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
         if ($cover) {
@@ -1131,7 +1363,8 @@ function picture_game_gallery_ids(array $gallery): array
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     try {
         // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare("SELECT id, folder_path, picture_game_enabled FROM galleries WHERE visibility = 'public' AND (folder_path = ? OR folder_path LIKE ?) ORDER BY folder_path");
+        $listingCondition = public_gallery_listing_condition('g');
+        $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
         $stmt->execute([$folderPath, $folderPath . '/%']);
     } catch (PDOException) {
         return [];
@@ -1141,6 +1374,9 @@ function picture_game_gallery_ids(array $gallery): array
     // Variable $ids stores this steps working value.
     $ids = [];
     foreach ($stmt->fetchAll() as $candidate) {
+        if (!visitor_can_access_gallery($candidate)) {
+            continue;
+        }
         // Variable $candidatePath stores this steps working value.
         $candidatePath = normalize_relative_path((string) $candidate['folder_path']);
         if ((int) ($candidate['picture_game_enabled'] ?? 0) === 1) {
@@ -1609,10 +1845,11 @@ function find_tag_by_slug(string $slug): ?array
 function public_galleries_for_tag(int $tagId): array
 {
     // Variable $stmt stores this steps working value.
+    $listingCondition = public_gallery_listing_condition('g');
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE g.visibility = 'public' AND (
+        WHERE $listingCondition AND (
             EXISTS (SELECT 1 FROM gallery_tags gt WHERE gt.gallery_id = g.id AND gt.tag_id = ?)
             OR EXISTS (SELECT 1 FROM image_tags it JOIN images tagged_image ON tagged_image.id = it.image_id WHERE tagged_image.gallery_id = g.id AND it.tag_id = ?)
         )
@@ -1633,7 +1870,7 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         return [];
     }
     // Variable $visibilitySql stores this steps working value.
-    $visibilitySql = $publicOnly ? " AND g.visibility = 'public'" : '';
+    $visibilitySql = $publicOnly ? ' AND ' . public_gallery_listing_condition('g') : '';
     // Variable $imageVisibilitySql stores this steps working value.
     $imageVisibilitySql = $publicOnly ? " AND tagged_image.visibility = 'public'" : '';
     // Variable $sql stores this steps working value.
@@ -2218,7 +2455,7 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
         $params[] = (int) $gallery['id'];
     }
     if ($publicOnly) {
-        $conditions[] = "g.visibility = 'public'";
+        $conditions[] = public_gallery_listing_condition('g');
         $conditions[] = "i.visibility = 'public'";
     }
     // Variable $sql stores this steps working value.
@@ -2231,7 +2468,7 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
     foreach ($stmt->fetchAll() as $image) {
         // Variable $imageGallery stores this steps working value.
         $imageGallery = find_gallery((int) $image['gallery_id']) ?: $gallery;
-        if (!gallery_allows_gps_maps($imageGallery)) {
+        if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !visitor_can_access_gallery($imageGallery))) {
             continue;
         }
         $points[] = image_map_point($image, $imageGallery);

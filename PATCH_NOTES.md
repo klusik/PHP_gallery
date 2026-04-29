@@ -2,6 +2,30 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.13
+
+### Major Changes
+
+- Added password-protected public galleries:
+  - protected galleries can be listed publicly without thumbnails or set as unlisted/direct-link-only
+  - protected access is inherited by subgalleries
+  - visitors can unlock a protected branch with a gallery password for 10 minutes
+  - admins can generate, regenerate, expire, or revoke share links
+  - share-link-only galleries are an explicit admin access mode and generate a usable link when saved
+  - generated share links use the canonical query route with the gallery id and token so the token cannot resolve to the wrong gallery
+  - active share links remain visible in the admin edit form and can be revoked later
+- Added a follow-up migration for existing v0.13 installs so the persistent share-link token column is applied even when the first v0.13 migration already ran.
+  - share links use `/share/{token}` and only store token hashes in the database
+- Centralized protected-gallery access checks across public gallery pages, thumbnails, original media, downloads, maps, tags, votes, and the picture game.
+- Added admin edit controls and dashboard access labels for protected/listed/unlisted galleries.
+- Updated the installer and initial schema for the v0.13 protected-gallery fields.
+
+### Notes
+
+- Run database migrations after uploading this version.
+- Regenerating a share link immediately invalidates the old link.
+- Unlisted protected galleries and their subgalleries are reachable by direct link only.
+
 ## Version 0.12
 
 ### Major Changes

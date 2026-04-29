@@ -20,12 +20,20 @@ return [
         cover_image_id BIGINT UNSIGNED NULL,
         sort_order INT NOT NULL DEFAULT 0,
         visibility ENUM('draft','public','private') NOT NULL DEFAULT 'draft',
+        access_mode ENUM('normal','password') NOT NULL DEFAULT 'normal',
+        access_listing ENUM('listed','unlisted') NOT NULL DEFAULT 'listed',
+        access_password_hash VARCHAR(255) NULL,
+        access_share_token VARCHAR(128) NULL,
+        access_token_hash CHAR(64) NULL,
+        access_token_expires_at DATETIME NULL,
         created_at DATETIME NOT NULL,
         updated_at DATETIME NOT NULL,
         UNIQUE KEY galleries_folder_path_hash_unique (folder_path_hash),
         UNIQUE KEY galleries_slug_unique (slug),
         KEY galleries_parent_id_index (parent_id),
-        KEY galleries_parent_visibility_sort_index (parent_id, visibility, sort_order, title)
+        KEY galleries_parent_visibility_sort_index (parent_id, visibility, sort_order, title),
+        KEY galleries_access_listing_index (visibility, access_mode, access_listing, parent_id, sort_order, title),
+        KEY galleries_access_token_hash_index (access_token_hash)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     "CREATE TABLE IF NOT EXISTS images (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

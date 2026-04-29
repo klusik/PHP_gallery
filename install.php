@@ -411,7 +411,7 @@ $value = static function (string $name) use ($defaults): string {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gallery CMS Installer</title>
+    <title>Gallery CMS Installer 0.13</title>
     <style>
         :root { color-scheme: light; font-family: Arial, sans-serif; color: #1f2933; background: #f5f7fa; }
         body { margin: 0; }
@@ -439,8 +439,8 @@ $value = static function (string $name) use ($defaults): string {
 </head>
 <body>
 <main>
-    <h1>Gallery CMS Installer</h1>
-    <p>Use this once to create the database, write <code>config.php</code>, run migrations, create folders, and add the first admin user.</p>
+    <h1>Gallery CMS Installer 0.13</h1>
+    <p>Use this once to create the database, write <code>config.php</code>, run migrations, create folders, and add the first admin user. This installer applies the protected-gallery migrations, including passwords, listed/unlisted access, and share links.</p>
 
     <?php foreach ($errors as $error): ?>
         <div class="notice bad"><?php echo installer_e($error); ?></div>
