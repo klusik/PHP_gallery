@@ -1219,7 +1219,7 @@ function check_application_update(): array
     return [
         'current_version' => CMS_VERSION,
         'latest_version' => null,
-        'branch' => CMS_UPDATE_BRANCH,
+        'branch' => implode(' or ', application_update_branch_candidates()),
         'repository' => CMS_GITHUB_REPOSITORY,
         'update_available' => false,
         'error' => $lastError ?? 'Could not contact GitHub.',
@@ -1288,7 +1288,7 @@ function install_application_update(): array
  */
 function application_update_branch_candidates(): array
 {
-    return array_values(array_unique([CMS_UPDATE_BRANCH, 'master']));
+    return CMS_UPDATE_BRANCHES;
 }
 
 /**
@@ -1296,6 +1296,7 @@ function application_update_branch_candidates(): array
  */
 function application_update_raw_url(string $branch, string $path): string
 {
+    application_update_assert_allowed_branch($branch);
     return 'https://raw.githubusercontent.com/' . CMS_GITHUB_REPOSITORY . '/' . rawurlencode($branch) . '/' . ltrim($path, '/');
 }
 
@@ -1304,8 +1305,19 @@ function application_update_raw_url(string $branch, string $path): string
  */
 function application_update_zip_url(string $branch): string
 {
+    application_update_assert_allowed_branch($branch);
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
     return 'https://codeload.github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/zip/refs/heads/' . rawurlencode($branch);
+}
+
+/**
+ * Reject update sources outside the stable GitHub branches.
+ */
+function application_update_assert_allowed_branch(string $branch): void
+{
+    if (!in_array($branch, CMS_UPDATE_BRANCHES, true)) {
+        throw new RuntimeException('Updates are allowed only from the main or master GitHub branch.');
+    }
 }
 
 /**
