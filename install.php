@@ -56,7 +56,11 @@ function installer_random_secret(): string
 function installer_default_base_url(): string
 {
     // Variable $https stores this steps working value.
-    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+        || $forwardedProto === 'https'
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
     // Variable $scheme stores this steps working value.
     $scheme = $https ? 'https' : 'http';
     // Variable $host stores this steps working value.

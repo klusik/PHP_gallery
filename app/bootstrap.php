@@ -86,7 +86,7 @@ function cms_run(): void
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
-            'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+            'secure' => request_is_https(),
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
