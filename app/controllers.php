@@ -1065,7 +1065,7 @@ function cms_admin_discover(): void
     if (!$candidates) {
         echo '<p>No new gallery folders found.</p>';
     } else {
-        echo '<form method="post" action="' . e(url_for('admin_import')) . '">' . csrf_field();
+        echo '<form method="post" action="' . e(url_for('admin_import')) . '" data-import-galleries-form>' . csrf_field();
         echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails during import</label></p>';
         echo '<table><thead><tr><th>Import</th><th>Folder</th><th>Title</th><th>Visibility</th></tr></thead><tbody>';
         foreach ($candidates as $candidate) {
@@ -1084,6 +1084,13 @@ function cms_admin_import(): void
 {
     require_admin();
     verify_csrf();
+    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        // Variable $result stores this steps working value.
+        $result = import_galleries_without_thumbnails($_POST['folders'] ?? []);
+        header('Content-Type: application/json');
+        echo json_encode($result);
+        return;
+    }
     // Variable $result stores this steps working value.
     $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
     redirect_to(url_for('admin', $result));

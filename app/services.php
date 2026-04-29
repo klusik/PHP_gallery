@@ -389,6 +389,63 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
 }
 
 /**
+ * Import and scan selected folders, returning imported gallery IDs for follow-up work.
+ */
+function import_galleries_without_thumbnails(array $folderPaths): array
+{
+    // Variable $candidates stores this steps working value.
+    $candidates = [];
+    foreach (discover_gallery_candidates() as $candidate) {
+        $candidates[$candidate['folder_path']] = $candidate;
+    }
+
+    // Variable $requested stores this steps working value.
+    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
+    // Variable $folderPaths stores this steps working value.
+    $folderPaths = [];
+    foreach ($requested as $requestedPath) {
+        if ($requestedPath === '') {
+            continue;
+        }
+        $segments = explode('/', $requestedPath);
+        $ancestorSegments = [];
+        while (count($segments) > 1) {
+            $ancestorSegments[] = array_shift($segments);
+            $ancestorPath = implode('/', $ancestorSegments);
+            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
+                $folderPaths[$ancestorPath] = $ancestorPath;
+            }
+        }
+        foreach (array_keys($candidates) as $candidatePath) {
+            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
+                $folderPaths[$candidatePath] = $candidatePath;
+            }
+        }
+    }
+    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+
+    $imported = 0;
+    $scanned = 0;
+    $importedIds = [];
+    foreach ($folderPaths as $folderPath) {
+        if (find_gallery_by_folder_path($folderPath)) {
+            continue;
+        }
+        $gallery = create_gallery_row_for_folder($folderPath);
+        if (!$gallery) {
+            continue;
+        }
+        $importedIds[] = (int) $gallery['id'];
+        $imported++;
+    }
+    sync_gallery_parent_ids();
+    foreach ($importedIds as $galleryId) {
+        $scanned += scan_gallery_images($galleryId);
+    }
+    return ['imported' => $imported, 'scanned' => $scanned, 'gallery_ids' => $importedIds, 'thumbnails' => 0];
+}
+
+/**
  * Import/update image rows for images directly inside one gallery folder.
  *
  * Child-folder images are intentionally ignored here because child folders are
