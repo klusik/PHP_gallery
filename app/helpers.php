@@ -223,12 +223,12 @@ function render_header(string $title): void
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
-    echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {
         echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
     }
+    echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     // Variable $page stores this steps working value.
     $page = (string) ($_GET['page'] ?? 'home');
     // Variable $bodyClass stores this steps working value.

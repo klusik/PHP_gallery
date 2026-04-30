@@ -356,15 +356,18 @@ editing code. The current theme controls include:
 
 - site name
 - accent colors
-- page and panel background colors
+- page, panel, and open-gallery panel background colors
 - corner roundness
 - serif or sans-serif font mode
 - selectable custom CSS skins from `custom_css/`
 - optional custom CSS upload
 
 Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
-built-in stylesheet. This gives technical users a template-like override path,
-while non-technical users can use the form controls.
+built-in stylesheet. The form controls read their defaults from the active CSS
+skin; once a color, radius, or font control is changed and saved, the generated
+theme stylesheet loads after custom CSS and overrides the core gallery colors.
+Use `Reset to CSS` on the Theme screen to clear saved slider overrides and return
+the controls to the active CSS defaults.
 
 The `custom_css/` folder contains selectable skins and examples. Use
 `custom_css/css_template.css` as a commented starting point, choose

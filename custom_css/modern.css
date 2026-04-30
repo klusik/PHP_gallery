@@ -10,6 +10,7 @@ public/assets/custom.css and loads it after the built-in stylesheet.
     --accent-dark: #1e3a8a;
     --paper: #f6f8fb;
     --panel: #ffffff;
+    --gallery-panel: #ffffff;
     --line: #d9e2ef;
     --ink: #111827;
     --muted: #64748b;

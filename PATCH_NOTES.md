@@ -2,6 +2,21 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.16
+
+### Major Changes
+
+- Theme controls now read defaults from the active CSS skin, and saved slider
+  values override custom CSS through the generated theme stylesheet.
+- Added a `Reset to CSS` button on the Theme screen to clear saved color, radius,
+  and font overrides while keeping the selected custom CSS skin.
+- Added a dedicated Theme color control for the open public gallery panel.
+
+### Notes
+
+- Existing installs with saved theme overrides may need one click on `Reset to
+  CSS` to return the sliders to the selected CSS skin defaults.
+
 ## Version 0.15
 
 ### Major Changes

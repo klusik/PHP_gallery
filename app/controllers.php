@@ -670,23 +670,22 @@ function cms_admin_theme(): void
                 unlink(custom_css_path());
             }
             set_app_setting('custom_css_preset', '');
+        } elseif (!empty($_POST['reset_theme_overrides'])) {
+            clear_theme_overrides();
         } else {
             // Variable $siteName stores this steps working value.
             $siteName = trim((string) ($_POST['site_name'] ?? ''));
             set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
-            set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
-            set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
-            set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
-            set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
-            set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
-            set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
             // Variable $preset stores this steps working value.
             $preset = (string) ($_POST['custom_css_preset'] ?? '');
             // Variable $presetPath stores this steps working value.
             $presetPath = custom_css_preset_path($preset);
+            $customCssChanged = false;
             if ($presetPath !== null) {
                 copy($presetPath, custom_css_path());
                 set_app_setting('custom_css_preset', $preset);
+                $customCssChanged = true;
             }
             if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
                 // Variable $name stores this steps working value.
@@ -694,7 +693,19 @@ function cms_admin_theme(): void
                 if (str_ends_with($name, '.css')) {
                     move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
                     set_app_setting('custom_css_preset', 'uploaded');
+                    $customCssChanged = true;
                 }
+            }
+            if ($themeControlsChanged) {
+                set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
+                set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
+                set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
+                set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
+                set_app_setting('theme_gallery_panel', sanitize_hex_color((string) $_POST['theme_gallery_panel'], '#fffaf0'));
+                set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
+                set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            } elseif ($customCssChanged) {
+                clear_theme_overrides();
             }
         }
         redirect_to(url_for('admin_theme', ['saved' => 1]));
@@ -702,14 +713,16 @@ function cms_admin_theme(): void
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
     render_header('Theme');
-    echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
+    echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
     echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
-    echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '"></label>';
-    echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '"></label>';
-    echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '"></label>';
-    echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '"></label>';
-    echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '"></label>';
-    echo '<label>Font style<select name="theme_font"><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control></label>';
+    echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '" data-theme-override-control></label>';
+    echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '" data-theme-override-control></label>';
+    echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '" data-theme-override-control></label>';
+    echo '<label>Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control></label>';
+    echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
+    echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
     echo '<label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
@@ -721,7 +734,7 @@ function cms_admin_theme(): void
     echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
+    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
     render_footer();
 }
 
@@ -1837,16 +1850,6 @@ function visibility_options(string $selected): string
 }
 
 /**
- * Validate a six-digit hex color from theme settings.
- */
-function sanitize_hex_color(string $value, string $fallback): string
-{
-    // Variable $value stores this steps working value.
-    $value = trim($value);
-    return preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : $fallback;
-}
-
-/**
  * Render existing tags as datalist suggestions for tag inputs.
  */
 function render_tag_datalist(): void
@@ -2013,18 +2016,42 @@ function cms_gallery_map_data(): void
 
 function cms_theme_css(): void
 {
-    $theme = theme_settings();
-    $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
+    $overrides = theme_override_settings();
     header('Content-Type: text/css; charset=utf-8');
     header('Cache-Control: private, max-age=300');
+    if ($overrides === []) {
+        echo '/* Theme controls are using the active CSS defaults. */';
+        return;
+    }
+    $theme = theme_settings();
+    $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';
     echo '--accent-dark:' . css_value((string) $theme['accent_dark']) . ';';
     echo '--paper:' . css_value((string) $theme['paper']) . ';';
     echo '--panel:' . css_value((string) $theme['panel']) . ';';
+    echo '--gallery-panel:' . css_value((string) $theme['gallery_panel']) . ';';
     echo '--radius:' . (int) $theme['radius'] . 'px;';
     echo '--font-family:' . css_value($fontFamily) . ';';
     echo '}';
+    echo 'body,.public-page,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
+    echo 'a{color:var(--accent-dark);}';
+    echo '.site-header,.admin-page .site-header{background:var(--paper);border-color:var(--line);}';
+    echo '.brand,.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
+    echo '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
+    echo '.nav a:hover,.button:hover,button:hover,input[type="submit"]:hover{border-color:var(--accent-dark);background:var(--accent-dark);}';
+    echo '.button.secondary,button.secondary{border-color:var(--accent-dark);background:transparent;color:var(--accent-dark);}';
+    echo '.hero,.panel,.gallery-card,.image-card,.admin-page .hero,.admin-page .panel{background:var(--panel);border-color:var(--line);border-radius:var(--radius);}';
+    echo '.public-page .hero{background:var(--gallery-panel);}';
+    echo '.gallery-card-link{background:var(--panel);color:inherit;}';
+    echo '.gallery-card-body h2,.image-meta h2{color:var(--ink);}';
+    echo '.inline-editor{border-color:var(--line);background:var(--field);border-radius:var(--radius);}';
+    echo 'input,textarea,select{background:var(--field);border-color:var(--line);border-radius:var(--radius);color:var(--ink);}';
+    echo 'input:focus,textarea:focus,select:focus{border-color:var(--accent);outline-color:color-mix(in srgb,var(--accent) 22%,transparent);}';
+    echo '.tag{border-color:var(--accent);background:var(--field);color:var(--accent-dark);}';
+    echo '.tag:hover,.tag:focus{border-color:var(--accent-dark);background:var(--panel);color:var(--accent-dark);}';
+    echo 'table{border-color:var(--line);border-radius:var(--radius);}';
+    echo 'th{background:var(--field);color:var(--ink);}';
 }
 
 /**
