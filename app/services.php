@@ -1674,11 +1674,11 @@ function check_application_update(): array
             }
             $latestVersion = application_update_highest_version($versionCandidates);
             $status = [
-                'current_version' => CMS_VERSION,
+                'current_version' => cms_current_version(),
                 'latest_version' => $latestVersion,
                 'branch' => $branch,
                 'repository' => CMS_GITHUB_REPOSITORY,
-                'update_available' => version_compare($latestVersion, CMS_VERSION, '>'),
+                'update_available' => version_compare($latestVersion, cms_current_version(), '>'),
                 'version_sources' => $versionCandidates,
                 'version_source' => application_update_version_source_label($versionCandidates, $latestVersion),
                 'error' => null,
@@ -1696,7 +1696,7 @@ function check_application_update(): array
     }
 
     return [
-        'current_version' => CMS_VERSION,
+        'current_version' => cms_current_version(),
         'latest_version' => null,
         'branch' => implode(' or ', application_update_branch_candidates()),
         'repository' => CMS_GITHUB_REPOSITORY,
@@ -1714,7 +1714,7 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
 {
     $cached = json_decode((string) app_setting('application_update_check_cache', ''), true);
     if (is_array($cached) && isset($cached['checked_at'], $cached['version'], $cached['status']) && is_array($cached['status'])) {
-        if ((string) $cached['version'] === CMS_VERSION && time() - (int) $cached['checked_at'] < $ttlSeconds) {
+        if ((string) $cached['version'] === cms_current_version() && time() - (int) $cached['checked_at'] < $ttlSeconds) {
             return $cached['status'];
         }
     }
@@ -1732,7 +1732,7 @@ function cache_application_update_check(array $status): void
     try {
         set_app_setting('application_update_check_cache', json_encode([
             'checked_at' => time(),
-            'version' => CMS_VERSION,
+            'version' => cms_current_version(),
             'status' => $status,
         ], JSON_UNESCAPED_SLASHES));
     } catch (Throwable) {
@@ -1874,7 +1874,7 @@ function restore_application_stable_release(): array
         'application_update_check_cache',
     ]);
 
-    $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? CMS_VERSION;
+    $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
 
     return [
         'version' => $restoredVersion,
@@ -2105,7 +2105,7 @@ function http_fetch(string $url, int $timeoutSeconds): string
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . CMS_VERSION,
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . cms_current_version(),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -2123,7 +2123,7 @@ function http_fetch(string $url, int $timeoutSeconds): string
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
-            'header' => "User-Agent: PHP-Gallery-CMS/" . CMS_VERSION . "\r\n",
+            'header' => "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n",
         ],
     ]);
     $body = @file_get_contents($url, false, $context);
