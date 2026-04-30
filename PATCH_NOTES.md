@@ -2,6 +2,18 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.17
+
+### Major Changes
+
+- The admin Updates button now switches to a fixed warning style and shows
+  `Updates (1)` when a newer GitHub version is available.
+
+### Notes
+
+- The pending-update badge uses a cached GitHub check and does not use theme
+  colors, so custom CSS and sliders cannot make it look like a normal button.
+
 ## Version 0.16
 
 ### Major Changes

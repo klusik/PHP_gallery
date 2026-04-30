@@ -1227,6 +1227,39 @@ function check_application_update(): array
 }
 
 /**
+ * Return a cached update check for small UI badges.
+ */
+function cached_application_update_check(int $ttlSeconds = 3600): array
+{
+    $cached = json_decode((string) app_setting('application_update_check_cache', ''), true);
+    if (is_array($cached) && isset($cached['checked_at'], $cached['status']) && is_array($cached['status'])) {
+        if (time() - (int) $cached['checked_at'] < $ttlSeconds) {
+            return $cached['status'];
+        }
+    }
+
+    $status = check_application_update();
+    try {
+        set_app_setting('application_update_check_cache', json_encode([
+            'checked_at' => time(),
+            'status' => $status,
+        ], JSON_UNESCAPED_SLASHES));
+    } catch (Throwable) {
+        // The update badge should never block an admin page.
+    }
+    return $status;
+}
+
+/**
+ * Return true when the cached update check says a newer version is available.
+ */
+function application_update_pending(): bool
+{
+    $status = cached_application_update_check();
+    return empty($status['error']) && !empty($status['update_available']);
+}
+
+/**
  * Install the newest GitHub branch archive over application-managed files.
  */
 function install_application_update(): array

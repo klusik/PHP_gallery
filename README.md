@@ -160,7 +160,9 @@ versions. The updater reads the newest version from `PATCH_NOTES.md`, downloads
 the configured GitHub branch archive, backs up overwritten files under
 `cache/updates/backups`, and leaves local `config.php`, galleries, cache files,
 and active custom CSS untouched. One-button installation requires outbound HTTPS
-from the server and PHP `ZipArchive`.
+from the server and PHP `ZipArchive`. When a newer version is available, the
+admin Updates button shows `Updates (1)` with a fixed warning style that does
+not use the selected theme colors.
 
 ## Local Run
 
