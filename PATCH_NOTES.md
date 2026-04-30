@@ -2,12 +2,21 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.20
+
+### Major Changes
+
+- Fixed the pending-update indicator on the admin update page so the fresh
+  GitHub check updates the same cached state used by the header and dashboard.
+- Pending update links and buttons now show `Update(1)` and use the fixed
+  warning background, including the primary update action button.
+
 ## Version 0.19
 
 ### Major Changes
 
 - The pending-update cache now invalidates when the application version changes,
-  so the `Updates (1)` badge stays accurate after a release.
+  so the `Update(1)` badge stays accurate after a release.
 
 ## Version 0.18
 
@@ -22,7 +31,7 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 ### Major Changes
 
 - The admin Updates button now switches to a fixed warning style and shows
-  `Updates (1)` when a newer GitHub version is available.
+  `Update(1)` when a newer GitHub version is available.
 
 ### Notes
 

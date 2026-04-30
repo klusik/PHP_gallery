@@ -1239,6 +1239,15 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
     }
 
     $status = check_application_update();
+    cache_application_update_check($status);
+    return $status;
+}
+
+/**
+ * Store an update check result for badge rendering.
+ */
+function cache_application_update_check(array $status): void
+{
     try {
         set_app_setting('application_update_check_cache', json_encode([
             'checked_at' => time(),
@@ -1248,7 +1257,6 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
     } catch (Throwable) {
         // The update badge should never block an admin page.
     }
-    return $status;
 }
 
 /**
@@ -1258,6 +1266,14 @@ function application_update_pending(): bool
 {
     $status = cached_application_update_check();
     return empty($status['error']) && !empty($status['update_available']);
+}
+
+/**
+ * Return the admin label for links that point to the update screen.
+ */
+function application_update_nav_label(bool $pending): string
+{
+    return $pending ? 'Update(1)' : 'Updates';
 }
 
 /**

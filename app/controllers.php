@@ -849,6 +849,7 @@ function cms_admin_update(): void
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
     $status = check_application_update();
+    cache_application_update_check($status);
     render_header('Application updates');
     echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
@@ -871,7 +872,7 @@ function cms_admin_update(): void
         if (!empty($status['update_available'])) {
             echo '<form method="post" class="form-grid">' . csrf_field();
             echo '<p>A newer version is available. The updater will download the GitHub branch archive, back up overwritten files under <code>cache/updates/backups</code>, and keep local config, galleries, cache, and custom CSS untouched.</p>';
-            echo '<button type="submit">Install update</button></form>';
+            echo '<button type="submit" class="is-update-pending">Update(1)</button></form>';
         } else {
             echo '<p class="muted">This installation is current.</p>';
         }
@@ -902,7 +903,7 @@ function cms_admin(): void
     $accessReady = gallery_access_schema_ready();
     $updatePending = application_update_pending();
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
-    $updateLabel = $updatePending ? 'Updates (1)' : 'Updates';
+    $updateLabel = application_update_nav_label($updatePending);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
@@ -2020,10 +2021,11 @@ function cms_gallery_map_data(): void
 function cms_theme_css(): void
 {
     $overrides = theme_override_settings();
+    $updatePendingCss = '.nav a.is-update-pending,.button.is-update-pending,button.is-update-pending{border-color:#7f1d1d!important;background:repeating-linear-gradient(135deg,#b91c1c 0 .55rem,#f59e0b .55rem 1.1rem)!important;color:#fff!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #7f1d1d!important;font-weight:800;}';
     header('Content-Type: text/css; charset=utf-8');
     header('Cache-Control: private, max-age=300');
     if ($overrides === []) {
-        echo '/* Theme controls are using the active CSS defaults. */';
+        echo $updatePendingCss;
         return;
     }
     $theme = theme_settings();
@@ -2055,6 +2057,7 @@ function cms_theme_css(): void
     echo '.tag:hover,.tag:focus{border-color:var(--accent-dark);background:var(--panel);color:var(--accent-dark);}';
     echo 'table{border-color:var(--line);border-radius:var(--radius);}';
     echo 'th{background:var(--field);color:var(--ink);}';
+    echo $updatePendingCss;
 }
 
 /**

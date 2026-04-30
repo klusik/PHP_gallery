@@ -239,7 +239,7 @@ function render_header(string $title): void
     if ($user) {
         $updatePending = application_update_pending();
         $updateClass = $updatePending ? ' class="is-update-pending"' : '';
-        $updateLabel = $updatePending ? 'Updates (1)' : 'Updates';
+        $updateLabel = application_update_nav_label($updatePending);
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
         echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
         echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
