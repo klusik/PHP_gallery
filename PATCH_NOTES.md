@@ -2,6 +2,21 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.36
+
+### Major Changes
+
+- Prepared the application metadata for the 0.36 release cycle.
+- Removed browser-side and app-side reuse from the update check path so the
+  admin update page always queries GitHub fresh.
+- Added cache-busting request parameters and no-cache request headers to the
+  GitHub version and archive fetches used by the updater.
+- Kept the fullscreen split map improvements from the previous release:
+  persistent map display during fullscreen browsing, restored map pins, and
+  the desktop-only split layout for the map panel.
+- Kept the non-image cache policy in place so HTML, CSS, JavaScript, JSON, and
+  theme CSS do not linger from older gallery states.
+
 ## Version 0.35
 
 ### Major Changes
