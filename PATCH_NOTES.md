@@ -2,6 +2,17 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.29
+
+### Major Changes
+
+- Removed the public tamper-warning overlay so beta installs and normal gallery
+  browsing no longer get blocked by the inline-style guard.
+- Continued the manual beta updater work so the stable/beta distinction stays
+  explicit while rollback remains available from the admin update screen.
+- Kept the fullscreen and mobile viewer work aligned with the existing overlay
+  model rather than introducing a separate viewer path.
+
 ## Version 0.28
 
 ### Major Changes
