@@ -1712,16 +1712,7 @@ function check_application_update(): array
  */
 function cached_application_update_check(int $ttlSeconds = 3600): array
 {
-    $cached = json_decode((string) app_setting('application_update_check_cache', ''), true);
-    if (is_array($cached) && isset($cached['checked_at'], $cached['version'], $cached['status']) && is_array($cached['status'])) {
-        if ((string) $cached['version'] === cms_current_version() && time() - (int) $cached['checked_at'] < $ttlSeconds) {
-            return $cached['status'];
-        }
-    }
-
-    $status = check_application_update();
-    cache_application_update_check($status);
-    return $status;
+    return check_application_update();
 }
 
 /**
@@ -1729,15 +1720,7 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
  */
 function cache_application_update_check(array $status): void
 {
-    try {
-        set_app_setting('application_update_check_cache', json_encode([
-            'checked_at' => time(),
-            'version' => cms_current_version(),
-            'status' => $status,
-        ], JSON_UNESCAPED_SLASHES));
-    } catch (Throwable) {
-        // The update badge should never block an admin page.
-    }
+    // Update checks are intentionally uncached now.
 }
 
 /**
@@ -1746,7 +1729,6 @@ function cache_application_update_check(array $status): void
 function application_update_pending(): bool
 {
     $status = check_application_update();
-    cache_application_update_check($status);
     return empty($status['error']) && !empty($status['update_available']);
 }
 
@@ -1985,7 +1967,7 @@ function application_update_commit_zip_url(string $commitId): string
 function application_update_raw_url(string $branch, string $path): string
 {
     application_update_assert_allowed_branch($branch);
-    return 'https://raw.githubusercontent.com/' . CMS_GITHUB_REPOSITORY . '/' . rawurlencode($branch) . '/' . ltrim($path, '/');
+    return 'https://raw.githubusercontent.com/' . CMS_GITHUB_REPOSITORY . '/' . rawurlencode($branch) . '/' . ltrim($path, '/') . '?nocache=' . rawurlencode((string) time());
 }
 
 /**
@@ -1995,7 +1977,7 @@ function application_update_zip_url(string $branch): string
 {
     application_update_assert_allowed_branch($branch);
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
-    return 'https://codeload.github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/zip/refs/heads/' . rawurlencode($branch);
+    return 'https://codeload.github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/zip/refs/heads/' . rawurlencode($branch) . '?nocache=' . rawurlencode((string) time());
 }
 
 /**
@@ -2108,6 +2090,10 @@ function http_fetch(string $url, int $timeoutSeconds): string
             CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . cms_current_version(),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => [
+                'Cache-Control: no-cache',
+                'Pragma: no-cache',
+            ],
         ]);
         $body = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
@@ -2123,7 +2109,9 @@ function http_fetch(string $url, int $timeoutSeconds): string
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
-            'header' => "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n",
+            'header' => "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n"
+                . "Cache-Control: no-cache\r\n"
+                . "Pragma: no-cache\r\n",
         ],
     ]);
     $body = @file_get_contents($url, false, $context);

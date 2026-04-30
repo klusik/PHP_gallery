@@ -904,7 +904,6 @@ function cms_admin_update(): void
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
     $status = check_application_update();
-    cache_application_update_check($status);
     $betaActive = application_update_beta_active();
     render_header('Application updates');
     echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
