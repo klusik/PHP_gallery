@@ -931,6 +931,9 @@ function cms_admin_update(): void
     } else {
         echo '<p>Latest version on GitHub: <strong>' . e((string) $status['latest_version']) . '</strong></p>';
         echo '<p class="muted">Checked branch: ' . e((string) $status['branch']) . '</p>';
+        if (!empty($status['version_source'])) {
+            echo '<p class="muted">Version source: ' . e((string) $status['version_source']) . '</p>';
+        }
         if (!empty($status['update_available'])) {
             echo '<form method="post" class="form-grid">' . csrf_field();
             echo '<input type="hidden" name="update_action" value="stable_update">';

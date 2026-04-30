@@ -2,6 +2,24 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.31
+
+### Major Changes
+
+- Prepared the application metadata for the 0.31 release cycle.
+- Hardened the GitHub update check so the admin update button can detect the
+  newest version from both `PATCH_NOTES.md` and `app/bootstrap.php`.
+- Made remote version parsing tolerate `v0.31` and `v_0.31` style headings, so
+  release notes and tags cannot hide a valid newer version.
+- Added explicit update-source reporting on the admin update page to show whether
+  the detected GitHub version came from patch notes or the remote bootstrap file.
+
+### Notes
+
+- Upload this release, then push the same files to the GitHub branch used by the
+  updater. Older installed copies will then see 0.31 as the newest available
+  version even if one of the remote version sources is temporarily stale.
+
 ## Version 0.30
 
 ### Major Changes
