@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.23';
+const CMS_VERSION = '0.24';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -113,6 +113,8 @@ function cms_run(): void
         'gallery_access' => 'cms_gallery_access',
         'share' => 'cms_share',
         'tag' => 'cms_tag',
+        'robots' => 'cms_robots_txt',
+        'sitemap' => 'cms_sitemap_xml',
         'picture_game' => 'cms_picture_game',
         'media' => 'cms_media',
         'thumb' => 'cms_thumb',
@@ -154,8 +156,8 @@ function cms_run(): void
 /**
  * Convert either query-string routes or simple pretty URLs into a page name.
  *
- * Query-string routes are the canonical form. Pretty URLs are only a convenience
- * layer when Apache rewrite rules are available.
+ * Query-string routes remain compatible. Pretty URLs are a convenience layer
+ * when Apache rewrite rules are available.
  */
 function cms_route_from_request(): array
 {
@@ -165,6 +167,12 @@ function cms_route_from_request(): array
 
     // Variable $path stores this steps working value.
     $path = trim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH), '/');
+    // Variable $basePath stores this steps working value.
+    $basePath = trim(request_script_base_path(), '/');
+    if ($basePath !== '' && ($path === $basePath || str_starts_with($path, $basePath . '/'))) {
+        // Variable $path stores this steps working value.
+        $path = ltrim(substr($path, strlen($basePath)), '/');
+    }
     // Variable $scriptDir stores this steps working value.
     $scriptDir = trim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
     if ($scriptDir !== '' && str_starts_with($path, $scriptDir . '/')) {
@@ -181,8 +189,17 @@ function cms_route_from_request(): array
     if ($segments === [] || $segments === ['index.php']) {
         return ['page' => 'home', 'params' => []];
     }
+    if ($segments === ['robots.txt']) {
+        return ['page' => 'robots', 'params' => []];
+    }
+    if ($segments === ['sitemap.xml']) {
+        return ['page' => 'sitemap', 'params' => []];
+    }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
-        return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+        if (count($segments) === 2) {
+            return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+        }
+        return ['page' => 'gallery', 'params' => ['gallery_path' => rawurldecode(implode('/', array_slice($segments, 1)))]];
     }
     if ($segments[0] === 'share' && isset($segments[1])) {
         return ['page' => 'share', 'params' => ['token' => rawurldecode($segments[1])]];

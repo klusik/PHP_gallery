@@ -38,6 +38,13 @@ function cms_gallery(): void
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
+    if (!$gallery && isset($_GET['gallery_path'])) {
+        try {
+            $gallery = find_gallery_by_folder_path((string) $_GET['gallery_path']);
+        } catch (RuntimeException) {
+            $gallery = null;
+        }
+    }
     if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
         cms_not_found();
         return;
@@ -70,10 +77,16 @@ function cms_gallery(): void
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     // Variable $galleryMapPoints stores this steps working value.
     $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
+    // Variable $seo stores this steps working value.
+    $seo = public_gallery_metadata($gallery);
+    ob_start();
+    render_public_seo_tags($gallery, $images);
+    render_gallery_json_ld($gallery, $images);
+    append_cms_head_extras((string) ob_get_clean());
 
-    render_header((string) $gallery['title']);
+    render_header((string) $seo['title']);
     render_breadcrumbs($gallery);
-    echo '<section class="hero"><h1>' . e($gallery['title']) . '</h1><p>' . e($gallery['description']) . '</p>';
+    echo '<section class="hero"><h1>' . e((string) $seo['title']) . '</h1><p>' . e((string) $seo['description']) . '</p>';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
@@ -95,7 +108,7 @@ function cms_gallery(): void
         echo '</div></section>';
     }
     echo '<section class="grid">';
-    foreach ($images as $image) {
+    foreach ($images as $index => $image) {
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $previewUrl stores this steps working value.
@@ -106,8 +119,10 @@ function cms_gallery(): void
         $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
+        // Variable $altText stores this steps working value.
+        $altText = image_alt_text($image, $gallery, $index + 1);
         echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
-        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($image['title'] ?: $image['filename']) . '"></a>';
+        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($altText) . '"></a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
@@ -346,7 +361,7 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
     $cover = $isProtectedPublicCard ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">';
+    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($cover) {
@@ -614,6 +629,28 @@ function cms_download_all(): void
     // Variable $zip stores this steps working value.
     $zip = build_all_zip();
     send_download($zip, 'all-galleries.zip');
+}
+
+/**
+ * Serve robots.txt for search engines.
+ */
+function cms_robots_txt(): void
+{
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "User-agent: *\n";
+    echo "Allow: /\n";
+    echo "Disallow: /index.php?page=admin\n";
+    echo "Disallow: /index.php?page=admin_\n";
+    echo "Disallow: /admin/\n";
+    echo "Sitemap: " . public_base_url() . "/sitemap.xml\n";
+}
+
+/**
+ * Serve sitemap.xml for public gallery pages.
+ */
+function cms_sitemap_xml(): void
+{
+    output_sitemap_xml();
 }
 
 /**

@@ -15,6 +15,7 @@ Important routes:
 - `page=home` lists public top-level galleries.
 - `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
   votes, breadcrumbs, and lightbox data.
+- `page=robots` and `page=sitemap` serve crawlable SEO files for public pages.
 - `page=gallery_access` validates a protected-gallery password and records a
   short public unlock in the visitor session.
 - `page=share&id=...&token=...` validates a share token for one protected
@@ -46,6 +47,17 @@ The app supports two web-root layouts. The repository root can be served
 directly, in which case root `index.php` delegates to `public/index.php`; or the
 server can point directly at `public/`. Query-string routes work in both layouts,
 and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
+The gallery pretty route accepts both the canonical `/gallery/{slug}/` shape and
+nested filesystem-path compatibility URLs such as `/gallery/travel/italy/rome/`.
+Rendered gallery pages always emit the slug URL as canonical. Public gallery
+cards use the clean slug route as the first step toward cleaner navigation,
+while breadcrumbs, redirects, forms, admin links, media, thumbnails, votes, and
+downloads keep using query-string routes for compatibility with shared hosting
+setups that do not rewrite clean URLs reliably.
+
+When `base_url` is empty, route helpers emit root-relative URLs based on the
+front-controller base path. This keeps CSS, JavaScript, and form actions stable
+when a visitor is on a clean gallery URL instead of `index.php`.
 
 ## Files
 
@@ -86,6 +98,13 @@ listings, `access_password_hash` stores the optional gallery password hash, and
 validation uses the hash; the encrypted token copy exists only so admins can see
 and revoke the active URL later. Protected access is inherited from ancestors at
 runtime. Password unlocks are session-scoped and expire after 10 minutes.
+
+Public gallery metadata resolves from `gallery.json` first, then database
+values, then folder-name fallbacks. The public page header emits canonical,
+description, Open Graph, Twitter card, and JSON-LD markup from that resolved
+metadata. Gallery image `alt` text uses caption metadata first, then a humanized
+filename, then a gallery/index fallback.
+`gallery.json` may store tags as comma-separated text or as a JSON array.
 
 `tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as
 comma-separated text; the UI recommends existing tags while typing. Public tag
@@ -174,6 +193,10 @@ The browser upload path follows the same structure as FTP. It creates or reuses
 a real gallery folder, stores validated images in that folder with safe unique
 filenames, scans the folder, and optionally starts the same thumbnail batch
 endpoint used by import and dashboard thumbnail actions.
+
+Sitemap generation reads public galleries from the database and emits absolute
+clean gallery URLs. `robots.txt` allows public crawling, blocks admin routes,
+and points crawlers at the sitemap.
 
 Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
 Generated files are progressive JPEGs named from the original base filename plus

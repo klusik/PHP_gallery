@@ -20,6 +20,8 @@ This release contains the full plain-PHP gallery application:
 - admin dashboard with bulk gallery and image actions
 - admin upload flows for creating empty galleries, uploading multiple images,
   and creating a gallery directly from uploaded images
+- public gallery SEO with canonical URLs, metadata tags, structured data,
+  `robots.txt`, and `sitemap.xml`
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - password-protected galleries with listed, unlisted, and share-link-only access
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
@@ -218,6 +220,7 @@ Admin workflow:
    upload shows transfer progress and then thumbnail progress when optimized
    thumbnails are requested.
 8. Use bulk actions to scan, publish, draft, or privatize selected galleries.
+
 9. Use the gallery or image thumbnail buttons when you need to rebuild generated
    thumbnails after replacing source files.
 10. Edit gallery title, description, slug, folder name, visibility, sort order,
@@ -242,6 +245,33 @@ Discovery is explicit and does not run on public requests.
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
 subgallery cards, lightbox image browsing, keyboard left/right navigation, and
 visible keyboard up/down voting controls in the lightbox.
+
+## Public SEO
+
+Public gallery pages follow the filesystem-first model and emit SEO metadata
+without adding a separate content store.
+
+- Public gallery cards link to the clean `/gallery/{slug}/` route.
+- Other gallery navigation, redirects, forms, and admin links keep using the
+  stable query-string route for now.
+- Canonical gallery URLs use the clean `/gallery/{slug}/` route, while the
+  original query-string route continues to work.
+- Nested filesystem paths such as `/gallery/travel/italy/rome/` are accepted as
+  compatibility routes when rewrite rules are enabled, but generated public
+  links and canonical tags use the unique slug route.
+- Page titles and descriptions resolve in this order:
+  1. `gallery.json`
+  2. database values
+  3. folder name for the title, gallery title for the description fallback
+- `gallery.json` supports `title`, `description`, and `tags`. Tags may be a
+  comma-separated string or a JSON array.
+- Each public gallery page emits one `<h1>` that matches the gallery title.
+- Image `alt` text resolves from caption metadata, then filename, then a
+  gallery-based fallback.
+- `robots.txt` allows public crawling, blocks admin routes, and advertises the
+  sitemap.
+- `sitemap.xml` lists public, non-protected galleries with absolute URLs.
+- Public gallery pages also emit Open Graph, Twitter card, and JSON-LD data.
 
 ## Protected Galleries
 

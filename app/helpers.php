@@ -99,13 +99,15 @@ function base_url(string $path = ''): string
 {
     // Variable $base stores this steps working value.
     $base = request_aware_base_url(rtrim((string) cms_config()['base_url'], '/'));
+    // Variable $basePath stores this steps working value.
+    $basePath = request_script_base_path();
     if ($path === '') {
-        return $base === '' ? 'index.php' : $base . '/';
+        return $base === '' ? ($basePath === '' ? '/' : $basePath . '/') : $base . '/';
     }
     if (str_starts_with($path, 'index.php')) {
-        return ($base === '' ? '' : $base . '/') . $path;
+        return ($base === '' ? ($basePath === '' ? '/' : $basePath . '/') : $base . '/') . $path;
     }
-    return ($base === '' ? '' : $base) . '/' . ltrim($path, '/');
+    return ($base === '' ? ($basePath === '' ? '' : $basePath) : $base) . '/' . ltrim($path, '/');
 }
 
 /**
@@ -119,6 +121,178 @@ function url_for(string $page, array $params = []): string
 }
 
 /**
+ * Build the public base URL for canonical and sitemap output.
+ */
+function public_base_url(): string
+{
+    $configured = rtrim(request_aware_base_url(rtrim((string) cms_config()['base_url'], '/')), '/');
+    if ($configured !== '') {
+        return $configured;
+    }
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $scheme = request_is_https() ? 'https' : 'http';
+    return rtrim($scheme . '://' . $host . request_script_base_path(), '/');
+}
+
+/**
+ * Convert an app URL to an absolute public URL for crawler-facing metadata.
+ */
+function absolute_public_url(string $url): string
+{
+    if (preg_match('#^https?://#i', $url) === 1) {
+        return $url;
+    }
+    if (str_starts_with($url, '/')) {
+        $parts = parse_url(public_base_url());
+        $origin = (string) ($parts['scheme'] ?? 'http') . '://' . (string) ($parts['host'] ?? 'localhost');
+        if (!empty($parts['port'])) {
+            $origin .= ':' . (int) $parts['port'];
+        }
+        return $origin . $url;
+    }
+    return public_base_url() . '/' . ltrim($url, '/');
+}
+
+/**
+ * Build the preferred public URL for one gallery, using the clean route.
+ */
+function gallery_public_url(array $gallery): string
+{
+    return public_base_url() . '/gallery/' . rawurlencode((string) $gallery['slug']) . '/';
+}
+
+/**
+ * Build the canonical public URL for one gallery.
+ */
+function canonical_url_for_gallery(array $gallery): string
+{
+    return gallery_public_url($gallery);
+}
+
+/**
+ * Return the best public title for one gallery page.
+ */
+function gallery_seo_title(array $gallery): string
+{
+    $metadata = public_gallery_metadata($gallery);
+    return $metadata['title'];
+}
+
+/**
+ * Return the best public description for one gallery page.
+ */
+function gallery_seo_description(array $gallery): string
+{
+    $metadata = public_gallery_metadata($gallery);
+    return $metadata['description'];
+}
+
+/**
+ * Build safe alt text for one gallery image.
+ */
+function image_alt_text(array $image, array $gallery, int $index = 1): string
+{
+    $caption = trim((string) ($image['description'] ?? ''));
+    if ($caption !== '') {
+        return $caption;
+    }
+    $title = trim((string) ($image['title'] ?? ''));
+    if ($title !== '') {
+        return $title;
+    }
+    $filename = trim((string) ($image['filename'] ?? ''));
+    if ($filename !== '') {
+        return trim(preg_replace('/[-_]+/', ' ', pathinfo($filename, PATHINFO_FILENAME)) ?: $filename);
+    }
+    return (string) ($gallery['title'] ?? 'Gallery') . ' image ' . $index;
+}
+
+/**
+ * Render SEO tags for a gallery page.
+ */
+function render_public_seo_tags(array $gallery, array $images = []): void
+{
+    $title = gallery_seo_title($gallery);
+    $description = gallery_seo_description($gallery);
+    $canonical = canonical_url_for_gallery($gallery);
+    $ogImage = '';
+    foreach ($images as $image) {
+        $preview = thumbnail_url($image, 800);
+        if ($preview !== '') {
+            $ogImage = absolute_public_url($preview);
+            break;
+        }
+    }
+    echo '<link rel="canonical" href="' . e($canonical) . '">';
+    echo '<meta name="description" content="' . e($description) . '">';
+    echo '<meta property="og:type" content="website">';
+    echo '<meta property="og:title" content="' . e($title) . '">';
+    echo '<meta property="og:description" content="' . e($description) . '">';
+    echo '<meta property="og:url" content="' . e($canonical) . '">';
+    echo '<meta property="og:site_name" content="' . e(site_name()) . '">';
+    if ($ogImage !== '') {
+        echo '<meta property="og:image" content="' . e($ogImage) . '">';
+    }
+    echo '<meta name="twitter:card" content="' . ($ogImage !== '' ? 'summary_large_image' : 'summary') . '">';
+    echo '<meta name="twitter:title" content="' . e($title) . '">';
+    echo '<meta name="twitter:description" content="' . e($description) . '">';
+    if ($ogImage !== '') {
+        echo '<meta name="twitter:image" content="' . e($ogImage) . '">';
+    }
+}
+
+/**
+ * Render JSON-LD for one gallery page.
+ */
+function render_gallery_json_ld(array $gallery, array $images = []): void
+{
+    $items = [];
+    $position = 1;
+    foreach ($images as $image) {
+        $items[] = [
+            '@type' => 'ImageObject',
+            'position' => $position++,
+            'name' => image_alt_text($image, $gallery, $position - 1),
+            'contentUrl' => absolute_public_url(thumbnail_url($image, 800)),
+            'url' => absolute_public_url(base_url('index.php?page=media&id=' . (int) $image['id'])),
+        ];
+    }
+    $jsonLd = [
+        '@context' => 'https://schema.org',
+        '@type' => 'ImageGallery',
+        'name' => gallery_seo_title($gallery),
+        'description' => gallery_seo_description($gallery),
+        'url' => canonical_url_for_gallery($gallery),
+        'image' => $items,
+    ];
+    $metadata = public_gallery_metadata($gallery);
+    if (!empty($metadata['tags'])) {
+        $jsonLd['keywords'] = $metadata['tags'];
+    }
+    $json = json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return;
+    }
+    echo '<script type="application/ld+json">' . str_replace('</', '<\/', $json) . '</script>';
+}
+
+/**
+ * Output the sitemap XML with public gallery URLs.
+ */
+function output_sitemap_xml(): void
+{
+    header('Content-Type: application/xml; charset=utf-8');
+    $base = public_base_url();
+    echo '<?xml version="1.0" encoding="UTF-8"?>';
+    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+    echo '<url><loc>' . e($base . '/') . '</loc></url>';
+    foreach (public_gallery_sitemap_entries() as $url) {
+        echo '<url><loc>' . e($url) . '</loc></url>';
+    }
+    echo '</urlset>';
+}
+
+/**
  * Resolve public asset paths for either repository-root or public/ web roots.
  */
 function asset_url(string $path): string
@@ -127,9 +301,12 @@ function asset_url(string $path): string
     $path = ltrim($path, '/');
     // Variable $script stores this steps working value.
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (str_ends_with($script, '/public/index.php')) {
+        return base_url('public/' . $path);
+    }
     // Variable $scriptFile stores this steps working value.
     $scriptFile = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_FILENAME'] ?? ''));
-    if (str_ends_with($script, '/public/index.php') || str_ends_with($scriptFile, '/public/index.php')) {
+    if (str_ends_with($scriptFile, '/public/index.php')) {
         return base_url($path);
     }
     return base_url('public/' . $path);
@@ -219,9 +396,16 @@ function render_header(string $title): void
     $siteName = site_name();
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
+    // Variable $page stores this steps working value.
+    $page = (string) ($_GET['page'] ?? 'home');
+    // Variable $bodyClass stores this steps working value.
+    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
     echo '<!doctype html><html lang="cs" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
+    if ($bodyClass === 'admin-page') {
+        echo '<meta name="robots" content="noindex,nofollow">';
+    }
     echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
@@ -229,10 +413,7 @@ function render_header(string $title): void
         echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
-    // Variable $page stores this steps working value.
-    $page = (string) ($_GET['page'] ?? 'home');
-    // Variable $bodyClass stores this steps working value.
-    $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
+    echo cms_head_extras_html();
     echo '</head><body class="' . e($bodyClass) . '"><header class="site-header">';
     echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
@@ -252,12 +433,38 @@ function render_header(string $title): void
 }
 
 /**
+ * Replace extra head HTML for the next rendered page.
+ */
+function set_cms_head_extras(string $html): void
+{
+    $GLOBALS['cms_head_extras'] = $html;
+}
+
+/**
+ * Append extra head HTML for the next rendered page.
+ */
+function append_cms_head_extras(string $html): void
+{
+    $GLOBALS['cms_head_extras'] = (string) ($GLOBALS['cms_head_extras'] ?? '') . $html;
+}
+
+/**
+ * Return buffered head extras and clear them after rendering.
+ */
+function cms_head_extras_html(): string
+{
+    $html = (string) ($GLOBALS['cms_head_extras'] ?? '');
+    $GLOBALS['cms_head_extras'] = '';
+    return $html;
+}
+
+/**
  * Render the shared footer and JavaScript include.
  */
 function render_footer(): void
 {
     echo '</main><footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
+    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(CMS_VERSION) . ')</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';

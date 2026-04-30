@@ -221,6 +221,57 @@ function read_gallery_sidecar(string $path): array
 }
 
 /**
+ * Return public SEO metadata for one gallery, combining gallery.json and DB values.
+ */
+function public_gallery_metadata(array $gallery): array
+{
+    // Variable $folderPath stores this steps working value.
+    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    // Variable $sidecar stores this steps working value.
+    $sidecar = [];
+    try {
+        $sidecar = read_gallery_sidecar(gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json');
+    } catch (Throwable) {
+        $sidecar = [];
+    }
+
+    // Variable $title stores this steps working value.
+    $title = trim((string) ($sidecar['title'] ?? ''));
+    if ($title === '') {
+        $title = trim((string) ($gallery['title'] ?? ''));
+    }
+    if ($title === '') {
+        $title = gallery_folder_name_from_path($folderPath);
+    }
+
+    // Variable $description stores this steps working value.
+    $description = trim((string) ($sidecar['description'] ?? ''));
+    if ($description === '') {
+        $description = trim((string) ($gallery['description'] ?? ''));
+    }
+    if ($description === '') {
+        $description = $title;
+    }
+
+    // Variable $tags stores this steps working value.
+    $tags = [];
+    $rawTags = $sidecar['tags'] ?? '';
+    $tagValues = is_array($rawTags) ? $rawTags : (preg_split('/[,;\n]+/', (string) $rawTags) ?: []);
+    foreach ($tagValues as $tag) {
+        $tag = trim((string) $tag);
+        if ($tag !== '') {
+            $tags[] = $tag;
+        }
+    }
+
+    return [
+        'title' => $title,
+        'description' => $description,
+        'tags' => array_values(array_unique($tags)),
+    ];
+}
+
+/**
  * Persist editable gallery metadata back into gallery.json.
  */
 function write_gallery_sidecar(array $gallery): void
@@ -229,6 +280,7 @@ function write_gallery_sidecar(array $gallery): void
     $data = [
         'title' => $gallery['title'],
         'description' => $gallery['description'],
+        'tags' => tags_as_string('gallery', (int) $gallery['id']),
         'visibility' => $gallery['visibility'],
         'sort_order' => (int) $gallery['sort_order'],
     ];
@@ -244,6 +296,27 @@ function write_gallery_sidecar(array $gallery): void
         }
     }
     write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
+}
+
+/**
+ * Return all public gallery sitemap URLs in filesystem order.
+ */
+function public_gallery_sitemap_entries(): array
+{
+    $accessReady = gallery_access_schema_ready();
+    $columns = $accessReady ? '*' : 'folder_path, slug, visibility';
+    $stmt = db()->query("SELECT $columns
+        FROM galleries
+        WHERE visibility = 'public'
+        ORDER BY folder_path");
+    $urls = [];
+    foreach ($stmt->fetchAll() as $gallery) {
+        if ($accessReady && gallery_access_requirement($gallery) !== null) {
+            continue;
+        }
+        $urls[] = gallery_public_url($gallery);
+    }
+    return array_values(array_unique($urls));
 }
 
 /**

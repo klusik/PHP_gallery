@@ -2,6 +2,32 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.24
+
+### Major Changes
+
+- Hardened public SEO routing without changing the working gallery navigation:
+  - public gallery cards now link to clean `/gallery/{slug}/` URLs as the first
+    baby step toward cleaner public navigation
+  - other gallery navigation, redirects, forms, and admin links remain on the
+    stable query-string route
+  - clean `/gallery/{slug}/` URLs are supported and used as canonical URLs
+  - nested `/gallery/folder/path/` URLs remain compatibility routes, but they
+    are not used as generated public links
+  - `/robots.txt` and `/sitemap.xml` now resolve correctly in subfolder installs
+  - `base_url = ''` installs now emit root-relative app links instead of
+    fragile page-relative links
+- Improved crawler metadata:
+  - gallery pages emit title, description, canonical, Open Graph, Twitter card,
+    and JSON-LD metadata
+  - gallery page headings keep a single `<h1>` that matches the resolved gallery
+    title
+  - image `alt` text falls back from caption metadata to filename to a
+    gallery-based fallback
+  - `sitemap.xml` lists public, non-protected galleries with absolute URLs
+  - `gallery.json` tags can be comma-separated text or a JSON array
+  - saved gallery sidecars now include gallery tags
+
 ## Version 0.23
 
 ### Major Changes
