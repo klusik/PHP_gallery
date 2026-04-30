@@ -2,6 +2,12 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.33
+
+### Major Changes
+
+- Prepared the application metadata for the 0.33 release cycle.
+
 ## Version 0.32
 
 ### Major Changes
