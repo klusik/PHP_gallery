@@ -1669,7 +1669,7 @@ function check_application_update(): array
         try {
             $versionCandidates = application_update_remote_version_candidates($branch);
             if ($versionCandidates === []) {
-                $lastError = 'No version marker was found in PATCH_NOTES.md or app/bootstrap.php on branch ' . $branch . '.';
+                $lastError = 'No version marker was found in app/bootstrap.php on branch ' . $branch . '.';
                 continue;
             }
             $latestVersion = application_update_highest_version($versionCandidates);
@@ -1993,22 +1993,11 @@ function application_update_assert_allowed_branch(string $branch): void
 }
 
 /**
- * Read all remote version markers that can identify the newest branch version.
+ * Read the remote version marker that identifies the newest branch version.
  */
 function application_update_remote_version_candidates(string $branch): array
 {
     $versionCandidates = [];
-
-    try {
-        $notes = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 12);
-        $notesVersion = application_update_latest_version_from_notes($notes);
-        if ($notesVersion !== null) {
-            $versionCandidates['PATCH_NOTES.md'] = $notesVersion;
-        }
-    } catch (Throwable $exception) {
-        $versionCandidates['PATCH_NOTES.md error'] = $exception->getMessage();
-    }
-
     try {
         $bootstrap = http_fetch(application_update_raw_url($branch, 'app/bootstrap.php'), 12);
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
@@ -2019,7 +2008,7 @@ function application_update_remote_version_candidates(string $branch): array
         $versionCandidates['app/bootstrap.php error'] = $exception->getMessage();
     }
 
-    return array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null);
+    return array_filter($versionCandidates ?? [], static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null);
 }
 
 /**
@@ -2080,17 +2069,6 @@ function application_update_normalize_version(string $version): ?string
     $version = preg_replace('/^v[_-]?/i', '', $version) ?? $version;
     if (preg_match('/^[0-9]+(?:\.[0-9]+){1,2}$/', $version)) {
         return $version;
-    }
-    return null;
-}
-
-/**
- * Parse the first release heading from patch notes.
- */
-function application_update_latest_version_from_notes(string $notes): ?string
-{
-    if (preg_match('/##\s+Version\s+(v[_-]?[0-9]+(?:\.[0-9]+){1,2}|[0-9]+(?:\.[0-9]+){1,2})\b/i', $notes, $match)) {
-        return application_update_normalize_version((string) $match[1]);
     }
     return null;
 }

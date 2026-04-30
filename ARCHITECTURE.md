@@ -145,8 +145,8 @@ bulk updates so admins can mark items as `todo`, `doing`, `waiting`, or `done`
 without server log access.
 
 The application updater is file-based so it can run on shared hosting without
-Git. It reads the latest version from GitHub `PATCH_NOTES.md` and
-`app/bootstrap.php`, downloads a branch zip, copies application-managed files, and backs up overwritten files
+Git. It reads `CMS_VERSION` from GitHub `app/bootstrap.php` as the version
+source of truth, downloads a branch zip, copies application-managed files, and backs up overwritten files
 under `cache/updates/backups`. Local-only paths such as `config.php`,
 `galleries/`, `cache/`, `custom_css/`, and `public/assets/custom.css` are
 skipped.

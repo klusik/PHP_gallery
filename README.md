@@ -161,8 +161,8 @@ admins can filter events and mark them as `To be done`, `Will be done`,
 `Waiting`, or `Done`.
 
 Logged-in admins can use `Admin dashboard -> Updates` to check GitHub for newer
-versions. The updater reads the newest version from `PATCH_NOTES.md` and
-`app/bootstrap.php`, downloads
+versions. The updater reads `CMS_VERSION` from `app/bootstrap.php` as the
+source of truth, downloads
 the configured GitHub branch archive, backs up overwritten files under
 `cache/updates/backups`, and leaves local `config.php`, galleries, cache files,
 and active custom CSS untouched. One-button installation requires outbound HTTPS
