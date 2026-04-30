@@ -2,6 +2,17 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.30
+
+### Major Changes
+
+- Made the lightbox fullscreen controls usable on mobile devices as a visible
+  overlay action, while keeping desktop keyboard behavior unchanged.
+- Simplified the mobile fullscreen path so it now relies on the app's own
+  overlay state instead of depending on the browser fullscreen API.
+- Added a lightweight debug flag for tracing the lightbox fullscreen toggle
+  path during local testing.
+
 ## Version 0.29
 
 ### Major Changes

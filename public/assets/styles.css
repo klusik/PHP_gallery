@@ -573,6 +573,9 @@ td {
 }
 
 .lightbox.is-mobile-fullscreen {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
     padding: 0;
     gap: 0;
     background: #050505;
@@ -615,6 +618,23 @@ td {
     top: 1rem;
     left: 1rem;
     min-width: 2.6rem;
+}
+
+.lightbox-mobile-fullscreen-button {
+    display: inline-grid;
+    place-items: center;
+    position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
+    left: max(1rem, env(safe-area-inset-left));
+    min-width: 3rem;
+    min-height: 3rem;
+    border-radius: 999px;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.lightbox.is-mobile-device .lightbox-fullscreen-button {
+    display: none;
 }
 
 .lightbox figure {
@@ -757,6 +777,11 @@ td {
     position: absolute;
     top: 1rem;
     right: 1rem;
+}
+
+.lightbox.is-mobile-device .lightbox-close {
+    top: max(1rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
 }
 
 .lightbox-hud,
@@ -1148,6 +1173,17 @@ body.has-mobile-lightbox {
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
+}
+
+.lightbox-fullscreen-link {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid #fffdf8;
+    background: rgba(255, 253, 248, 0.12);
+    color: #fffdf8;
+    border-radius: var(--radius, 16px);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
 }
 
 .lightbox-counter,
