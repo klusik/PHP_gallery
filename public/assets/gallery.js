@@ -232,6 +232,7 @@
     const lightboxMapButton = overlay.querySelector('[data-lightbox-map]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
+    let fullscreenHideTimer = null;
 
     // Function `syncLightboxVote` executes this focused behavior.
     function syncLightboxVote(card) {
@@ -288,10 +289,14 @@
         }
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
+        showLightboxHud();
     }
 
     // Function `close` executes this focused behavior.
     function close() {
+        exitLightboxFullscreen();
+        clearLightboxHudTimer();
+        overlay.classList.remove('is-ui-visible');
         overlay.hidden = true;
         image.removeAttribute('src');
         document.body.classList.remove('has-lightbox');
@@ -324,17 +329,32 @@
         if (action === 'next') {
             step(1);
         }
+        if (action === 'fullscreen') {
+            event.preventDefault();
+            toggleLightboxFullscreen();
+        }
         if (event.target.closest('[data-lightbox-map]')) {
             event.preventDefault();
             openPhotoMapFromJson(event.target.closest('[data-lightbox-map]').dataset.mapPoint || '');
         }
     });
 
+    overlay.addEventListener('mousemove', showLightboxHud);
+    overlay.addEventListener('pointermove', showLightboxHud);
+    overlay.addEventListener('mouseleave', scheduleHideLightboxHud);
+    overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
+    document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
+
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {
             return;
         }
         if (event.key === 'Escape') {
+            if (isLightboxFullscreen()) {
+                event.preventDefault();
+                exitLightboxFullscreen();
+                return;
+            }
             close();
         }
         if (event.key === 'ArrowLeft') {
@@ -351,6 +371,10 @@
             event.preventDefault();
             submitLightboxVote(-1);
         }
+        if (event.key === 'f' || (event.key === 'F' && event.shiftKey === false) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f')) {
+            event.preventDefault();
+            toggleLightboxFullscreen();
+        }
     });
 
     // Function `submitLightboxVote` executes this focused behavior.
@@ -363,6 +387,84 @@
         if (button) {
             button.click();
         }
+    }
+
+    function isLightboxFullscreen() {
+        return overlay.classList.contains('is-fullscreen');
+    }
+
+    async function toggleLightboxFullscreen() {
+        if (isLightboxFullscreen()) {
+            await exitLightboxFullscreen();
+            return;
+        }
+        await enterLightboxFullscreen();
+    }
+
+    async function enterLightboxFullscreen() {
+        overlay.classList.add('is-fullscreen');
+        overlay.classList.remove('is-ui-visible');
+        try {
+            if (overlay.requestFullscreen) {
+                await overlay.requestFullscreen();
+            }
+        } catch {
+            // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
+        }
+    }
+
+    async function exitLightboxFullscreen() {
+        overlay.classList.remove('is-fullscreen');
+        if (document.fullscreenElement) {
+            try {
+                await document.exitFullscreen();
+            } catch {
+                // Ignore fullscreen exit failures.
+            }
+        }
+    }
+
+    function syncLightboxFullscreenState() {
+        if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
+            overlay.classList.remove('is-fullscreen');
+            overlay.classList.remove('is-ui-visible');
+            return;
+        }
+        if (document.fullscreenElement === overlay) {
+            overlay.classList.add('is-fullscreen');
+            overlay.classList.remove('is-ui-visible');
+        }
+    }
+
+    function clearLightboxHudTimer() {
+        if (fullscreenHideTimer) {
+            clearTimeout(fullscreenHideTimer);
+            fullscreenHideTimer = null;
+        }
+    }
+
+    function showLightboxHud() {
+        clearLightboxHudTimer();
+        overlay.classList.add('is-ui-visible');
+        if (isLightboxFullscreen()) {
+            fullscreenHideTimer = window.setTimeout(() => {
+                overlay.classList.remove('is-ui-visible');
+            }, 1800);
+        } else {
+            overlay.classList.remove('is-ui-visible');
+        }
+    }
+
+    function scheduleHideLightboxHud() {
+        if (!isLightboxFullscreen()) {
+            return;
+        }
+        clearLightboxHudTimer();
+        fullscreenHideTimer = window.setTimeout(() => {
+            if (isLightboxFullscreen()) {
+                overlay.classList.remove('is-ui-visible');
+            }
+        }, 1200);
     }
 
 
