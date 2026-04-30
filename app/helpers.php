@@ -237,10 +237,13 @@ function render_header(string $title): void
     echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
+        $updatePending = application_update_pending();
+        $updateClass = $updatePending ? ' class="is-update-pending"' : '';
+        $updateLabel = $updatePending ? 'Updates (1)' : 'Updates';
         echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
         echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
         echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
-        echo '<a href="' . e(url_for('admin_update')) . '">Updates</a>';
+        echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';

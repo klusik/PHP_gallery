@@ -900,11 +900,14 @@ function cms_admin(): void
     $featureSchemaReady = admin_feature_schema_ready();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
+    $updatePending = application_update_pending();
+    $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
+    $updateLabel = $updatePending ? 'Updates (1)' : 'Updates';
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">Updates</a>';
+    echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
     echo '<button type="submit" class="secondary' . ($featureSchemaReady ? '' : ' is-alert') . '">Run database migration</button>';
     echo '</form>';
