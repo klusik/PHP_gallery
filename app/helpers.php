@@ -406,7 +406,10 @@ function render_header(string $title): void
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '">';
+    // Main stylesheet gets a build-busting version so structural CSS changes
+    // are not masked by browser cache.
+    $stylesPath = dirname(__DIR__) . '/public/assets/styles.css';
+    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '?v=' . (is_file($stylesPath) ? filemtime($stylesPath) : time()) . '">';
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {

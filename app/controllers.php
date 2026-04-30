@@ -2411,7 +2411,9 @@ function cms_theme_css(): void
     $overrides = theme_override_settings();
     $updatePendingCss = '.nav a.is-update-pending,.button.is-update-pending,button.is-update-pending{border-color:#7f1d1d!important;background:repeating-linear-gradient(135deg,#b91c1c 0 .55rem,#f59e0b .55rem 1.1rem)!important;color:#fff!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #7f1d1d!important;font-weight:800;}';
     header('Content-Type: text/css; charset=utf-8');
-    header('Cache-Control: private, max-age=300');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     if ($overrides === []) {
         echo $updatePendingCss;
         return;
