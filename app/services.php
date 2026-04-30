@@ -280,9 +280,10 @@ function write_gallery_sidecar(array $gallery): void
     $data = [
         'title' => $gallery['title'],
         'description' => $gallery['description'],
-        'tags' => tags_as_string('gallery', (int) $gallery['id']),
+        'tags' => implode(', ', array_column(tags_for_entity('gallery', (int) $gallery['id']), 'name')),
         'visibility' => $gallery['visibility'],
         'sort_order' => (int) $gallery['sort_order'],
+        'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
     ];
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
@@ -341,6 +342,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
         'visibility' => $metadata['visibility'] ?? 'draft',
+        'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -375,6 +377,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $candidate = gallery_folder_candidate_metadata($folderPath);
     // Variable $visibility stores this steps working value.
     $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
@@ -382,7 +385,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     // Variable $pdo stores this steps working value.
     $pdo = db();
     // Variable $stmt stores this steps working value.
-    $columns = ['parent_id', 'folder_path', 'folder_path_hash', 'slug', 'title', 'description', 'sort_order', 'visibility'];
+    $columns = ['parent_id', 'folder_path', 'folder_path_hash', 'slug', 'title', 'description', 'sort_order', 'visibility', 'voting_enabled'];
     $values = [
         $parent ? (int) $parent['id'] : null,
         $folderPath,
@@ -392,6 +395,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $candidate['description'],
         (int) $candidate['sort_order'],
         $visibility,
+        $votingEnabled,
     ];
     if (gallery_access_schema_ready()) {
         $columns[] = 'access_mode';
@@ -425,6 +429,7 @@ function create_empty_gallery(array $input): array
     }
     $description = (string) ($input['description'] ?? '');
     $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
+    $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
     $parentId = (int) ($input['parent_id'] ?? 0);
     $parent = $parentId > 0 ? find_gallery($parentId) : null;
     if ($parentId > 0 && !$parent) {
@@ -446,6 +451,7 @@ function create_empty_gallery(array $input): array
         'description' => $description,
         'visibility' => $visibility,
         'sort_order' => (int) ($input['sort_order'] ?? 0),
+        'voting_enabled' => $votingEnabled,
     ]);
     if (!$sidecarWritten) {
         throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
@@ -1355,6 +1361,40 @@ function gallery_access_schema_ready(): bool
     } catch (PDOException) {
         return false;
     }
+}
+
+/**
+ * Return whether gallery voting columns are available.
+ */
+function gallery_voting_schema_ready(): bool
+{
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'voting_enabled'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (PDOException) {
+        return false;
+    }
+}
+
+/**
+ * Return true when a gallery allows public voting controls.
+ */
+function gallery_voting_allowed(array $gallery): bool
+{
+    return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
+}
+
+/**
+ * Repair gallery voting/game inconsistencies when the admin dashboard is loaded.
+ */
+function sync_gallery_voting_game_state(): int
+{
+    if (!gallery_voting_schema_ready() || !picture_game_schema_ready()) {
+        return 0;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE picture_game_enabled = 1 AND voting_enabled = 0');
+    $stmt->execute([now_sql()]);
+    return $stmt->rowCount();
 }
 
 /**

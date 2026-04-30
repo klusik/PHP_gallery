@@ -77,6 +77,8 @@ function cms_gallery(): void
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     // Variable $galleryMapPoints stores this steps working value.
     $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
+    // Variable $votingAllowed stores this steps working value.
+    $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
@@ -128,13 +130,13 @@ function cms_gallery(): void
         }
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
-        render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']));
+        render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']), $votingAllowed);
         echo '</div>';
         render_public_image_admin_form($image);
         echo '</article>';
     }
     echo '</section>';
-    render_lightbox();
+    render_lightbox($votingAllowed);
     render_footer();
 }
 
@@ -457,8 +459,11 @@ function render_tag_list(array $tags, ?string $label = null): void
 /**
  * Render the public vote controls and current vote state.
  */
-function render_vote_form(int $imageId, int $score, int $currentVote): void
+function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
 {
+    if (!$votingAllowed) {
+        return;
+    }
     echo '<form class="vote-row" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
     echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo csrf_field();
@@ -471,12 +476,12 @@ function render_vote_form(int $imageId, int $score, int $currentVote): void
 /**
  * Render the lightbox shell used by public gallery JavaScript.
  */
-function render_lightbox(): void
+function render_lightbox(bool $votingAllowed = true): void
 {
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Up/Down vote, Esc closes</span><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; Map</button></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p><div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div></figcaption></figure>';
+    echo '<figure><a data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><span class="lightbox-help">Arrow keys navigate, Esc closes</span><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; Map</button></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p>' . ($votingAllowed ? '<div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div>' : '') . '</figcaption></figure>';
     echo '<button type="button" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '</div>';
 }
@@ -575,7 +580,7 @@ function cms_vote(): void
     $vote = (int) ($_POST['vote'] ?? 0);
     $image = find_image($imageId);
     $gallery = $image ? find_gallery((int) $image['gallery_id']) : null;
-    if (!in_array($vote, [-1, 1], true) || !$image || !$gallery || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
+    if (!in_array($vote, [-1, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         http_response_code(422);
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Invalid vote.']);
@@ -924,6 +929,13 @@ function cms_admin_update(): void
 function cms_admin(): void
 {
     require_admin();
+    // Self-heal voting/game state only when the admin dashboard is opened.
+    $repairedVotingGame = sync_gallery_voting_game_state();
+    if ($repairedVotingGame > 0) {
+        admin_log_event('info', 'gallery.voting_game_synced', 'Admin dashboard repaired gallery voting/game settings.', [
+            'gallery_count' => $repairedVotingGame,
+        ]);
+    }
     sync_gallery_parent_ids();
     // Variable $galleries stores this steps working value.
     $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
@@ -934,8 +946,10 @@ function cms_admin(): void
     $pictureGameReady = picture_game_schema_ready();
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready();
-    // Variable $featureSchemaReady stores this steps working value.
-    $featureSchemaReady = admin_feature_schema_ready();
+    // Variable $votingReady stores this steps working value.
+    $votingReady = gallery_voting_schema_ready();
+    // Variable $migrationPending stores this steps working value.
+    $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     $updatePending = application_update_pending();
@@ -950,9 +964,11 @@ function cms_admin(): void
     echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
-    echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
-    echo '<button type="submit" class="secondary' . ($featureSchemaReady ? '' : ' is-alert') . '">Run database migration</button>';
-    echo '</form>';
+    if ($migrationPending) {
+        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+        echo '<button type="submit" class="button is-update-pending">Run database migration</button>';
+        echo '</form>';
+    }
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
@@ -963,7 +979,7 @@ function cms_admin(): void
     } elseif (isset($_GET['migration_failed'])) {
         echo '<div class="notice">Migration failed: ' . e((string) $_GET['migration_failed']) . '</div>';
     }
-    if (!$featureSchemaReady) {
+    if ($migrationPending) {
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
@@ -971,6 +987,9 @@ function cms_admin(): void
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
     echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
+    if ($votingReady) {
+        echo '<option value="vote_on">Enable voting</option><option value="vote_off">Disable voting</option>';
+    }
     if ($pictureGameReady) {
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
@@ -979,9 +998,12 @@ function cms_admin(): void
     if ($accessReady) {
         echo '<th>Access</th>';
     }
-    echo '<th>Maps</th>';
+    echo '<th title="Maps">M</th>';
+    if ($votingReady) {
+        echo '<th title="Voting">V</th>';
+    }
     if ($pictureGameReady) {
-        echo '<th>Game</th>';
+        echo '<th title="Game">G</th>';
     }
     echo '<th>Images</th><th>Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
@@ -1000,9 +1022,12 @@ function cms_admin(): void
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
             echo '<td>' . e($accessLabel) . '</td>';
         }
-        echo '<td>' . (exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
+        echo '<td>' . render_admin_feature_flag(exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
+        if ($votingReady) {
+            echo '<td>' . render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '✓', 'Voting enabled') . '</td>';
+        }
         if ($pictureGameReady) {
-            echo '<td>' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? 'Enabled' : '') . '</td>';
+            echo '<td>' . render_admin_feature_flag((int) ($gallery['picture_game_enabled'] ?? 0) === 1, '✓', 'Picture game enabled') . '</td>';
         }
         echo '<td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
         echo '<a class="gallery-row-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
@@ -1047,6 +1072,17 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
         . '<td>' . e((string) ($entry['username'] ?? '')) . '</td>'
         . ($withActions ? '<td>' . $statusForm . '</td>' : '')
         . '</tr>';
+}
+
+/**
+ * Render a compact admin feature indicator for table cells.
+ */
+function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
+{
+    if (!$enabled) {
+        return '';
+    }
+    return '<span class="admin-flag is-enabled" title="' . e($label) . '" aria-label="' . e($label) . '">' . e($symbol) . '</span>';
 }
 
 /**
@@ -1161,11 +1197,9 @@ function cms_admin_log_update(): void
  */
 function render_admin_migration_notice(string $message): void
 {
-    // Variable $highlight stores this steps working value.
-    $highlight = admin_feature_schema_ready() ? '' : ' is-alert';
-    echo '<div class="notice' . $highlight . '"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    echo '<div class="notice is-alert"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
     echo '<span>' . e($message) . '</span> ';
-    echo '<button type="submit">Run database migration</button>';
+    echo '<button type="submit" class="button is-update-pending">Run database migration</button>';
     echo '</form></div>';
 }
 
@@ -1239,6 +1273,7 @@ function cms_admin_new_gallery(): void
                 'description' => $_POST['description'] ?? '',
                 'visibility' => $_POST['visibility'] ?? 'draft',
                 'parent_id' => $_POST['parent_id'] ?? 0,
+                'voting_enabled' => $_POST['voting_enabled'] ?? 0,
             ]);
             admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
                 'gallery_id' => (int) $gallery['id'],
@@ -1261,6 +1296,7 @@ function cms_admin_new_gallery(): void
     echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
     echo '<button type="submit">Create gallery folder</button></form></section>';
     render_footer();
@@ -1351,6 +1387,7 @@ function cms_admin_upload(): void
     echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
     echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
@@ -1429,6 +1466,33 @@ function cms_admin_bulk_galleries(): void
         }
         redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
     }
+    if (in_array($action, ['vote_on', 'vote_off'], true) && $galleryIds) {
+        if (!gallery_voting_schema_ready()) {
+            admin_log_event('warning', 'votes.schema_missing', 'Attempted to change gallery voting before migration was applied.', [
+                'gallery_ids' => $galleryIds,
+                'action' => $action,
+            ]);
+            redirect_to(url_for('admin', ['migration_required' => 1]));
+        }
+        // Variable $expandedIds stores this steps working value.
+        $expandedIds = [];
+        foreach ($galleryIds as $galleryId) {
+            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        }
+        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
+        if ($expandedIds) {
+            // Variable $placeholders stores this steps working value.
+            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET voting_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([$action === 'vote_on' ? 1 : 0, now_sql()], $expandedIds));
+            if ($action === 'vote_off') {
+                $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = 0, updated_at = ? WHERE id IN (' . $placeholders . ')');
+                $stmt->execute(array_merge([now_sql()], $expandedIds));
+            }
+        }
+        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+    }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
         if (!admin_feature_schema_ready()) {
             admin_log_event('warning', 'picture_game.schema_missing', 'Attempted to change picture game before migration was applied.', [
@@ -1449,6 +1513,10 @@ function cms_admin_bulk_galleries(): void
             // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([$action === 'game_on' ? 1 : 0, now_sql()], $expandedIds));
+            if ($action === 'game_on') {
+                $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE id IN (' . $placeholders . ')');
+                $stmt->execute(array_merge([now_sql()], $expandedIds));
+            }
         }
         redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
     }
@@ -1671,6 +1739,14 @@ function cms_admin_edit_gallery(): void
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $gpsMapEnabled stores this steps working value.
         $gpsMapEnabled = $gpsMapReady && !empty($_POST['gps_map_enabled']) ? 1 : 0;
+        // Variable $votingEnabled stores this steps working value.
+        $votingEnabled = gallery_voting_schema_ready() && !empty($_POST['voting_enabled']) ? 1 : 0;
+        if ($pictureGameEnabled) {
+            $votingEnabled = 1;
+        }
+        if (!$votingEnabled) {
+            $pictureGameEnabled = 0;
+        }
         // Variable $accessType stores this steps working value.
         $accessType = $accessReady && in_array($_POST['access_type'] ?? '', ['password', 'share'], true) ? (string) $_POST['access_type'] : 'normal';
         // Variable $accessMode stores this steps working value.
@@ -1741,6 +1817,9 @@ function cms_admin_edit_gallery(): void
         }
         if ($gpsMapReady) {
             $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
+        }
+        if (gallery_voting_schema_ready()) {
+            $fields['voting_enabled = ?'] = $votingEnabled;
         }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
@@ -1844,6 +1923,10 @@ function cms_admin_edit_gallery(): void
     }
     if ($pictureGameReady) {
         echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
+    }
+    if (gallery_voting_schema_ready()) {
+        echo '<label><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable image voting for this gallery</label>';
+        echo '<p class="muted">When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.</p>';
     }
     if ($gpsMapReady) {
         echo '<label><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label>';

@@ -13,7 +13,7 @@ No WordPress, Composer packages, npm build step, or framework is required.
 
 ## Release Highlights
 
-This release contains the full plain-PHP gallery application:
+Version 0.25 contains the full plain-PHP gallery application:
 
 - browser installer through `install.php`
 - filesystem gallery discovery with nested subgalleries
@@ -24,7 +24,8 @@ This release contains the full plain-PHP gallery application:
   `robots.txt`, and `sitemap.xml`
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - password-protected galleries with listed, unlisted, and share-link-only access
-- public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
+- public gallery cards, breadcrumbs, lightbox browsing, and optional
+  per-gallery up/down voting
 - optional picture comparison game for admin-selected galleries
 - optional EXIF/GPS map overlays for GPS-tagged photos in enabled gallery branches
 - web-optimized JPEG thumbnails generated in each gallery's `thumbs/` folder

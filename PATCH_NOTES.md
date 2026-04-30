@@ -2,6 +2,17 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.25
+
+### Major Changes
+
+- Added optional per-gallery voting controls with admin-side enable/disable
+  support, public UI gating, and preserved vote history when disabled.
+- Added admin dashboard bulk actions and compact status columns for gallery
+  voting, GPS maps, and picture game settings.
+- Added admin-side self-healing for gallery voting/game flag mismatches on
+  dashboard load so game-enabled galleries always keep voting enabled.
+
 ## Version 0.24
 
 ### Major Changes

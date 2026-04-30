@@ -235,7 +235,7 @@
 
     // Function `syncLightboxVote` executes this focused behavior.
     function syncLightboxVote(card) {
-        if (!lightboxVoteForm) {
+        if (!lightboxVoteForm || lightboxVoteForm.closest('[hidden]')) {
             return;
         }
         // Variable `vote` stores this steps working value.
@@ -355,7 +355,7 @@
 
     // Function `submitLightboxVote` executes this focused behavior.
     function submitLightboxVote(value) {
-        if (!lightboxVoteForm) {
+        if (!lightboxVoteForm || lightboxVoteForm.closest('[hidden]')) {
             return;
         }
         // Variable `button` stores this steps working value.
