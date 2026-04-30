@@ -2,14 +2,20 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.18
+
+### Major Changes
+
+- Opened public gallery titles now use a slightly smaller display size while
+  still taking the full panel width, so long names fit more comfortably without
+  wrapping early on desktop layouts.
+
 ## Version 0.17
 
 ### Major Changes
 
 - The admin Updates button now switches to a fixed warning style and shows
   `Updates (1)` when a newer GitHub version is available.
-- Opened public gallery titles now use the full panel width, so longer names do
-  not wrap prematurely on desktop-sized layouts.
 
 ### Notes
 
