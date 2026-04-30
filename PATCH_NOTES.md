@@ -2,6 +2,22 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.35
+
+### Major Changes
+
+- Kept the fullscreen lightbox map split open when browsing to the next or
+  previous image in fullscreen, so the map now persists until it is turned off
+  or fullscreen mode ends.
+- Restored the map pins in the fullscreen split view by reusing the same marker
+  icon path as the normal public map overlay and keeping the Leaflet marker
+  panes above the tile panes.
+- Added a strict non-cache policy for non-image responses so browsers stop
+  reusing stale HTML, CSS, JavaScript, JSON, and theme CSS from older gallery
+  states.
+- Versioned the main public stylesheet URL so updated UI and map code cannot be
+  masked by a previously cached `styles.css`.
+
 ## Version 0.34
 
 ### Major Changes
