@@ -879,9 +879,20 @@ function cms_admin_update(): void
     if (request_method() === 'POST') {
         verify_csrf();
         try {
-            $result = install_application_update();
-            admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
-            $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+            $action = (string) ($_POST['update_action'] ?? 'stable_update');
+            if ($action === 'beta_install') {
+                $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
+                admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result);
+                $_SESSION['admin_update_notice'] = 'Installed beta commit ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+            } elseif ($action === 'beta_revert') {
+                $result = restore_application_stable_backup();
+                admin_log_event('info', 'update.beta_reverted', 'Admin reverted beta application build to stable backup.', $result);
+                $_SESSION['admin_update_notice'] = 'Restored the last stable version from beta backup.';
+            } else {
+                $result = install_application_update();
+                admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
+                $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+            }
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
             admin_log_event('warning', 'update.failed', 'Application update failed.', ['error' => $exception->getMessage()]);
@@ -893,6 +904,7 @@ function cms_admin_update(): void
     unset($_SESSION['admin_update_notice']);
     $status = check_application_update();
     cache_application_update_check($status);
+    $betaActive = application_update_beta_active();
     render_header('Application updates');
     echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
@@ -906,6 +918,12 @@ function cms_admin_update(): void
     }
     echo '<section class="panel"><h2>Status</h2>';
     echo '<p>Installed version: <strong>' . e(CMS_VERSION) . '</strong></p>';
+    if ($betaActive) {
+        echo '<p>Active channel: <strong>beta</strong></p>';
+        echo '<p>Installed beta commit: <code>' . e(application_update_beta_commit()) . '</code></p>';
+    } else {
+        echo '<p>Active channel: <strong>stable</strong></p>';
+    }
     echo '<p>Repository: <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
     if (!empty($status['error'])) {
         echo '<p class="muted">Could not check for updates: ' . e((string) $status['error']) . '</p>';
@@ -914,11 +932,26 @@ function cms_admin_update(): void
         echo '<p class="muted">Checked branch: ' . e((string) $status['branch']) . '</p>';
         if (!empty($status['update_available'])) {
             echo '<form method="post" class="form-grid">' . csrf_field();
+            echo '<input type="hidden" name="update_action" value="stable_update">';
             echo '<p>A newer version is available. The updater will download the GitHub branch archive, back up overwritten files under <code>cache/updates/backups</code>, and keep local config, galleries, cache, and custom CSS untouched.</p>';
             echo '<button type="submit" class="is-update-pending">Update(1)</button></form>';
         } else {
             echo '<p class="muted">This installation is current.</p>';
         }
+    }
+    echo '<hr><h3>Beta build</h3>';
+    echo '<form method="post" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="update_action" value="beta_install">';
+    echo '<label>Git commit hash<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
+    echo '<p class="muted">Enter a full or short Git commit hash from the repository to install that exact beta snapshot.</p>';
+    echo '<button type="submit">Install beta commit</button>';
+    echo '</form>';
+    if ($betaActive) {
+        echo '<form method="post" class="form-grid" style="margin-top:1rem;">' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="beta_revert">';
+        echo '<p class="muted">This restores the last stable file backup that was created before the beta install. Database changes from the beta are not rolled back automatically.</p>';
+        echo '<button type="submit" class="button secondary">Revert to last stable version</button>';
+        echo '</form>';
     }
     echo '</section>';
     render_footer();

@@ -13,7 +13,7 @@ No WordPress, Composer packages, npm build step, or framework is required.
 
 ## Release Highlights
 
-Version 0.27 contains the full plain-PHP gallery application:
+Version 0.28 contains the full plain-PHP gallery application:
 
 - browser installer through `install.php`
 - filesystem gallery discovery with nested subgalleries
