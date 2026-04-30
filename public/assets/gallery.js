@@ -1,45 +1,4 @@
 (() => {
-    // Inline styles bypass the theme/custom CSS workflow. If somebody edits the
-    // rendered HTML directly, make the tampering obvious to public visitors.
-    function showCompromiseWarning() {
-        if (document.querySelector('[data-compromise-warning]')) {
-            return;
-        }
-        // Variable `warning` stores this steps working value.
-        const warning = document.createElement('div');
-        warning.className = 'compromise-warning';
-        warning.dataset.compromiseWarning = 'true';
-        warning.textContent = 'unoriginal changes, this page is corrupted and compromised!';
-        document.body.append(warning);
-    }
-
-    // Function `isAllowedRuntimeInlineStyle` executes this focused behavior.
-    // Leaflet is allowed to use inline styles inside the trusted map overlay
-    // because its pan, zoom, tile, marker and popup positioning logic depends
-    // on runtime-calculated transform and size attributes. The gallery still
-    // treats inline styles everywhere else as page tampering.
-    function isAllowedRuntimeInlineStyle(node) {
-        if (!(node instanceof Element)) {
-            return false;
-        }
-        return Boolean(node.closest('[data-inline-style-allowed]')) || isBrowserTranslationInlineStyle(node);
-    }
-
-    // Function `isBrowserTranslationInlineStyle` executes this focused behavior.
-    function isBrowserTranslationInlineStyle(node) {
-        if (!(node instanceof Element)) {
-            return false;
-        }
-        if (node.closest('.skiptranslate, .goog-te-gadget, [id^="goog-gt-"], [class^="VIpgJd-"]')) {
-            return true;
-        }
-        if (node.tagName !== 'FONT') {
-            return false;
-        }
-        const style = (node.getAttribute('style') || '').replace(/\s+/g, '').toLowerCase();
-        return style === 'vertical-align:inherit;' || style === 'vertical-align:inherit';
-    }
-
     // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
     function hasUnauthorizedInlineStyle() {
         return Array.from(document.querySelectorAll('[style]')).some((node) => !isAllowedRuntimeInlineStyle(node));
