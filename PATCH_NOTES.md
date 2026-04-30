@@ -8,6 +8,7 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
 - Prepared the application metadata for the 0.32 release cycle.
 - Made `app/bootstrap.php` the single source of truth for update version checks.
+- Reworded the beta update UI to say "beta code" instead of "Git commit hash".
 
 ## Version 0.31
 
