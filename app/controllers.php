@@ -906,7 +906,9 @@ function cms_admin(): void
     $updateLabel = application_update_nav_label($updatePending);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
-    echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
+    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
+    echo '<button type="submit">Check for new gallery folders</button>';
+    echo '</form>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -1131,10 +1133,20 @@ function render_admin_migration_notice(string $message): void
 function cms_admin_discover(): void
 {
     require_admin();
+    $refresh = null;
+    if (request_method() === 'POST') {
+        verify_csrf();
+        $refresh = scan_all_imported_gallery_images();
+        admin_log_event('info', 'galleries.refresh_scanned', 'Admin refreshed imported galleries from filesystem.', $refresh);
+    }
     // Variable $candidates stores this steps working value.
     $candidates = discover_gallery_candidates();
     render_header('New gallery folders');
     echo '<section class="panel"><h1>New gallery folders</h1>';
+    echo '<p><a class="button secondary" href="' . e(url_for('admin')) . '">Back to admin dashboard</a></p>';
+    if ($refresh !== null) {
+        echo '<div class="notice">Scanned ' . (int) $refresh['galleries'] . ' existing galleries and imported or updated ' . (int) $refresh['images'] . ' images.</div>';
+    }
     if (!$candidates) {
         echo '<p>No new gallery folders found.</p>';
     } else {

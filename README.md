@@ -197,7 +197,8 @@ galleries/
 Admin workflow:
 
 1. Log in at `index.php?page=admin_login`.
-2. Use `Check for new gallery folders`.
+2. Use `Check for new gallery folders`. This also scans already-imported
+   galleries for newly added or changed direct image files.
 3. Review detected folders and import selected galleries. Importing a parent
    folder also imports its detected subgallery folders.
 4. Leave `Create optimized thumbnails during import` checked unless you want to

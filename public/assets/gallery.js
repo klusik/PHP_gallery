@@ -140,6 +140,7 @@
     });
 
     setupThumbnailProgress();
+    setupGalleryRefreshProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
@@ -572,6 +573,52 @@
     // Function `escapeAttribute` executes this focused behavior.
     function escapeAttribute(value) {
         return escapeHtml(value).replace(/'/g, '&#039;');
+    }
+
+    // Function `setupGalleryRefreshProgress` executes this focused behavior.
+    function setupGalleryRefreshProgress() {
+        document.querySelectorAll('[data-refresh-galleries-form]').forEach((form) => {
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.submitting === '1') {
+                    return;
+                }
+                event.preventDefault();
+                form.dataset.submitting = '1';
+                // Variable `button` stores this steps working value.
+                const button = form.querySelector('button[type="submit"], input[type="submit"]');
+                if (button) {
+                    button.disabled = true;
+                    if ('value' in button && button.tagName === 'INPUT') {
+                        button.value = 'Scanning...';
+                    } else {
+                        button.textContent = 'Scanning...';
+                    }
+                }
+                const progress = ensureGalleryRefreshProgress(form);
+                progress.hidden = false;
+                requestAnimationFrame(() => {
+                    setTimeout(() => HTMLFormElement.prototype.submit.call(form), 40);
+                });
+            });
+        });
+    }
+
+    // Function `ensureGalleryRefreshProgress` executes this focused behavior.
+    function ensureGalleryRefreshProgress(form) {
+        let progress = document.querySelector('[data-gallery-refresh-progress]');
+        if (progress) {
+            return progress;
+        }
+        progress = document.createElement('div');
+        progress.className = 'thumbnail-progress';
+        progress.dataset.galleryRefreshProgress = 'true';
+        progress.innerHTML = '<progress class="thumbnail-progress-bar"></progress><p class="muted">Scanning existing galleries and checking for new gallery folders...</p>';
+        const target = form.closest('.hero') || form;
+        target.insertAdjacentElement('afterend', progress);
+        return progress;
     }
 
     // Function `setupThumbnailProgress` executes this focused behavior.
