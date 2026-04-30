@@ -1659,7 +1659,7 @@ function cms_github_project_url(): string
 }
 
 /**
- * Check GitHub PATCH_NOTES.md for the newest published version.
+ * Check GitHub release metadata for the newest published application version.
  */
 function check_application_update(): array
 {
@@ -1667,18 +1667,20 @@ function check_application_update(): array
     $latestStatus = null;
     foreach (application_update_branch_candidates() as $branch) {
         try {
-            $notes = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 12);
-            $latestVersion = application_update_latest_version_from_notes($notes);
-            if ($latestVersion === null) {
-                $lastError = 'PATCH_NOTES.md did not contain a version heading on branch ' . $branch . '.';
+            $versionCandidates = application_update_remote_version_candidates($branch);
+            if ($versionCandidates === []) {
+                $lastError = 'No version marker was found in PATCH_NOTES.md or app/bootstrap.php on branch ' . $branch . '.';
                 continue;
             }
+            $latestVersion = application_update_highest_version($versionCandidates);
             $status = [
                 'current_version' => CMS_VERSION,
                 'latest_version' => $latestVersion,
                 'branch' => $branch,
                 'repository' => CMS_GITHUB_REPOSITORY,
                 'update_available' => version_compare($latestVersion, CMS_VERSION, '>'),
+                'version_sources' => $versionCandidates,
+                'version_source' => application_update_version_source_label($versionCandidates, $latestVersion),
                 'error' => null,
             ];
             if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
@@ -1699,6 +1701,8 @@ function check_application_update(): array
         'branch' => implode(' or ', application_update_branch_candidates()),
         'repository' => CMS_GITHUB_REPOSITORY,
         'update_available' => false,
+        'version_sources' => [],
+        'version_source' => '',
         'error' => $lastError ?? 'Could not contact GitHub.',
     ];
 }
@@ -1989,12 +1993,104 @@ function application_update_assert_allowed_branch(string $branch): void
 }
 
 /**
+ * Read all remote version markers that can identify the newest branch version.
+ */
+function application_update_remote_version_candidates(string $branch): array
+{
+    $versionCandidates = [];
+
+    try {
+        $notes = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 12);
+        $notesVersion = application_update_latest_version_from_notes($notes);
+        if ($notesVersion !== null) {
+            $versionCandidates['PATCH_NOTES.md'] = $notesVersion;
+        }
+    } catch (Throwable $exception) {
+        $versionCandidates['PATCH_NOTES.md error'] = $exception->getMessage();
+    }
+
+    try {
+        $bootstrap = http_fetch(application_update_raw_url($branch, 'app/bootstrap.php'), 12);
+        $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
+        if ($bootstrapVersion !== null) {
+            $versionCandidates['app/bootstrap.php'] = $bootstrapVersion;
+        }
+    } catch (Throwable $exception) {
+        $versionCandidates['app/bootstrap.php error'] = $exception->getMessage();
+    }
+
+    return array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null);
+}
+
+/**
+ * Return the highest semantic version from remote version candidates.
+ */
+function application_update_highest_version(array $versionCandidates): string
+{
+    $highestVersion = null;
+    foreach ($versionCandidates as $version) {
+        $normalizedVersion = application_update_normalize_version((string) $version);
+        if ($normalizedVersion === null) {
+            continue;
+        }
+        if ($highestVersion === null || version_compare($normalizedVersion, $highestVersion, '>')) {
+            $highestVersion = $normalizedVersion;
+        }
+    }
+
+    if ($highestVersion === null) {
+        throw new RuntimeException('Remote version candidates did not contain a valid version number.');
+    }
+
+    return $highestVersion;
+}
+
+/**
+ * Return a readable label for the remote source that provided the selected version.
+ */
+function application_update_version_source_label(array $versionCandidates, string $latestVersion): string
+{
+    $labels = [];
+    foreach ($versionCandidates as $source => $version) {
+        $normalizedVersion = application_update_normalize_version((string) $version);
+        if ($normalizedVersion === $latestVersion) {
+            $labels[] = (string) $source;
+        }
+    }
+    return implode(', ', $labels);
+}
+
+/**
+ * Parse the CMS_VERSION constant from a remote bootstrap file.
+ */
+function application_update_version_from_bootstrap(string $bootstrap): ?string
+{
+    if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
+        return application_update_normalize_version((string) $match[1]);
+    }
+    return null;
+}
+
+/**
+ * Normalize version strings used in notes, tags, and constants.
+ */
+function application_update_normalize_version(string $version): ?string
+{
+    $version = trim($version);
+    $version = preg_replace('/^v[_-]?/i', '', $version) ?? $version;
+    if (preg_match('/^[0-9]+(?:\.[0-9]+){1,2}$/', $version)) {
+        return $version;
+    }
+    return null;
+}
+
+/**
  * Parse the first release heading from patch notes.
  */
 function application_update_latest_version_from_notes(string $notes): ?string
 {
-    if (preg_match('/##\s+Version\s+([0-9]+(?:\.[0-9]+){1,2})\b/i', $notes, $match)) {
-        return $match[1];
+    if (preg_match('/##\s+Version\s+(v[_-]?[0-9]+(?:\.[0-9]+){1,2}|[0-9]+(?:\.[0-9]+){1,2})\b/i', $notes, $match)) {
+        return application_update_normalize_version((string) $match[1]);
     }
     return null;
 }
