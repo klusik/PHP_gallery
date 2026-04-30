@@ -2,6 +2,18 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.28
+
+### Major Changes
+
+- Expanded the updater to support manual beta installs from a specific Git
+  commit hash, with rollback to the last stable backup when beta is active.
+- Continued the fullscreen and mobile gallery work with swipe-friendly viewer
+  behavior and a CSS fallback path for devices that do not expose native
+  fullscreen the same way.
+- Kept the release and update UI aligned with the live version state so the
+  admin navigation and update screen remain responsive to new releases.
+
 ## Version 0.27
 
 ### Major Changes

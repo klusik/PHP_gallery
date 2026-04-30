@@ -1747,6 +1747,133 @@ function application_update_pending(): bool
 }
 
 /**
+ * Return true when the application is currently on a beta/manual commit install.
+ */
+function application_update_beta_active(): bool
+{
+    return app_setting('application_update_channel', 'stable') === 'beta' && app_setting('application_update_beta_commit', '') !== '';
+}
+
+/**
+ * Return the currently installed beta commit hash, if any.
+ */
+function application_update_beta_commit(): string
+{
+    return (string) app_setting('application_update_beta_commit', '');
+}
+
+/**
+ * Return the stored stable backup archive path used for beta rollback.
+ */
+function application_update_beta_backup_path(): string
+{
+    return (string) app_setting('application_update_beta_backup_path', '');
+}
+
+/**
+ * Install a beta/manual commit archive over the current application files.
+ */
+function install_application_beta(string $commitId): array
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
+    }
+    $commitId = strtolower(trim($commitId));
+    if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
+        throw new RuntimeException('Enter a valid Git commit hash.');
+    }
+
+    $root = dirname(__DIR__);
+    $updateDir = $root . '/cache/updates';
+    $backupDir = $updateDir . '/backups';
+    application_update_ensure_dir($updateDir);
+    application_update_ensure_dir($backupDir);
+
+    $stamp = date('Ymd-His');
+    $zipPath = $updateDir . '/beta-' . $stamp . '.zip';
+    $extractDir = $updateDir . '/beta-extract-' . $stamp;
+    application_update_ensure_dir($extractDir);
+
+    $archive = http_fetch(application_update_commit_zip_url($commitId), 60);
+    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
+        throw new RuntimeException('Could not write beta archive into cache/updates.');
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        throw new RuntimeException('Downloaded beta archive could not be opened.');
+    }
+    if (!$zip->extractTo($extractDir)) {
+        $zip->close();
+        throw new RuntimeException('Downloaded beta archive could not be extracted.');
+    }
+    $zip->close();
+
+    $sourceRoot = application_update_extracted_root($extractDir);
+    $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
+    $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    $migrations = run_migrations();
+    cache_application_update_check(check_application_update());
+    set_app_setting('application_update_channel', 'beta');
+    set_app_setting('application_update_beta_commit', $commitId);
+    set_app_setting('application_update_beta_backup_path', str_replace('\\', '/', substr($backupPath, strlen($root) + 1)));
+    delete_app_settings(['application_update_check_cache']);
+
+    return [
+        'version' => $commitId,
+        'branch' => 'beta',
+        'files_copied' => $copied,
+        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
+        'migrations' => $migrations,
+    ];
+}
+
+/**
+ * Restore the last stable backup created before the beta install.
+ */
+function restore_application_stable_backup(): array
+{
+    $backupPath = application_update_beta_backup_path();
+    if ($backupPath === '') {
+        throw new RuntimeException('No beta rollback backup is available.');
+    }
+    $root = dirname(__DIR__);
+    $absoluteBackup = $root . '/' . ltrim($backupPath, '/');
+    if (!is_file($absoluteBackup)) {
+        throw new RuntimeException('Stored beta rollback backup file was not found.');
+    }
+
+    $restoreDir = $root . '/cache/updates/restore-' . date('Ymd-His');
+    application_update_ensure_dir($restoreDir);
+    $zip = new ZipArchive();
+    if ($zip->open($absoluteBackup) !== true) {
+        throw new RuntimeException('Beta rollback backup could not be opened.');
+    }
+    if (!$zip->extractTo($restoreDir)) {
+        $zip->close();
+        throw new RuntimeException('Beta rollback backup could not be extracted.');
+    }
+    $zip->close();
+
+    $sourceRoot = application_update_extracted_root($restoreDir);
+    $copied = application_update_copy_files($sourceRoot, $root, $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip');
+    delete_app_settings([
+        'application_update_channel',
+        'application_update_beta_commit',
+        'application_update_beta_backup_path',
+        'application_update_check_cache',
+    ]);
+
+    return [
+        'version' => CMS_VERSION,
+        'branch' => 'stable',
+        'files_copied' => $copied,
+        'backup' => $backupPath,
+        'migrations' => [],
+    ];
+}
+
+/**
  * Return the admin label for links that point to the update screen.
  */
 function application_update_nav_label(bool $pending): string
@@ -1818,6 +1945,18 @@ function install_application_update(): array
 function application_update_branch_candidates(): array
 {
     return CMS_UPDATE_BRANCHES;
+}
+
+/**
+ * Build a GitHub archive URL for one commit hash.
+ */
+function application_update_commit_zip_url(string $commitId): string
+{
+    if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
+        throw new RuntimeException('Enter a valid Git commit hash.');
+    }
+    [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
+    return 'https://github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/archive/' . rawurlencode($commitId) . '.zip';
 }
 
 /**

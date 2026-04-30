@@ -233,6 +233,7 @@
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
     let fullscreenHideTimer = null;
+    let touchGesture = null;
 
     // Function `syncLightboxVote` executes this focused behavior.
     function syncLightboxVote(card) {
@@ -289,6 +290,7 @@
         }
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
+        updateLightboxViewportMode();
         showLightboxHud();
     }
 
@@ -297,6 +299,8 @@
         exitLightboxFullscreen();
         clearLightboxHudTimer();
         overlay.classList.remove('is-ui-visible');
+        clearTouchGesture();
+        updateLightboxViewportMode();
         overlay.hidden = true;
         image.removeAttribute('src');
         document.body.classList.remove('has-lightbox');
@@ -342,6 +346,10 @@
     overlay.addEventListener('mousemove', showLightboxHud);
     overlay.addEventListener('pointermove', showLightboxHud);
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud);
+    overlay.addEventListener('pointerdown', startTouchGesture);
+    overlay.addEventListener('pointermove', trackTouchGesture);
+    overlay.addEventListener('pointerup', finishTouchGesture);
+    overlay.addEventListener('pointercancel', clearTouchGesture);
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
 
@@ -407,14 +415,19 @@
         try {
             if (overlay.requestFullscreen) {
                 await overlay.requestFullscreen();
+                return;
             }
         } catch {
             // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
         }
+        overlay.classList.add('is-mobile-fullscreen');
+        document.body.classList.add('has-mobile-lightbox');
     }
 
     async function exitLightboxFullscreen() {
         overlay.classList.remove('is-fullscreen');
+        overlay.classList.remove('is-mobile-fullscreen');
+        document.body.classList.remove('has-mobile-lightbox');
         if (document.fullscreenElement) {
             try {
                 await document.exitFullscreen();
@@ -427,11 +440,15 @@
     function syncLightboxFullscreenState() {
         if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
             overlay.classList.remove('is-fullscreen');
+            overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
+            document.body.classList.remove('has-mobile-lightbox');
             return;
         }
         if (document.fullscreenElement === overlay) {
             overlay.classList.add('is-fullscreen');
+            overlay.classList.remove('is-mobile-fullscreen');
+            document.body.classList.remove('has-mobile-lightbox');
             overlay.classList.remove('is-ui-visible');
         }
     }
@@ -465,6 +482,71 @@
                 overlay.classList.remove('is-ui-visible');
             }
         }, 1200);
+    }
+
+    function updateLightboxViewportMode() {
+        document.body.classList.toggle('has-mobile-lightbox', overlay.classList.contains('is-mobile-fullscreen'));
+    }
+
+    function clearTouchGesture() {
+        if (touchGesture) {
+            overlay.releasePointerCapture?.(touchGesture.pointerId);
+        }
+        touchGesture = null;
+    }
+
+    function startTouchGesture(event) {
+        if (overlay.hidden || !isLightboxFullscreen()) {
+            return;
+        }
+        if (event.pointerType === 'mouse' || event.button !== 0) {
+            return;
+        }
+        if (event.target.closest('button, a, input, textarea, select, form')) {
+            return;
+        }
+        touchGesture = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
+            startedAt: Date.now(),
+            active: true,
+        };
+        overlay.setPointerCapture?.(event.pointerId);
+    }
+
+    function trackTouchGesture(event) {
+        if (!touchGesture || !touchGesture.active || event.pointerId !== touchGesture.pointerId) {
+            return;
+        }
+        touchGesture.lastX = event.clientX;
+        touchGesture.lastY = event.clientY;
+        const dx = touchGesture.lastX - touchGesture.startX;
+        const dy = touchGesture.lastY - touchGesture.startY;
+        if (Math.abs(dx) > 18 || Math.abs(dy) > 18) {
+            overlay.classList.add('is-ui-visible');
+        }
+    }
+
+    function finishTouchGesture(event) {
+        if (!touchGesture || !touchGesture.active || event.pointerId !== touchGesture.pointerId) {
+            return;
+        }
+        const dx = event.clientX - touchGesture.startX;
+        const dy = event.clientY - touchGesture.startY;
+        const elapsed = Date.now() - touchGesture.startedAt;
+        clearTouchGesture();
+        if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) || elapsed > 1200) {
+            return;
+        }
+        event.preventDefault();
+        if (dx < 0) {
+            step(1);
+        } else {
+            step(-1);
+        }
     }
 
 
