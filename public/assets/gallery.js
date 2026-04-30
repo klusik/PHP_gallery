@@ -60,6 +60,25 @@
         subtree: true,
     });
 
+    function setupThemeOverrideForm() {
+        const form = document.querySelector('[data-theme-form]');
+        if (!form) {
+            return;
+        }
+        const changed = form.querySelector('[data-theme-controls-changed]');
+        if (!changed) {
+            return;
+        }
+        form.querySelectorAll('[data-theme-override-control]').forEach((control) => {
+            control.addEventListener('input', () => {
+                changed.value = '1';
+            });
+            control.addEventListener('change', () => {
+                changed.value = '1';
+            });
+        });
+    }
+
     // Submit votes through fetch so the selected state and score update without
     // leaving the lightbox/gallery page.
     document.addEventListener('submit', async (event) => {
@@ -124,6 +143,7 @@
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
+    setupThemeOverrideForm();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.

@@ -8,6 +8,8 @@
     --paper: #f8f4ec;
     /* `--panel` defines container backgrounds for cards, panels, and tables. */
     --panel: #fffaf0;
+    /* `--gallery-panel` defines the opened public gallery header panel. */
+    --gallery-panel: #fffaf0;
     /* `--line` defines shared border and divider color. */
     --line: #ded4c2;
     /* `--accent` defines primary interactive color. */
@@ -895,7 +897,7 @@ td {
     position: relative;
     overflow: hidden;
     border: 0;
-    background: linear-gradient(135deg, rgba(255, 250, 240, 0.94), rgba(239, 228, 208, 0.9));
+    background: var(--gallery-panel);
 }
 
 .public-page .hero h1 {

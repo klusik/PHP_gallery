@@ -104,10 +104,14 @@ when the EXIF extension is available. `gps_lat`, `gps_lng`, `gps_altitude`, and
 rescan. The migration also adds an index for gallery/GPS lookups.
 
 `app_settings` stores configurable application values such as the public site
-name, theme colors, radius, font mode, and selected custom CSS preset. CSS files
-in `custom_css/` can be selected in the admin theme screen; the selected file or
-a custom upload is copied to `public/assets/custom.css` and loaded after the
-built-in stylesheet.
+name, theme color overrides, radius override, font mode override, and selected
+custom CSS preset. CSS files in `custom_css/` can be selected in the admin theme
+screen; the selected file or a custom upload is copied to
+`public/assets/custom.css` and loaded after the built-in stylesheet. The active
+CSS skin supplies the default theme-control values. Once a control is changed,
+`page=theme_css` loads after custom CSS and emits the saved overrides. The
+Theme screen's `Reset to CSS` action removes those saved overrides without
+removing the active custom CSS file.
 
 `admin_logs` stores admin-visible operational events such as failed migration
 runs and rejected admin-only actions. The dashboard renders recent entries, and

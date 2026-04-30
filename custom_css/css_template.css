@@ -48,6 +48,9 @@ Example use cases:
     /* Panel and card background. Keep this close to --paper for subtle UI. */
     --panel: #fffaf0;
 
+    /* Opened public gallery header background. */
+    --gallery-panel: #fffaf0;
+
     /* Global border radius. Increase for softer, more rounded surfaces. */
     --radius: 16px;
 
