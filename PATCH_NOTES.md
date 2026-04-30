@@ -2,6 +2,13 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.19
+
+### Major Changes
+
+- The pending-update cache now invalidates when the application version changes,
+  so the `Updates (1)` badge stays accurate after a release.
+
 ## Version 0.18
 
 ### Major Changes
