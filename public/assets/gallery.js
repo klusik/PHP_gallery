@@ -150,6 +150,7 @@
     setupAdminGalleryFilters();
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
+    setupGalleryUploadProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
@@ -630,6 +631,106 @@
         return progress;
     }
 
+    // Function `setupGalleryUploadProgress` executes this focused behavior.
+    function setupGalleryUploadProgress() {
+        document.querySelectorAll('[data-gallery-upload-form]').forEach((form) => {
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                runGalleryUpload(form);
+            });
+        });
+    }
+
+    // Function `runGalleryUpload` executes this focused behavior.
+    function runGalleryUpload(form) {
+        const progress = ensureThumbnailProgress(form);
+        const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+        buttons.forEach((button) => {
+            button.disabled = true;
+        });
+        updateBasicProgress(progress, 0, 'Preparing upload...');
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action || window.location.href);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.upload.addEventListener('progress', (event) => {
+            if (!event.lengthComputable) {
+                updateBasicProgress(progress, 100, 'Uploading images...');
+                return;
+            }
+            updateBasicProgress(progress, Math.round((event.loaded / event.total) * 100), 'Uploading images...');
+        });
+        xhr.addEventListener('load', async () => {
+            try {
+                const result = JSON.parse(xhr.responseText || '{}');
+                if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
+                    throw new Error(result.error || 'Upload failed.');
+                }
+                updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
+                if (form.querySelector('input[name="create_thumbnails"]')?.checked && Array.isArray(result.gallery_ids) && result.gallery_ids.length > 0) {
+                    await runUploadThumbnailProgress(form, progress, result.gallery_ids, result);
+                    return;
+                }
+                window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0});
+            } catch (error) {
+                updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+            } finally {
+                buttons.forEach((button) => {
+                    button.disabled = false;
+                });
+            }
+        });
+        xhr.addEventListener('error', () => {
+            updateBasicProgress(progress, 100, 'Upload failed.');
+            buttons.forEach((button) => {
+                button.disabled = false;
+            });
+        });
+        xhr.send(body);
+    }
+
+    async function runUploadThumbnailProgress(form, progress, galleryIds, uploadResult) {
+        let offset = 0;
+        let total = 0;
+        let created = 0;
+        let skipped = 0;
+        while (true) {
+            const body = new FormData();
+            body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
+            body.set('ajax', '1');
+            body.set('offset', String(offset));
+            body.set('batch_size', '6');
+            galleryIds.forEach((galleryId) => {
+                body.append('gallery_ids[]', String(galleryId));
+            });
+            const response = await fetch(thumbnailEndpoint(form, null), {
+                method: 'POST',
+                body,
+                headers: {'Accept': 'application/json'},
+            });
+            if (!response.ok) {
+                throw new Error('Thumbnail request failed.');
+            }
+            const result = await response.json();
+            total = result.total || 0;
+            offset = result.next_offset || 0;
+            created += result.created || 0;
+            skipped += result.skipped || 0;
+            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Uploaded ${uploadResult.uploaded || 0} images. Creating thumbnails...`);
+            if (result.done) {
+                updateThumbnailProgress(progress, total, total, created, skipped, 'Upload and thumbnail job complete.');
+                const redirect = new URL(uploadResult.redirect_url || window.location.href, window.location.href);
+                redirect.searchParams.set('thumbnails', String(created));
+                window.location.href = redirect.toString();
+                break;
+            }
+        }
+    }
+
     // Function `setupThumbnailProgress` executes this focused behavior.
     function setupThumbnailProgress() {
         document.addEventListener('click', async (event) => {
@@ -962,6 +1063,13 @@
         progress.querySelector('[data-thumbnail-progress-fill]').value = percent;
         progress.querySelector('[data-thumbnail-progress-text]').textContent =
             `${label} ${processed}/${total} images checked, ${created} files created, ${skipped} existing files skipped.`;
+    }
+
+    // Function `updateBasicProgress` executes this focused behavior.
+    function updateBasicProgress(progress, percent, label) {
+        progress.hidden = false;
+        progress.querySelector('[data-thumbnail-progress-fill]').value = Math.max(0, Math.min(100, percent));
+        progress.querySelector('[data-thumbnail-progress-text]').textContent = label;
     }
 
     // Function `setGalleryRowHiddenReason` executes this focused behavior.

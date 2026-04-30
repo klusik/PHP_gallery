@@ -28,6 +28,10 @@ Important routes:
 - `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
   same visibility checks.
 - `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
+- `page=admin_new_gallery` creates an empty filesystem gallery folder and DB
+  row from an authenticated admin form.
+- `page=admin_upload` stores uploaded images inside real gallery folders, then
+  scans the target folder and can continue into thumbnail batch generation.
 - `page=admin_theme` stores theme controls and optional custom CSS.
 - `page=admin_update` checks GitHub for newer releases and can install the
   configured branch archive after creating a backup of overwritten files.
@@ -55,14 +59,16 @@ and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
 - `database/migrations/`: ordered PHP files returning SQL statements.
 - `public/assets/styles.css`: built-in themeable stylesheet.
 - `public/assets/gallery.js`: voting AJAX, tag suggestions, admin tree controls,
-  select-all controls, and lightbox behavior.
+  select-all controls, upload/thumbnail progress, and lightbox behavior.
 - `deploy.bat` and `scripts/deploy.ps1`: optional FTP/local deployment helpers.
 - `.htaccess`, `public/.htaccess`, `cache/.htaccess`, `galleries/.htaccess`:
   routing and direct-access protection for Apache hosting.
 
 ## Data Model
 
-`galleries` represent folders under `galleries_root`. Nested folders become
+`galleries` represent folders under `galleries_root`. The filesystem folder tree
+is the source of truth for gallery hierarchy; the database mirrors it and stores
+metadata, access rules, tags, and public slugs. Nested folders become
 subgalleries through `parent_id`. `images` represent image files directly inside
 one gallery folder. Child folder images are intentionally not imported into the
 parent gallery.
@@ -130,6 +136,13 @@ The admin gallery tree collapse state is also stored in `app_settings` as a JSON
 list of collapsed gallery IDs. The dashboard posts updates through
 `page=admin_save_gallery_collapse`.
 
+Admin gallery folder changes are physical filesystem operations. Changing a
+gallery parent or folder name moves the whole folder subtree under
+`galleries_root`, rejects destination collisions and self-descendant moves, then
+updates every affected gallery row. If the database update fails after the
+filesystem move, the service attempts to move the folder back and logs the
+failure for admin review.
+
 The public JavaScript intentionally detects inline `style` attributes and shows
 a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
@@ -156,6 +169,11 @@ prompt that posts to `page=admin_run_migrations`.
 Gallery discovery starts at `galleries_root`. The app normalizes relative paths
 and checks that image access stays inside the configured gallery folder. Public
 media is served through `page=media`, not as raw filesystem paths.
+
+The browser upload path follows the same structure as FTP. It creates or reuses
+a real gallery folder, stores validated images in that folder with safe unique
+filenames, scans the folder, and optionally starts the same thumbnail batch
+endpoint used by import and dashboard thumbnail actions.
 
 Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
 Generated files are progressive JPEGs named from the original base filename plus
@@ -196,18 +214,23 @@ metadata changes.
    should only target drafts, public galleries, or private galleries. The
    `Select displayed galleries` checkbox only selects rows that remain visible
    after both status filtering and collapsed tree branches.
-7. Bulk-publish galleries or images.
-8. Collapse or expand subgallery rows as needed; the state is persisted.
-9. Edit titles, descriptions, tags, cover images, hierarchy, and theme settings.
-10. Logged-in admins can also edit gallery and image titles/descriptions directly
+7. Create empty gallery folders or upload multiple images from the dashboard
+   when FTP is not convenient. Upload-created galleries and FTP-created
+   galleries use the same folder layout and scan path.
+8. Bulk-publish galleries or images.
+9. Collapse or expand subgallery rows as needed; the state is persisted.
+10. Edit titles, descriptions, tags, cover images, hierarchy, folder names, and
+    theme settings. Changing a gallery parent or folder name moves the real
+    folder subtree and then updates DB paths.
+11. Logged-in admins can also edit gallery and image titles/descriptions directly
    from public gallery pages through admin-only inline forms. Inline removal
    deletes CMS records only; filesystem folders and image files are left intact.
-11. Opt galleries or gallery branches into the picture game from gallery edit
+12. Opt galleries or gallery branches into the picture game from gallery edit
     pages or dashboard bulk actions. New galleries remain opted out by default.
-12. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
+13. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
     migration and rescanning existing images. The setting is recursive, so child
     galleries inherit map availability from enabled ancestors.
-13. If a feature migration is pending, use the dashboard migration prompt to run
+14. If a feature migration is pending, use the dashboard migration prompt to run
     it before enabling the related controls.
 
 ## Deployment

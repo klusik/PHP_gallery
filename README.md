@@ -18,6 +18,8 @@ This release contains the full plain-PHP gallery application:
 - browser installer through `install.php`
 - filesystem gallery discovery with nested subgalleries
 - admin dashboard with bulk gallery and image actions
+- admin upload flows for creating empty galleries, uploading multiple images,
+  and creating a gallery directly from uploaded images
 - editable gallery metadata, cover images, tags, visibility, and hierarchy
 - password-protected galleries with listed, unlisted, and share-link-only access
 - public gallery cards, breadcrumbs, lightbox browsing, and up/down voting
@@ -209,21 +211,29 @@ Admin workflow:
    change. `Select displayed galleries` only selects rows currently visible
    after filtering and tree collapsing, so bulk actions can safely target
    only drafts, only public galleries, or only private galleries.
-6. Use bulk actions to scan, publish, draft, or privatize selected galleries.
-7. Use the gallery or image thumbnail buttons when you need to rebuild generated
+6. Use `Create empty gallery` when you want to create a real empty folder before
+   adding photos later through FTP or the upload page.
+7. Use `Upload photos` to upload multiple images into an existing gallery or to
+   create a new gallery directly from an upload. With JavaScript enabled, the
+   upload shows transfer progress and then thumbnail progress when optimized
+   thumbnails are requested.
+8. Use bulk actions to scan, publish, draft, or privatize selected galleries.
+9. Use the gallery or image thumbnail buttons when you need to rebuild generated
    thumbnails after replacing source files.
-8. Edit gallery title, description, slug, visibility, sort order, parent gallery,
-   title picture, and tags.
-9. Edit image title, description, visibility, sort order, and tags.
-10. When logged in, use the inline public-page controls to rename galleries,
+10. Edit gallery title, description, slug, folder name, visibility, sort order,
+    parent gallery, title picture, and tags. Changing the folder name or parent
+    gallery moves the real folder subtree on disk and updates database paths for
+    all descendants.
+11. Edit image title, description, visibility, sort order, and tags.
+12. When logged in, use the inline public-page controls to rename galleries,
    rename photo titles, edit descriptions, publish, hide, or remove CMS records
    without leaving the gallery view. Removing a record does not delete the
    underlying folder or image file from disk.
-11. Opt selected galleries or whole gallery branches into the picture game when
+13. Opt selected galleries or whole gallery branches into the picture game when
     you want visitors to compare images side by side.
-12. Enable EXIF GPS maps on gallery branches where you want public photo pins
+14. Enable EXIF GPS maps on gallery branches where you want public photo pins
     and gallery map overlays.
-13. Use protected access controls on a gallery edit page when a public gallery
+15. Use protected access controls on a gallery edit page when a public gallery
     should require a password, disappear from listings, or be opened only by a
     share link.
 
@@ -478,6 +488,7 @@ data-vote-form
 data-tag-input
 data-gallery-visibility-filter
 data-gallery-row
+data-gallery-upload-form
 ```
 
 Do not rely on a CSS class as both a styling hook and a JavaScript behavior hook
@@ -490,6 +501,7 @@ Use short, direct labels:
 - `Save gallery`
 - `Scan/import images`
 - `Select displayed galleries`
+- `Upload photos`
 - `Set public`
 - `Title picture`
 - `Check for new gallery folders`
@@ -577,6 +589,20 @@ expanded individually, and the dashboard has `Collapse all` and `Expand all`
 controls. The collapsed gallery IDs are stored in `app_settings`, so the tree
 state persists across reloads.
 
+## Filesystem-First Galleries
+
+Gallery folders on disk are the source of truth for hierarchy. Database rows
+store the index, slugs, visibility, tags, protection settings, and other
+metadata, but `folder_path` is expected to match a real folder under
+`galleries_root`.
+
+Admin folder operations preserve that rule. Creating an empty gallery creates an
+empty folder and a `gallery.json` sidecar. Uploading photos writes image files
+into the selected gallery folder, then scans that folder so uploaded and
+FTP-added images are represented the same way. Changing a gallery folder name or
+parent moves the folder subtree on disk first, then updates the affected
+database `folder_path` values.
+
 ## FTP Deployment
 
 Run:
@@ -617,7 +643,8 @@ configuration on the target server through `install.php` or by copying
   votes, tags, and the picture game.
 - Folder names can contain spaces and non-ASCII characters; public URLs use generated slugs.
 - Only `jpg`, `jpeg`, `png`, `gif`, and `webp` files are imported.
-- Image MIME data is validated with `getimagesize` during scans.
+- Image MIME data is validated with `getimagesize` during scans and uploads.
+- Admin uploads are stored inside `galleries_root` with collision-safe filenames.
 - Admin POST actions use CSRF tokens.
 - SQL access uses PDO prepared statements.
 - User and database output is escaped with `htmlspecialchars`.

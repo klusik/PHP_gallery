@@ -2,6 +2,22 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Unreleased
+
+### Major Changes
+
+- Added filesystem-first gallery management groundwork:
+  - changing a gallery parent now moves the real folder subtree on disk
+  - changing the folder name on a gallery edit page renames the real folder
+  - all moved descendant gallery `folder_path` values are updated together
+  - failed folder moves are logged and leave an admin-visible error
+- Added admin gallery creation and upload flows:
+  - `Create empty gallery` creates a real empty folder and a gallery row
+  - `Upload photos` can upload multiple images into an existing gallery
+  - uploads can also create a new gallery folder before storing images
+  - upload progress is shown in the browser, followed by existing thumbnail
+    batch progress when optimized thumbnails are requested
+
 ## Version 0.22
 
 ### Major Changes

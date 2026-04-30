@@ -26,6 +26,79 @@ function gallery_abs_path(string $relativePath): string
 }
 
 /**
+ * Resolve a future gallery path whose final directory may not exist yet.
+ */
+function gallery_target_abs_path(string $relativePath): string
+{
+    $relativePath = normalize_relative_path($relativePath);
+    if ($relativePath === '') {
+        throw new RuntimeException('Gallery folder path cannot be empty.');
+    }
+    $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $parent = dirname($path);
+    if (!is_dir($parent) || !path_inside(galleries_root(), $parent)) {
+        throw new RuntimeException('Gallery target parent is outside the configured root or does not exist.');
+    }
+    return $path;
+}
+
+/**
+ * Convert an admin-entered folder name into one safe directory segment.
+ */
+function gallery_folder_segment(string $value): string
+{
+    return slugify($value);
+}
+
+/**
+ * Return the final path segment for a gallery folder path.
+ */
+function gallery_folder_name_from_path(string $folderPath): string
+{
+    $segments = explode('/', normalize_relative_path($folderPath));
+    return (string) end($segments);
+}
+
+/**
+ * Build a relative child folder path under an optional parent gallery.
+ */
+function gallery_child_folder_path(?array $parent, string $folderName): string
+{
+    $segment = gallery_folder_segment($folderName);
+    if ($segment === '') {
+        throw new RuntimeException('Gallery folder name cannot be empty.');
+    }
+    if (!$parent) {
+        return $segment;
+    }
+    return normalize_relative_path((string) $parent['folder_path'] . '/' . $segment);
+}
+
+/**
+ * Return an unused child folder path, appending a numeric suffix when needed.
+ */
+function unique_gallery_child_folder_path(?array $parent, string $folderName): string
+{
+    $segment = gallery_folder_segment($folderName);
+    $candidate = gallery_child_folder_path($parent, $segment);
+    $counter = 2;
+    while (is_dir(gallery_target_abs_path($candidate)) || find_gallery_by_folder_path($candidate)) {
+        $candidate = gallery_child_folder_path($parent, $segment . '-' . $counter);
+        $counter++;
+    }
+    return $candidate;
+}
+
+/**
+ * Write gallery metadata into a sidecar before or after a DB row exists.
+ */
+function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
+{
+    $path = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
+    return file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
+}
+
+/**
  * Resolve an image record to its absolute file path inside its gallery folder.
  */
 function image_abs_path(array $image, array $gallery): string
@@ -152,8 +225,6 @@ function read_gallery_sidecar(string $path): array
  */
 function write_gallery_sidecar(array $gallery): void
 {
-    // Variable $path stores this steps working value.
-    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json';
     // Variable $data stores this steps working value.
     $data = [
         'title' => $gallery['title'],
@@ -172,7 +243,7 @@ function write_gallery_sidecar(array $gallery): void
             $data['cover'] = $cover['relative_path'];
         }
     }
-    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
 
 /**
@@ -268,6 +339,164 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         write_gallery_sidecar($gallery);
     }
     return $gallery;
+}
+
+/**
+ * Create a real empty folder and immediately index it as a gallery.
+ */
+function create_empty_gallery(array $input): array
+{
+    $title = trim((string) ($input['title'] ?? ''));
+    if ($title === '') {
+        throw new RuntimeException('Gallery title is required.');
+    }
+    $description = (string) ($input['description'] ?? '');
+    $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
+    $parentId = (int) ($input['parent_id'] ?? 0);
+    $parent = $parentId > 0 ? find_gallery($parentId) : null;
+    if ($parentId > 0 && !$parent) {
+        throw new RuntimeException('Selected parent gallery does not exist.');
+    }
+
+    $folderName = trim((string) ($input['folder_name'] ?? ''));
+    $folderPath = unique_gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
+    $target = gallery_target_abs_path($folderPath);
+    if (file_exists($target)) {
+        throw new RuntimeException('Gallery folder already exists.');
+    }
+    if (!mkdir($target, 0775, true)) {
+        throw new RuntimeException('Could not create gallery folder.');
+    }
+
+    $sidecarWritten = write_gallery_sidecar_for_path($folderPath, [
+        'title' => $title,
+        'description' => $description,
+        'visibility' => $visibility,
+        'sort_order' => (int) ($input['sort_order'] ?? 0),
+    ]);
+    if (!$sidecarWritten) {
+        throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
+    }
+
+    $gallery = create_gallery_row_for_folder($folderPath);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery folder was created, but the database row could not be created.');
+    }
+    sync_gallery_parent_ids();
+    $gallery = find_gallery((int) $gallery['id']) ?: $gallery;
+    write_gallery_sidecar($gallery);
+    return $gallery;
+}
+
+/**
+ * Return all DB gallery rows represented by one filesystem subtree.
+ */
+function gallery_subtree_rows(int $galleryId): array
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return [];
+    }
+    $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+    $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY folder_path');
+    $stmt->execute([$folderPath, $folderPath . '/%']);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Physically move one gallery folder subtree and then make DB paths follow it.
+ */
+function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null): array
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    $oldPath = normalize_relative_path((string) $gallery['folder_path']);
+    $oldAbs = gallery_abs_path($oldPath);
+    if (!is_dir($oldAbs)) {
+        throw new RuntimeException('Current gallery folder does not exist on disk.');
+    }
+
+    $parent = $parentId !== null && $parentId > 0 ? find_gallery($parentId) : null;
+    if ($parentId !== null && $parentId > 0 && !$parent) {
+        throw new RuntimeException('Selected parent gallery does not exist.');
+    }
+    if ($parent && (int) $parent['id'] === $galleryId) {
+        throw new RuntimeException('A gallery cannot be moved under itself.');
+    }
+    if ($parent) {
+        $parentPath = normalize_relative_path((string) $parent['folder_path']);
+        if ($parentPath === $oldPath || str_starts_with($parentPath . '/', $oldPath . '/')) {
+            throw new RuntimeException('A gallery cannot be moved under one of its own subgalleries.');
+        }
+        if (!is_dir(gallery_abs_path($parentPath))) {
+            throw new RuntimeException('Selected parent folder does not exist on disk.');
+        }
+    }
+
+    $currentFolderName = gallery_folder_name_from_path($oldPath);
+    $targetFolderName = $folderName !== null && trim($folderName) !== '' ? gallery_folder_segment($folderName) : $currentFolderName;
+    if ($targetFolderName === '') {
+        throw new RuntimeException('Gallery folder name cannot be empty.');
+    }
+    $newPath = $parent ? normalize_relative_path((string) $parent['folder_path'] . '/' . $targetFolderName) : $targetFolderName;
+    if ($newPath === $oldPath) {
+        return ['moved' => false, 'from' => $oldPath, 'to' => $newPath, 'galleries' => 0];
+    }
+    if (find_gallery_by_folder_path($newPath)) {
+        throw new RuntimeException('Another gallery already uses the destination folder path.');
+    }
+    $newAbs = gallery_target_abs_path($newPath);
+    if (file_exists($newAbs)) {
+        throw new RuntimeException('Destination folder already exists on disk.');
+    }
+
+    $rows = gallery_subtree_rows($galleryId);
+    $pathMap = [];
+    foreach ($rows as $row) {
+        $rowPath = normalize_relative_path((string) $row['folder_path']);
+        $suffix = $rowPath === $oldPath ? '' : substr($rowPath, strlen($oldPath) + 1);
+        $pathMap[(int) $row['id']] = $suffix === '' ? $newPath : normalize_relative_path($newPath . '/' . $suffix);
+    }
+
+    $pdo = db();
+    $moved = false;
+    try {
+        $pdo->beginTransaction();
+        if (!rename($oldAbs, $newAbs)) {
+            throw new RuntimeException('Could not move gallery folder on disk.');
+        }
+        $moved = true;
+        $stmt = $pdo->prepare('UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ? WHERE id = ?');
+        foreach ($pathMap as $id => $path) {
+            $rowParentId = $id === $galleryId ? ($parent ? (int) $parent['id'] : null) : null;
+            if ($id !== $galleryId) {
+                $rowParent = find_parent_gallery_for_path($path);
+                $rowParentId = $rowParent ? (int) $rowParent['id'] : null;
+            }
+            $stmt->execute([$path, hash('sha256', $path), $rowParentId, now_sql(), $id]);
+        }
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if ($moved && is_dir($newAbs) && !is_dir($oldAbs)) {
+            @rename($newAbs, $oldAbs);
+        }
+        throw new RuntimeException('Gallery move failed: ' . $exception->getMessage(), 0, $exception);
+    }
+
+    sync_gallery_parent_ids();
+    foreach (array_keys($pathMap) as $id) {
+        $updated = find_gallery((int) $id);
+        if ($updated) {
+            write_gallery_sidecar($updated);
+        }
+    }
+
+    return ['moved' => true, 'from' => $oldPath, 'to' => $newPath, 'galleries' => count($pathMap)];
 }
 
 /**
@@ -588,6 +817,117 @@ function scan_gallery_images(int $galleryId): int
     apply_gallery_cover_from_sidecar($gallery);
     ensure_gallery_cover((int) $gallery['id']);
     return $count;
+}
+
+/**
+ * Normalize a PHP multi-upload array into validated image upload entries.
+ */
+function gallery_upload_entries(?array $files): array
+{
+    if (!$files || empty($files['name']) || !is_array($files['name'])) {
+        throw new RuntimeException('Choose at least one image to upload.');
+    }
+    $entries = [];
+    foreach ($files['name'] as $index => $name) {
+        $error = (int) ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            throw new RuntimeException(upload_error_message($error));
+        }
+        $tmpName = (string) ($files['tmp_name'][$index] ?? '');
+        if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+            throw new RuntimeException('Uploaded file is not available.');
+        }
+        $originalName = (string) $name;
+        if (!is_supported_image_path($originalName)) {
+            throw new RuntimeException('Only JPG, PNG, GIF, and WebP images can be uploaded.');
+        }
+        $info = @getimagesize($tmpName);
+        if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+            throw new RuntimeException('One uploaded file is not a valid image.');
+        }
+        $entries[] = [
+            'tmp_name' => $tmpName,
+            'name' => $originalName,
+            'size' => (int) ($files['size'][$index] ?? 0),
+        ];
+    }
+    if (!$entries) {
+        throw new RuntimeException('Choose at least one image to upload.');
+    }
+    return $entries;
+}
+
+/**
+ * Human-readable upload error for admin notices and JSON responses.
+ */
+function upload_error_message(int $error): string
+{
+    return match ($error) {
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'An uploaded file is larger than the server allows.',
+        UPLOAD_ERR_PARTIAL => 'An uploaded file was only partially received.',
+        UPLOAD_ERR_NO_TMP_DIR => 'The server has no temporary upload directory.',
+        UPLOAD_ERR_CANT_WRITE => 'The server could not write an uploaded file.',
+        UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the upload.',
+        default => 'Upload failed.',
+    };
+}
+
+/**
+ * Build a safe stored filename while keeping the original image extension.
+ */
+function safe_uploaded_image_filename(string $name): string
+{
+    $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    $base = pathinfo($name, PATHINFO_FILENAME);
+    return slugify($base) . '.' . $extension;
+}
+
+/**
+ * Return an unused filename and absolute target path inside one gallery folder.
+ */
+function unique_gallery_upload_target(array $gallery, string $filename): array
+{
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    $safeName = safe_uploaded_image_filename($filename);
+    $base = pathinfo($safeName, PATHINFO_FILENAME);
+    $extension = pathinfo($safeName, PATHINFO_EXTENSION);
+    $candidate = $safeName;
+    $counter = 2;
+    while (file_exists($galleryRoot . DIRECTORY_SEPARATOR . $candidate) || find_image_by_path((int) $gallery['id'], $candidate)) {
+        $candidate = $base . '-' . $counter . '.' . $extension;
+        $counter++;
+    }
+    return [$candidate, $galleryRoot . DIRECTORY_SEPARATOR . $candidate];
+}
+
+/**
+ * Move validated uploaded images into the gallery folder and scan the result.
+ */
+function store_uploaded_gallery_images(int $galleryId, array $entries): array
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
+        throw new RuntimeException('Gallery folder is not writable.');
+    }
+
+    $stored = [];
+    foreach ($entries as $entry) {
+        [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
+        if (!move_uploaded_file((string) $entry['tmp_name'], $target)) {
+            throw new RuntimeException('Could not store uploaded image.');
+        }
+        $stored[] = $filename;
+    }
+
+    $changed = scan_gallery_images($galleryId);
+    return ['uploaded' => count($stored), 'filenames' => $stored, 'scanned' => $changed];
 }
 
 /**

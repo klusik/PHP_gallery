@@ -129,6 +129,8 @@ function cms_run(): void
         'admin_update' => 'cms_admin_update',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
+        'admin_new_gallery' => 'cms_admin_new_gallery',
+        'admin_upload' => 'cms_admin_upload',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
