@@ -5,6 +5,14 @@
     RewriteRule ^ public/index.php [L]
 </IfModule>
 
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?:html?|css|js|json|xml)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </FilesMatch>
+</IfModule>
+
 <FilesMatch "^(config|config\.example)\.php$">
     Require all denied
 </FilesMatch>
