@@ -2,6 +2,13 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.32
+
+### Major Changes
+
+- Prepared the application metadata for the 0.32 release cycle.
+- Made `app/bootstrap.php` the single source of truth for update version checks.
+
 ## Version 0.31
 
 ### Major Changes
