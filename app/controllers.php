@@ -918,7 +918,7 @@ function cms_admin_update(): void
         echo '<div class="notice">Update failed: ' . e($error) . '</div>';
     }
     echo '<section class="panel"><h2>Status</h2>';
-    echo '<p>Installed version: <strong>' . e(CMS_VERSION) . '</strong></p>';
+    echo '<p>Installed version: <strong>' . e(cms_current_version()) . '</strong></p>';
     if ($betaActive) {
         echo '<p>Active channel: <strong>beta</strong></p>';
         echo '<p>Installed beta code: <code>' . e(application_update_beta_commit()) . '</code></p>';

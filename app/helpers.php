@@ -459,12 +459,32 @@ function cms_head_extras_html(): string
 }
 
 /**
+ * Read the current application version directly from app/bootstrap.php.
+ */
+function cms_current_version(): string
+{
+    static $version = null;
+    if ($version !== null) {
+        return $version;
+    }
+
+    $bootstrapPath = dirname(__DIR__) . '/app/bootstrap.php';
+    $bootstrap = is_file($bootstrapPath) ? (string) file_get_contents($bootstrapPath) : '';
+    if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
+        $version = trim((string) $match[1]);
+        return $version;
+    }
+
+    return $version = CMS_VERSION;
+}
+
+/**
  * Render the shared footer and JavaScript include.
  */
 function render_footer(): void
 {
     echo '</main><footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(CMS_VERSION) . ')</a>';
+    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
