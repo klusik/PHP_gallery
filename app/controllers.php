@@ -909,6 +909,8 @@ function cms_admin(): void
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
     echo '<button type="submit">Check for new gallery folders</button>';
     echo '</form>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -1182,6 +1184,149 @@ function cms_admin_import(): void
     // Variable $result stores this steps working value.
     $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
     redirect_to(url_for('admin', $result));
+}
+
+/**
+ * Create a gallery row backed by a real empty folder.
+ */
+function cms_admin_new_gallery(): void
+{
+    require_admin();
+    $error = '';
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            $gallery = create_empty_gallery([
+                'title' => $_POST['title'] ?? '',
+                'folder_name' => $_POST['folder_name'] ?? '',
+                'description' => $_POST['description'] ?? '',
+                'visibility' => $_POST['visibility'] ?? 'draft',
+                'parent_id' => $_POST['parent_id'] ?? 0,
+            ]);
+            admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
+                'gallery_id' => (int) $gallery['id'],
+                'folder_path' => (string) $gallery['folder_path'],
+            ]);
+            redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
+        } catch (Throwable $exception) {
+            $error = $exception->getMessage();
+            admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
+        }
+    }
+
+    render_header('Create empty gallery');
+    echo '<section class="hero"><h1>Create empty gallery</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></nav></section>';
+    if ($error !== '') {
+        echo '<div class="notice">Create failed: ' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><form method="post" class="form-grid">' . csrf_field();
+    echo '<label>Gallery name<input name="title" required></label>';
+    echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
+    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label>Description<textarea name="description"></textarea></label>';
+    echo '<button type="submit">Create gallery folder</button></form></section>';
+    render_footer();
+}
+
+/**
+ * Upload images into an existing gallery or a newly created gallery folder.
+ */
+function cms_admin_upload(): void
+{
+    require_admin();
+    if (request_method() === 'POST') {
+        verify_csrf();
+        $wantsJson = admin_wants_json();
+        try {
+            $entries = gallery_upload_entries($_FILES['images'] ?? null);
+            $mode = (string) ($_POST['upload_mode'] ?? 'existing');
+            if ($mode === 'new') {
+                $gallery = create_empty_gallery([
+                    'title' => $_POST['title'] ?? '',
+                    'folder_name' => $_POST['folder_name'] ?? '',
+                    'description' => $_POST['description'] ?? '',
+                    'visibility' => $_POST['visibility'] ?? 'draft',
+                    'parent_id' => $_POST['parent_id'] ?? 0,
+                ]);
+            } else {
+                $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
+                if (!$gallery) {
+                    throw new RuntimeException('Choose an existing gallery.');
+                }
+            }
+
+            $stored = store_uploaded_gallery_images((int) $gallery['id'], $entries);
+            $thumbnails = 0;
+            if (!$wantsJson && !empty($_POST['create_thumbnails'])) {
+                $thumbnails = create_gallery_thumbnails((int) $gallery['id']);
+            }
+            admin_log_event('info', 'gallery.images_uploaded', 'Admin uploaded images into a gallery folder.', [
+                'gallery_id' => (int) $gallery['id'],
+                'folder_path' => (string) $gallery['folder_path'],
+                'uploaded' => (int) $stored['uploaded'],
+                'scanned' => (int) $stored['scanned'],
+            ]);
+            $response = [
+                'ok' => true,
+                'gallery_id' => (int) $gallery['id'],
+                'gallery_ids' => [(int) $gallery['id']],
+                'uploaded' => (int) $stored['uploaded'],
+                'scanned' => (int) $stored['scanned'],
+                'thumbnails' => $thumbnails,
+                'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails]),
+            ];
+            if ($wantsJson) {
+                header('Content-Type: application/json');
+                echo json_encode($response);
+                return;
+            }
+            redirect_to($response['redirect_url']);
+        } catch (Throwable $exception) {
+            admin_log_event('error', 'gallery.upload_failed', 'Admin image upload failed.', ['error' => $exception->getMessage()]);
+            if ($wantsJson) {
+                http_response_code(422);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
+                return;
+            }
+            $_SESSION['admin_upload_error'] = $exception->getMessage();
+            redirect_to(url_for('admin_upload'));
+        }
+    }
+
+    $error = (string) ($_SESSION['admin_upload_error'] ?? '');
+    unset($_SESSION['admin_upload_error']);
+    render_header('Upload photos');
+    echo '<section class="hero"><h1>Upload photos</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a></nav></section>';
+    if ($error !== '') {
+        echo '<div class="notice">Upload failed: ' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
+    echo '<input type="hidden" name="upload_mode" value="existing">';
+    echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select() . '</select></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
+    echo '<button type="submit">Upload images</button></form></section>';
+    echo '<section class="panel"><h2>Create gallery from upload</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
+    echo '<input type="hidden" name="upload_mode" value="new">';
+    echo '<label>Gallery name<input name="title" required></label>';
+    echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
+    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label>Description<textarea name="description"></textarea></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
+    echo '<button type="submit">Create gallery and upload</button></form></section>';
+    render_footer();
+}
+
+/**
+ * Return whether an admin POST expects JSON.
+ */
+function admin_wants_json(): bool
+{
+    return !empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
 }
 
 /**
@@ -1512,6 +1657,31 @@ function cms_admin_edit_gallery(): void
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
         $parentId = $parentId > 0 && find_gallery($parentId) ? $parentId : null;
+        $currentFolderName = gallery_folder_name_from_path((string) $gallery['folder_path']);
+        $submittedFolderName = trim((string) ($_POST['folder_name'] ?? $currentFolderName));
+        $folderNameChanged = $submittedFolderName !== '' && $submittedFolderName !== $currentFolderName;
+        $moveResult = null;
+        if ((int) ($gallery['parent_id'] ?? 0) !== (int) ($parentId ?? 0) || $folderNameChanged) {
+            try {
+                $moveResult = move_gallery_folder_to_parent((int) $gallery['id'], $parentId, $folderNameChanged ? $submittedFolderName : null);
+                if (!empty($moveResult['moved'])) {
+                    admin_log_event('info', 'gallery.folder_moved', 'Admin moved a gallery folder.', [
+                        'gallery_id' => (int) $gallery['id'],
+                        'from' => (string) $moveResult['from'],
+                        'to' => (string) $moveResult['to'],
+                        'galleries' => (int) $moveResult['galleries'],
+                    ]);
+                }
+                $gallery = find_gallery((int) $gallery['id']) ?: $gallery;
+            } catch (Throwable $exception) {
+                admin_log_event('error', 'gallery.folder_move_failed', 'Admin gallery folder move failed.', [
+                    'gallery_id' => (int) $gallery['id'],
+                    'error' => $exception->getMessage(),
+                ]);
+                $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
+                redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'move_failed' => 1]));
+            }
+        }
         // Variable $coverImageId stores this steps working value.
         $coverImageId = (int) ($_POST['cover_image_id'] ?? 0);
         // Variable $coverImage stores this steps working value.
@@ -1571,11 +1741,29 @@ function cms_admin_edit_gallery(): void
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
-        redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'saved' => 1]));
+        $params = ['id' => $gallery['id'], 'saved' => 1];
+        if (!empty($moveResult['moved'])) {
+            $params['moved'] = 1;
+        }
+        redirect_to(url_for('admin_edit_gallery', $params));
     }
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
     render_header('Edit gallery');
+    $galleryError = (string) ($_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? '');
+    unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
+    if ($galleryError !== '') {
+        echo '<div class="notice">Gallery folder move failed: ' . e($galleryError) . '</div>';
+    }
+    if (isset($_GET['created'])) {
+        echo '<div class="notice">Gallery folder created.</div>';
+    } elseif (isset($_GET['uploaded'])) {
+        echo '<div class="notice">Uploaded ' . (int) $_GET['uploaded'] . ' images, scanned or updated ' . (int) ($_GET['scanned'] ?? 0) . ' image records, and created ' . (int) ($_GET['thumbnails'] ?? 0) . ' thumbnails.</div>';
+    } elseif (isset($_GET['moved'])) {
+        echo '<div class="notice">Gallery folder moved on disk and database paths were updated.</div>';
+    } elseif (isset($_GET['saved'])) {
+        echo '<div class="notice">Gallery saved.</div>';
+    }
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
@@ -1584,6 +1772,7 @@ function cms_admin_edit_gallery(): void
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
     echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
+    echo '<label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" required><span class="muted">Changing this renames the folder on disk.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     if ($accessReady) {
@@ -1903,6 +2092,32 @@ function gallery_parent_options(array $currentGallery): string
         // Variable $selected stores this steps working value.
         $selected = (int) ($currentGallery['parent_id'] ?? 0) === (int) $gallery['id'] ? ' selected' : '';
         $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * Build parent gallery options for a new gallery or upload-created gallery.
+ */
+function gallery_parent_options_for_new(): string
+{
+    $html = '';
+    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    foreach ($galleries as $gallery) {
+        $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * Build existing gallery options for upload targets.
+ */
+function gallery_options_for_select(): string
+{
+    $html = '';
+    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    foreach ($galleries as $gallery) {
+        $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
     }
     return $html;
 }
