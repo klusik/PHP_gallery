@@ -667,7 +667,7 @@ td {
 }
 
 .lightbox-mobile-fullscreen-button {
-    display: inline-grid;
+    display: none;
     place-items: center;
     position: absolute;
     top: max(1rem, env(safe-area-inset-top));
@@ -681,6 +681,10 @@ td {
 
 .lightbox.is-mobile-device .lightbox-fullscreen-button {
     display: none;
+}
+
+.lightbox.is-mobile-device .lightbox-mobile-fullscreen-button {
+    display: inline-grid;
 }
 
 .lightbox figure {
@@ -946,6 +950,7 @@ td {
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-close {
     justify-self: end;
+    margin-top: 2.75rem;
 }
 
 .lightbox.is-fullscreen .lightbox-nav,
