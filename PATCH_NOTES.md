@@ -2,6 +2,18 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.27
+
+### Major Changes
+
+- Improved the public fullscreen overlay so the lightbox HUD, navigation, and
+  centered image staging behave more consistently across normal and fullscreen
+  states.
+- Fixed update-badge detection so new releases are reflected immediately in the
+  admin navigation rather than waiting on stale cached state.
+- Continued the 0.26 admin polish by keeping migration prompts conditional and
+  preserving the compact dashboard feature indicators.
+
 ## Version 0.26
 
 ### Major Changes

@@ -1741,7 +1741,8 @@ function cache_application_update_check(array $status): void
  */
 function application_update_pending(): bool
 {
-    $status = cached_application_update_check();
+    $status = check_application_update();
+    cache_application_update_check($status);
     return empty($status['error']) && !empty($status['update_available']);
 }
 
