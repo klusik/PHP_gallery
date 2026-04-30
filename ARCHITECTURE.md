@@ -184,23 +184,30 @@ metadata changes.
 
 1. Run `install.php` or manual setup.
 2. Log in at `index.php?page=admin_login`.
-3. Use `Check for new gallery folders`.
+3. Use `Check for new gallery folders`. The dashboard action refreshes already
+   imported galleries for new or changed direct image files before it shows the
+   folder discovery page, logs the refresh, and displays a wait indicator while
+   the request is running.
 4. Import selected folders. Selected parent folders automatically include
    detected descendant gallery folders.
 5. Let import scan images and optionally create thumbnails, or run scan and
    thumbnail actions later from the dashboard/edit pages.
-6. Bulk-publish galleries or images.
-7. Collapse or expand subgallery rows as needed; the state is persisted.
-8. Edit titles, descriptions, tags, cover images, hierarchy, and theme settings.
-9. Logged-in admins can also edit gallery and image titles/descriptions directly
+6. Filter the dashboard gallery table by visibility when a bulk gallery action
+   should only target drafts, public galleries, or private galleries. The
+   `Select displayed galleries` checkbox only selects rows that remain visible
+   after both status filtering and collapsed tree branches.
+7. Bulk-publish galleries or images.
+8. Collapse or expand subgallery rows as needed; the state is persisted.
+9. Edit titles, descriptions, tags, cover images, hierarchy, and theme settings.
+10. Logged-in admins can also edit gallery and image titles/descriptions directly
    from public gallery pages through admin-only inline forms. Inline removal
    deletes CMS records only; filesystem folders and image files are left intact.
-10. Opt galleries or gallery branches into the picture game from gallery edit
+11. Opt galleries or gallery branches into the picture game from gallery edit
     pages or dashboard bulk actions. New galleries remain opted out by default.
-11. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
+12. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
     migration and rescanning existing images. The setting is recursive, so child
     galleries inherit map availability from enabled ancestors.
-12. If a feature migration is pending, use the dashboard migration prompt to run
+13. If a feature migration is pending, use the dashboard migration prompt to run
     it before enabling the related controls.
 
 ## Deployment

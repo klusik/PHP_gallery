@@ -906,7 +906,9 @@ function cms_admin(): void
     $updateLabel = application_update_nav_label($updatePending);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
-    echo '<a class="button" href="' . e(url_for('admin_discover')) . '">Check for new gallery folders</a>';
+    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
+    echo '<button type="submit">Check for new gallery folders</button>';
+    echo '</form>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -926,7 +928,10 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="gallery_ids[]"> Select all galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
+    echo '<div class="bulk-row">';
+    echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
+    echo '<span class="muted" data-gallery-filter-summary></span>';
+    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
     if ($pictureGameReady) {
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
@@ -947,7 +952,7 @@ function cms_admin(): void
         $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
@@ -1131,10 +1136,20 @@ function render_admin_migration_notice(string $message): void
 function cms_admin_discover(): void
 {
     require_admin();
+    $refresh = null;
+    if (request_method() === 'POST') {
+        verify_csrf();
+        $refresh = scan_all_imported_gallery_images();
+        admin_log_event('info', 'galleries.refresh_scanned', 'Admin refreshed imported galleries from filesystem.', $refresh);
+    }
     // Variable $candidates stores this steps working value.
     $candidates = discover_gallery_candidates();
     render_header('New gallery folders');
     echo '<section class="panel"><h1>New gallery folders</h1>';
+    echo '<p><a class="button secondary" href="' . e(url_for('admin')) . '">Back to admin dashboard</a></p>';
+    if ($refresh !== null) {
+        echo '<div class="notice">Scanned ' . (int) $refresh['galleries'] . ' existing galleries and imported or updated ' . (int) $refresh['images'] . ' images.</div>';
+    }
     if (!$candidates) {
         echo '<p>No new gallery folders found.</p>';
     } else {

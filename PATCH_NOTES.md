@@ -2,6 +2,21 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.22
+
+### Major Changes
+
+- The dashboard `Check for new gallery folders` button now also scans all
+  already-imported galleries for new or changed direct image files before
+  showing the discovery screen.
+- Added an admin log entry and on-screen summary for that refresh scan, including
+  how many existing galleries were scanned and how many image records changed.
+- Added a visible wait indicator for the dashboard refresh scan so large gallery
+  checks no longer leave the admin page looking frozen while the request runs.
+- Added an admin gallery status filter for drafts, public galleries, and private
+  galleries. The bulk `Select displayed galleries` checkbox now only selects
+  rows that remain visible after filtering and collapsed tree branches.
+
 ## Version 0.21
 
 ### Major Changes

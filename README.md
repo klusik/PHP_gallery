@@ -197,28 +197,33 @@ galleries/
 Admin workflow:
 
 1. Log in at `index.php?page=admin_login`.
-2. Use `Check for new gallery folders`.
+2. Use `Check for new gallery folders`. This also scans already-imported
+   galleries for newly added or changed direct image files.
 3. Review detected folders and import selected galleries. Importing a parent
    folder also imports its detected subgallery folders.
 4. Leave `Create optimized thumbnails during import` checked unless you want to
    generate thumbnails later from the admin dashboard. With JavaScript enabled,
    import thumbnail creation shows a progress bar with processed, created, and
    skipped counts.
-5. Use bulk actions to scan, publish, draft, or privatize selected galleries.
-6. Use the gallery or image thumbnail buttons when you need to rebuild generated
+5. Filter the admin gallery table by status when you need a focused bulk
+   change. `Select displayed galleries` only selects rows currently visible
+   after filtering and tree collapsing, so bulk actions can safely target
+   only drafts, only public galleries, or only private galleries.
+6. Use bulk actions to scan, publish, draft, or privatize selected galleries.
+7. Use the gallery or image thumbnail buttons when you need to rebuild generated
    thumbnails after replacing source files.
-7. Edit gallery title, description, slug, visibility, sort order, parent gallery,
+8. Edit gallery title, description, slug, visibility, sort order, parent gallery,
    title picture, and tags.
-8. Edit image title, description, visibility, sort order, and tags.
-9. When logged in, use the inline public-page controls to rename galleries,
+9. Edit image title, description, visibility, sort order, and tags.
+10. When logged in, use the inline public-page controls to rename galleries,
    rename photo titles, edit descriptions, publish, hide, or remove CMS records
    without leaving the gallery view. Removing a record does not delete the
    underlying folder or image file from disk.
-10. Opt selected galleries or whole gallery branches into the picture game when
+11. Opt selected galleries or whole gallery branches into the picture game when
     you want visitors to compare images side by side.
-11. Enable EXIF GPS maps on gallery branches where you want public photo pins
+12. Enable EXIF GPS maps on gallery branches where you want public photo pins
     and gallery map overlays.
-12. Use protected access controls on a gallery edit page when a public gallery
+13. Use protected access controls on a gallery edit page when a public gallery
     should require a password, disappear from listings, or be opened only by a
     share link.
 
@@ -471,6 +476,8 @@ JavaScript hooks use `data-*` attributes instead of styling classes:
 data-lightbox-image
 data-vote-form
 data-tag-input
+data-gallery-visibility-filter
+data-gallery-row
 ```
 
 Do not rely on a CSS class as both a styling hook and a JavaScript behavior hook
@@ -482,6 +489,7 @@ Use short, direct labels:
 
 - `Save gallery`
 - `Scan/import images`
+- `Select displayed galleries`
 - `Set public`
 - `Title picture`
 - `Check for new gallery folders`

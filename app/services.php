@@ -591,6 +591,22 @@ function scan_gallery_images(int $galleryId): int
 }
 
 /**
+ * Scan every imported gallery folder for new or changed direct images.
+ */
+function scan_all_imported_gallery_images(): array
+{
+    $scanned = 0;
+    $changed = 0;
+    $galleryIds = db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($galleryIds as $galleryId) {
+        $current = scan_gallery_images((int) $galleryId);
+        $scanned++;
+        $changed += $current;
+    }
+    return ['galleries' => $scanned, 'images' => $changed];
+}
+
+/**
  * Thumbnail variants generated for web views.
  */
 function thumbnail_sizes(): array

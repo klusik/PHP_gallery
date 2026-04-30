@@ -127,19 +127,29 @@
         }
     });
 
-    // Table-level select-all checkboxes are scoped by input name so gallery and
-    // image bulk forms can share the same behavior.
+    // Table-level select-all checkboxes are scoped by input name and form. When
+    // a table is filtered, hidden rows are left untouched so bulk operations
+    // only apply to what the admin can currently see.
     document.querySelectorAll('[data-select-all]').forEach((checkbox) => {
         checkbox.addEventListener('change', () => {
             // Variable `name` stores this steps working value.
             const name = checkbox.dataset.selectAll;
-            document.querySelectorAll(`input[type="checkbox"][name="${name}"]`).forEach((item) => {
+            // Variable `scope` stores this steps working value.
+            const scope = checkbox.closest('form') || document;
+            scope.querySelectorAll(`input[type="checkbox"][name="${name}"]`).forEach((item) => {
+                // Variable `row` stores this steps working value.
+                const row = item.closest('tr');
+                if (row && row.hidden) {
+                    return;
+                }
                 item.checked = checkbox.checked;
             });
         });
     });
 
+    setupAdminGalleryFilters();
     setupThumbnailProgress();
+    setupGalleryRefreshProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
@@ -574,6 +584,52 @@
         return escapeHtml(value).replace(/'/g, '&#039;');
     }
 
+    // Function `setupGalleryRefreshProgress` executes this focused behavior.
+    function setupGalleryRefreshProgress() {
+        document.querySelectorAll('[data-refresh-galleries-form]').forEach((form) => {
+            if (!(form instanceof HTMLFormElement)) {
+                return;
+            }
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.submitting === '1') {
+                    return;
+                }
+                event.preventDefault();
+                form.dataset.submitting = '1';
+                // Variable `button` stores this steps working value.
+                const button = form.querySelector('button[type="submit"], input[type="submit"]');
+                if (button) {
+                    button.disabled = true;
+                    if ('value' in button && button.tagName === 'INPUT') {
+                        button.value = 'Scanning...';
+                    } else {
+                        button.textContent = 'Scanning...';
+                    }
+                }
+                const progress = ensureGalleryRefreshProgress(form);
+                progress.hidden = false;
+                requestAnimationFrame(() => {
+                    setTimeout(() => HTMLFormElement.prototype.submit.call(form), 40);
+                });
+            });
+        });
+    }
+
+    // Function `ensureGalleryRefreshProgress` executes this focused behavior.
+    function ensureGalleryRefreshProgress(form) {
+        let progress = document.querySelector('[data-gallery-refresh-progress]');
+        if (progress) {
+            return progress;
+        }
+        progress = document.createElement('div');
+        progress.className = 'thumbnail-progress';
+        progress.dataset.galleryRefreshProgress = 'true';
+        progress.innerHTML = '<progress class="thumbnail-progress-bar"></progress><p class="muted">Scanning existing galleries and checking for new gallery folders...</p>';
+        const target = form.closest('.hero') || form;
+        target.insertAdjacentElement('afterend', progress);
+        return progress;
+    }
+
     // Function `setupThumbnailProgress` executes this focused behavior.
     function setupThumbnailProgress() {
         document.addEventListener('click', async (event) => {
@@ -908,6 +964,80 @@
             `${label} ${processed}/${total} images checked, ${created} files created, ${skipped} existing files skipped.`;
     }
 
+    // Function `setGalleryRowHiddenReason` executes this focused behavior.
+    function setGalleryRowHiddenReason(row, reason, hidden) {
+        if (!(row instanceof HTMLElement)) {
+            return;
+        }
+        if (reason === 'filter') {
+            row.dataset.hiddenByFilter = hidden ? '1' : '0';
+        }
+        if (reason === 'tree') {
+            row.dataset.hiddenByTree = hidden ? '1' : '0';
+        }
+        row.hidden = row.dataset.hiddenByFilter === '1' || row.dataset.hiddenByTree === '1';
+    }
+
+    // Function `setupAdminGalleryFilters` executes this focused behavior.
+    function setupAdminGalleryFilters() {
+        // Variable `filter` stores this steps working value.
+        const filter = document.querySelector('[data-gallery-visibility-filter]');
+        if (!(filter instanceof HTMLSelectElement)) {
+            return;
+        }
+        // Variable `form` stores this steps working value.
+        const form = filter.closest('form');
+        // Variable `rows` stores this steps working value.
+        const rows = Array.from(document.querySelectorAll('[data-gallery-row]'));
+        // Variable `summary` stores this steps working value.
+        const summary = document.querySelector('[data-gallery-filter-summary]');
+        // Variable `selectAll` stores this steps working value.
+        const selectAll = form ? form.querySelector('[data-select-all="gallery_ids[]"]') : null;
+
+        // Function `updateSummary` executes this focused behavior.
+        function updateSummary() {
+            let displayed = 0;
+            let total = 0;
+            const selectedVisibility = filter.value || 'all';
+            rows.forEach((row) => {
+                const matchesFilter = selectedVisibility === 'all' || row.dataset.galleryVisibility === selectedVisibility;
+                if (matchesFilter && row.dataset.hiddenByTree !== '1') {
+                    total++;
+                }
+                if (!row.hidden) {
+                    displayed++;
+                }
+            });
+            if (summary) {
+                summary.textContent = `${displayed} / ${total} galleries displayed`;
+            }
+        }
+
+        // Function `applyFilter` executes this focused behavior.
+        function applyFilter() {
+            const selectedVisibility = filter.value || 'all';
+            rows.forEach((row) => {
+                // A filtered-out row is also unchecked. This prevents a hidden
+                // stale selection from being included in the next bulk action.
+                const matches = selectedVisibility === 'all' || row.dataset.galleryVisibility === selectedVisibility;
+                setGalleryRowHiddenReason(row, 'filter', !matches);
+                if (!matches) {
+                    row.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]').forEach((checkbox) => {
+                        checkbox.checked = false;
+                    });
+                }
+            });
+            if (selectAll instanceof HTMLInputElement) {
+                selectAll.checked = false;
+            }
+            updateSummary();
+        }
+
+        document.addEventListener('galleryRowsChanged', updateSummary);
+        filter.addEventListener('change', applyFilter);
+        applyFilter();
+    }
+
     // Function `setupAdminGalleryTree` executes this focused behavior.
     function setupAdminGalleryTree() {
         // Variable `rows` stores this steps working value.
@@ -953,8 +1083,21 @@
                     const parent = rows.find((candidate) => candidate.dataset.galleryId === parentId);
                     parentId = parent ? (parent.dataset.parentId || '0') : '0';
                 }
-                row.hidden = hidden;
+                setGalleryRowHiddenReason(row, 'tree', hidden);
+                if (hidden) {
+                    row.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]').forEach((checkbox) => {
+                        checkbox.checked = false;
+                    });
+                }
             });
+            // The master checkbox is a one-shot command for the current view,
+            // so any tree visibility change clears it rather than leaving a
+            // stale checked state after hidden rows have been unchecked.
+            const selectAll = document.querySelector('[data-gallery-bulk-form] [data-select-all="gallery_ids[]"]');
+            if (selectAll instanceof HTMLInputElement) {
+                selectAll.checked = false;
+            }
+            document.dispatchEvent(new Event('galleryRowsChanged'));
         }
 
         document.querySelectorAll('[data-gallery-toggle]').forEach((button) => {
