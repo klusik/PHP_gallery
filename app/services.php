@@ -1232,8 +1232,8 @@ function check_application_update(): array
 function cached_application_update_check(int $ttlSeconds = 3600): array
 {
     $cached = json_decode((string) app_setting('application_update_check_cache', ''), true);
-    if (is_array($cached) && isset($cached['checked_at'], $cached['status']) && is_array($cached['status'])) {
-        if (time() - (int) $cached['checked_at'] < $ttlSeconds) {
+    if (is_array($cached) && isset($cached['checked_at'], $cached['version'], $cached['status']) && is_array($cached['status'])) {
+        if ((string) $cached['version'] === CMS_VERSION && time() - (int) $cached['checked_at'] < $ttlSeconds) {
             return $cached['status'];
         }
     }
@@ -1242,6 +1242,7 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
     try {
         set_app_setting('application_update_check_cache', json_encode([
             'checked_at' => time(),
+            'version' => CMS_VERSION,
             'status' => $status,
         ], JSON_UNESCAPED_SLASHES));
     } catch (Throwable) {
@@ -1306,6 +1307,7 @@ function install_application_update(): array
     $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
     $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
     $migrations = run_migrations();
+    delete_app_settings(['application_update_check_cache']);
 
     return [
         'version' => (string) $status['latest_version'],
