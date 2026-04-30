@@ -8,6 +8,8 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
 - The admin Updates button now switches to a fixed warning style and shows
   `Updates (1)` when a newer GitHub version is available.
+- Opened public gallery titles now use the full panel width, so longer names do
+  not wrap prematurely on desktop-sized layouts.
 
 ### Notes
 

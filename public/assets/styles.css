@@ -910,11 +910,13 @@ td {
 }
 
 .public-page .hero h1 {
-    max-width: 18ch;
+    max-width: 100%;
     margin: 0 0 0.35rem;
-    font-size: clamp(2rem, 5vw, 4.5rem);
-    line-height: 0.95;
-    letter-spacing: -0.055em;
+    font-size: clamp(1.75rem, 3.4vw, 3.4rem);
+    line-height: 1.05;
+    letter-spacing: 0;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .public-page .hero p {
