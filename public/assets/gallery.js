@@ -193,6 +193,11 @@
     let currentIndex = 0;
     let fullscreenHideTimer = null;
     let touchGesture = null;
+    const isMobileTouchDevice = detectMobileTouchDevice();
+    const supportsPointerGestures = Boolean(window.PointerEvent);
+    const isLightboxDebugEnabled = detectLightboxDebugFlag();
+    overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
+    window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
 
     // Function `syncLightboxVote` executes this focused behavior.
     function syncLightboxVote(card) {
@@ -281,8 +286,15 @@
     });
 
     overlay.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const actionTarget = target?.closest('[data-lightbox-action]');
         // Variable `action` stores this steps working value.
-        const action = event.target.dataset.lightboxAction;
+        const action = actionTarget?.dataset.lightboxAction;
+        if (isMobileTouchDevice && isLightboxFullscreen() && target?.closest('.lightbox-stage-link')) {
+            event.preventDefault();
+            showLightboxHud();
+            return;
+        }
         if (action === 'close' || event.target === overlay) {
             close();
         }
@@ -296,19 +308,27 @@
             event.preventDefault();
             toggleLightboxFullscreen();
         }
-        if (event.target.closest('[data-lightbox-map]')) {
+        const mapButton = target?.closest('[data-lightbox-map]');
+        if (mapButton) {
             event.preventDefault();
-            openPhotoMapFromJson(event.target.closest('[data-lightbox-map]').dataset.mapPoint || '');
+            openPhotoMapFromJson(mapButton.dataset.mapPoint || '');
         }
     });
 
     overlay.addEventListener('mousemove', showLightboxHud);
     overlay.addEventListener('pointermove', showLightboxHud);
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud);
-    overlay.addEventListener('pointerdown', startTouchGesture);
-    overlay.addEventListener('pointermove', trackTouchGesture);
-    overlay.addEventListener('pointerup', finishTouchGesture);
-    overlay.addEventListener('pointercancel', clearTouchGesture);
+    if (supportsPointerGestures) {
+        overlay.addEventListener('pointerdown', startTouchGesture);
+        overlay.addEventListener('pointermove', trackTouchGesture);
+        overlay.addEventListener('pointerup', finishTouchGesture);
+        overlay.addEventListener('pointercancel', clearTouchGesture);
+    } else {
+        overlay.addEventListener('touchstart', startTouchGesture, {passive: false});
+        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false});
+        overlay.addEventListener('touchend', finishTouchGesture, {passive: false});
+        overlay.addEventListener('touchcancel', clearTouchGesture);
+    }
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
 
@@ -361,19 +381,34 @@
     }
 
     async function toggleLightboxFullscreen() {
+        debugLightbox('toggle:before', {
+            mobile: isMobileTouchDevice,
+            fullscreen: isLightboxFullscreen(),
+            browserFullscreen: Boolean(document.fullscreenElement),
+        });
         if (isLightboxFullscreen()) {
             await exitLightboxFullscreen();
+            debugLightbox('toggle:exit');
             return;
         }
         await enterLightboxFullscreen();
+        debugLightbox('toggle:enter');
     }
 
     async function enterLightboxFullscreen() {
         overlay.classList.add('is-fullscreen');
         overlay.classList.remove('is-ui-visible');
+        if (isMobileTouchDevice) {
+            overlay.classList.add('is-mobile-fullscreen');
+            document.body.classList.add('has-mobile-lightbox');
+            debugLightbox('enter:mobile-css');
+            showLightboxHud();
+            return;
+        }
         try {
             if (overlay.requestFullscreen) {
                 await overlay.requestFullscreen();
+                debugLightbox('enter:native');
                 return;
             }
         } catch {
@@ -381,27 +416,34 @@
         }
         overlay.classList.add('is-mobile-fullscreen');
         document.body.classList.add('has-mobile-lightbox');
+        debugLightbox('enter:fallback-css');
+        showLightboxHud();
     }
 
     async function exitLightboxFullscreen() {
         overlay.classList.remove('is-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         document.body.classList.remove('has-mobile-lightbox');
-        if (document.fullscreenElement) {
+        if (!isMobileTouchDevice && document.fullscreenElement) {
             try {
                 await document.exitFullscreen();
             } catch {
                 // Ignore fullscreen exit failures.
             }
         }
+        debugLightbox('exit');
     }
 
     function syncLightboxFullscreenState() {
+        if (isMobileTouchDevice) {
+            return;
+        }
         if (!document.fullscreenElement && overlay.classList.contains('is-fullscreen')) {
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
             document.body.classList.remove('has-mobile-lightbox');
+            debugLightbox('sync:browser-exit');
             return;
         }
         if (document.fullscreenElement === overlay) {
@@ -409,6 +451,7 @@
             overlay.classList.remove('is-mobile-fullscreen');
             document.body.classList.remove('has-mobile-lightbox');
             overlay.classList.remove('is-ui-visible');
+            debugLightbox('sync:browser-enter');
         }
     }
 
@@ -448,8 +491,12 @@
     }
 
     function clearTouchGesture() {
-        if (touchGesture) {
-            overlay.releasePointerCapture?.(touchGesture.pointerId);
+        if (touchGesture && touchGesture.pointerId !== null) {
+            try {
+                overlay.releasePointerCapture?.(touchGesture.pointerId);
+            } catch {
+                // Ignore pointer capture release failures from older mobile engines.
+            }
         }
         touchGesture = null;
     }
@@ -458,43 +505,71 @@
         if (overlay.hidden || !isLightboxFullscreen()) {
             return;
         }
-        if (event.pointerType === 'mouse' || event.button !== 0) {
+        const point = lightboxGesturePoint(event);
+        if (!point) {
             return;
         }
-        if (event.target.closest('button, a, input, textarea, select, form')) {
+        if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0)) {
+            return;
+        }
+        if (isMobileTouchDevice) {
+            showLightboxHud();
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (isLightboxControlTarget(target)) {
             return;
         }
         touchGesture = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            lastX: event.clientX,
-            lastY: event.clientY,
+            pointerId: event.type === 'pointerdown' ? event.pointerId : null,
+            startX: point.clientX,
+            startY: point.clientY,
+            lastX: point.clientX,
+            lastY: point.clientY,
             startedAt: Date.now(),
             active: true,
         };
-        overlay.setPointerCapture?.(event.pointerId);
+        if (touchGesture.pointerId !== null) {
+            try {
+                overlay.setPointerCapture?.(touchGesture.pointerId);
+            } catch {
+                // Pointer capture is best-effort on mobile browsers.
+            }
+        }
     }
 
     function trackTouchGesture(event) {
-        if (!touchGesture || !touchGesture.active || event.pointerId !== touchGesture.pointerId) {
+        if (!touchGesture || !touchGesture.active) {
             return;
         }
-        touchGesture.lastX = event.clientX;
-        touchGesture.lastY = event.clientY;
+        if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
+            return;
+        }
+        const point = lightboxGesturePoint(event);
+        if (!point) {
+            return;
+        }
+        touchGesture.lastX = point.clientX;
+        touchGesture.lastY = point.clientY;
         const dx = touchGesture.lastX - touchGesture.startX;
         const dy = touchGesture.lastY - touchGesture.startY;
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
+            event.preventDefault();
+        }
         if (Math.abs(dx) > 18 || Math.abs(dy) > 18) {
             overlay.classList.add('is-ui-visible');
         }
     }
 
     function finishTouchGesture(event) {
-        if (!touchGesture || !touchGesture.active || event.pointerId !== touchGesture.pointerId) {
+        if (!touchGesture || !touchGesture.active) {
             return;
         }
-        const dx = event.clientX - touchGesture.startX;
-        const dy = event.clientY - touchGesture.startY;
+        if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
+            return;
+        }
+        const point = lightboxGesturePoint(event) || {clientX: touchGesture.lastX, clientY: touchGesture.lastY};
+        const dx = point.clientX - touchGesture.startX;
+        const dy = point.clientY - touchGesture.startY;
         const elapsed = Date.now() - touchGesture.startedAt;
         clearTouchGesture();
         if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) || elapsed > 1200) {
@@ -505,6 +580,60 @@
             step(1);
         } else {
             step(-1);
+        }
+    }
+
+    function lightboxGesturePoint(event) {
+        if (event.changedTouches && event.changedTouches.length > 0) {
+            return event.changedTouches[0];
+        }
+        if (event.touches && event.touches.length > 0) {
+            return event.touches[0];
+        }
+        if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+            return event;
+        }
+        return null;
+    }
+
+    function isLightboxControlTarget(target) {
+        if (!target) {
+            return false;
+        }
+        if (target.closest('.lightbox-hud')) {
+            return true;
+        }
+        if (target.closest('.lightbox-meta')) {
+            return Boolean(target.closest('button, a, input, textarea, select, form'));
+        }
+        return Boolean(target.closest('button, input, textarea, select, form'));
+    }
+
+    function detectMobileTouchDevice() {
+        const hasTouch = navigator.maxTouchPoints > 0 || window.matchMedia?.('(pointer: coarse)').matches;
+        if (!hasTouch) {
+            return false;
+        }
+        const userAgent = navigator.userAgent || '';
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent)
+            || (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1);
+    }
+
+    function debugLightbox(message, details = {}) {
+        if (!isLightboxDebugEnabled) {
+            return;
+        }
+        console.debug('[lightbox]', message, details);
+    }
+
+    function detectLightboxDebugFlag() {
+        if (new URLSearchParams(window.location.search).has('lightbox_debug')) {
+            return true;
+        }
+        try {
+            return window.localStorage.getItem('lightbox_debug') === '1';
+        } catch {
+            return false;
         }
     }
 
