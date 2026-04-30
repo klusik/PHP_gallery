@@ -849,6 +849,13 @@ td {
     margin: 0;
 }
 
+.admin-flag.is-enabled {
+    color: #1f8a3b;
+    font-weight: 800;
+    display: inline-block;
+    min-width: 1ch;
+}
+
 .admin-page tr:hover td {
     background: #f6f7f7;
 }

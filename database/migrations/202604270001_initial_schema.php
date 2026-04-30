@@ -20,6 +20,7 @@ return [
         cover_image_id BIGINT UNSIGNED NULL,
         sort_order INT NOT NULL DEFAULT 0,
         visibility ENUM('draft','public','private') NOT NULL DEFAULT 'draft',
+        voting_enabled TINYINT(1) NOT NULL DEFAULT 0,
         access_mode ENUM('normal','password') NOT NULL DEFAULT 'normal',
         access_listing ENUM('listed','unlisted') NOT NULL DEFAULT 'listed',
         access_password_hash VARCHAR(255) NULL,
