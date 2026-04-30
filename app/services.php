@@ -1759,7 +1759,7 @@ function application_update_beta_active(): bool
 }
 
 /**
- * Return the currently installed beta commit hash, if any.
+ * Return the currently installed beta code, if any.
  */
 function application_update_beta_commit(): string
 {
@@ -1767,7 +1767,7 @@ function application_update_beta_commit(): string
 }
 
 /**
- * Return the stored stable backup archive path used for beta rollback.
+ * Return the stored beta backup archive path.
  */
 function application_update_beta_backup_path(): string
 {
@@ -1775,7 +1775,7 @@ function application_update_beta_backup_path(): string
 }
 
 /**
- * Install a beta/manual commit archive over the current application files.
+ * Install a beta/manual code archive over the current application files.
  */
 function install_application_beta(string $commitId): array
 {
@@ -1784,7 +1784,7 @@ function install_application_beta(string $commitId): array
     }
     $commitId = strtolower(trim($commitId));
     if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
-        throw new RuntimeException('Enter a valid Git commit hash.');
+        throw new RuntimeException('Enter a valid beta code.');
     }
 
     $root = dirname(__DIR__);
@@ -1833,34 +1833,40 @@ function install_application_beta(string $commitId): array
 }
 
 /**
- * Restore the last stable backup created before the beta install.
+ * Restore the stable release from the GitHub branch head.
  */
-function restore_application_stable_backup(): array
+function restore_application_stable_release(): array
 {
-    $backupPath = application_update_beta_backup_path();
-    if ($backupPath === '') {
-        throw new RuntimeException('No beta rollback backup is available.');
-    }
     $root = dirname(__DIR__);
-    $absoluteBackup = $root . '/' . ltrim($backupPath, '/');
-    if (!is_file($absoluteBackup)) {
-        throw new RuntimeException('Stored beta rollback backup file was not found.');
+    $branch = application_update_branch_candidates()[0] ?? '';
+    if ($branch === '') {
+        throw new RuntimeException('No stable release branch is configured.');
+    }
+    $updateDir = $root . '/cache/updates';
+    $stamp = date('Ymd-His');
+    $restoreDir = $updateDir . '/stable-restore-' . $stamp;
+    application_update_ensure_dir($updateDir);
+    application_update_ensure_dir($restoreDir);
+
+    $archive = http_fetch(application_update_zip_url($branch), 60);
+    $zipPath = $updateDir . '/stable-restore-' . $stamp . '.zip';
+    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
+        throw new RuntimeException('Could not write stable restore archive into cache/updates.');
     }
 
-    $restoreDir = $root . '/cache/updates/restore-' . date('Ymd-His');
-    application_update_ensure_dir($restoreDir);
     $zip = new ZipArchive();
-    if ($zip->open($absoluteBackup) !== true) {
-        throw new RuntimeException('Beta rollback backup could not be opened.');
+    if ($zip->open($zipPath) !== true) {
+        throw new RuntimeException('Downloaded stable restore archive could not be opened.');
     }
     if (!$zip->extractTo($restoreDir)) {
         $zip->close();
-        throw new RuntimeException('Beta rollback backup could not be extracted.');
+        throw new RuntimeException('Downloaded stable restore archive could not be extracted.');
     }
     $zip->close();
 
     $sourceRoot = application_update_extracted_root($restoreDir);
     $copied = application_update_copy_files($sourceRoot, $root, $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip');
+    application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings([
         'application_update_channel',
         'application_update_beta_commit',
@@ -1868,13 +1874,23 @@ function restore_application_stable_backup(): array
         'application_update_check_cache',
     ]);
 
+    $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? CMS_VERSION;
+
     return [
-        'version' => CMS_VERSION,
+        'version' => $restoredVersion,
         'branch' => 'stable',
         'files_copied' => $copied,
-        'backup' => $backupPath,
+        'archive' => str_replace('\\', '/', substr($zipPath, strlen($root) + 1)),
         'migrations' => [],
     ];
+}
+
+/**
+ * Backward-compatible wrapper for the stable release restore.
+ */
+function restore_application_stable_backup(): array
+{
+    return restore_application_stable_release();
 }
 
 /**
@@ -1952,12 +1968,12 @@ function application_update_branch_candidates(): array
 }
 
 /**
- * Build a GitHub archive URL for one commit hash.
+ * Build a GitHub archive URL for one code snapshot.
  */
 function application_update_commit_zip_url(string $commitId): string
 {
     if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
-        throw new RuntimeException('Enter a valid Git commit hash.');
+        throw new RuntimeException('Enter a valid beta code.');
     }
     [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
     return 'https://github.com/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/archive/' . rawurlencode($commitId) . '.zip';
@@ -2186,11 +2202,59 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
         if (!copy($item->getPathname(), $destination)) {
             throw new RuntimeException('Could not copy update file: ' . $relativePath);
         }
+        application_update_invalidate_opcache_for_path($destination);
         $copied++;
     }
 
     $backup->close();
     return $copied;
+}
+
+/**
+ * Invalidate cached PHP bytecode for a freshly copied file when opcache is enabled.
+ */
+function application_update_invalidate_opcache_for_path(string $path): void
+{
+    if (!function_exists('opcache_invalidate')) {
+        return;
+    }
+    if (is_file($path) && preg_match('/\.php$/i', $path)) {
+        @opcache_invalidate($path, true);
+    }
+}
+
+/**
+ * Invalidate cached PHP bytecode for restored application files under a source tree.
+ */
+function application_update_invalidate_opcache(string $destinationRoot, string $sourceRoot): void
+{
+    if (!function_exists('opcache_invalidate')) {
+        return;
+    }
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($iterator as $item) {
+        if ($item->isDir() || $item->isLink()) {
+            continue;
+        }
+        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
+        $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        application_update_invalidate_opcache_for_path($destination);
+    }
+}
+
+/**
+ * Read the CMS version from a local bootstrap file.
+ */
+function application_update_version_from_local_bootstrap(string $bootstrapPath): ?string
+{
+    if (!is_file($bootstrapPath)) {
+        return null;
+    }
+    $bootstrap = (string) file_get_contents($bootstrapPath);
+    return application_update_version_from_bootstrap($bootstrap);
 }
 
 /**

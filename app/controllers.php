@@ -884,11 +884,11 @@ function cms_admin_update(): void
             if ($action === 'beta_install') {
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
                 admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result);
-                $_SESSION['admin_update_notice'] = 'Installed beta commit ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+                $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
             } elseif ($action === 'beta_revert') {
-                $result = restore_application_stable_backup();
-                admin_log_event('info', 'update.beta_reverted', 'Admin reverted beta application build to stable backup.', $result);
-                $_SESSION['admin_update_notice'] = 'Restored the last stable version from beta backup.';
+                $result = restore_application_stable_release();
+                admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result);
+                $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head.';
             } else {
                 $result = install_application_update();
                 admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
@@ -921,7 +921,7 @@ function cms_admin_update(): void
     echo '<p>Installed version: <strong>' . e(CMS_VERSION) . '</strong></p>';
     if ($betaActive) {
         echo '<p>Active channel: <strong>beta</strong></p>';
-        echo '<p>Installed beta commit: <code>' . e(application_update_beta_commit()) . '</code></p>';
+        echo '<p>Installed beta code: <code>' . e(application_update_beta_commit()) . '</code></p>';
     } else {
         echo '<p>Active channel: <strong>stable</strong></p>';
     }
@@ -946,15 +946,15 @@ function cms_admin_update(): void
     echo '<hr><h3>Beta build</h3>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="beta_install">';
-    echo '<label>Git commit hash<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
-    echo '<p class="muted">Enter a full or short Git commit hash from the repository to install that exact beta snapshot.</p>';
-    echo '<button type="submit">Install beta commit</button>';
+    echo '<label>Beta code<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
+    echo '<p class="muted">Enter the beta code for the snapshot you want to install.</p>';
+    echo '<button type="submit">Install beta snapshot</button>';
     echo '</form>';
     if ($betaActive) {
         echo '<form method="post" class="form-grid" style="margin-top:1rem;">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
-        echo '<p class="muted">This restores the last stable file backup that was created before the beta install. Database changes from the beta are not rolled back automatically.</p>';
-        echo '<button type="submit" class="button secondary">Revert to last stable version</button>';
+        echo '<p class="muted">This downloads the stable branch head from GitHub and restores application files from that release. Database changes from the beta are not rolled back automatically.</p>';
+        echo '<button type="submit" class="button secondary">Restore stable release</button>';
         echo '</form>';
     }
     echo '</section>';
