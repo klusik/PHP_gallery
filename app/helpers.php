@@ -464,7 +464,7 @@ function cms_head_extras_html(): string
 function render_footer(): void
 {
     echo '</main><footer class="site-footer muted">';
-    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery on GitHub</a>';
+    echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(CMS_VERSION) . ')</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
