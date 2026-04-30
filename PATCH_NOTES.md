@@ -2,6 +2,14 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.21
+
+### Major Changes
+
+- Prepared the application for the next release cycle by bumping the active
+  version number and keeping the updater badge logic aligned with the current
+  installed release.
+
 ## Version 0.20
 
 ### Major Changes
@@ -10,6 +18,9 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
   GitHub check updates the same cached state used by the header and dashboard.
 - Pending update links and buttons now show `Update(1)` and use the fixed
   warning background, including the primary update action button.
+- The updater now checks both allowed GitHub branches and uses the highest
+  advertised version, so a stale `main` branch cannot hide a newer `master`
+  release.
 
 ## Version 0.19
 
