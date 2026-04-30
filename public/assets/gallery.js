@@ -189,6 +189,10 @@
     const lightboxVoteIndicator = overlay.querySelector('[data-lightbox-vote-indicator]');
     // Variable `lightboxMapButton` stores this steps working value.
     const lightboxMapButton = overlay.querySelector('[data-lightbox-map]');
+    const lightboxMapSplit = overlay.querySelector('[data-lightbox-map-split]');
+    const lightboxMapSplitClose = overlay.querySelector('[data-lightbox-map-split-close]');
+    const lightboxMapSplitTitle = overlay.querySelector('[data-lightbox-map-split-title]');
+    const lightboxMapSplitCanvas = overlay.querySelector('[data-lightbox-map-split-canvas]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
     let fullscreenHideTimer = null;
@@ -247,10 +251,20 @@
             counter.textContent = `${index + 1} / ${cards.length}`;
         }
         overlay.dataset.currentImageId = card.dataset.imageId || '';
+        overlay.dataset.currentTitle = card.dataset.title || '';
         syncLightboxVote(card);
         if (lightboxMapButton) {
-            lightboxMapButton.hidden = !card.dataset.mapPoint;
-            lightboxMapButton.dataset.mapPoint = card.dataset.mapPoint || '';
+            const hasMapPoint = Boolean(card.dataset.mapPoint && card.dataset.mapPoint.trim());
+            lightboxMapButton.hidden = !hasMapPoint;
+            lightboxMapButton.dataset.mapPoint = hasMapPoint ? card.dataset.mapPoint.trim() : '';
+        }
+        if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+            const mapPoint = card.dataset.mapPoint || '';
+            if (mapPoint.trim()) {
+                openLightboxMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
+            } else if (lightboxMapSplitTitle) {
+                lightboxMapSplitTitle.textContent = card.dataset.title || title.textContent || 'Map';
+            }
         }
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
@@ -311,9 +325,17 @@
         const mapButton = target?.closest('[data-lightbox-map]');
         if (mapButton) {
             event.preventDefault();
-            openPhotoMapFromJson(mapButton.dataset.mapPoint || '');
+            if (isLightboxFullscreen()) {
+                toggleLightboxMapSplit(mapButton.dataset.mapPoint || '', overlay.dataset.currentTitle || '');
+            } else {
+                openPhotoMapFromJson(mapButton.dataset.mapPoint || '');
+            }
         }
     });
+
+    if (lightboxMapSplitClose) {
+        lightboxMapSplitClose.addEventListener('click', closeLightboxMapSplit);
+    }
 
     overlay.addEventListener('mousemove', showLightboxHud);
     overlay.addEventListener('pointermove', showLightboxHud);
@@ -423,6 +445,7 @@
     async function exitLightboxFullscreen() {
         overlay.classList.remove('is-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
+        closeLightboxMapSplit();
         document.body.classList.remove('has-mobile-lightbox');
         if (!isMobileTouchDevice && document.fullscreenElement) {
             try {
@@ -702,20 +725,84 @@
 
     // Function `ensureLeaflet` executes this focused behavior.
     function ensureLeaflet() {
-        if (window.L) {
+        if (window.L && document.querySelector('link[data-gallery-leaflet-css]')) {
+            configureLeafletMarkerIcon();
             return Promise.resolve();
         }
         if (window.galleryLeafletLoading) {
             return window.galleryLeafletLoading;
         }
 
-        // The local stylesheet now contains the required Leaflet layout rules.
-        // Only the JavaScript library is loaded dynamically so the map button
-        // does not wait on stylesheet load events that can be unreliable after
-        // cache restores or browser hard-refreshes.
-        window.galleryLeafletLoading = ensureLeafletScript().then(() => undefined);
+        // Leaflet depends on its stylesheet for tile-pane positioning and image
+        // state during zoom/fullscreen transitions. The app keeps a local CSS
+        // fallback below, but loading the official stylesheet first prevents
+        // Chromium fullscreen from showing stale tile panes as a visible grid.
+        window.galleryLeafletLoading = Promise.all([
+            ensureLeafletStylesheet(),
+            ensureLeafletScript(),
+        ]).then(() => {
+            configureLeafletMarkerIcon();
+        });
 
         return window.galleryLeafletLoading;
+    }
+
+    // Function `ensureLeafletStylesheet` executes this focused behavior.
+    function ensureLeafletStylesheet() {
+        const existingStylesheet = document.querySelector('link[data-gallery-leaflet-css]');
+        if (existingStylesheet) {
+            return Promise.resolve();
+        }
+
+        return new Promise((resolve) => {
+            // Variable `stylesheet` stores this steps working value.
+            const stylesheet = document.createElement('link');
+            stylesheet.rel = 'stylesheet';
+            stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            stylesheet.integrity = 'sha256-p4NxAoJBhIINfQkM12i93m8fFYdHn5t2mZmk3qj6y8o=';
+            stylesheet.crossOrigin = '';
+            stylesheet.dataset.galleryLeafletCss = 'true';
+            stylesheet.onload = () => resolve();
+            stylesheet.onerror = () => resolve();
+            document.head.append(stylesheet);
+        });
+    }
+
+    // Function `configureLeafletMarkerIcon` executes this focused behavior.
+    function configureLeafletMarkerIcon() {
+        if (!window.L || !L.Icon || !L.Icon.Default) {
+            return;
+        }
+
+        // Leaflet normally detects marker image URLs from leaflet.css. The app
+        // loads Leaflet dynamically and can run inside fullscreen/modal scopes,
+        // where custom gallery image CSS may make that detection unreliable.
+        // Use explicit upstream image URLs so normal maps and fullscreen split
+        // maps both keep the blue GPS marker.
+        L.Icon.Default.mergeOptions({
+            iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+            iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        });
+    }
+
+    // Function `getGalleryMapMarkerIcon` executes this focused behavior.
+    function getGalleryMapMarkerIcon() {
+        if (!window.L || !L.divIcon) {
+            return undefined;
+        }
+
+        if (!window.galleryMapMarkerIcon) {
+            window.galleryMapMarkerIcon = L.divIcon({
+                className: 'gallery-leaflet-marker',
+                html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
+                iconAnchor: [13, 40],
+                iconSize: [26, 40],
+                popupAnchor: [0, -36],
+            });
+        }
+
+        return window.galleryMapMarkerIcon;
     }
 
     // Function `ensureLeafletScript` executes this focused behavior.
@@ -794,7 +881,11 @@
         canvas.innerHTML = '';
 
         // Variable `map` stores this steps working value.
-        const map = L.map(canvas);
+        const map = L.map(canvas, {
+            fadeAnimation: false,
+            markerZoomAnimation: false,
+            zoomAnimation: false,
+        });
         overlay.galleryLeafletMap = map;
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -809,29 +900,140 @@
                 return;
             }
             // Variable `marker` stores this steps working value.
-            const marker = L.marker([point.lat, point.lng]).addTo(map);
+            const marker = L.marker([point.lat, point.lng], {icon: getGalleryMapMarkerIcon()}).addTo(map);
             marker.bindPopup(mapPopupHtml(point));
             bounds.push([point.lat, point.lng]);
         });
 
+        setInitialMapViewport(map, bounds, {padding: [30, 30]});
+        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]});
+    }
+
+    function toggleLightboxMapSplit(json, title) {
+        if (!json || !isLightboxFullscreen()) {
+            return;
+        }
+        if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+            closeLightboxMapSplit();
+            return;
+        }
+        openLightboxMapSplit(json, title);
+    }
+
+    async function openLightboxMapSplit(json, title) {
+        const points = parseMapPoints(json);
+        if (!points.length || !lightboxMapSplit || !lightboxMapSplitCanvas) {
+            return;
+        }
+        await ensureLeaflet();
+        lightboxMapSplit.hidden = false;
+        lightboxMapSplitTitle.textContent = title || 'Map';
+        overlay.classList.add('is-map-split');
+        await waitForElementSize(lightboxMapSplitCanvas);
+        if (overlay.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+        lightboxMapSplitCanvas.innerHTML = '';
+        const map = L.map(lightboxMapSplitCanvas, {
+            fadeAnimation: false,
+            markerZoomAnimation: false,
+            zoomAnimation: false,
+        });
+        overlay.galleryLeafletSplitMap = map;
+        if (overlay.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+        const bounds = [];
+        points.forEach((point) => {
+            if (typeof point.lat !== 'number' || typeof point.lng !== 'number') {
+                return;
+            }
+            const marker = L.marker([point.lat, point.lng], {icon: getGalleryMapMarkerIcon()}).addTo(map);
+            marker.bindPopup(mapPopupHtml(point));
+            bounds.push([point.lat, point.lng]);
+        });
+        setInitialMapViewport(map, bounds, {padding: [24, 24]});
+        stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]});
+        overlay.galleryLeafletSplitResizeObserver = new ResizeObserver(() => {
+            if (overlay.galleryLeafletSplitMap) {
+                overlay.galleryLeafletSplitMap.invalidateSize(false);
+            }
+        });
+        overlay.galleryLeafletSplitResizeObserver.observe(lightboxMapSplitCanvas);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (overlay.galleryLeafletSplitMap) {
+                    overlay.galleryLeafletSplitMap.invalidateSize(false);
+                }
+            });
+        });
+    }
+
+    // Function `setInitialMapViewport` executes this focused behavior.
+    function setInitialMapViewport(map, bounds, options) {
         map.invalidateSize(false);
         if (bounds.length === 1) {
-            map.setView(bounds[0], 15);
-        } else {
-            map.fitBounds(bounds, {padding: [30, 30]});
+            map.setView(bounds[0], 15, {animate: false});
+        } else if (bounds.length > 1) {
+            map.fitBounds(bounds, {...options, animate: false});
         }
+    }
 
-        // Recheck size once more after tile panes and markers are attached.
-        // This keeps the map stable after font loading, scrollbar changes or
-        // custom CSS skins that slightly alter dialog dimensions.
-        setTimeout(() => {
-            map.invalidateSize(false);
-            if (bounds.length === 1) {
-                map.setView(bounds[0], map.getZoom());
-            } else {
-                map.fitBounds(bounds, {padding: [30, 30]});
+    // Function `stabilizeMapAfterLayout` executes this focused behavior.
+    function stabilizeMapAfterLayout(map, bounds, options) {
+        const refreshDelays = [0, 60, 150, 350];
+        refreshDelays.forEach((delay) => {
+            window.setTimeout(() => {
+                if (!map || !map.getContainer()?.isConnected) {
+                    return;
+                }
+                setInitialMapViewport(map, bounds, options);
+            }, delay);
+        });
+    }
+
+    async function waitForElementSize(element) {
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const rect = element.getBoundingClientRect();
+            const computed = window.getComputedStyle(element);
+            if (rect.width > 0 && rect.height > 0 && computed.display !== 'none' && computed.visibility !== 'hidden') {
+                return;
             }
-        }, 150);
+            await afterNextPaint();
+        }
+    }
+
+    function closeLightboxMapSplit() {
+        if (overlay.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        if (lightboxMapSplit) {
+            lightboxMapSplit.hidden = true;
+        }
+        overlay.classList.remove('is-map-split');
+        if (overlay.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+        if (lightboxMapSplitCanvas) {
+            lightboxMapSplitCanvas.innerHTML = '';
+        }
+    }
+
+    function parseMapPoints(json) {
+        try {
+            const parsed = JSON.parse(json);
+            return Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+            return [];
+        }
     }
 
     // Function `mapPopupHtml` executes this focused behavior.
@@ -1516,4 +1718,3 @@
         refreshVisibility();
     }
 })();
-

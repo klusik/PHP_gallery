@@ -613,6 +613,52 @@ td {
     backdrop-filter: blur(8px);
 }
 
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-original-button,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-height: 2.25rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid #fffdf8;
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 253, 248, 0.12);
+    color: #fffdf8;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button[hidden] {
+    display: none !important;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-meta {
+    max-width: min(42rem, calc(100% - 2rem));
+    padding: 0.45rem 0.6rem;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    max-width: 100%;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-original-button,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
+    width: auto;
+    min-width: 0;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.9rem;
+}
+
 .lightbox-fullscreen-button {
     position: absolute;
     top: 1rem;
@@ -805,6 +851,101 @@ td {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split figure {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(560px, 38vw);
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-meta {
+    position: static;
+    inset: auto;
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    justify-self: center;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 0.5rem;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.5rem;
+    border-left: 1px solid rgba(255, 253, 248, 0.18);
+    background: rgba(10, 10, 10, 0.24);
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split[hidden] {
+    display: none !important;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-title {
+    color: #fffdf8;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas {
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container {
+    width: 100%;
+    height: 100%;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container img,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container .leaflet-tile {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    filter: none;
+    max-height: none;
+    max-width: none;
+    object-fit: initial;
+    opacity: 1;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-tile-loaded {
+    opacity: 1 !important;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-close {
+    justify-self: end;
 }
 
 .lightbox.is-fullscreen .lightbox-nav,
@@ -1196,6 +1337,7 @@ body.has-mobile-lightbox {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: auto;
     border: 1px solid #fffdf8;
     border-radius: var(--radius, 16px);
     color: #fffdf8;
@@ -1233,6 +1375,30 @@ body.has-mobile-lightbox {
     touch-action: pan-x pan-y;
 }
 
+.leaflet-tile-pane {
+    z-index: 200;
+}
+
+.leaflet-overlay-pane {
+    z-index: 400;
+}
+
+.leaflet-shadow-pane {
+    z-index: 500;
+}
+
+.leaflet-marker-pane {
+    z-index: 600;
+}
+
+.leaflet-tooltip-pane {
+    z-index: 650;
+}
+
+.leaflet-popup-pane {
+    z-index: 700;
+}
+
 .leaflet-tile,
 .leaflet-marker-icon,
 .leaflet-marker-shadow {
@@ -1245,7 +1411,18 @@ body.has-mobile-lightbox {
 }
 
 .leaflet-tile-loaded {
+    opacity: 1;
     visibility: inherit;
+}
+
+.leaflet-fade-anim .leaflet-tile {
+    opacity: 0;
+    transition: opacity 0.2s linear;
+    will-change: opacity;
+}
+
+.leaflet-fade-anim .leaflet-tile-loaded {
+    opacity: 1;
 }
 
 .leaflet-zoom-animated {
@@ -1489,7 +1666,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 
 .lightbox-map-button {
-    border-radius: 999px;
     padding: 0.35rem 0.7rem;
 }
 
@@ -1580,4 +1756,139 @@ body.has-map-overlay {
 
 .exif-admin-summary dd {
     margin: 0;
+}
+
+/* Leaflet fullscreen split hardening.
+   Browser fullscreen applies the gallery lightbox image rules to every image
+   inside the fullscreen element. Leaflet also keeps old tile containers around
+   during zoom/resize transitions. These local overrides keep map tiles as raw
+   map tiles so the split map cannot inherit photo sizing, filters, radius or
+   transitions from the fullscreen viewer. */
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container img.leaflet-tile,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container .leaflet-tile-pane img {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 256px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 256px !important;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-container,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-pane {
+    filter: none !important;
+    opacity: 1 !important;
+}
+
+
+/* Leaflet marker icon hardening.
+   Keep the GPS pin dimensions independent from gallery image and fullscreen
+   image rules while leaving map tiles controlled by the tile-specific reset. */
+.leaflet-container img.leaflet-marker-icon {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 41px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 25px !important;
+    z-index: auto;
+}
+
+.leaflet-container img.leaflet-marker-shadow {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 41px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 41px !important;
+}
+
+.leaflet-container .leaflet-marker-pane {
+    z-index: 600;
+}
+
+.leaflet-container .leaflet-shadow-pane {
+    z-index: 500;
+}
+
+/* CSS-only Leaflet marker for gallery GPS maps.
+   This avoids Leaflet's external PNG marker dependency, which can appear as a
+   broken image in fullscreen or on hosts that restrict CDN image loading. */
+.leaflet-container .gallery-leaflet-marker {
+    background: transparent !important;
+    border: 0 !important;
+    display: block !important;
+    height: 40px !important;
+    margin: 0 !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    visibility: visible !important;
+    width: 26px !important;
+}
+
+.leaflet-container .gallery-leaflet-marker-pin {
+    background: #2f80d1;
+    border: 2px solid #ffffff;
+    border-radius: 50% 50% 50% 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+    display: block;
+    height: 26px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    transform: rotate(-45deg);
+    width: 26px;
+}
+
+.leaflet-container .gallery-leaflet-marker-pin::after {
+    background: #ffffff;
+    border-radius: 50%;
+    content: "";
+    display: block;
+    height: 8px;
+    left: 7px;
+    position: absolute;
+    top: 7px;
+    width: 8px;
+}
+
+.leaflet-container .gallery-leaflet-marker-shadow {
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 50%;
+    bottom: -1px;
+    display: block;
+    height: 9px;
+    left: 4px;
+    position: absolute;
+    transform: rotate(-12deg);
+    width: 22px;
 }
