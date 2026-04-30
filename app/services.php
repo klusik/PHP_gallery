@@ -1195,6 +1195,7 @@ function cms_github_project_url(): string
 function check_application_update(): array
 {
     $lastError = null;
+    $latestStatus = null;
     foreach (application_update_branch_candidates() as $branch) {
         try {
             $notes = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 12);
@@ -1203,7 +1204,7 @@ function check_application_update(): array
                 $lastError = 'PATCH_NOTES.md did not contain a version heading on branch ' . $branch . '.';
                 continue;
             }
-            return [
+            $status = [
                 'current_version' => CMS_VERSION,
                 'latest_version' => $latestVersion,
                 'branch' => $branch,
@@ -1211,9 +1212,16 @@ function check_application_update(): array
                 'update_available' => version_compare($latestVersion, CMS_VERSION, '>'),
                 'error' => null,
             ];
+            if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
+                $latestStatus = $status;
+            }
         } catch (Throwable $exception) {
             $lastError = $exception->getMessage();
         }
+    }
+
+    if ($latestStatus !== null) {
+        return $latestStatus;
     }
 
     return [
@@ -1376,7 +1384,7 @@ function application_update_assert_allowed_branch(string $branch): void
  */
 function application_update_latest_version_from_notes(string $notes): ?string
 {
-    if (preg_match('/^##\s+Version\s+([0-9]+(?:\.[0-9]+){1,2})\s*$/mi', $notes, $match)) {
+    if (preg_match('/##\s+Version\s+([0-9]+(?:\.[0-9]+){1,2})\b/i', $notes, $match)) {
         return $match[1];
     }
     return null;
