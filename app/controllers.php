@@ -948,8 +948,8 @@ function cms_admin(): void
     $gpsMapReady = exif_gps_schema_ready();
     // Variable $votingReady stores this steps working value.
     $votingReady = gallery_voting_schema_ready();
-    // Variable $featureSchemaReady stores this steps working value.
-    $featureSchemaReady = admin_feature_schema_ready();
+    // Variable $migrationPending stores this steps working value.
+    $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     $updatePending = application_update_pending();
@@ -964,9 +964,11 @@ function cms_admin(): void
     echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
-    echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
-    echo '<button type="submit" class="secondary' . ($featureSchemaReady ? '' : ' is-alert') . '">Run database migration</button>';
-    echo '</form>';
+    if ($migrationPending) {
+        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+        echo '<button type="submit" class="button is-update-pending">Run database migration</button>';
+        echo '</form>';
+    }
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
     echo '</nav></section>';
@@ -977,7 +979,7 @@ function cms_admin(): void
     } elseif (isset($_GET['migration_failed'])) {
         echo '<div class="notice">Migration failed: ' . e((string) $_GET['migration_failed']) . '</div>';
     }
-    if (!$featureSchemaReady) {
+    if ($migrationPending) {
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
@@ -1195,11 +1197,9 @@ function cms_admin_log_update(): void
  */
 function render_admin_migration_notice(string $message): void
 {
-    // Variable $highlight stores this steps working value.
-    $highlight = admin_feature_schema_ready() ? '' : ' is-alert';
-    echo '<div class="notice' . $highlight . '"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
+    echo '<div class="notice is-alert"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
     echo '<span>' . e($message) . '</span> ';
-    echo '<button type="submit">Run database migration</button>';
+    echo '<button type="submit" class="button is-update-pending">Run database migration</button>';
     echo '</form></div>';
 }
 

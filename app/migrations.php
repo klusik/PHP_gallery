@@ -92,3 +92,30 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
         || str_contains($message, 'errno: 121');
 }
 
+/**
+ * Return true when at least one migration file has not been recorded yet.
+ */
+function pending_migrations_exist(): bool
+{
+    try {
+        $pdo = db();
+        $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
+            version VARCHAR(64) NOT NULL PRIMARY KEY,
+            applied_at DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        $applied = array_flip($applied);
+        $files = glob(dirname(__DIR__) . '/database/migrations/*.php') ?: [];
+        sort($files);
+        foreach ($files as $file) {
+            $version = basename($file, '.php');
+            if (!isset($applied[$version])) {
+                return true;
+            }
+        }
+        return false;
+    } catch (Throwable) {
+        return true;
+    }
+}
+
