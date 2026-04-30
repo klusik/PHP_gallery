@@ -552,7 +552,8 @@ td {
     inset: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 4rem minmax(0, 1fr) 4rem;
+    grid-template-areas: "previous stage next";
     gap: 1rem;
     align-items: center;
     padding: 1rem;
@@ -563,21 +564,80 @@ td {
     display: none;
 }
 
+.lightbox.is-fullscreen {
+    padding: 0;
+    gap: 0;
+    background: #050505;
+    grid-template-columns: 1fr;
+    grid-template-areas: "stage";
+}
+
+.lightbox.is-fullscreen figure {
+    width: 100%;
+    height: 100%;
+}
+
+.lightbox.is-fullscreen img {
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+}
+
+.lightbox.is-fullscreen .lightbox-meta {
+    position: absolute;
+    inset: auto 1rem 1rem;
+    max-width: min(58rem, calc(100% - 2rem));
+    padding: 0.75rem;
+    background: rgba(10, 10, 10, 0.42);
+    border-radius: var(--radius, 16px);
+    backdrop-filter: blur(8px);
+}
+
+.lightbox-fullscreen-button {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    min-width: 2.6rem;
+}
+
+.lightbox figure {
+    grid-area: stage;
+    display: grid;
+    justify-items: center;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.lightbox img {
+    display: block;
+    margin: 0 auto;
+    max-width: min(100%, calc(100vw - 8rem));
+    max-height: 78vh;
+    object-fit: contain;
+    border-radius: var(--radius, 16px);
+}
+
+.lightbox-meta {
+    display: grid;
+    gap: 0.45rem;
+    justify-items: center;
+    max-width: min(58rem, 100%);
+}
+
 .lightbox figure {
     margin: 0;
     color: #fffdf8;
     text-align: center;
 }
 
-.lightbox img {
-    max-height: 78vh;
-    object-fit: contain;
-    border-radius: var(--radius, 16px);
-}
-
 .lightbox figure a {
-    display: inline-block;
+    display: grid;
+    place-items: center;
     color: inherit;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .lightbox button {
@@ -660,18 +720,64 @@ td {
     color: #a73333;
 }
 
-.lightbox button[data-lightbox-action="previous"],
-.lightbox button[data-lightbox-action="next"] {
+.lightbox-nav {
     min-width: 3rem;
     min-height: 3rem;
     border-radius: var(--radius, 16px);
     font-size: 1.5rem;
+    justify-self: center;
+}
+
+.lightbox-previous {
+    grid-area: previous;
+}
+
+.lightbox-next {
+    grid-area: next;
 }
 
 .lightbox-close {
     position: absolute;
     top: 1rem;
     right: 1rem;
+}
+
+.lightbox-hud,
+.lightbox-meta {
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.lightbox.is-fullscreen .lightbox-hud,
+.lightbox.is-fullscreen .lightbox-meta {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.35rem);
+}
+
+.lightbox.is-fullscreen.is-ui-visible .lightbox-hud,
+.lightbox.is-fullscreen.is-ui-visible .lightbox-meta {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.lightbox.is-fullscreen .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.lightbox.is-fullscreen .lightbox-previous {
+    left: 1rem;
+}
+
+.lightbox.is-fullscreen .lightbox-next {
+    right: 1rem;
+}
+
+.lightbox.is-fullscreen figure a {
+    width: 100%;
+    height: 100%;
 }
 
 .has-lightbox {
@@ -897,6 +1003,25 @@ td {
 
     .lightbox {
         grid-template-columns: 1fr;
+        grid-template-areas: "stage";
+    }
+
+    .lightbox img {
+        max-width: calc(100vw - 2rem);
+    }
+
+    .lightbox-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .lightbox-previous {
+        left: 0.5rem;
+    }
+
+    .lightbox-next {
+        right: 0.5rem;
     }
 
     .picture-game-pair {
