@@ -49,8 +49,10 @@ server can point directly at `public/`. Query-string routes work in both layouts
 and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
 The gallery pretty route accepts both the canonical `/gallery/{slug}/` shape and
 nested filesystem-path compatibility URLs such as `/gallery/travel/italy/rome/`.
-Rendered gallery pages always emit the slug URL as canonical, and public UI
-links keep using the query-string route for compatibility with shared hosting
+Rendered gallery pages always emit the slug URL as canonical. Public gallery
+cards use the clean slug route as the first step toward cleaner navigation,
+while breadcrumbs, redirects, forms, admin links, media, thumbnails, votes, and
+downloads keep using query-string routes for compatibility with shared hosting
 setups that do not rewrite clean URLs reliably.
 
 When `base_url` is empty, route helpers emit root-relative URLs based on the
