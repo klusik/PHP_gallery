@@ -500,7 +500,15 @@ function render_footer(): void
  */
 function supported_image_extensions(): array
 {
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (function_exists('heic_conversion_supported') && heic_conversion_supported()) {
+        $extensions[] = 'heic';
+        $extensions[] = 'heif';
+    }
+    if (function_exists('raw_conversion_supported') && raw_conversion_supported()) {
+        $extensions[] = 'dng';
+    }
+    return $extensions;
 }
 
 /**

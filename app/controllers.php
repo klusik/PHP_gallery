@@ -1344,7 +1344,17 @@ function cms_admin_new_gallery(): void
  */
 function cms_admin_upload(): void
 {
-    require_admin();
+    $isAjaxUpload = request_method() === 'POST' && admin_wants_json();
+    $user = current_user();
+    if (!$user || $user['role'] !== 'admin') {
+        if ($isAjaxUpload) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'Your admin session expired. Please sign in again.']);
+            return;
+        }
+        redirect_to(url_for('admin_login'));
+    }
     if (request_method() === 'POST') {
         verify_csrf();
         $wantsJson = admin_wants_json();
@@ -1407,15 +1417,36 @@ function cms_admin_upload(): void
 
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
+    $heicSupported = heic_conversion_supported();
+    $rawSupported = raw_conversion_supported();
     render_header('Upload photos');
     echo '<section class="hero"><h1>Upload photos</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a></nav></section>';
     if ($error !== '') {
         echo '<div class="notice">Upload failed: ' . e($error) . '</div>';
     }
+    echo '<section class="panel compact-support"><h2>Upload support</h2><table class="support-matrix"><thead><tr><th>Type</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th></tr></thead><tbody><tr>';
+    echo '<th scope="row">Available</th>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
+    echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
+    echo '</tr></tbody></table></section>';
+    $acceptTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    if ($heicSupported) {
+        $acceptTypes[] = '.heic';
+        $acceptTypes[] = '.heif';
+    }
+    if ($rawSupported) {
+        $acceptTypes[] = '.dng';
+    }
+    $acceptTypes[] = 'image/*';
+    $acceptValue = implode(',', $acceptTypes);
     echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="existing">';
     echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select() . '</select></label>';
-    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
     echo '<button type="submit">Upload images</button></form></section>';
     echo '<section class="panel"><h2>Create gallery from upload</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
@@ -1426,7 +1457,7 @@ function cms_admin_upload(): void
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
-    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
     echo '<button type="submit">Create gallery and upload</button></form></section>';
     render_footer();

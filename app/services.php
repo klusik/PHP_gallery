@@ -921,7 +921,15 @@ function gallery_upload_entries(?array $files): array
         }
         $originalName = (string) $name;
         if (!is_supported_image_path($originalName)) {
-            throw new RuntimeException('Only JPG, PNG, GIF, and WebP images can be uploaded.');
+            $message = 'Only JPG, PNG, GIF, and WebP images can be uploaded.';
+            if (heic_conversion_supported() && raw_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.';
+            } elseif (heic_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.';
+            } elseif (raw_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.';
+            }
+            throw new RuntimeException($message . ' Offending file: ' . $originalName . '.');
         }
         $info = @getimagesize($tmpName);
         if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
@@ -937,6 +945,46 @@ function gallery_upload_entries(?array $files): array
         throw new RuntimeException('Choose at least one image to upload.');
     }
     return $entries;
+}
+
+/**
+ * Return whether the server can decode HEIC/HEIF images for conversion.
+ */
+function heic_conversion_supported(): bool
+{
+    if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
+        return false;
+    }
+    try {
+        $formats = Imagick::queryFormats('HEIC');
+        if ($formats) {
+            return true;
+        }
+        $formats = Imagick::queryFormats('HEIF');
+        return (bool) $formats;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Return whether the server can decode RAW/DNG images for conversion.
+ */
+function raw_conversion_supported(): bool
+{
+    if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
+        return false;
+    }
+    try {
+        $formats = Imagick::queryFormats('DNG');
+        if ($formats) {
+            return true;
+        }
+        $formats = Imagick::queryFormats('RAW');
+        return (bool) $formats;
+    } catch (Throwable) {
+        return false;
+    }
 }
 
 /**

@@ -1140,6 +1140,11 @@
         });
         xhr.addEventListener('load', async () => {
             try {
+                const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
+                if (!contentType.includes('application/json')) {
+                    const snippet = (xhr.responseText || '').trim().slice(0, 120);
+                    throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Your session may have expired.' : 'Server returned an unexpected response.');
+                }
                 const result = JSON.parse(xhr.responseText || '{}');
                 if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
                     throw new Error(result.error || 'Upload failed.');
