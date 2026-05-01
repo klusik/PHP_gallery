@@ -2,6 +2,26 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.37
+
+### Major Changes
+
+- Added a standalone admin reset entrypoint at `reset.php` so the site can be
+  restored to the current stable branch head even when the normal admin update
+  page is no longer usable after a broken beta deploy.
+- Added a new gallery thumbnail asset path column so uploaded gallery cover
+  images can be stored separately from imported gallery photos and served
+  through a dedicated public route.
+- Kept gallery-card cover rendering responsive by introducing thumbnail
+  `srcset`/`sizes` hints and an intermediate 600px size, which lets the browser
+  choose a sharper preview for wide cards without forcing the full 800px asset
+  everywhere.
+- Reduced gallery-page and lightbox overhead by batching per-image tag and vote
+  lookups, memoizing request-scoped gallery helpers, and preloading adjacent
+  lightbox images for smoother forward and backward viewing.
+- Added reverse tag indexes so tag-filter pages and contained-tag lookups scale
+  better on larger libraries.
+
 ## Version 0.36
 
 ### Major Changes
