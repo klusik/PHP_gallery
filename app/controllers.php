@@ -36,6 +36,8 @@ function cms_home(): void
  */
 function cms_gallery(): void
 {
+    // Variable $viewer stores this steps working value.
+    $viewer = current_user();
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     if (!$gallery && isset($_GET['gallery_path'])) {
@@ -45,16 +47,16 @@ function cms_gallery(): void
             $gallery = null;
         }
     }
-    if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
+    if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
         cms_not_found();
         return;
     }
-    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+    if (!$viewer && !visitor_can_access_gallery($gallery)) {
         render_gallery_access_gate($gallery);
         return;
     }
     // Variable $publicOnly stores this steps working value.
-    $publicOnly = !current_user();
+    $publicOnly = !$viewer;
 
     // Variable $stmt stores this steps working value.
     $sql = "SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
@@ -71,6 +73,12 @@ function cms_gallery(): void
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
     $images = $stmt->fetchAll();
+    // Variable $imageIds stores this steps working value.
+    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // Variable $imageTagsById stores this steps working value.
+    $imageTagsById = tags_for_entities('image', $imageIds);
+    // Variable $votesById stores this steps working value.
+    $votesById = current_votes_for_images($imageIds);
     // Variable $children stores this steps working value.
     $children = child_galleries((int) $gallery['id'], $publicOnly);
     // Variable $mapsAllowed stores this steps working value.
@@ -79,6 +87,8 @@ function cms_gallery(): void
     $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
     // Variable $votingAllowed stores this steps working value.
     $votingAllowed = gallery_voting_allowed($gallery);
+    // Variable $pictureGameImages stores this steps working value.
+    $pictureGameImages = picture_game_images($gallery);
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
@@ -98,7 +108,7 @@ function cms_gallery(): void
         echo ' <button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
     }
     echo '</section>';
-    if (picture_game_available($gallery)) {
+    if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
     }
     render_public_gallery_admin_form($gallery);
@@ -114,23 +124,25 @@ function cms_gallery(): void
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 800);
+        $previewUrl = thumbnail_url($image, 300);
         // Variable $imageTags stores this steps working value.
-        $imageTags = tags_for_entity('image', (int) $image['id']);
+        $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
         $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
         // Variable $altText stores this steps working value.
         $altText = image_alt_text($image, $gallery, $index + 1);
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
-        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($altText) . '"></a>';
+        // Variable $vote stores this steps working value.
+        $vote = $votesById[(int) $image['id']] ?? 0;
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw" alt="' . e($altText) . '"></a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
-        render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']), $votingAllowed);
+        render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
         echo '</div>';
         render_public_image_admin_form($image);
         echo '</article>';
@@ -228,7 +240,7 @@ function render_picture_game_choice(array $image, string $side): void
     // Variable $label stores this steps working value.
     $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
     echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
-    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
     echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
     echo '</button>';
 }
@@ -243,7 +255,7 @@ function render_picture_game_stats(array $topImages): void
     }
     echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
     foreach ($topImages as $image) {
-        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
     }
     echo '</div></section>';
@@ -370,14 +382,14 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     } elseif ($coverAsset !== '') {
         echo '<img loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" alt="">';
+        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 300)) . '" srcset="' . e(thumbnail_srcset($cover, [300, 600, 800])) . '" sizes="(min-width: 90rem) 20vw, (min-width: 60rem) 25vw, (min-width: 40rem) 33vw, 100vw" alt="">';
     } else {
         // Variable $collage stores this steps working value.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="">';
+                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600])) . '" sizes="(min-width: 90rem) 10vw, (min-width: 60rem) 14vw, (min-width: 40rem) 20vw, 50vw" alt="">';
             }
             echo '</span>';
         }

@@ -39,15 +39,22 @@ function verify_csrf(): void
  */
 function current_user(): ?array
 {
+    static $cache = false;
+    static $cachedUser = null;
+    if ($cache !== false) {
+        return $cachedUser;
+    }
     if (empty($_SESSION['user_id'])) {
-        return null;
+        $cache = true;
+        return $cachedUser = null;
     }
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
     $stmt->execute([(int) $_SESSION['user_id']]);
     // Variable $user stores this steps working value.
     $user = $stmt->fetch();
-    return $user ?: null;
+    $cache = true;
+    return $cachedUser = ($user ?: null);
 }
 
 /**
