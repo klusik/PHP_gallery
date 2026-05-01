@@ -990,6 +990,47 @@ function cms_admin_update(): void
 }
 
 /**
+ * Provide a dedicated admin-only reset page for restoring the stable branch head.
+ */
+function cms_admin_reset(): void
+{
+    require_admin();
+    $error = null;
+    $notice = '';
+
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            $result = restore_application_stable_release();
+            admin_log_event('info', 'update.stable_restored', 'Admin restored the stable branch head from the reset page.', $result);
+            $notice = 'Restored the stable branch head. Copied ' . (int) $result['files_copied'] . ' files.';
+        } catch (Throwable $exception) {
+            admin_log_event('warning', 'update.reset_failed', 'Stable branch reset failed.', ['error' => $exception->getMessage()]);
+            $error = $exception->getMessage();
+        }
+    }
+
+    render_header('Reset application');
+    echo '<section class="hero"><h1>Reset application</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">Open updates</a>';
+    echo '</nav></section>';
+    if ($notice !== '') {
+        echo '<div class="notice">' . e($notice) . '</div>';
+    }
+    if ($error !== null) {
+        echo '<div class="notice">Reset failed: ' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><h2>Restore stable branch head</h2>';
+    echo '<p>This replaces the application files with the current `main` branch head from GitHub, which is useful if a beta build broke the site.</p>';
+    echo '<p class="muted">You must be logged in as an administrator. The action uses the same restore logic as the admin update screen.</p>';
+    echo '<form method="post" class="form-grid">' . csrf_field();
+    echo '<button type="submit" class="button danger">Reset to stable branch head</button>';
+    echo '</form></section>';
+    render_footer();
+}
+
+/**
  * Admin dashboard for gallery scanning, publishing, and bulk actions.
  */
 function cms_admin(): void
