@@ -389,14 +389,14 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     } elseif ($coverAsset !== '') {
         echo '<img loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 300)) . '" srcset="' . e(thumbnail_srcset($cover, [300, 600, 800])) . '" sizes="(min-width: 90rem) 20vw, (min-width: 60rem) 25vw, (min-width: 40rem) 33vw, 100vw" alt="">';
+        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" srcset="' . e(thumbnail_srcset($cover, [300, 800])) . '" sizes="(max-width: 299px) 300px, 800px" alt="">';
     } else {
         // Variable $collage stores this steps working value.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600])) . '" sizes="(min-width: 90rem) 10vw, (min-width: 60rem) 14vw, (min-width: 40rem) 20vw, 50vw" alt="">';
+                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" srcset="' . e(thumbnail_srcset($image, [300, 800])) . '" sizes="(max-width: 299px) 300px, 800px" alt="">';
             }
             echo '</span>';
         }
@@ -568,7 +568,37 @@ function cms_gallery_cover_asset(): void
         cms_not_found();
         return;
     }
-    header('Content-Type: ' . (string) (mime_content_type($path) ?: 'image/jpeg'));
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
+    if (!str_starts_with($mime, 'image/')) {
+        cms_not_found();
+        return;
+    }
+    if (extension_loaded('gd')) {
+        $info = @getimagesize($path);
+        $source = $info !== false ? image_create_from_path($path, (string) ($info['mime'] ?? $mime)) : false;
+        if ($info !== false && $source && ((int) $info[0] > 800 || (int) $info[1] > 800)) {
+            $scale = min(1.0, 800 / max((int) $info[0], (int) $info[1]));
+            $targetWidth = max(1, (int) round((int) $info[0] * $scale));
+            $targetHeight = max(1, (int) round((int) $info[1] * $scale));
+            $target = imagecreatetruecolor($targetWidth, $targetHeight);
+            $white = imagecolorallocate($target, 255, 255, 255);
+            imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
+            imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, (int) $info[0], (int) $info[1]);
+            imageinterlace($target, true);
+            header('Content-Type: image/jpeg');
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: public, max-age=86400');
+            imagejpeg($target, null, 82);
+            imagedestroy($target);
+            imagedestroy($source);
+            return;
+        }
+        if ($source) {
+            imagedestroy($source);
+        }
+    }
+    header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: public, max-age=86400');
     readfile($path);
