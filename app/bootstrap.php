@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.36';
+const CMS_VERSION = '0.37';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
