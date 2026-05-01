@@ -222,6 +222,15 @@
 
     // Variable `image` stores this steps working value.
     const image = overlay.querySelector('[data-lightbox-img]');
+    const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    const lightboxImageTransitionDuration = 300;
+    const lightboxPreviewPreloadRadius = 8;
+    const lightboxFullPreloadRadius = 2;
+    const lightboxFullSwapIdleDelay = 450;
+    const lightboxDecodedImageCacheLimit = 48;
+    let transitionImage = null;
+    let activeLightboxTransitionToken = 0;
+    let pendingFullImageSwapTimer = null;
     // Variable `originalLinks` stores this steps working value.
     const originalLinks = Array.from(overlay.querySelectorAll('[data-lightbox-original-link]'));
     // Variable `title` stores this steps working value.
@@ -245,6 +254,7 @@
     let currentIndex = 0;
     // Variable `preloadedSources` stores this steps working value.
     const preloadedSources = new Set();
+    const decodedLightboxImages = new Map();
     let fullscreenHideTimer = null;
     let touchGesture = null;
     const isMobileTouchDevice = detectMobileTouchDevice();
@@ -281,6 +291,196 @@
         lightboxVoteIndicator.textContent = vote === '1' ? 'Voted up' : vote === '-1' ? 'Voted down' : 'No vote';
     }
 
+    let activeLightboxImageToken = 0;
+
+    function clearPendingFullImageSwap() {
+        if (pendingFullImageSwapTimer) {
+            window.clearTimeout(pendingFullImageSwapTimer);
+            pendingFullImageSwapTimer = null;
+        }
+    }
+
+    function decodeLoadedImage(loadedImage) {
+        if (typeof loadedImage.decode !== 'function') {
+            return Promise.resolve();
+        }
+        return loadedImage.decode().catch(() => undefined);
+    }
+
+    function loadFreshDecodedLightboxImage(src) {
+        return new Promise((resolve, reject) => {
+            if (!src) {
+                reject(new Error('Missing lightbox image source.'));
+                return;
+            }
+            const loadedImage = new Image();
+            loadedImage.decoding = 'async';
+            loadedImage.loading = 'eager';
+            loadedImage.onload = () => {
+                decodeLoadedImage(loadedImage).then(() => resolve(loadedImage));
+            };
+            loadedImage.onerror = reject;
+            loadedImage.src = src;
+        });
+    }
+
+    function rememberDecodedLightboxImage(src, preloadPromise) {
+        if (decodedLightboxImages.has(src)) {
+            decodedLightboxImages.delete(src);
+        }
+        decodedLightboxImages.set(src, preloadPromise);
+        trimDecodedLightboxImageCache();
+        return preloadPromise;
+    }
+
+    function trimDecodedLightboxImageCache() {
+        while (decodedLightboxImages.size > lightboxDecodedImageCacheLimit) {
+            const oldestKey = decodedLightboxImages.keys().next().value;
+            if (!oldestKey) {
+                return;
+            }
+            decodedLightboxImages.delete(oldestKey);
+        }
+    }
+
+    function preloadDecodedLightboxImage(src) {
+        if (!src) {
+            return Promise.resolve(null);
+        }
+        if (decodedLightboxImages.has(src)) {
+            const cachedPromise = decodedLightboxImages.get(src);
+            decodedLightboxImages.delete(src);
+            decodedLightboxImages.set(src, cachedPromise);
+            return cachedPromise;
+        }
+        const preloadPromise = loadFreshDecodedLightboxImage(src).catch(() => null);
+        return rememberDecodedLightboxImage(src, preloadPromise);
+    }
+
+    function loadDecodedLightboxImage(src) {
+        if (!src) {
+            return Promise.reject(new Error('Missing lightbox image source.'));
+        }
+        if (decodedLightboxImages.has(src)) {
+            const cachedPromise = decodedLightboxImages.get(src);
+            decodedLightboxImages.delete(src);
+            decodedLightboxImages.set(src, cachedPromise);
+            return cachedPromise.then((preloadedImage) => {
+                if (preloadedImage) {
+                    return preloadedImage;
+                }
+                const freshPromise = loadFreshDecodedLightboxImage(src);
+                rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
+                return freshPromise;
+            });
+        }
+        const freshPromise = loadFreshDecodedLightboxImage(src);
+        rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
+        return freshPromise;
+    }
+
+    function removeTransitionImage(node) {
+        const imageToRemove = node || transitionImage;
+        if (!imageToRemove) {
+            return;
+        }
+        imageToRemove.remove();
+        if (!node || transitionImage === node) {
+            transitionImage = null;
+        }
+    }
+
+    function applyLightboxImageSource(src, altText) {
+        if (!src || image.getAttribute('src') === src) {
+            image.alt = altText;
+            return;
+        }
+        image.src = src;
+        image.alt = altText;
+    }
+
+    function showLightboxImageSource(index, token, src, altText, immediate) {
+        if (!src) {
+            return Promise.resolve(false);
+        }
+        if (immediate || !stageLink || !image.getAttribute('src')) {
+            activeLightboxTransitionToken += 1;
+            removeTransitionImage();
+            applyLightboxImageSource(src, altText);
+            return Promise.resolve(true);
+        }
+        return loadDecodedLightboxImage(src).then((loadedImage) => new Promise((resolve) => {
+            if (currentIndex !== index || activeLightboxImageToken !== token) {
+                resolve(false);
+                return;
+            }
+            if (image.getAttribute('src') === src) {
+                image.alt = altText;
+                resolve(true);
+                return;
+            }
+            activeLightboxTransitionToken += 1;
+            const transitionToken = activeLightboxTransitionToken;
+            removeTransitionImage();
+            const transitionNode = loadedImage.cloneNode(false);
+            transitionNode.alt = '';
+            transitionNode.setAttribute('aria-hidden', 'true');
+            transitionNode.className = 'lightbox-transition-image';
+            transitionImage = transitionNode;
+            stageLink.append(transitionNode);
+            requestAnimationFrame(() => {
+                if (
+                    currentIndex !== index ||
+                    activeLightboxImageToken !== token ||
+                    activeLightboxTransitionToken !== transitionToken ||
+                    transitionImage !== transitionNode
+                ) {
+                    removeTransitionImage(transitionNode);
+                    resolve(false);
+                    return;
+                }
+                transitionNode.classList.add('is-visible');
+                window.setTimeout(() => {
+                    if (
+                        currentIndex !== index ||
+                        activeLightboxImageToken !== token ||
+                        activeLightboxTransitionToken !== transitionToken ||
+                        transitionImage !== transitionNode
+                    ) {
+                        removeTransitionImage(transitionNode);
+                        resolve(false);
+                        return;
+                    }
+                    applyLightboxImageSource(src, altText);
+                    requestAnimationFrame(() => {
+                        removeTransitionImage(transitionNode);
+                        resolve(true);
+                    });
+                }, lightboxImageTransitionDuration);
+            });
+        })).catch(() => false);
+    }
+
+    function swapLightboxImageAfterDecode(index, token, previewSrc, fullSrc, altText) {
+        if (!fullSrc || !previewSrc || fullSrc === previewSrc) {
+            return Promise.resolve(false);
+        }
+        clearPendingFullImageSwap();
+        return new Promise((resolve) => {
+            pendingFullImageSwapTimer = window.setTimeout(() => {
+                pendingFullImageSwapTimer = null;
+                loadDecodedLightboxImage(fullSrc).then(() => {
+                    if (currentIndex !== index || activeLightboxImageToken !== token) {
+                        resolve(false);
+                        return;
+                    }
+                    applyLightboxImageSource(fullSrc, altText);
+                    resolve(true);
+                }).catch(() => resolve(false));
+            }, lightboxFullSwapIdleDelay);
+        });
+    }
+
     // Function `openAt` executes this focused behavior.
     function openAt(index) {
         // Variable `card` stores this steps working value.
@@ -289,8 +489,21 @@
             return;
         }
         currentIndex = index;
-        image.src = card.dataset.fullSrc;
-        image.alt = card.dataset.title || '';
+        activeLightboxImageToken += 1;
+        activeLightboxTransitionToken += 1;
+        clearPendingFullImageSwap();
+        const imageToken = activeLightboxImageToken;
+        const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
+        const fullSrc = card.dataset.fullSrc || previewSrc;
+        const altText = card.dataset.title || '';
+        const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
+        preloadCardLightboxImages(card, true);
+        showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
+            if (!wasDisplayed || currentIndex !== index || activeLightboxImageToken !== imageToken) {
+                return;
+            }
+            swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
+        });
         originalLinks.forEach((originalLink) => {
             originalLink.href = card.dataset.fullSrc || '#';
         });
@@ -323,6 +536,14 @@
         showLightboxHud();
     }
 
+    function step(offset) {
+        if (cards.length === 0) {
+            return;
+        }
+        const nextIndex = (currentIndex + offset + cards.length) % cards.length;
+        openAt(nextIndex);
+    }
+
     // Function `close` executes this focused behavior.
     function close() {
         exitLightboxFullscreen();
@@ -331,34 +552,40 @@
         clearTouchGesture();
         updateLightboxViewportMode();
         overlay.hidden = true;
+        clearPendingFullImageSwap();
+        removeTransitionImage();
         image.removeAttribute('src');
         document.body.classList.remove('has-lightbox');
     }
 
-    // Function `step` executes this focused behavior.
-    function step(offset) {
-        openAt((currentIndex + offset + cards.length) % cards.length);
+
+    function preloadCardLightboxImages(card, includeFullImage) {
+        if (!card) {
+            return;
+        }
+        const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
+        const fullSrc = card.dataset.fullSrc || previewSrc;
+        [previewSrc, includeFullImage ? fullSrc : ''].forEach((src) => {
+            if (!src) {
+                return;
+            }
+            preloadedSources.add(src);
+            preloadDecodedLightboxImage(src);
+        });
     }
 
     function preloadAdjacentImages(index) {
         if (shouldLimitLightboxPreloading()) {
             return;
         }
-        const offsets = [1, 2, 3, -1, -2];
-        offsets.forEach((offset) => {
-            const card = cards[(index + offset + cards.length) % cards.length];
-            if (!card || !card.dataset.fullSrc) {
-                return;
-            }
-            const src = card.dataset.fullSrc;
-            if (preloadedSources.has(src)) {
-                return;
-            }
-            preloadedSources.add(src);
-            const img = new Image();
-            img.decoding = 'async';
-            img.loading = 'eager';
-            img.src = src;
+        const previewOffsets = [];
+        for (let distance = 1; distance <= lightboxPreviewPreloadRadius; distance += 1) {
+            previewOffsets.push(distance, -distance);
+        }
+        previewOffsets.forEach((offset) => {
+            const normalizedIndex = (index + offset + cards.length) % cards.length;
+            const card = cards[normalizedIndex];
+            preloadCardLightboxImages(card, Math.abs(offset) <= lightboxFullPreloadRadius);
         });
     }
 
@@ -1148,7 +1375,7 @@
         // Variable `description` stores this steps working value.
         const description = point.description ? `<p>${escapeHtml(point.description)}</p>` : '';
         // Variable `thumb` stores this steps working value.
-        const thumb = point.thumb ? `<img src="${escapeAttribute(point.thumb)}" alt="">` : '';
+        const thumb = point.thumb ? `<img decoding="async" loading="lazy" src="${escapeAttribute(point.thumb)}" alt="">` : '';
         // Variable `image` stores this steps working value.
         const image = point.image ? `<p><a href="${escapeAttribute(point.image)}">Open photo</a></p>` : '';
         return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${image}</div>`;

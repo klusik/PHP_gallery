@@ -1129,7 +1129,7 @@ function scan_all_imported_gallery_images(): array
  */
 function thumbnail_sizes(): array
 {
-    return [300, 600, 800];
+    return [300, 600, 800, 960, 1280, 1600];
 }
 
 /**
@@ -1137,9 +1137,25 @@ function thumbnail_sizes(): array
  */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
+    return thumbnail_srcset_for_format($image, $sizes, 'jpg');
+}
+
+/**
+ * Build a responsive WebP srcset for thumbnails when WebP variants exist.
+ */
+function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): string
+{
+    return thumbnail_srcset_for_format($image, $sizes, 'webp');
+}
+
+/**
+ * Build a responsive srcset for one thumbnail format.
+ */
+function thumbnail_srcset_for_format(array $image, array $sizes, string $format): string
+{
     $entries = [];
     $gallery = find_gallery((int) $image['gallery_id']);
-    if (!$gallery) {
+    if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
         return '';
     }
     foreach ($sizes as $size) {
@@ -1148,13 +1164,13 @@ function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
             continue;
         }
         try {
-            if (!is_file(thumbnail_abs_path($image, $gallery, $size))) {
+            if (!is_file(thumbnail_abs_path($image, $gallery, $size, $format))) {
                 continue;
             }
         } catch (RuntimeException) {
             continue;
         }
-        $entries[] = url_for('thumb', ['id' => $image['id'], 'size' => $size]) . ' ' . $size . 'w';
+        $entries[] = thumbnail_url($image, $size, $format) . ' ' . $size . 'w';
     }
     return implode(', ', $entries);
 }
@@ -1176,35 +1192,68 @@ function gallery_thumbs_dir(array $gallery, bool $create = false): string
 }
 
 /**
- * Build the generated JPEG thumbnail filename for an image and size.
+ * Build the generated thumbnail filename for an image, size, and format.
  */
-function thumbnail_filename(array $image, int $size): string
+function thumbnail_filename(array $image, int $size, string $format = 'jpg'): string
 {
-    return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.jpg';
+    if (!in_array($format, ['jpg', 'webp'], true)) {
+        throw new RuntimeException('Unsupported thumbnail format.');
+    }
+    return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.' . $format;
 }
 
 /**
  * Resolve one generated thumbnail path.
  */
-function thumbnail_abs_path(array $image, array $gallery, int $size): string
+function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
     if (!in_array($size, thumbnail_sizes(), true)) {
         throw new RuntimeException('Unsupported thumbnail size.');
     }
-    return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size);
+    return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
+}
+
+/**
+ * Return true when a thumbnail may be safely served directly as a static file.
+ */
+function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
+{
+    if ((string) ($image['visibility'] ?? '') !== 'public' || gallery_access_requirement($gallery) !== null) {
+        return false;
+    }
+    $configuredRoot = realpath(galleries_root());
+    $defaultRoot = realpath(dirname(__DIR__) . '/galleries');
+    return $configuredRoot !== false && $defaultRoot !== false && $configuredRoot === $defaultRoot;
+}
+
+/**
+ * Return the public URL for a gallery file when the configured gallery root is web-visible.
+ */
+function gallery_static_file_url(array $gallery, string $relativeFilePath): string
+{
+    $galleryPath = normalize_relative_path((string) $gallery['folder_path']);
+    $filePath = normalize_relative_path($relativeFilePath);
+    $segments = array_filter(explode('/', trim($galleryPath . '/' . $filePath, '/')), static fn (string $segment): bool => $segment !== '');
+    $encoded = array_map('rawurlencode', $segments);
+    return base_url('galleries/' . implode('/', $encoded));
 }
 
 /**
  * Return the best public URL for an image thumbnail, falling back to the source.
  */
-function thumbnail_url(array $image, int $size): string
+function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
         try {
-            if (is_file(thumbnail_abs_path($image, $gallery, $size))) {
-                return url_for('thumb', ['id' => $image['id'], 'size' => $size]);
+            $path = thumbnail_abs_path($image, $gallery, $size, $format);
+            if (is_file($path)) {
+                return thumbnail_serving_url($image, $gallery, $size, $format);
+            }
+            $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
+            if ($fallback !== null) {
+                return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
             }
         } catch (RuntimeException) {
             return url_for('media', ['id' => $image['id']]);
@@ -1213,6 +1262,174 @@ function thumbnail_url(array $image, int $size): string
     return url_for('media', ['id' => $image['id']]);
 }
 
+/**
+ * Return the URL that serves an already existing thumbnail without creating files.
+ */
+function thumbnail_serving_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
+{
+    if (thumbnail_can_use_static_public_url($image, $gallery)) {
+        return gallery_static_file_url($gallery, 'thumbs/' . thumbnail_filename($image, $size, $format));
+    }
+    return url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]);
+}
+
+/**
+ * Find an existing thumbnail to use when the requested variant has not been generated yet.
+ */
+function thumbnail_existing_fallback(array $image, array $gallery, int $preferredSize, string $preferredFormat = 'jpg'): ?array
+{
+    // Variable $sizes stores this steps working value.
+    $sizes = thumbnail_sizes();
+    usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
+        return abs($left - $preferredSize) <=> abs($right - $preferredSize);
+    });
+    // Variable $formats stores this steps working value.
+    $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
+    foreach ($sizes as $size) {
+        foreach ($formats as $format) {
+            if (!in_array($format, ['jpg', 'webp'], true)) {
+                continue;
+            }
+            if (is_file(thumbnail_abs_path($image, $gallery, (int) $size, $format))) {
+                return ['size' => (int) $size, 'format' => $format];
+            }
+        }
+    }
+    return null;
+}
+/**
+ * Build image markup with WebP source when the WebP thumbnails exist.
+ */
+function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = ''): string
+{
+    $fallbackUrl = thumbnail_url($image, $fallbackSize);
+    $webpSrcset = thumbnail_webp_srcset($image, $srcsetSizes);
+    $jpegSrcset = thumbnail_srcset($image, $srcsetSizes);
+    $attributes = trim($extraAttributes);
+    $html = '<picture>';
+    if ($webpSrcset !== '') {
+        $html .= '<source type="image/webp" srcset="' . e($webpSrcset) . '" sizes="' . e($sizes) . '">';
+    }
+    $html .= '<img decoding="async" ' . ($attributes === '' ? '' : $attributes . ' ') . 'src="' . e($fallbackUrl) . '"';
+    if ($jpegSrcset !== '') {
+        $html .= ' srcset="' . e($jpegSrcset) . '"';
+    }
+    $html .= ' sizes="' . e($sizes) . '" alt="' . e($alt) . '"></picture>';
+    return $html;
+}
+
+/**
+ * Return true when the server can create WebP thumbnails for this source without losing required EXIF data.
+ */
+function thumbnail_webp_required_for_source(string $sourcePath, string $mime): bool
+{
+    if (!function_exists('imagewebp')) {
+        return false;
+    }
+    if (!image_source_has_exif($sourcePath, $mime)) {
+        return true;
+    }
+    return class_exists('Imagick');
+}
+
+/**
+ * Return missing or stale thumbnail variant counts for one image without creating files.
+ */
+function thumbnail_maintenance_status(array $image, array $gallery): array
+{
+    // Variable $sourcePath stores this steps working value.
+    $sourcePath = image_abs_path($image, $gallery);
+    if (!is_file($sourcePath)) {
+        return ['required' => 0, 'missing' => 0, 'webp_skipped' => 0];
+    }
+    // Variable $sourceMtime stores this steps working value.
+    $sourceMtime = filemtime($sourcePath) ?: 0;
+    // Variable $info stores this steps working value.
+    $info = @getimagesize($sourcePath);
+    $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+    $formats = ['jpg'];
+    $webpSkipped = 0;
+    if ($mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime)) {
+        $formats[] = 'webp';
+    } elseif ($mime === 'image/jpeg' && function_exists('imagewebp') && image_source_has_exif($sourcePath, $mime) && !class_exists('Imagick')) {
+        $webpSkipped = count(thumbnail_sizes());
+    }
+    // Variable $required stores this steps working value.
+    $required = 0;
+    // Variable $missing stores this steps working value.
+    $missing = 0;
+    foreach (thumbnail_sizes() as $size) {
+        foreach ($formats as $format) {
+            $required++;
+            try {
+                $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+            } catch (RuntimeException) {
+                $missing++;
+                continue;
+            }
+            if (!is_file($targetPath) || filemtime($targetPath) < $sourceMtime) {
+                $missing++;
+            }
+        }
+    }
+    return ['required' => $required, 'missing' => $missing, 'webp_skipped' => $webpSkipped];
+}
+
+/**
+ * Summarize pending thumbnail maintenance for the admin area without generating thumbnails.
+ */
+function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000): array
+{
+    // Variable $params stores this steps working value.
+    $params = [];
+    $where = "i.relative_path NOT LIKE '%/%'";
+    if ($galleryIds !== null) {
+        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        if (!$galleryIds) {
+            return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false];
+        }
+        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        $params = $galleryIds;
+    }
+    $limit = max(1, $maxImagesToScan + 1);
+    $stmt = db()->prepare("SELECT i.*, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename LIMIT $limit");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    $limited = count($rows) > $maxImagesToScan;
+    if ($limited) {
+        array_pop($rows);
+    }
+    // Variable $galleryCache stores this steps working value.
+    $galleryCache = [];
+    // Variable $imagesWithMissing stores this steps working value.
+    $imagesWithMissing = 0;
+    // Variable $missingVariants stores this steps working value.
+    $missingVariants = 0;
+    // Variable $webpSkipped stores this steps working value.
+    $webpSkipped = 0;
+    foreach ($rows as $image) {
+        $galleryId = (int) $image['gallery_id'];
+        if (!isset($galleryCache[$galleryId])) {
+            $galleryCache[$galleryId] = find_gallery($galleryId);
+        }
+        if (!$galleryCache[$galleryId]) {
+            continue;
+        }
+        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
+        if ($status['missing'] > 0) {
+            $imagesWithMissing++;
+            $missingVariants += $status['missing'];
+        }
+        $webpSkipped += $status['webp_skipped'];
+    }
+    return [
+        'images_scanned' => count($rows),
+        'images_with_missing' => $imagesWithMissing,
+        'missing_variants' => $missingVariants,
+        'webp_skipped' => $webpSkipped,
+        'limited' => $limited,
+    ];
+}
 /**
  * Generate all configured thumbnails for direct images in one gallery.
  */
@@ -1253,7 +1470,7 @@ function create_all_thumbnails(): int
 }
 
 /**
- * Rebuild web-optimized JPEG thumbnails for one source image.
+ * Rebuild web-optimized thumbnails for one source image.
  */
 function create_image_thumbnails(array $image, array $gallery): int
 {
@@ -1268,48 +1485,63 @@ function create_image_thumbnails_result(array $image, array $gallery): array
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        return ['created' => 0, 'skipped' => 0];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0];
     }
     gallery_thumbs_dir($gallery, true);
+    // Variable $sourceMtime stores this steps working value.
+    $sourceMtime = filemtime($sourcePath) ?: time();
     // Variable $targets stores this steps working value.
     $targets = [];
     // Variable $skipped stores this steps working value.
     $skipped = 0;
+    // Variable $webpSkipped stores this steps working value.
+    $webpSkipped = 0;
     foreach (thumbnail_sizes() as $size) {
-        // Variable $targetPath stores this steps working value.
-        $targetPath = thumbnail_abs_path($image, $gallery, $size);
-        if (is_file($targetPath) && filemtime($targetPath) >= filemtime($sourcePath)) {
-            $skipped++;
-            continue;
+        foreach (['jpg', 'webp'] as $format) {
+            // Variable $targetPath stores this steps working value.
+            $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+            if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {
+                $skipped++;
+                continue;
+            }
+            $targets[$size][$format] = $targetPath;
         }
-        $targets[$size] = $targetPath;
     }
     if (!$targets) {
-        return ['created' => 0, 'skipped' => $skipped];
-    }
-    if (!extension_loaded('gd')) {
-        return ['created' => 0, 'skipped' => $skipped];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => 0];
     }
     // Variable $info stores this steps working value.
     $info = @getimagesize($sourcePath);
     if ($info === false || empty($info['mime'])) {
-        return ['created' => 0, 'skipped' => $skipped];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
+    }
+    if (!extension_loaded('gd')) {
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
     }
     // Variable $source stores this steps working value.
     $source = image_create_from_path($sourcePath, (string) $info['mime']);
     if (!$source) {
-        return ['created' => 0, 'skipped' => $skipped];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
     }
     // Variable $created stores this steps working value.
     $created = 0;
-    foreach ($targets as $size => $targetPath) {
-        if (write_resized_jpeg($source, (int) $info[0], (int) $info[1], $size, $targetPath)) {
+    foreach ($targets as $size => $formatTargets) {
+        if (isset($formatTargets['jpg']) && write_resized_jpeg($source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['jpg'])) {
             $created++;
+        }
+        if (isset($formatTargets['webp'])) {
+            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['webp'], (string) $info['mime']);
+            if ($webpWritten) {
+                $created++;
+            } else {
+                $webpSkipped++;
+            }
         }
     }
     imagedestroy($source);
-    return ['created' => $created, 'skipped' => $skipped];
+    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
 }
+
 
 /**
  * Return image IDs directly owned by the selected galleries.
@@ -1375,6 +1607,83 @@ function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSi
     $written = imagejpeg($target, $targetPath, 82);
     imagedestroy($target);
     return $written;
+}
+
+/**
+ * Return true when the source contains EXIF that must survive WebP conversion.
+ */
+function image_source_has_exif(string $sourcePath, string $mime): bool
+{
+    if ($mime !== 'image/jpeg' || !function_exists('exif_read_data')) {
+        return false;
+    }
+    $exif = @exif_read_data($sourcePath, null, true, false);
+    return is_array($exif) && $exif !== [];
+}
+
+/**
+ * Resize an image to WebP, preserving EXIF when the source has EXIF metadata.
+ */
+function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdImage $source, int $width, int $height, int $maxSide, string $targetPath, string $mime): bool
+{
+    if (!function_exists('imagewebp')) {
+        return false;
+    }
+    if (image_source_has_exif($sourcePath, $mime)) {
+        return write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath);
+    }
+    return write_resized_webp_with_gd($source, $width, $height, $maxSide, $targetPath);
+}
+
+/**
+ * Resize an image to WebP with GD for sources that do not need EXIF copying.
+ */
+function write_resized_webp_with_gd(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
+{
+    // Variable $scale stores this steps working value.
+    $scale = min(1.0, $maxSide / max($width, $height));
+    // Variable $targetWidth stores this steps working value.
+    $targetWidth = max(1, (int) round($width * $scale));
+    // Variable $targetHeight stores this steps working value.
+    $targetHeight = max(1, (int) round($height * $scale));
+    // Variable $target stores this steps working value.
+    $target = imagecreatetruecolor($targetWidth, $targetHeight);
+    imagealphablending($target, true);
+    imagesavealpha($target, true);
+    // Variable $transparent stores this steps working value.
+    $transparent = imagecolorallocatealpha($target, 0, 0, 0, 127);
+    imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $transparent);
+    imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+    // Variable $written stores this steps working value.
+    $written = imagewebp($target, $targetPath, 82);
+    imagedestroy($target);
+    return $written;
+}
+
+/**
+ * Resize a JPEG to WebP with Imagick while copying the EXIF profile.
+ */
+function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath): bool
+{
+    if (!class_exists('Imagick')) {
+        return false;
+    }
+    try {
+        $image = new Imagick($sourcePath);
+        $profiles = $image->getImageProfiles('exif', true);
+        $image->thumbnailImage($maxSide, $maxSide, true, true);
+        $image->setImageFormat('webp');
+        $image->setImageCompressionQuality(82);
+        if (isset($profiles['exif']) && $profiles['exif'] !== '') {
+            $image->profileImage('exif', $profiles['exif']);
+        }
+        $written = $image->writeImage($targetPath);
+        $image->clear();
+        $image->destroy();
+        return $written;
+    } catch (Throwable) {
+        return false;
+    }
 }
 
 /**
@@ -3175,12 +3484,19 @@ function apply_gallery_cover_from_sidecar(array $gallery): void
  */
 function find_gallery(int $id): ?array
 {
+    static $cache = [];
+
+    if (array_key_exists($id, $cache)) {
+        return $cache[$id];
+    }
+
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE id = ?');
     $stmt->execute([$id]);
     // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
-    return $gallery ?: null;
+    $cache[$id] = $gallery ?: null;
+    return $cache[$id];
 }
 
 /**
@@ -3188,12 +3504,19 @@ function find_gallery(int $id): ?array
  */
 function find_gallery_by_slug(string $slug): ?array
 {
+    static $cache = [];
+
+    if (array_key_exists($slug, $cache)) {
+        return $cache[$slug];
+    }
+
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE slug = ?');
     $stmt->execute([$slug]);
     // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
-    return $gallery ?: null;
+    $cache[$slug] = $gallery ?: null;
+    return $cache[$slug];
 }
 
 /**
@@ -3201,12 +3524,20 @@ function find_gallery_by_slug(string $slug): ?array
  */
 function find_gallery_by_folder_path(string $folderPath): ?array
 {
+    static $cache = [];
+
+    $normalizedPath = normalize_relative_path($folderPath);
+    if (array_key_exists($normalizedPath, $cache)) {
+        return $cache[$normalizedPath];
+    }
+
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path_hash = ?');
-    $stmt->execute([hash('sha256', normalize_relative_path($folderPath))]);
+    $stmt->execute([hash('sha256', $normalizedPath)]);
     // Variable $gallery stores this steps working value.
     $gallery = $stmt->fetch();
-    return $gallery ?: null;
+    $cache[$normalizedPath] = $gallery ?: null;
+    return $cache[$normalizedPath];
 }
 
 /**
@@ -3232,12 +3563,19 @@ function find_parent_gallery_for_path(string $folderPath): ?array
  */
 function find_image(int $id): ?array
 {
+    static $cache = [];
+
+    if (array_key_exists($id, $cache)) {
+        return $cache[$id];
+    }
+
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM images WHERE id = ?');
     $stmt->execute([$id]);
     // Variable $image stores this steps working value.
     $image = $stmt->fetch();
-    return $image ?: null;
+    $cache[$id] = $image ?: null;
+    return $cache[$id];
 }
 
 /**
@@ -3245,12 +3583,21 @@ function find_image(int $id): ?array
  */
 function find_image_by_path(int $galleryId, string $relativePath): ?array
 {
+    static $cache = [];
+
+    $normalizedPath = normalize_relative_path($relativePath);
+    $cacheKey = $galleryId . '|' . $normalizedPath;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ?');
-    $stmt->execute([$galleryId, hash('sha256', $relativePath)]);
+    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
     // Variable $image stores this steps working value.
     $image = $stmt->fetch();
-    return $image ?: null;
+    $cache[$cacheKey] = $image ?: null;
+    return $cache[$cacheKey];
 }
 
 /**

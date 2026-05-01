@@ -96,7 +96,6 @@ function cms_run(): void
         ]);
         session_start();
     }
-    send_security_headers();
 
     // Variable $route stores this steps working value.
     $route = cms_route_from_request();
@@ -106,6 +105,7 @@ function cms_run(): void
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    send_security_headers();
     // Variable $routes stores this steps working value.
     $routes = [
         'home' => 'cms_home',

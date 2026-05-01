@@ -95,6 +95,16 @@ function send_security_headers(): void
     header('X-Frame-Options: SAMEORIGIN');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+
+    $page = (string) ($_GET['page'] ?? 'home');
+    $isAnonymousGet = request_method() === 'GET' && current_user() === null;
+    $isPublicCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game', 'robots', 'sitemap', 'theme_css'], true);
+
+    if ($isAnonymousGet && $isPublicCacheCandidate) {
+        header('Cache-Control: public, max-age=120, stale-while-revalidate=600');
+        return;
+    }
+
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
     header('Expires: 0');
