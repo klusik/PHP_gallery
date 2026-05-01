@@ -2,6 +2,53 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.39
+
+### Major Changes
+
+- Added a global theme background image upload stored in private cache storage
+  instead of gallery media folders.
+- Added a background opacity slider in the Theme admin panel, including a live
+  percentage display while adjusting the value.
+- Added theme-level header title color and gallery title color controls so dark
+  backgrounds can keep text readable.
+- Added a fallback background source at the theme level and per-gallery
+  background source selection in gallery admin.
+- Added public background rendering as a base color layer with an optional
+  background image layer on top.
+- Moved gallery breadcrumbs and action buttons into the hero panel so the
+  public gallery header is more compact and aligned.
+- Updated the header and hero surfaces to share the rounded-corner theme
+  setting while keeping the hero styling translucent over the background.
+- Hardened the Leaflet map overlay path so normal public maps and fullscreen
+  split maps keep working after dynamic DOM changes and resize/rebuild cycles.
+- Added a dedicated public route for serving the stored global theme background
+  asset.
+- Added a bulk Theme-panel action to reset every gallery background override
+  back to the theme background.
+- Added a compact `B` indicator to the admin gallery table for galleries that
+  have an explicit background override.
+
+### Fixes
+
+- Fixed normal gallery map overlays so they remain visible in public view.
+- Fixed the inline-style guard so legitimate Leaflet runtime styles no longer
+  trigger the tamper warning path.
+- Fixed Leaflet tile sizing and viewport initialization during overlay
+  creation.
+- Fixed stale map pane errors caused by initializing the map before the
+  overlay had finished sizing.
+- Fixed the `background_source` gallery column schema so clearing the per-
+  gallery setting can store `NULL` and fall back to the theme background.
+- Fixed `custom.css` tracking so uploaded custom styles are ignored by Git.
+
+### Notes
+
+- This release continues the theme-backed background model introduced in the
+  previous cycle, but now includes a bulk reset flow for gallery overrides and
+  a table-level indicator so admins can see which galleries diverge from the
+  theme.
+
 ## Version 0.38
 
 ### Major Changes
