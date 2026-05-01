@@ -90,7 +90,7 @@ function cms_gallery(): void
     // Variable $pictureGameImages stores this steps working value.
     $pictureGameImages = picture_game_images($gallery);
     // Variable $backgroundAssetUrl stores this steps working value.
-    $backgroundAssetUrl = $publicOnly ? gallery_background_asset_url($gallery, $publicOnly) : '';
+    $backgroundAssetUrl = gallery_background_asset_url($gallery, $publicOnly);
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
@@ -771,6 +771,10 @@ function cms_admin_theme(): void
                 }
             }
             set_app_setting('theme_background_path', '');
+        } elseif (!empty($_POST['reset_all_gallery_backgrounds'])) {
+            if (gallery_background_source_schema_ready()) {
+                db()->exec("UPDATE galleries SET background_source = NULL, updated_at = " . db()->quote(now_sql()) . " WHERE background_source IS NOT NULL");
+            }
         } elseif (!empty($_POST['reset_theme_overrides'])) {
             clear_theme_overrides();
         } else {
@@ -850,6 +854,7 @@ function cms_admin_theme(): void
     }
     echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
     echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button></div>';
     echo '</fieldset>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
@@ -1185,6 +1190,7 @@ function cms_admin(): void
         echo '<th>Access</th>';
     }
     echo '<th title="Maps">M</th>';
+    echo '<th>B</th>';
     if ($votingReady) {
         echo '<th title="Voting">V</th>';
     }
@@ -1209,6 +1215,7 @@ function cms_admin(): void
             echo '<td>' . e($accessLabel) . '</td>';
         }
         echo '<td>' . render_admin_feature_flag(exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
+        echo '<td>' . render_admin_feature_flag(gallery_background_source_schema_ready() && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</td>';
         if ($votingReady) {
             echo '<td>' . render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '✓', 'Voting enabled') . '</td>';
         }

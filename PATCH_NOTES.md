@@ -34,6 +34,8 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
   creation.
 - Fixed stale map pane errors caused by initializing the map before the
   overlay had finished sizing.
+- Fixed the `background_source` gallery column schema so clearing the per-
+  gallery setting can store `NULL` and fall back to the theme background.
 - Fixed `custom.css` tracking so uploaded custom styles are ignored by Git.
 
 ## Version 0.37

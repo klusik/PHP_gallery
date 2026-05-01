@@ -1444,7 +1444,7 @@ function resolved_gallery_background_source(array $gallery): string
 {
     return gallery_background_source($gallery)
         ?? theme_background_source()
-        ?? 'existing';
+        ?? '';
 }
 
 /**
@@ -1453,6 +1453,9 @@ function resolved_gallery_background_source(array $gallery): string
 function gallery_background_asset_url(array $gallery, bool $publicOnly): string
 {
     $source = resolved_gallery_background_source($gallery);
+    if ($source === '') {
+        return '';
+    }
     if ($source === 'upload') {
         return gallery_cover_asset_url($gallery, $publicOnly);
     }
