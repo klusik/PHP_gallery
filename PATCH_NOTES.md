@@ -2,6 +2,19 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.41
+
+### Major Changes
+
+- Added slug-based public URLs for files so image pages can use stable, readable paths.
+- Optimized routing and public-path handling so gallery and file URLs resolve with less overhead.
+- Improved cache handling for public pages and navigation so repeated requests reuse more of the generated state.
+- Added database migrations to backfill public URL slugs and clean up older public path records.
+
+### Fixes
+
+- Prepared the application metadata for the 0.41 release cycle.
+
 ## Version 0.40
 
 ### Major Changes
