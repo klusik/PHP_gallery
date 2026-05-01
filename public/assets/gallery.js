@@ -252,6 +252,8 @@
     const lightboxMapSplitCanvas = overlay.querySelector('[data-lightbox-map-split-canvas]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
+    let lightboxReturnUrl = window.location.href;
+    let lightboxHistoryActive = false;
     // Variable `preloadedSources` stores this steps working value.
     const preloadedSources = new Set();
     const decodedLightboxImages = new Map();
@@ -493,6 +495,15 @@
         activeLightboxTransitionToken += 1;
         clearPendingFullImageSwap();
         const imageToken = activeLightboxImageToken;
+        const pageUrl = card.dataset.pageUrl || '';
+        const galleryUrl = card.dataset.galleryUrl || window.location.href;
+        if (!lightboxHistoryActive) {
+            lightboxReturnUrl = galleryUrl;
+            lightboxHistoryActive = true;
+        }
+        if (pageUrl && window.history && window.history.replaceState) {
+            window.history.replaceState({lightbox: true}, '', pageUrl);
+        }
         const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
         const fullSrc = card.dataset.fullSrc || previewSrc;
         const altText = card.dataset.title || '';
@@ -556,6 +567,10 @@
         removeTransitionImage();
         image.removeAttribute('src');
         document.body.classList.remove('has-lightbox');
+        if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
+            window.history.replaceState({}, '', lightboxReturnUrl);
+        }
+        lightboxHistoryActive = false;
     }
 
 

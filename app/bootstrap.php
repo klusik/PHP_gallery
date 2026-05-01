@@ -118,6 +118,8 @@ function cms_run(): void
         'picture_game' => 'cms_picture_game',
         'media' => 'cms_media',
         'thumb' => 'cms_thumb',
+        'public_media' => 'cms_public_media',
+        'public_thumb' => 'cms_public_thumb',
         'gallery_cover_asset' => 'cms_gallery_cover_asset',
         'theme_background_asset' => 'cms_theme_background_asset',
         'vote' => 'cms_vote',
@@ -139,6 +141,7 @@ function cms_run(): void
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_logs' => 'cms_admin_logs',
@@ -199,10 +202,27 @@ function cms_route_from_request(): array
         return ['page' => 'sitemap', 'params' => []];
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
-        if (count($segments) === 2) {
-            return ['page' => 'gallery', 'params' => ['slug' => rawurldecode($segments[1])]];
+        $gallerySegments = array_slice($segments, 1);
+        $lastSegment = end($gallerySegments);
+        if (is_string($lastSegment) && preg_match('/^thumb-([0-9]+)\.(jpg|webp)$/', $lastSegment, $thumbnailMatch)) {
+            array_pop($gallerySegments);
+            return [
+                'page' => 'public_thumb',
+                'params' => [
+                    'public_path' => rawurldecode(implode('/', $gallerySegments)),
+                    'size' => (int) $thumbnailMatch[1],
+                    'format' => $thumbnailMatch[2],
+                ],
+            ];
         }
-        return ['page' => 'gallery', 'params' => ['gallery_path' => rawurldecode(implode('/', array_slice($segments, 1)))]];
+        if ($lastSegment === 'media' || $lastSegment === 'original') {
+            array_pop($gallerySegments);
+            return [
+                'page' => 'public_media',
+                'params' => ['public_path' => rawurldecode(implode('/', $gallerySegments))],
+            ];
+        }
+        return ['page' => 'gallery', 'params' => ['public_path' => rawurldecode(implode('/', $gallerySegments))]];
     }
     if ($segments[0] === 'share' && isset($segments[1])) {
         return ['page' => 'share', 'params' => ['token' => rawurldecode($segments[1])]];
