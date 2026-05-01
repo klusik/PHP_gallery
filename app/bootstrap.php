@@ -118,6 +118,7 @@ function cms_run(): void
         'picture_game' => 'cms_picture_game',
         'media' => 'cms_media',
         'thumb' => 'cms_thumb',
+        'gallery_cover_asset' => 'cms_gallery_cover_asset',
         'vote' => 'cms_vote',
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',

@@ -296,6 +296,9 @@ function write_gallery_sidecar(array $gallery): void
             $data['cover'] = $cover['relative_path'];
         }
     }
+    if (!empty($gallery['cover_image_path'])) {
+        $data['cover_image_path'] = (string) $gallery['cover_image_path'];
+    }
     write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
 
@@ -1058,6 +1061,39 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
 }
 
 /**
+ * Store one uploaded gallery thumbnail outside the indexed image set.
+ */
+function store_uploaded_gallery_cover(int $galleryId, array $file): string
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    $coverDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbnail';
+    if (!is_dir($coverDir) && !mkdir($coverDir, 0775, true)) {
+        throw new RuntimeException('Could not create thumbnail folder.');
+    }
+    if (!path_inside($galleryRoot, $coverDir)) {
+        throw new RuntimeException('Thumbnail path is outside its gallery.');
+    }
+    $extension = strtolower(pathinfo((string) ($file['name'] ?? 'cover.jpg'), PATHINFO_EXTENSION));
+    $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
+    $relative = 'thumbnail/cover.' . $safeExtension;
+    $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.' . $safeExtension;
+    foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*') ?: [] as $oldFile) {
+        if (is_file($oldFile) && $oldFile !== $target) {
+            @unlink($oldFile);
+        }
+    }
+    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
+        throw new RuntimeException('Could not store gallery thumbnail.');
+    }
+    set_gallery_cover_path($galleryId, $relative);
+    return $relative;
+}
+
+/**
  * Scan every imported gallery folder for new or changed direct images.
  */
 function scan_all_imported_gallery_images(): array
@@ -1320,6 +1356,45 @@ function ensure_gallery_cover(int $galleryId): void
     // Variable $update stores this steps working value.
     $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
     $update->execute([(int) $coverId, now_sql(), $galleryId]);
+}
+
+/**
+ * Return the gallery thumbnail asset path, if one was uploaded.
+ */
+function gallery_cover_path(array $gallery): ?string
+{
+    $path = trim((string) ($gallery['cover_image_path'] ?? ''));
+    return $path !== '' ? $path : null;
+}
+
+/**
+ * Return true when the uploaded gallery thumbnail column is available.
+ */
+function gallery_cover_asset_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
+        $ready = (bool) $stmt->fetch();
+    } catch (Throwable) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+/**
+ * Update a gallery's uploaded thumbnail asset path.
+ */
+function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
+{
+    if (!gallery_cover_asset_schema_ready()) {
+        return;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$relativePath !== null && $relativePath !== '' ? $relativePath : null, now_sql(), $galleryId]);
 }
 
 /**
@@ -2586,6 +2661,21 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 }
 
 /**
+ * Return a gallery thumbnail URL from an uploaded asset, if present.
+ */
+function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
+{
+    if ($publicOnly && gallery_access_requirement($gallery) !== null) {
+        return '';
+    }
+    $coverPath = gallery_cover_path($gallery);
+    if ($coverPath === null) {
+        return '';
+    }
+    return url_for('gallery_cover_asset', ['id' => (int) $gallery['id']]);
+}
+
+/**
  * Function `gallery_cover_collage_images` handles this scoped operation.
  */
 function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
@@ -2613,6 +2703,34 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
         }
     }
     return array_values($images);
+}
+
+/**
+ * Build visual cover choices from the gallery subtree.
+ */
+function gallery_cover_choices(int $galleryId, bool $publicOnly): array
+{
+    $choices = [];
+    $root = find_gallery($galleryId);
+    if (!$root) {
+        return [];
+    }
+    $stack = [$root];
+    while ($stack) {
+        $gallery = array_shift($stack);
+        $cover = gallery_direct_cover_image((int) $gallery['id'], $publicOnly);
+        if ($cover) {
+            $choices[] = [
+                'gallery_id' => (int) $gallery['id'],
+                'gallery_title' => (string) $gallery['title'],
+                'image' => $cover,
+            ];
+        }
+        foreach (child_galleries((int) $gallery['id'], $publicOnly) as $child) {
+            $stack[] = $child;
+        }
+    }
+    return $choices;
 }
 
 /**

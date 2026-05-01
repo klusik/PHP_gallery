@@ -362,10 +362,13 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
 {
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
-    $cover = $isProtectedPublicCard ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
+    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
+    } elseif ($coverAsset !== '') {
+        echo '<img loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
         echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" alt="">';
     } else {
@@ -523,6 +526,32 @@ function cms_thumb(): void
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     header('Content-Length: ' . filesize($path));
     header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
+    readfile($path);
+}
+
+/**
+ * Stream an uploaded gallery thumbnail asset.
+ */
+function cms_gallery_cover_asset(): void
+{
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    $coverPath = gallery_cover_path($gallery);
+    if ($coverPath === null) {
+        cms_not_found();
+        return;
+    }
+    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $coverPath);
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: ' . (string) (mime_content_type($path) ?: 'image/jpeg'));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: public, max-age=86400');
     readfile($path);
 }
 
@@ -1869,6 +1898,25 @@ function cms_admin_edit_gallery(): void
         $coverImage = $coverImageId > 0 ? find_image($coverImageId) : null;
         // Variable $coverImageId stores this steps working value.
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
+        $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        if (gallery_cover_asset_schema_ready() && !empty($_FILES['cover_upload']['name'] ?? '')) {
+            $uploadError = (int) ($_FILES['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
+            if ($uploadError !== UPLOAD_ERR_NO_FILE) {
+                if ($uploadError !== UPLOAD_ERR_OK) {
+                    throw new RuntimeException(upload_error_message($uploadError));
+                }
+                $tmpName = (string) ($_FILES['cover_upload']['tmp_name'] ?? '');
+                if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+                    throw new RuntimeException('Uploaded thumbnail is not available.');
+                }
+                $info = @getimagesize($tmpName);
+                if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                    throw new RuntimeException('The uploaded gallery thumbnail is not a valid image.');
+                }
+                $coverImagePath = store_uploaded_gallery_cover((int) $gallery['id'], $_FILES['cover_upload']);
+                $coverImageId = null;
+            }
+        }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
         $fields = [
@@ -1900,6 +1948,9 @@ function cms_admin_edit_gallery(): void
                 $fields['access_token_hash = ?'] = null;
                 $fields['access_token_expires_at = ?'] = null;
             }
+        }
+        if (gallery_cover_asset_schema_ready()) {
+            $fields['cover_image_path = ?'] = $coverImagePath;
         }
         $fields['updated_at = ?'] = now_sql();
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -1951,7 +2002,7 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
@@ -2001,7 +2052,12 @@ function cms_admin_edit_gallery(): void
         echo '<p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
-    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
+    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">Includes images from subgalleries.</span></label>';
+    if (gallery_cover_asset_schema_ready()) {
+        echo '<label>Upload gallery thumbnail<input type="file" name="cover_upload" accept="image/*"><span class="muted">This is stored separately from gallery images.</span></label>';
+    } else {
+        echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
+    }
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
     echo '<button type="submit">Save gallery</button></form></section>';
@@ -2313,17 +2369,20 @@ function gallery_options_for_select(): string
 /**
  * Build cover-image options for one gallery.
  */
-function gallery_cover_options(int $galleryId, int $selectedImageId): string
+function gallery_cover_options(int $galleryId, int $selectedImageId, bool $includeDescendants = false): string
 {
-    // Variable $images stores this steps working value.
-    $images = gallery_images($galleryId, false);
+    $images = $includeDescendants ? gallery_cover_choices($galleryId, false) : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
     // Variable $html stores this steps working value.
     $html = '';
-    foreach ($images as $image) {
+    foreach ($images as $entry) {
+        $image = $entry['image'];
         // Variable $selected stores this steps working value.
         $selected = $selectedImageId === (int) $image['id'] ? ' selected' : '';
         // Variable $label stores this steps working value.
         $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
+        if ($includeDescendants && !empty($entry['gallery_title'])) {
+            $label = $entry['gallery_title'] . ' - ' . $label;
+        }
         $html .= '<option value="' . (int) $image['id'] . '"' . $selected . '>' . e($label) . '</option>';
     }
     return $html;
