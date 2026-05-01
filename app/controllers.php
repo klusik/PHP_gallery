@@ -59,13 +59,23 @@ function cms_gallery(): void
     // Variable $viewer stores this steps working value.
     $viewer = current_user();
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
-    if (!$gallery && isset($_GET['gallery_path'])) {
+    $gallery = null;
+    if (isset($_GET['gallery_path'])) {
         try {
             $gallery = find_gallery_by_folder_path((string) $_GET['gallery_path']);
         } catch (RuntimeException) {
             $gallery = null;
         }
+    }
+    if (!$gallery && isset($_GET['slug'])) {
+        try {
+            $gallery = find_gallery_by_folder_path((string) $_GET['slug']);
+        } catch (RuntimeException) {
+            $gallery = null;
+        }
+    }
+    if (!$gallery) {
+        $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
     if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
         cms_not_found();
@@ -238,7 +248,7 @@ function cms_picture_game(): void
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>Picture game</h1><p>Choose the picture you prefer. Your choice gives that picture one upvote; the other picture is not downvoted.</p></section>';
     if (!$pair) {
-        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">Back to gallery</a></p></section>';
+        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(gallery_public_url($gallery)) . '">Back to gallery</a></p></section>';
         render_picture_game_stats($topImages);
         render_footer();
         return;
@@ -297,7 +307,7 @@ function render_breadcrumbs(?array $gallery = null): void
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($gallery) {
         foreach (gallery_ancestors($gallery, true) as $ancestor) {
-            echo '<span aria-hidden="true">/</span><a href="' . e(url_for('gallery', ['slug' => $ancestor['slug']])) . '">' . e($ancestor['title']) . '</a>';
+            echo '<span aria-hidden="true">/</span><a href="' . e(gallery_public_url($ancestor)) . '">' . e($ancestor['title']) . '</a>';
         }
         echo '<span aria-hidden="true">/</span><span>' . e($gallery['title']) . '</span>';
     }
@@ -356,7 +366,7 @@ function cms_gallery_access(): void
         return;
     }
     grant_gallery_public_access((int) $requirement['id']);
-    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+    redirect_to(gallery_public_url($gallery));
 }
 
 /**
@@ -383,7 +393,7 @@ function cms_share(): void
         return;
     }
     grant_gallery_public_access((int) $gallery['id']);
-    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+    redirect_to(gallery_public_url($gallery));
 }
 
 /**
@@ -1264,7 +1274,7 @@ function cms_admin(): void
         echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
-        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
+        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
         if ($accessReady) {
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
@@ -2406,7 +2416,7 @@ function cms_admin_public_update_gallery(): void
             // Variable $parent stores this steps working value.
             $parent = find_gallery((int) $gallery['parent_id']);
             if ($parent) {
-                $redirect = url_for('gallery', ['slug' => $parent['slug']]);
+                $redirect = gallery_public_url($parent);
             }
         }
         // Variable $stmt stores this steps working value.
@@ -2428,7 +2438,7 @@ function cms_admin_public_update_gallery(): void
     if ($updated) {
         write_gallery_sidecar($updated);
     }
-    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('gallery', ['slug' => $gallery['slug']])));
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
 }
 
 /**

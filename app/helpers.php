@@ -154,11 +154,29 @@ function absolute_public_url(string $url): string
 }
 
 /**
- * Build the preferred public URL for one gallery, using the clean route.
+ * Encode one relative gallery path for clean public URLs while preserving slashes.
+ */
+function gallery_public_path_segment(string $folderPath): string
+{
+    $normalizedPath = trim(str_replace('\\', '/', $folderPath), '/');
+    if ($normalizedPath === '') {
+        return rawurlencode('gallery');
+    }
+
+    $segments = array_values(array_filter(explode('/', $normalizedPath), static fn (string $segment): bool => $segment !== ''));
+    return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
+}
+
+/**
+ * Build the preferred public URL for one gallery, using its full folder path.
  */
 function gallery_public_url(array $gallery): string
 {
-    return public_base_url() . '/gallery/' . rawurlencode((string) $gallery['slug']) . '/';
+    $folderPath = (string) ($gallery['folder_path'] ?? '');
+    if ($folderPath === '') {
+        $folderPath = (string) ($gallery['slug'] ?? 'gallery');
+    }
+    return public_base_url() . '/gallery/' . gallery_public_path_segment($folderPath) . '/';
 }
 
 /**
