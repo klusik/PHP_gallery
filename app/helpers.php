@@ -417,7 +417,14 @@ function render_header(string $title): void
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     echo cms_head_extras_html();
-    echo '</head><body class="' . e($bodyClass) . '"><header class="site-header">';
+    echo '</head><body class="' . e($bodyClass) . '">';
+    if ($bodyClass === 'public-page') {
+        echo '<div class="theme-background-shell" aria-hidden="true">';
+        echo '<div class="theme-background-base"></div>';
+        echo '<div class="theme-background-image"></div>';
+        echo '</div>';
+    }
+    echo '<header class="site-header">';
     echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {

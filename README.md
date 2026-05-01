@@ -11,31 +11,6 @@ A small PHP 8+ gallery CMS for ordinary shared hosting. Media discovery comes fr
 
 No WordPress, Composer packages, npm build step, or framework is required.
 
-## Release Highlights
-
-Version 0.30 contains the full plain-PHP gallery application:
-
-- browser installer through `install.php`
-- filesystem gallery discovery with nested subgalleries
-- admin dashboard with bulk gallery and image actions
-- admin upload flows for creating empty galleries, uploading multiple images,
-  and creating a gallery directly from uploaded images
-- public gallery SEO with canonical URLs, metadata tags, structured data,
-  `robots.txt`, and `sitemap.xml`
-- editable gallery metadata, cover images, tags, visibility, and hierarchy
-- password-protected galleries with listed, unlisted, and share-link-only access
-- public gallery cards, breadcrumbs, lightbox browsing, and optional
-  per-gallery up/down voting
-- optional picture comparison game for admin-selected galleries
-- optional EXIF/GPS map overlays for GPS-tagged photos in enabled gallery branches
-- web-optimized JPEG thumbnails generated in each gallery's `thumbs/` folder
-- automatic scan and optional thumbnail creation during gallery import
-- visible inherited tags for galleries that contain tagged subgalleries
-- theme controls and optional custom CSS upload
-- ZIP downloads for one gallery or all galleries
-- FTP/local deployment helper scripts
-- Apache `.htaccess` files for routing and private-folder protection
-
 ## Setup
 
 The easiest setup path is the browser installer. It is meant for ordinary shared

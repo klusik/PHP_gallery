@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.37';
+const CMS_VERSION = '0.38';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -119,6 +119,7 @@ function cms_run(): void
         'media' => 'cms_media',
         'thumb' => 'cms_thumb',
         'gallery_cover_asset' => 'cms_gallery_cover_asset',
+        'theme_background_asset' => 'cms_theme_background_asset',
         'vote' => 'cms_vote',
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',

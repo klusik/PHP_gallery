@@ -89,28 +89,35 @@ function cms_gallery(): void
     $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $pictureGameImages stores this steps working value.
     $pictureGameImages = picture_game_images($gallery);
+    // Variable $backgroundAssetUrl stores this steps working value.
+    $backgroundAssetUrl = $publicOnly ? gallery_background_asset_url($gallery, $publicOnly) : '';
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
     render_public_seo_tags($gallery, $images);
     render_gallery_json_ld($gallery, $images);
     append_cms_head_extras((string) ob_get_clean());
+    if ($backgroundAssetUrl !== '') {
+        append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
+    }
 
     render_header((string) $seo['title']);
-    render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>' . e((string) $seo['title']) . '</h1><p>' . e((string) $seo['description']) . '</p>';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
+    echo '<div class="hero-actions">';
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a>';
     if ($galleryMapPoints) {
-        echo ' <button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
+        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
     }
-    echo '</section>';
     if (picture_game_available($gallery, $pictureGameImages)) {
-        echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
+        echo '<a class="button secondary" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a>';
     }
+    echo '</div>';
+    render_breadcrumbs($gallery);
+    echo '</section>';
     render_public_gallery_admin_form($gallery);
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
@@ -755,6 +762,15 @@ function cms_admin_theme(): void
                 unlink(custom_css_path());
             }
             set_app_setting('custom_css_preset', '');
+        } elseif (!empty($_POST['reset_theme_background'])) {
+            $path = theme_background_path();
+            if ($path !== null) {
+                $absolute = dirname(__DIR__) . '/' . ltrim($path, '/');
+                if (is_file($absolute)) {
+                    @unlink($absolute);
+                }
+            }
+            set_app_setting('theme_background_path', '');
         } elseif (!empty($_POST['reset_theme_overrides'])) {
             clear_theme_overrides();
         } else {
@@ -781,12 +797,28 @@ function cms_admin_theme(): void
                     $customCssChanged = true;
                 }
             }
+            if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
+                // Variable $name stores this steps working value.
+                $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
+                if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
+                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                        throw new RuntimeException('The uploaded theme background is not a valid image.');
+                    }
+                    store_uploaded_theme_background($_FILES['theme_background']);
+                }
+            }
+            set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
+            set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
             if ($themeControlsChanged) {
                 set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
                 set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
                 set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
                 set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
                 set_app_setting('theme_gallery_panel', sanitize_hex_color((string) $_POST['theme_gallery_panel'], '#fffaf0'));
+                set_app_setting('theme_header_text', sanitize_hex_color((string) $_POST['theme_header_text'], '#0f172a'));
+                set_app_setting('theme_hero_text', sanitize_hex_color((string) $_POST['theme_hero_text'], '#0f172a'));
                 set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
                 set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
             } elseif ($customCssChanged) {
@@ -806,6 +838,19 @@ function cms_admin_theme(): void
     echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '" data-theme-override-control></label>';
     echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '" data-theme-override-control></label>';
     echo '<label>Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control></label>';
+    echo '<label>Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control></label>';
+    echo '<label>Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control></label>';
+    echo '<fieldset class="form-grid"><legend>Background</legend>';
+    echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
+    $themeBackgroundUrl = theme_background_asset_url();
+    if ($themeBackgroundUrl !== '') {
+        echo '<p class="muted">Current theme background: <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">view stored image</a></p>';
+    } else {
+        echo '<p class="muted">No global theme background image is stored yet.</p>';
+    }
+    echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
+    echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
+    echo '</fieldset>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
     // Variable $selectedPreset stores this steps working value.
@@ -819,8 +864,30 @@ function cms_admin_theme(): void
     echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></form></section>';
+    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button></div></form></section>';
     render_footer();
+}
+
+/**
+ * Stream the stored global theme background image.
+ */
+function cms_theme_background_asset(): void
+{
+    $relative = theme_background_path();
+    if ($relative === null) {
+        cms_not_found();
+        return;
+    }
+    $absolute = dirname(__DIR__) . '/' . ltrim($relative, '/');
+    if (!is_file($absolute)) {
+        cms_not_found();
+        return;
+    }
+    $mime = mime_content_type($absolute) ?: 'application/octet-stream';
+    header('Content-Type: ' . $mime);
+    header('Content-Length: ' . (string) filesize($absolute));
+    header('Cache-Control: public, max-age=86400');
+    readfile($absolute);
 }
 
 /**
@@ -991,7 +1058,7 @@ function cms_admin_update(): void
     echo '<button type="submit">Install beta snapshot</button>';
     echo '</form>';
     if ($betaActive) {
-        echo '<form method="post" class="form-grid" style="margin-top:1rem;">' . csrf_field();
+        echo '<form method="post" class="form-grid form-grid-spaced">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
         echo '<p class="muted">This downloads the stable branch head from GitHub and restores application files from that release. Database changes from the beta are not rolled back automatically.</p>';
         echo '<button type="submit" class="button secondary">Restore stable release</button>';
@@ -1952,6 +2019,13 @@ function cms_admin_edit_gallery(): void
         // Variable $coverImageId stores this steps working value.
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        $backgroundSource = null;
+        if (gallery_background_source_schema_ready()) {
+            $submittedBackgroundSource = (string) ($_POST['background_source'] ?? '');
+            if (in_array($submittedBackgroundSource, ['upload', 'existing', 'collage'], true)) {
+                $backgroundSource = $submittedBackgroundSource;
+            }
+        }
         if (gallery_cover_asset_schema_ready() && !empty($_FILES['cover_upload']['name'] ?? '')) {
             $uploadError = (int) ($_FILES['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
             if ($uploadError !== UPLOAD_ERR_NO_FILE) {
@@ -2004,6 +2078,9 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_cover_asset_schema_ready()) {
             $fields['cover_image_path = ?'] = $coverImagePath;
+        }
+        if (gallery_background_source_schema_ready()) {
+            $fields['background_source = ?'] = $backgroundSource;
         }
         $fields['updated_at = ?'] = now_sql();
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -2110,6 +2187,12 @@ function cms_admin_edit_gallery(): void
         echo '<label>Upload gallery thumbnail<input type="file" name="cover_upload" accept="image/*"><span class="muted">This is stored separately from gallery images.</span></label>';
     } else {
         echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
+    }
+    if (gallery_background_source_schema_ready()) {
+        $backgroundSource = gallery_background_source($gallery);
+        echo '<label>Background source<select name="background_source"><option value=""' . ($backgroundSource === null ? ' selected' : '') . '>Use theme background</option><option value="upload"' . ($backgroundSource === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . ($backgroundSource === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . ($backgroundSource === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">If unset, the gallery inherits the Theme background.</span></label>';
+    } else {
+        echo '<p class="muted">Background source selection will be available after the background migration is applied.</p>';
     }
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
@@ -2550,36 +2633,46 @@ function cms_gallery_map_data(): void
 
 function cms_theme_css(): void
 {
-    $overrides = theme_override_settings();
     $updatePendingCss = '.nav a.is-update-pending,.button.is-update-pending,button.is-update-pending{border-color:#7f1d1d!important;background:repeating-linear-gradient(135deg,#b91c1c 0 .55rem,#f59e0b .55rem 1.1rem)!important;color:#fff!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #7f1d1d!important;font-weight:800;}';
+    $themeBackground = theme_background_asset_url();
     header('Content-Type: text/css; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
     header('Expires: 0');
-    if ($overrides === []) {
-        echo $updatePendingCss;
-        return;
-    }
     $theme = theme_settings();
     $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
+    $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';
     echo '--accent-dark:' . css_value((string) $theme['accent_dark']) . ';';
     echo '--paper:' . css_value((string) $theme['paper']) . ';';
     echo '--panel:' . css_value((string) $theme['panel']) . ';';
     echo '--gallery-panel:' . css_value((string) $theme['gallery_panel']) . ';';
+    echo '--header-text:' . css_value((string) $theme['header_text']) . ';';
+    echo '--hero-text:' . css_value((string) $theme['hero_text']) . ';';
     echo '--radius:' . (int) $theme['radius'] . 'px;';
     echo '--font-family:' . css_value($fontFamily) . ';';
     echo '}';
-    echo 'body,.public-page,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
+    echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
+    echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);position:relative;}';
+    echo '.theme-background-shell{position:fixed;inset:0;pointer-events:none;z-index:0;}';
+    echo '.theme-background-base,.theme-background-image{position:absolute;inset:0;}';
+    echo '.theme-background-base{background:var(--paper);}';
+    echo '.theme-background-image{background-image:' . ($themeBackground !== '' ? 'url("' . css_value($themeBackground) . '")' : 'none') . ';background-size:cover;background-position:center center;background-repeat:no-repeat;opacity:' . number_format($backgroundOpacity / 100, 2, '.', '') . ';}';
+    echo '.public-page > *:not(.theme-background-shell):not(.map-overlay):not(.lightbox):not(.runtime-style-warning){position:relative;z-index:1;}';
     echo 'a{color:var(--accent-dark);}';
-    echo '.site-header,.admin-page .site-header{background:var(--paper);border-color:var(--line);}';
-    echo '.brand,.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
+    echo '.site-header{background:rgba(255,255,255,0.10);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08);border-color:rgba(255,255,255,0.22);padding:clamp(1rem,3vw,2rem);margin-bottom:1rem;border-radius:var(--radius);}';
+    echo '.admin-page .site-header{background:var(--paper);border-color:var(--line);}';
+    echo '.brand{color:var(--header-text, var(--ink));font-family:var(--font-family);}';
+    echo '.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
     echo '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
     echo '.nav a:hover,.button:hover,button:hover,input[type="submit"]:hover{border-color:var(--accent-dark);background:var(--accent-dark);}';
     echo '.button.secondary,button.secondary{border-color:var(--accent-dark);background:transparent;color:var(--accent-dark);}';
     echo '.hero,.panel,.gallery-card,.image-card,.admin-page .hero,.admin-page .panel{background:var(--panel);border-color:var(--line);border-radius:var(--radius);}';
-    echo '.public-page .hero{background:var(--gallery-panel);}';
+    echo '.public-page .hero{background:rgba(255,255,255,0.18);backdrop-filter:blur(10px) saturate(1.06);-webkit-backdrop-filter:blur(10px) saturate(1.06);position:relative;overflow:hidden;border-color:rgba(255,255,255,0.28);}';
+    echo '.public-page .hero > *{position:relative;z-index:1;}';
+    echo '.public-page .hero::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,.16) 52%,rgba(255,255,255,.22) 100%);pointer-events:none;}';
+    echo '.public-page .hero h1,.public-page .hero p,.public-page .hero .tag-list-label{color:var(--hero-text, var(--ink));}';
     echo '.gallery-card-link{background:var(--panel);color:inherit;}';
     echo '.gallery-card-body h2,.image-meta h2{color:var(--ink);}';
     echo '.inline-editor{border-color:var(--line);background:var(--field);border-radius:var(--radius);}';

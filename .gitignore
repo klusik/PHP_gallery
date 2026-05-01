@@ -5,6 +5,7 @@ config.php
 /tmp/
 /deploy/
 /galleries/
+/public/assets/custom.css
 .env
 *.log
 *.tmp
