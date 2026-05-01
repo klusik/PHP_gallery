@@ -2,6 +2,18 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.40
+
+### Major Changes
+
+- Tightened public gallery-card thumbnail selection so previews prefer the 800px variant and only fall back to 300px on very small viewports.
+- Fixed responsive gallery-card thumbnail srcsets so they no longer advertise missing sizes that could resolve to full-size media.
+- Normalized uploaded gallery cover assets to bounded preview images instead of streaming the original upload directly.
+
+### Fixes
+
+- Prepared the application metadata for the 0.40 release cycle.
+
 ## Version 0.39
 
 ### Major Changes
