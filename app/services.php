@@ -296,6 +296,9 @@ function write_gallery_sidecar(array $gallery): void
             $data['cover'] = $cover['relative_path'];
         }
     }
+    if (!empty($gallery['cover_image_path'])) {
+        $data['cover_image_path'] = (string) $gallery['cover_image_path'];
+    }
     write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
 
@@ -921,7 +924,15 @@ function gallery_upload_entries(?array $files): array
         }
         $originalName = (string) $name;
         if (!is_supported_image_path($originalName)) {
-            throw new RuntimeException('Only JPG, PNG, GIF, and WebP images can be uploaded.');
+            $message = 'Only JPG, PNG, GIF, and WebP images can be uploaded.';
+            if (heic_conversion_supported() && raw_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.';
+            } elseif (heic_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.';
+            } elseif (raw_conversion_supported()) {
+                $message = 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.';
+            }
+            throw new RuntimeException($message . ' Offending file: ' . $originalName . '.');
         }
         $info = @getimagesize($tmpName);
         if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
@@ -937,6 +948,46 @@ function gallery_upload_entries(?array $files): array
         throw new RuntimeException('Choose at least one image to upload.');
     }
     return $entries;
+}
+
+/**
+ * Return whether the server can decode HEIC/HEIF images for conversion.
+ */
+function heic_conversion_supported(): bool
+{
+    if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
+        return false;
+    }
+    try {
+        $formats = Imagick::queryFormats('HEIC');
+        if ($formats) {
+            return true;
+        }
+        $formats = Imagick::queryFormats('HEIF');
+        return (bool) $formats;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Return whether the server can decode RAW/DNG images for conversion.
+ */
+function raw_conversion_supported(): bool
+{
+    if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
+        return false;
+    }
+    try {
+        $formats = Imagick::queryFormats('DNG');
+        if ($formats) {
+            return true;
+        }
+        $formats = Imagick::queryFormats('RAW');
+        return (bool) $formats;
+    } catch (Throwable) {
+        return false;
+    }
 }
 
 /**
@@ -1010,6 +1061,39 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
 }
 
 /**
+ * Store one uploaded gallery thumbnail outside the indexed image set.
+ */
+function store_uploaded_gallery_cover(int $galleryId, array $file): string
+{
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    $coverDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbnail';
+    if (!is_dir($coverDir) && !mkdir($coverDir, 0775, true)) {
+        throw new RuntimeException('Could not create thumbnail folder.');
+    }
+    if (!path_inside($galleryRoot, $coverDir)) {
+        throw new RuntimeException('Thumbnail path is outside its gallery.');
+    }
+    $extension = strtolower(pathinfo((string) ($file['name'] ?? 'cover.jpg'), PATHINFO_EXTENSION));
+    $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
+    $relative = 'thumbnail/cover.' . $safeExtension;
+    $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.' . $safeExtension;
+    foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*') ?: [] as $oldFile) {
+        if (is_file($oldFile) && $oldFile !== $target) {
+            @unlink($oldFile);
+        }
+    }
+    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
+        throw new RuntimeException('Could not store gallery thumbnail.');
+    }
+    set_gallery_cover_path($galleryId, $relative);
+    return $relative;
+}
+
+/**
  * Scan every imported gallery folder for new or changed direct images.
  */
 function scan_all_imported_gallery_images(): array
@@ -1030,7 +1114,23 @@ function scan_all_imported_gallery_images(): array
  */
 function thumbnail_sizes(): array
 {
-    return [300, 800];
+    return [300, 600, 800];
+}
+
+/**
+ * Build a responsive srcset for the supported thumbnail sizes.
+ */
+function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
+{
+    $entries = [];
+    foreach ($sizes as $size) {
+        $size = (int) $size;
+        if (!in_array($size, thumbnail_sizes(), true)) {
+            continue;
+        }
+        $entries[] = thumbnail_url($image, $size) . ' ' . $size . 'w';
+    }
+    return implode(', ', $entries);
 }
 
 /**
@@ -1272,6 +1372,45 @@ function ensure_gallery_cover(int $galleryId): void
     // Variable $update stores this steps working value.
     $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
     $update->execute([(int) $coverId, now_sql(), $galleryId]);
+}
+
+/**
+ * Return the gallery thumbnail asset path, if one was uploaded.
+ */
+function gallery_cover_path(array $gallery): ?string
+{
+    $path = trim((string) ($gallery['cover_image_path'] ?? ''));
+    return $path !== '' ? $path : null;
+}
+
+/**
+ * Return true when the uploaded gallery thumbnail column is available.
+ */
+function gallery_cover_asset_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
+        $ready = (bool) $stmt->fetch();
+    } catch (Throwable) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+/**
+ * Update a gallery's uploaded thumbnail asset path.
+ */
+function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
+{
+    if (!gallery_cover_asset_schema_ready()) {
+        return;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$relativePath !== null && $relativePath !== '' ? $relativePath : null, now_sql(), $galleryId]);
 }
 
 /**
@@ -2414,6 +2553,11 @@ function admin_log_update_status(int $logId, string $status): void
  */
 function child_galleries(int $parentId, bool $publicOnly): array
 {
+    static $cache = [];
+    $cacheKey = $parentId . ':' . ($publicOnly ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $sql stores this steps working value.
     $sql = "SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
@@ -2428,7 +2572,7 @@ function child_galleries(int $parentId, bool $publicOnly): array
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    return $cache[$cacheKey] = $stmt->fetchAll();
 }
 
 /**
@@ -2436,6 +2580,11 @@ function child_galleries(int $parentId, bool $publicOnly): array
  */
 function gallery_ancestors(array $gallery, bool $publicOnly): array
 {
+    static $cache = [];
+    $cacheKey = (int) $gallery['id'] . ':' . ($publicOnly ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $ancestors stores this steps working value.
     $ancestors = [];
     // Variable $parentId stores this steps working value.
@@ -2450,7 +2599,7 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
         // Variable $parentId stores this steps working value.
         $parentId = $parent['parent_id'] ?? null;
     }
-    return $ancestors;
+    return $cache[$cacheKey] = $ancestors;
 }
 
 /**
@@ -2462,10 +2611,15 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
  */
 function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
 {
+    static $cache = [];
+    $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $galleryIds stores this steps working value.
     $galleryIds = gallery_subtree_ids($galleryId);
     if (!$galleryIds) {
-        return 0;
+        return $cache[$cacheKey] = 0;
     }
     if ($publicOnly) {
         $galleryIds = array_values(array_filter($galleryIds, static function (int $candidateId): bool {
@@ -2473,7 +2627,7 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
             return $candidate && visitor_can_access_gallery($candidate);
         }));
         if (!$galleryIds) {
-            return 0;
+            return $cache[$cacheKey] = 0;
         }
     }
 
@@ -2495,7 +2649,7 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    return (int) $stmt->fetchColumn();
+    return $cache[$cacheKey] = (int) $stmt->fetchColumn();
 }
 
 /**
@@ -2511,16 +2665,21 @@ function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
  */
 function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 {
+    static $cache = [];
+    $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        return null;
+        return $cache[$cacheKey] = null;
     }
     if (!empty($gallery['cover_image_id'])) {
         // Variable $cover stores this steps working value.
         $cover = find_image((int) $gallery['cover_image_id']);
         if ($cover && !str_contains((string) $cover['relative_path'], '/') && (!$publicOnly || $cover['visibility'] === 'public')) {
-            return $cover;
+            return $cache[$cacheKey] = $cover;
         }
     }
     // Variable $sql stores this steps working value.
@@ -2534,7 +2693,22 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
     $stmt->execute([$galleryId]);
     // Variable $image stores this steps working value.
     $image = $stmt->fetch();
-    return $image ?: null;
+    return $cache[$cacheKey] = ($image ?: null);
+}
+
+/**
+ * Return a gallery thumbnail URL from an uploaded asset, if present.
+ */
+function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
+{
+    if ($publicOnly && gallery_access_requirement($gallery) !== null) {
+        return '';
+    }
+    $coverPath = gallery_cover_path($gallery);
+    if ($coverPath === null) {
+        return '';
+    }
+    return url_for('gallery_cover_asset', ['id' => (int) $gallery['id']]);
 }
 
 /**
@@ -2542,6 +2716,11 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
  */
 function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
 {
+    static $cache = [];
+    $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . $limit;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $images stores this steps working value.
     $images = [];
     // Parent galleries without direct images borrow covers from child galleries.
@@ -2564,7 +2743,35 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
             }
         }
     }
-    return array_values($images);
+    return $cache[$cacheKey] = array_values($images);
+}
+
+/**
+ * Build visual cover choices from the gallery subtree.
+ */
+function gallery_cover_choices(int $galleryId, bool $publicOnly): array
+{
+    $choices = [];
+    $root = find_gallery($galleryId);
+    if (!$root) {
+        return [];
+    }
+    $stack = [$root];
+    while ($stack) {
+        $gallery = array_shift($stack);
+        $cover = gallery_direct_cover_image((int) $gallery['id'], $publicOnly);
+        if ($cover) {
+            $choices[] = [
+                'gallery_id' => (int) $gallery['id'],
+                'gallery_title' => (string) $gallery['title'],
+                'image' => $cover,
+            ];
+        }
+        foreach (child_galleries((int) $gallery['id'], $publicOnly) as $child) {
+            $stack[] = $child;
+        }
+    }
+    return $choices;
 }
 
 /**
@@ -2613,25 +2820,31 @@ function picture_game_gallery_ids(array $gallery): array
  */
 function picture_game_images(array $gallery): array
 {
+    static $cache = [];
+    $cacheKey = (int) $gallery['id'];
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $galleryIds stores this steps working value.
     $galleryIds = picture_game_gallery_ids($gallery);
     if (!$galleryIds) {
-        return [];
+        return $cache[$cacheKey] = [];
     }
     // Variable $placeholders stores this steps working value.
     $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
     $stmt->execute($galleryIds);
-    return $stmt->fetchAll();
+    return $cache[$cacheKey] = $stmt->fetchAll();
 }
 
 /**
  * Return whether one gallery has enough opted-in public images for a game.
  */
-function picture_game_available(array $gallery): bool
+function picture_game_available(array $gallery, ?array $images = null): bool
 {
-    return count(picture_game_images($gallery)) >= 2;
+    $images ??= picture_game_images($gallery);
+    return count($images) >= 2;
 }
 
 /**
@@ -2658,10 +2871,10 @@ function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 /**
  * Return the next unplayed image pair for this voter in one gallery context.
  */
-function next_picture_game_pair(array $gallery): ?array
+function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 {
     // Variable $images stores this steps working value.
-    $images = picture_game_images($gallery);
+    $images ??= picture_game_images($gallery);
     if (count($images) < 2) {
         return null;
     }
@@ -2717,14 +2930,15 @@ function next_picture_game_pair(array $gallery): ?array
 /**
  * Record one picture-game selection and upvote only the chosen image.
  */
-function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId): void
+function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
 {
     [$imageAId, $imageBId] = picture_game_pair_key($leftImageId, $rightImageId);
     if (!in_array($winnerImageId, [$imageAId, $imageBId], true)) {
         throw new RuntimeException('Selected image is not part of this pair.');
     }
     // Variable $allowedIds stores this steps working value.
-    $allowedIds = array_map(static fn (array $image): int => (int) $image['id'], picture_game_images($gallery));
+    $images ??= picture_game_images($gallery);
+    $allowedIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     if (!in_array($imageAId, $allowedIds, true) || !in_array($imageBId, $allowedIds, true)) {
         throw new RuntimeException('Image pair is not available in this game.');
     }
@@ -2755,10 +2969,10 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
 /**
  * Return top global picture-game winners for one gallery context.
  */
-function picture_game_top_images(array $gallery, int $limit = 3): array
+function picture_game_top_images(array $gallery, int $limit = 3, ?array $images = null): array
 {
     // Variable $images stores this steps working value.
-    $images = picture_game_images($gallery);
+    $images ??= picture_game_images($gallery);
     if (!$images) {
         return [];
     }
@@ -3008,6 +3222,11 @@ function sync_entity_tags(string $type, int $id, string $tagText): void
  */
 function tags_for_entity(string $type, int $id): array
 {
+    static $cache = [];
+    $cacheKey = $type . ':' . $id;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
     // Variable $mapTable stores this steps working value.
     $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
     // Variable $idColumn stores this steps working value.
@@ -3016,7 +3235,72 @@ function tags_for_entity(string $type, int $id): array
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT t.* FROM tags t JOIN ' . $mapTable . ' mt ON mt.tag_id = t.id WHERE mt.' . $idColumn . ' = ? ORDER BY t.name');
         $stmt->execute([$id]);
-        return $stmt->fetchAll();
+        return $cache[$cacheKey] = $stmt->fetchAll();
+    } catch (PDOException) {
+        return $cache[$cacheKey] = [];
+    }
+}
+
+/**
+ * Return all tags for many entities in one query, grouped by entity ID.
+ */
+function tags_for_entities(string $type, array $ids): array
+{
+    static $cache = [];
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    if (!$ids) {
+        return [];
+    }
+    $cacheKey = $type . ':' . implode(',', $ids);
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    try {
+        $stmt = db()->prepare(
+            'SELECT mt.' . $idColumn . ' AS entity_id, t.*
+             FROM tags t
+             JOIN ' . $mapTable . ' mt ON mt.tag_id = t.id
+             WHERE mt.' . $idColumn . ' IN (' . $placeholders . ')
+             ORDER BY mt.' . $idColumn . ', t.name'
+        );
+        $stmt->execute($ids);
+        $grouped = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $grouped[(int) $row['entity_id']][] = $row;
+        }
+        return $cache[$cacheKey] = $grouped;
+    } catch (PDOException) {
+        return $cache[$cacheKey] = [];
+    }
+}
+
+/**
+ * Return votes for many images for the current viewer in one query, keyed by image ID.
+ */
+function current_votes_for_images(array $imageIds): array
+{
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        return [];
+    }
+    $user = current_user();
+    $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
+    try {
+        if ($user) {
+            $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE user_id = ? AND image_id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([(int) $user['id']], $imageIds));
+        } else {
+            $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE visitor_hash = ? AND image_id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([visitor_hash()], $imageIds));
+        }
+        $votes = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $votes[(int) $row['image_id']] = (int) $row['vote'];
+        }
+        return $votes;
     } catch (PDOException) {
         return [];
     }

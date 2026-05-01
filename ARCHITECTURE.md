@@ -36,6 +36,9 @@ Important routes:
 - `page=admin_theme` stores theme controls and optional custom CSS.
 - `page=admin_update` checks GitHub for newer releases and can install the
   configured branch archive after creating a backup of overwritten files.
+- `reset.php` is a standalone admin-only recovery entrypoint that restores the
+  current stable branch head when the normal admin update page is unusable
+  after a broken beta deploy.
 - `page=admin_run_migrations` runs pending migrations from an authenticated
   admin POST when the dashboard detects a stale schema.
 - `page=admin_public_update_gallery` and `page=admin_public_update_image` save
@@ -88,6 +91,9 @@ parent gallery.
 `cover_image_id` stores an editable title picture. If a gallery has no direct
 cover image, public gallery cards can compose a small cover from child gallery
 covers.
+`cover_image_path` stores an uploaded gallery thumbnail separately from the
+imported gallery images. When present and the gallery is public, the card can
+use that asset instead of generating a cover from gallery photos.
 
 Protected-gallery access is stored on `galleries` separately from visibility.
 `access_mode` determines whether public access is normal or protected,
@@ -166,6 +172,10 @@ The public JavaScript intentionally detects inline `style` attributes and shows
 a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
 
+The gallery page batches per-image tags and votes, memoizes request-scoped
+gallery helpers, and preloads adjacent lightbox images so forward/backward
+browsing feels smoother on large images without changing the rendered layout.
+
 When GPS maps are enabled, the gallery page renders a pin button on each image
 with coordinates and a map button for the branch. The JavaScript loads Leaflet
 on demand, opens an overlay with OpenStreetMap tiles, and uses a small JSON
@@ -200,13 +210,13 @@ and points crawlers at the sitemap.
 
 Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
 Generated files are progressive JPEGs named from the original base filename plus
-`_thumb300` or `_thumb800`, for example `photo_thumb300.jpg`. Discovery ignores
-thumbnail folders, and scans only import direct source images from the gallery
-folder. Public cards and image previews request the `800` thumbnail through
-`page=thumb`; admin table previews use the `300` thumbnail. Missing thumbnails
-fall back to the original media route until an admin generates them. The
-lightbox intentionally uses the original protected media route instead of
-thumbnails.
+`_thumb300`, `_thumb600`, or `_thumb800`, for example `photo_thumb300.jpg`.
+Discovery ignores thumbnail folders, and scans only import direct source images
+from the gallery folder. Public cards and image previews use responsive
+`srcset`/`sizes` hints so the browser can choose between the available thumbnail
+sizes based on the actual card width. Missing thumbnails fall back to the
+original media route until an admin generates them. The lightbox intentionally
+uses the original protected media route instead of thumbnails.
 
 Thumbnail creation is incremental. If a generated file exists and is newer than
 or equal to the source image, the service counts it as skipped and does not
@@ -216,6 +226,8 @@ processed, created, skipped, and completion state for the progress UI.
 Gallery import with `Create optimized thumbnails during import` checked uses an
 AJAX import phase followed by the same thumbnail batch endpoint, so progress is
 visible while thumbnails are created for newly imported galleries.
+The upload screen reports HEIC and RAW support when the runtime extensions are
+available, and accepts those formats when conversion support is present.
 
 Each gallery can also have a `gallery.json` sidecar. The app writes metadata such
 as title, description, visibility, sort order, and cover path there when gallery

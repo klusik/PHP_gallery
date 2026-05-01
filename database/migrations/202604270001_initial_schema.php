@@ -87,6 +87,7 @@ return [
         gallery_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (gallery_id, tag_id),
+        KEY gallery_tags_tag_gallery_index (tag_id, gallery_id),
         CONSTRAINT gallery_tags_gallery_id_foreign FOREIGN KEY (gallery_id) REFERENCES galleries(id) ON DELETE CASCADE,
         CONSTRAINT gallery_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -94,6 +95,7 @@ return [
         image_id BIGINT UNSIGNED NOT NULL,
         tag_id BIGINT UNSIGNED NOT NULL,
         PRIMARY KEY (image_id, tag_id),
+        KEY image_tags_tag_image_index (tag_id, image_id),
         CONSTRAINT image_tags_image_id_foreign FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
         CONSTRAINT image_tags_tag_id_foreign FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",

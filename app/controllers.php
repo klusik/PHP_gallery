@@ -36,6 +36,8 @@ function cms_home(): void
  */
 function cms_gallery(): void
 {
+    // Variable $viewer stores this steps working value.
+    $viewer = current_user();
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     if (!$gallery && isset($_GET['gallery_path'])) {
@@ -45,16 +47,16 @@ function cms_gallery(): void
             $gallery = null;
         }
     }
-    if (!$gallery || ($gallery['visibility'] !== 'public' && !current_user())) {
+    if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
         cms_not_found();
         return;
     }
-    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+    if (!$viewer && !visitor_can_access_gallery($gallery)) {
         render_gallery_access_gate($gallery);
         return;
     }
     // Variable $publicOnly stores this steps working value.
-    $publicOnly = !current_user();
+    $publicOnly = !$viewer;
 
     // Variable $stmt stores this steps working value.
     $sql = "SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
@@ -71,6 +73,12 @@ function cms_gallery(): void
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
     $images = $stmt->fetchAll();
+    // Variable $imageIds stores this steps working value.
+    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // Variable $imageTagsById stores this steps working value.
+    $imageTagsById = tags_for_entities('image', $imageIds);
+    // Variable $votesById stores this steps working value.
+    $votesById = current_votes_for_images($imageIds);
     // Variable $children stores this steps working value.
     $children = child_galleries((int) $gallery['id'], $publicOnly);
     // Variable $mapsAllowed stores this steps working value.
@@ -79,6 +87,8 @@ function cms_gallery(): void
     $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
     // Variable $votingAllowed stores this steps working value.
     $votingAllowed = gallery_voting_allowed($gallery);
+    // Variable $pictureGameImages stores this steps working value.
+    $pictureGameImages = picture_game_images($gallery);
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
@@ -98,7 +108,7 @@ function cms_gallery(): void
         echo ' <button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
     }
     echo '</section>';
-    if (picture_game_available($gallery)) {
+    if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<p class="game-entry"><a class="button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a></p>';
     }
     render_public_gallery_admin_form($gallery);
@@ -114,23 +124,25 @@ function cms_gallery(): void
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 800);
+        $previewUrl = thumbnail_url($image, 300);
         // Variable $imageTags stores this steps working value.
-        $imageTags = tags_for_entity('image', (int) $image['id']);
+        $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
         $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
         // Variable $altText stores this steps working value.
         $altText = image_alt_text($image, $gallery, $index + 1);
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . current_vote_for_image((int) $image['id']) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
-        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" alt="' . e($altText) . '"></a>';
+        // Variable $vote stores this steps working value.
+        $vote = $votesById[(int) $image['id']] ?? 0;
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw" alt="' . e($altText) . '"></a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
         render_tag_list($imageTags);
-        render_vote_form((int) $image['id'], (int) $image['score'], current_vote_for_image((int) $image['id']), $votingAllowed);
+        render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
         echo '</div>';
         render_public_image_admin_form($image);
         echo '</article>';
@@ -228,7 +240,7 @@ function render_picture_game_choice(array $image, string $side): void
     // Variable $label stores this steps working value.
     $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
     echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
-    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
     echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
     echo '</button>';
 }
@@ -243,7 +255,7 @@ function render_picture_game_stats(array $topImages): void
     }
     echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
     foreach ($topImages as $image) {
-        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="' . e($image['title'] ?: $image['filename']) . '">';
+        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
     }
     echo '</div></section>';
@@ -362,19 +374,22 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
 {
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
-    $cover = $isProtectedPublicCard ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
+    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
+    } elseif ($coverAsset !== '') {
+        echo '<img loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" alt="">';
+        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 300)) . '" srcset="' . e(thumbnail_srcset($cover, [300, 600, 800])) . '" sizes="(min-width: 90rem) 20vw, (min-width: 60rem) 25vw, (min-width: 40rem) 33vw, 100vw" alt="">';
     } else {
         // Variable $collage stores this steps working value.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt="">';
+                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600])) . '" sizes="(min-width: 90rem) 10vw, (min-width: 60rem) 14vw, (min-width: 40rem) 20vw, 50vw" alt="">';
             }
             echo '</span>';
         }
@@ -523,6 +538,32 @@ function cms_thumb(): void
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     header('Content-Length: ' . filesize($path));
     header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
+    readfile($path);
+}
+
+/**
+ * Stream an uploaded gallery thumbnail asset.
+ */
+function cms_gallery_cover_asset(): void
+{
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    $coverPath = gallery_cover_path($gallery);
+    if ($coverPath === null) {
+        cms_not_found();
+        return;
+    }
+    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $coverPath);
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: ' . (string) (mime_content_type($path) ?: 'image/jpeg'));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: public, max-age=86400');
     readfile($path);
 }
 
@@ -961,6 +1002,47 @@ function cms_admin_update(): void
 }
 
 /**
+ * Provide a dedicated admin-only reset page for restoring the stable branch head.
+ */
+function cms_admin_reset(): void
+{
+    require_admin();
+    $error = null;
+    $notice = '';
+
+    if (request_method() === 'POST') {
+        verify_csrf();
+        try {
+            $result = restore_application_stable_release();
+            admin_log_event('info', 'update.stable_restored', 'Admin restored the stable branch head from the reset page.', $result);
+            $notice = 'Restored the stable branch head. Copied ' . (int) $result['files_copied'] . ' files.';
+        } catch (Throwable $exception) {
+            admin_log_event('warning', 'update.reset_failed', 'Stable branch reset failed.', ['error' => $exception->getMessage()]);
+            $error = $exception->getMessage();
+        }
+    }
+
+    render_header('Reset application');
+    echo '<section class="hero"><h1>Reset application</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">Open updates</a>';
+    echo '</nav></section>';
+    if ($notice !== '') {
+        echo '<div class="notice">' . e($notice) . '</div>';
+    }
+    if ($error !== null) {
+        echo '<div class="notice">Reset failed: ' . e($error) . '</div>';
+    }
+    echo '<section class="panel"><h2>Restore stable branch head</h2>';
+    echo '<p>This replaces the application files with the current `main` branch head from GitHub, which is useful if a beta build broke the site.</p>';
+    echo '<p class="muted">You must be logged in as an administrator. The action uses the same restore logic as the admin update screen.</p>';
+    echo '<form method="post" class="form-grid">' . csrf_field();
+    echo '<button type="submit" class="button danger">Reset to stable branch head</button>';
+    echo '</form></section>';
+    render_footer();
+}
+
+/**
  * Admin dashboard for gallery scanning, publishing, and bulk actions.
  */
 function cms_admin(): void
@@ -1344,7 +1426,17 @@ function cms_admin_new_gallery(): void
  */
 function cms_admin_upload(): void
 {
-    require_admin();
+    $isAjaxUpload = request_method() === 'POST' && admin_wants_json();
+    $user = current_user();
+    if (!$user || $user['role'] !== 'admin') {
+        if ($isAjaxUpload) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'Your admin session expired. Please sign in again.']);
+            return;
+        }
+        redirect_to(url_for('admin_login'));
+    }
     if (request_method() === 'POST') {
         verify_csrf();
         $wantsJson = admin_wants_json();
@@ -1407,15 +1499,36 @@ function cms_admin_upload(): void
 
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
+    $heicSupported = heic_conversion_supported();
+    $rawSupported = raw_conversion_supported();
     render_header('Upload photos');
     echo '<section class="hero"><h1>Upload photos</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a></nav></section>';
     if ($error !== '') {
         echo '<div class="notice">Upload failed: ' . e($error) . '</div>';
     }
+    echo '<section class="panel compact-support"><h2>Upload support</h2><table class="support-matrix"><thead><tr><th>Type</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th></tr></thead><tbody><tr>';
+    echo '<th scope="row">Available</th>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="support-yes">✓</td>';
+    echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
+    echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
+    echo '</tr></tbody></table></section>';
+    $acceptTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    if ($heicSupported) {
+        $acceptTypes[] = '.heic';
+        $acceptTypes[] = '.heif';
+    }
+    if ($rawSupported) {
+        $acceptTypes[] = '.dng';
+    }
+    $acceptTypes[] = 'image/*';
+    $acceptValue = implode(',', $acceptTypes);
     echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="existing">';
     echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select() . '</select></label>';
-    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
     echo '<button type="submit">Upload images</button></form></section>';
     echo '<section class="panel"><h2>Create gallery from upload</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
@@ -1426,7 +1539,7 @@ function cms_admin_upload(): void
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
-    echo '<label>Images<input name="images[]" type="file" accept="image/*" multiple required></label>';
+    echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
     echo '<button type="submit">Create gallery and upload</button></form></section>';
     render_footer();
@@ -1838,6 +1951,25 @@ function cms_admin_edit_gallery(): void
         $coverImage = $coverImageId > 0 ? find_image($coverImageId) : null;
         // Variable $coverImageId stores this steps working value.
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
+        $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        if (gallery_cover_asset_schema_ready() && !empty($_FILES['cover_upload']['name'] ?? '')) {
+            $uploadError = (int) ($_FILES['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
+            if ($uploadError !== UPLOAD_ERR_NO_FILE) {
+                if ($uploadError !== UPLOAD_ERR_OK) {
+                    throw new RuntimeException(upload_error_message($uploadError));
+                }
+                $tmpName = (string) ($_FILES['cover_upload']['tmp_name'] ?? '');
+                if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+                    throw new RuntimeException('Uploaded thumbnail is not available.');
+                }
+                $info = @getimagesize($tmpName);
+                if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                    throw new RuntimeException('The uploaded gallery thumbnail is not a valid image.');
+                }
+                $coverImagePath = store_uploaded_gallery_cover((int) $gallery['id'], $_FILES['cover_upload']);
+                $coverImageId = null;
+            }
+        }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
         $fields = [
@@ -1869,6 +2001,9 @@ function cms_admin_edit_gallery(): void
                 $fields['access_token_hash = ?'] = null;
                 $fields['access_token_expires_at = ?'] = null;
             }
+        }
+        if (gallery_cover_asset_schema_ready()) {
+            $fields['cover_image_path = ?'] = $coverImagePath;
         }
         $fields['updated_at = ?'] = now_sql();
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -1920,7 +2055,7 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
@@ -1970,7 +2105,12 @@ function cms_admin_edit_gallery(): void
         echo '<p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
-    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0)) . '</select></label>';
+    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">Includes images from subgalleries.</span></label>';
+    if (gallery_cover_asset_schema_ready()) {
+        echo '<label>Upload gallery thumbnail<input type="file" name="cover_upload" accept="image/*"><span class="muted">This is stored separately from gallery images.</span></label>';
+    } else {
+        echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
+    }
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
     echo '<button type="submit">Save gallery</button></form></section>';
@@ -2282,17 +2422,20 @@ function gallery_options_for_select(): string
 /**
  * Build cover-image options for one gallery.
  */
-function gallery_cover_options(int $galleryId, int $selectedImageId): string
+function gallery_cover_options(int $galleryId, int $selectedImageId, bool $includeDescendants = false): string
 {
-    // Variable $images stores this steps working value.
-    $images = gallery_images($galleryId, false);
+    $images = $includeDescendants ? gallery_cover_choices($galleryId, false) : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
     // Variable $html stores this steps working value.
     $html = '';
-    foreach ($images as $image) {
+    foreach ($images as $entry) {
+        $image = $entry['image'];
         // Variable $selected stores this steps working value.
         $selected = $selectedImageId === (int) $image['id'] ? ' selected' : '';
         // Variable $label stores this steps working value.
         $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
+        if ($includeDescendants && !empty($entry['gallery_title'])) {
+            $label = $entry['gallery_title'] . ' - ' . $label;
+        }
         $html .= '<option value="' . (int) $image['id'] . '"' . $selected . '>' . e($label) . '</option>';
     }
     return $html;

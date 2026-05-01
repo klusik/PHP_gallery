@@ -195,6 +195,8 @@
     const lightboxMapSplitCanvas = overlay.querySelector('[data-lightbox-map-split-canvas]');
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
+    // Variable `preloadedSources` stores this steps working value.
+    const preloadedSources = new Set();
     let fullscreenHideTimer = null;
     let touchGesture = null;
     const isMobileTouchDevice = detectMobileTouchDevice();
@@ -266,6 +268,7 @@
                 lightboxMapSplitTitle.textContent = card.dataset.title || title.textContent || 'Map';
             }
         }
+        preloadAdjacentImages(index);
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
@@ -287,6 +290,39 @@
     // Function `step` executes this focused behavior.
     function step(offset) {
         openAt((currentIndex + offset + cards.length) % cards.length);
+    }
+
+    function preloadAdjacentImages(index) {
+        if (shouldLimitLightboxPreloading()) {
+            return;
+        }
+        const offsets = [1, 2, 3, -1, -2];
+        offsets.forEach((offset) => {
+            const card = cards[(index + offset + cards.length) % cards.length];
+            if (!card || !card.dataset.fullSrc) {
+                return;
+            }
+            const src = card.dataset.fullSrc;
+            if (preloadedSources.has(src)) {
+                return;
+            }
+            preloadedSources.add(src);
+            const img = new Image();
+            img.decoding = 'async';
+            img.loading = 'eager';
+            img.src = src;
+        });
+    }
+
+    function shouldLimitLightboxPreloading() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (!connection) {
+            return false;
+        }
+        if (connection.saveData) {
+            return true;
+        }
+        return ['slow-2g', '2g'].includes(connection.effectiveType);
     }
 
     cards.forEach((card, index) => {
@@ -1140,6 +1176,11 @@
         });
         xhr.addEventListener('load', async () => {
             try {
+                const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
+                if (!contentType.includes('application/json')) {
+                    const snippet = (xhr.responseText || '').trim().slice(0, 120);
+                    throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Your session may have expired.' : 'Server returned an unexpected response.');
+                }
                 const result = JSON.parse(xhr.responseText || '{}');
                 if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
                     throw new Error(result.error || 'Upload failed.');

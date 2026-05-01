@@ -476,6 +476,43 @@ td {
     color: #fffdf8;
 }
 
+.compact-support {
+    padding: 0.75rem 1rem;
+}
+
+.compact-support h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+}
+
+.support-matrix {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.support-matrix th,
+.support-matrix td {
+    padding: 0.35rem 0.55rem;
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+}
+
+.support-matrix th[scope="row"] {
+    text-align: left;
+    font-weight: 700;
+}
+
+.support-yes {
+    color: #166534;
+    font-weight: 700;
+}
+
+.support-no {
+    color: #b91c1c;
+    font-weight: 700;
+}
+
 .inline-form {
     display: inline-flex;
     flex-wrap: wrap;
