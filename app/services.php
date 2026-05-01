@@ -1077,16 +1077,31 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     if (!path_inside($galleryRoot, $coverDir)) {
         throw new RuntimeException('Thumbnail path is outside its gallery.');
     }
-    $extension = strtolower(pathinfo((string) ($file['name'] ?? 'cover.jpg'), PATHINFO_EXTENSION));
-    $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
-    $relative = 'thumbnail/cover.' . $safeExtension;
-    $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.' . $safeExtension;
+    $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.jpg';
     foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*') ?: [] as $oldFile) {
         if (is_file($oldFile) && $oldFile !== $target) {
             @unlink($oldFile);
         }
     }
-    if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
+    $tmpPath = (string) ($file['tmp_name'] ?? '');
+    $info = @getimagesize($tmpPath);
+    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+        throw new RuntimeException('Could not read the uploaded gallery thumbnail image.');
+    }
+    if (!extension_loaded('gd')) {
+        throw new RuntimeException('Gallery thumbnail resizing requires the GD extension.');
+    }
+    $source = image_create_from_path($tmpPath, (string) $info['mime']);
+    if (!$source) {
+        throw new RuntimeException('Could not decode the uploaded gallery thumbnail image.');
+    }
+    if (!write_resized_jpeg($source, (int) $info[0], (int) $info[1], 800, $target)) {
+        imagedestroy($source);
+        throw new RuntimeException('Could not store gallery thumbnail.');
+    }
+    imagedestroy($source);
+    $relative = 'thumbnail/cover.jpg';
+    if (!is_file($target)) {
         throw new RuntimeException('Could not store gallery thumbnail.');
     }
     set_gallery_cover_path($galleryId, $relative);
@@ -1123,12 +1138,23 @@ function thumbnail_sizes(): array
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
     $entries = [];
+    $gallery = find_gallery((int) $image['gallery_id']);
+    if (!$gallery) {
+        return '';
+    }
     foreach ($sizes as $size) {
         $size = (int) $size;
         if (!in_array($size, thumbnail_sizes(), true)) {
             continue;
         }
-        $entries[] = thumbnail_url($image, $size) . ' ' . $size . 'w';
+        try {
+            if (!is_file(thumbnail_abs_path($image, $gallery, $size))) {
+                continue;
+            }
+        } catch (RuntimeException) {
+            continue;
+        }
+        $entries[] = url_for('thumb', ['id' => $image['id'], 'size' => $size]) . ' ' . $size . 'w';
     }
     return implode(', ', $entries);
 }
@@ -1461,11 +1487,11 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
     }
     if ($source === 'existing') {
         $image = gallery_cover_image((int) $gallery['id'], $publicOnly);
-        return $image ? thumbnail_url($image, 1200) : '';
+        return $image ? thumbnail_url($image, 800) : '';
     }
     if ($source === 'collage') {
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly, 1);
-        return $collage ? thumbnail_url($collage[0], 1200) : '';
+        return $collage ? thumbnail_url($collage[0], 800) : '';
     }
     return '';
 }
