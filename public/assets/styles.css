@@ -107,6 +107,18 @@ button.is-update-pending {
     font-weight: 800;
 }
 
+.runtime-style-warning {
+    position: sticky;
+    top: 0;
+    z-index: 10000;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    background: #7f1d1d;
+    color: #ffffff;
+    font-weight: 800;
+    text-align: center;
+}
+
 /* Panels, cards, and gallery grids */
 
 .hero,
@@ -297,6 +309,10 @@ button.is-update-pending {
 .form-grid {
     display: grid;
     gap: 0.8rem;
+}
+
+.form-grid-spaced {
+    margin-top: 1rem;
 }
 
 .bulk-row {
@@ -1276,6 +1292,18 @@ body.has-mobile-lightbox {
 
 .public-page .hero p {
     max-width: 68ch;
+}
+
+.public-page .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+    margin-top: 0.85rem;
+}
+
+.public-page .hero .breadcrumbs {
+    margin-top: 1rem;
 }
 
 .public-page .gallery-card {

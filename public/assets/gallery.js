@@ -1,4 +1,42 @@
 (() => {
+    const runtimeInlineStyleSelector = [
+        '[data-inline-style-allowed="true"]',
+        '.map-overlay',
+        '.lightbox-map-split',
+        '.leaflet-container',
+        '.leaflet-pane',
+        '.leaflet-tile-pane',
+        '.leaflet-tile-container',
+        '.leaflet-layer',
+        '.leaflet-tile',
+        '.leaflet-marker-icon',
+        '.leaflet-marker-shadow',
+        '.leaflet-popup',
+        '.leaflet-control',
+    ].join(',');
+
+    // Allow a small set of runtime-managed inline styles used by the app.
+    function isAllowedRuntimeInlineStyle(node) {
+        return Boolean(
+            node &&
+            (
+                node.dataset?.inlineStyleAllowed === 'true' ||
+                node.closest?.(runtimeInlineStyleSelector)
+            )
+        );
+    }
+
+    function showCompromiseWarning() {
+        if (!document.body || document.querySelector('[data-runtime-style-warning]')) {
+            return;
+        }
+        const warning = document.createElement('div');
+        warning.className = 'runtime-style-warning';
+        warning.dataset.runtimeStyleWarning = 'true';
+        warning.textContent = 'Unexpected inline styles were detected. The page was not modified by the theme system.';
+        document.body.prepend(warning);
+    }
+
     // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
     function hasUnauthorizedInlineStyle() {
         return Array.from(document.querySelectorAll('[style]')).some((node) => !isAllowedRuntimeInlineStyle(node));
@@ -36,6 +74,16 @@
                 changed.value = '1';
             });
         });
+        const opacityControl = form.querySelector('[data-theme-background-opacity]');
+        const opacityDisplay = form.querySelector('[data-theme-background-opacity-display]');
+        if (opacityControl && opacityDisplay) {
+            const syncOpacity = () => {
+                opacityDisplay.textContent = `${opacityControl.value}%`;
+            };
+            opacityControl.addEventListener('input', syncOpacity);
+            opacityControl.addEventListener('change', syncOpacity);
+            syncOpacity();
+        }
     }
 
     // Submit votes through fetch so the selected state and score update without
@@ -795,7 +843,7 @@
             const stylesheet = document.createElement('link');
             stylesheet.rel = 'stylesheet';
             stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-            stylesheet.integrity = 'sha256-p4NxAoJBhIINfQkM12i93m8fFYdHn5t2mZmk3qj6y8o=';
+            stylesheet.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
             stylesheet.crossOrigin = '';
             stylesheet.dataset.galleryLeafletCss = 'true';
             stylesheet.onload = () => resolve();
@@ -910,6 +958,7 @@
 
         // Variable `canvas` stores this steps working value.
         const canvas = overlay.querySelector('[data-map-canvas]');
+        await waitForElementSize(canvas);
         if (overlay.galleryLeafletMap) {
             overlay.galleryLeafletMap.remove();
             overlay.galleryLeafletMap = null;
@@ -941,8 +990,8 @@
             bounds.push([point.lat, point.lng]);
         });
 
-        setInitialMapViewport(map, bounds, {padding: [30, 30]});
-        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]});
+        setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
     }
 
     function toggleLightboxMapSplit(json, title) {
@@ -994,42 +1043,62 @@
             marker.bindPopup(mapPopupHtml(point));
             bounds.push([point.lat, point.lng]);
         });
-        setInitialMapViewport(map, bounds, {padding: [24, 24]});
-        stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]});
+        setInitialMapViewport(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
+        stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
         overlay.galleryLeafletSplitResizeObserver = new ResizeObserver(() => {
-            if (overlay.galleryLeafletSplitMap) {
+            if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                 overlay.galleryLeafletSplitMap.invalidateSize(false);
             }
         });
         overlay.galleryLeafletSplitResizeObserver.observe(lightboxMapSplitCanvas);
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                if (overlay.galleryLeafletSplitMap) {
+                if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                     overlay.galleryLeafletSplitMap.invalidateSize(false);
                 }
             });
         });
     }
 
+    function isUsableLeafletMap(map, isCurrent = () => true) {
+        return Boolean(
+            map &&
+            isCurrent() &&
+            map._container &&
+            map._container.isConnected &&
+            map._mapPane
+        );
+    }
+
     // Function `setInitialMapViewport` executes this focused behavior.
-    function setInitialMapViewport(map, bounds, options) {
-        map.invalidateSize(false);
-        if (bounds.length === 1) {
-            map.setView(bounds[0], 15, {animate: false});
-        } else if (bounds.length > 1) {
-            map.fitBounds(bounds, {...options, animate: false});
-        }
+    function setInitialMapViewport(map, bounds, options, isCurrent = () => true) {
+        requestAnimationFrame(() => {
+            if (!isUsableLeafletMap(map, isCurrent) || bounds.length === 0) {
+                return;
+            }
+            try {
+                map.invalidateSize(false);
+                if (bounds.length === 1) {
+                    map.setView(bounds[0], 15, {animate: false});
+                } else if (bounds.length > 1) {
+                    map.fitBounds(bounds, {...options, animate: false});
+                }
+            } catch {
+                // Leaflet can briefly expose a stale map pane while overlays are
+                // being recreated. Later stabilization passes will retry.
+            }
+        });
     }
 
     // Function `stabilizeMapAfterLayout` executes this focused behavior.
-    function stabilizeMapAfterLayout(map, bounds, options) {
+    function stabilizeMapAfterLayout(map, bounds, options, isCurrent = () => true) {
         const refreshDelays = [0, 60, 150, 350];
         refreshDelays.forEach((delay) => {
             window.setTimeout(() => {
-                if (!map || !map.getContainer()?.isConnected) {
+                if (!isUsableLeafletMap(map, isCurrent)) {
                     return;
                 }
-                setInitialMapViewport(map, bounds, options);
+                setInitialMapViewport(map, bounds, options, isCurrent);
             }, delay);
         });
     }
