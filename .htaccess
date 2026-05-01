@@ -6,10 +6,22 @@
 </IfModule>
 
 <IfModule mod_headers.c>
-    <FilesMatch "\.(?:html?|css|js|json|xml)$">
-        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
-        Header set Pragma "no-cache"
-        Header set Expires "0"
+    <FilesMatch "\.(?:css|js)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+        Header unset Pragma
+        Header unset Expires
+    </FilesMatch>
+
+    <FilesMatch "\.(?:jpg|jpeg|png|gif|webp|avif|svg|ico)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+        Header unset Pragma
+        Header unset Expires
+    </FilesMatch>
+
+    <FilesMatch "\.(?:html?|json|xml)$">
+        Header set Cache-Control "public, max-age=300"
+        Header unset Pragma
+        Header unset Expires
     </FilesMatch>
 </IfModule>
 

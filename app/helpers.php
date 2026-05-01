@@ -154,11 +154,72 @@ function absolute_public_url(string $url): string
 }
 
 /**
- * Build the preferred public URL for one gallery, using the clean route.
+ * Encode one relative public path while preserving slashes.
+ */
+function public_path_segment(string $path): string
+{
+    $normalizedPath = trim(str_replace('\\', '/', $path), '/');
+    if ($normalizedPath === '') {
+        return rawurlencode('gallery');
+    }
+
+    $segments = array_values(array_filter(explode('/', $normalizedPath), static fn (string $segment): bool => $segment !== ''));
+    return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
+}
+
+/**
+ * Encode one relative gallery path for clean public URLs while preserving slashes.
+ */
+function gallery_public_path_segment(string $folderPath): string
+{
+    return public_path_segment($folderPath);
+}
+
+/**
+ * Build the preferred public URL for one gallery, using its clean public path when available.
  */
 function gallery_public_url(array $gallery): string
 {
-    return public_base_url() . '/gallery/' . rawurlencode((string) $gallery['slug']) . '/';
+    $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
+    if ($urlPath === '') {
+        $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+    }
+    if ($urlPath === '') {
+        $urlPath = (string) ($gallery['slug'] ?? 'gallery');
+    }
+    return public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
+}
+
+/**
+ * Build the preferred public URL for one image detail page.
+ */
+function image_public_url(array $image, array $gallery): string
+{
+    $slug = trim((string) ($image['url_slug'] ?? ''));
+    if ($slug === '') {
+        $slug = slugify(pathinfo((string) ($image['filename'] ?? 'image'), PATHINFO_FILENAME));
+    } else {
+        $slug = slugify($slug);
+    }
+    return rtrim(gallery_public_url($gallery), '/') . '/' . rawurlencode($slug) . '/';
+}
+
+
+/**
+ * Build the preferred clean public media URL for one original image file.
+ */
+function image_public_media_url(array $image, array $gallery): string
+{
+    return rtrim(image_public_url($image, $gallery), '/') . '/media';
+}
+
+/**
+ * Build the preferred clean public thumbnail URL for one generated image variant.
+ */
+function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
+{
+    $format = $format === 'webp' ? 'webp' : 'jpg';
+    return rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format;
 }
 
 /**
@@ -254,7 +315,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
             'position' => $position++,
             'name' => image_alt_text($image, $gallery, $position - 1),
             'contentUrl' => absolute_public_url(thumbnail_url($image, 800)),
-            'url' => absolute_public_url(base_url('index.php?page=media&id=' . (int) $image['id'])),
+            'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
     }
     $jsonLd = [
@@ -469,6 +530,29 @@ function cms_head_extras_html(): string
 }
 
 /**
+ * Append an inline footer script for the next rendered page.
+ */
+function append_cms_footer_script(string $script): void
+{
+    $GLOBALS['cms_footer_scripts'] = (array) ($GLOBALS['cms_footer_scripts'] ?? []);
+    $GLOBALS['cms_footer_scripts'][] = $script;
+}
+
+/**
+ * Return buffered footer scripts and clear them after rendering.
+ */
+function cms_footer_scripts_html(): string
+{
+    $scripts = (array) ($GLOBALS['cms_footer_scripts'] ?? []);
+    $GLOBALS['cms_footer_scripts'] = [];
+    $html = '';
+    foreach ($scripts as $script) {
+        $html .= '<script>' . $script . '</script>';
+    }
+    return $html;
+}
+
+/**
  * Read the current application version directly from app/bootstrap.php.
  */
 function cms_current_version(): string
@@ -499,6 +583,7 @@ function render_footer(): void
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
     echo '<script src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '" defer></script>';
+    echo cms_footer_scripts_html();
     echo '</body></html>';
 }
 

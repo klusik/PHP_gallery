@@ -3,6 +3,26 @@
 declare(strict_types=1);
 
 /**
+ * Send validators for a streamed file and stop on a matching browser cache entry.
+ */
+function send_conditional_file_headers(string $path, string $cacheControl): void
+{
+    $mtime = (int) filemtime($path);
+    $size = (int) filesize($path);
+    $etag = '"' . sha1($path . '|' . $mtime . '|' . $size) . '"';
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+    header('Cache-Control: ' . $cacheControl);
+
+    $clientEtag = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+    $clientModifiedSince = (string) ($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '');
+    if ($clientEtag === $etag || ($clientModifiedSince !== '' && (int) strtotime($clientModifiedSince) >= $mtime)) {
+        http_response_code(304);
+        exit;
+    }
+}
+
+/**
  * Public homepage showing top-level public galleries.
  */
 function cms_home(): void
@@ -39,13 +59,30 @@ function cms_gallery(): void
     // Variable $viewer stores this steps working value.
     $viewer = current_user();
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
+    $gallery = null;
+    // Variable $requestedImage stores this steps working value.
+    $requestedImage = null;
+    if (isset($_GET['public_path'])) {
+        $resolved = resolve_public_gallery_path((string) $_GET['public_path'], !$viewer);
+        $gallery = $resolved['gallery'];
+        $requestedImage = $resolved['image'];
+    }
     if (!$gallery && isset($_GET['gallery_path'])) {
         try {
             $gallery = find_gallery_by_folder_path((string) $_GET['gallery_path']);
         } catch (RuntimeException) {
             $gallery = null;
         }
+    }
+    if (!$gallery && isset($_GET['slug'])) {
+        try {
+            $gallery = find_gallery_by_folder_path((string) $_GET['slug']);
+        } catch (RuntimeException) {
+            $gallery = null;
+        }
+    }
+    if (!$gallery) {
+        $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
     if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
         cms_not_found();
@@ -129,9 +166,11 @@ function cms_gallery(): void
     echo '<section class="grid">';
     foreach ($images as $index => $image) {
         // Variable $mediaUrl stores this steps working value.
-        $mediaUrl = url_for('media', ['id' => $image['id']]);
+        $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        // Variable $imagePageUrl stores this steps working value.
+        $imagePageUrl = image_public_url($image, $gallery);
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 300);
+        $previewUrl = thumbnail_url($image, 1600);
         // Variable $imageTags stores this steps working value.
         $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
@@ -142,8 +181,8 @@ function cms_gallery(): void
         $altText = image_alt_text($image, $gallery, $index + 1);
         // Variable $vote stores this steps working value.
         $vote = $votesById[(int) $image['id']] ?? 0;
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
-        echo '<a class="image-preview-link" href="' . e($mediaUrl) . '"><img loading="lazy" src="' . e($previewUrl) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw" alt="' . e($altText) . '"></a>';
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], '(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw', $altText, 'loading="lazy"') . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
@@ -156,6 +195,9 @@ function cms_gallery(): void
     }
     echo '</section>';
     render_lightbox($votingAllowed);
+    if ($requestedImage) {
+        append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var card=document.querySelector("[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"]");if(card){card.click();}});');
+    }
     render_footer();
 }
 
@@ -218,7 +260,7 @@ function cms_picture_game(): void
     render_breadcrumbs($gallery);
     echo '<section class="hero"><h1>Picture game</h1><p>Choose the picture you prefer. Your choice gives that picture one upvote; the other picture is not downvoted.</p></section>';
     if (!$pair) {
-        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">Back to gallery</a></p></section>';
+        echo '<section class="panel"><h2>All comparisons complete</h2><p>You have already seen every available picture pair in this gallery game. Thank you for voting.</p><p><a class="button" href="' . e(gallery_public_url($gallery)) . '">Back to gallery</a></p></section>';
         render_picture_game_stats($topImages);
         render_footer();
         return;
@@ -247,7 +289,7 @@ function render_picture_game_choice(array $image, string $side): void
     // Variable $label stores this steps working value.
     $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
     echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
-    echo '<img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
+    echo '<img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
     echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
     echo '</button>';
 }
@@ -262,7 +304,7 @@ function render_picture_game_stats(array $topImages): void
     }
     echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
     foreach ($topImages as $image) {
-        echo '<article class="image-card"><img loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
+        echo '<article class="image-card"><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
         echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
     }
     echo '</div></section>';
@@ -277,7 +319,7 @@ function render_breadcrumbs(?array $gallery = null): void
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($gallery) {
         foreach (gallery_ancestors($gallery, true) as $ancestor) {
-            echo '<span aria-hidden="true">/</span><a href="' . e(url_for('gallery', ['slug' => $ancestor['slug']])) . '">' . e($ancestor['title']) . '</a>';
+            echo '<span aria-hidden="true">/</span><a href="' . e(gallery_public_url($ancestor)) . '">' . e($ancestor['title']) . '</a>';
         }
         echo '<span aria-hidden="true">/</span><span>' . e($gallery['title']) . '</span>';
     }
@@ -336,7 +378,7 @@ function cms_gallery_access(): void
         return;
     }
     grant_gallery_public_access((int) $requirement['id']);
-    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+    redirect_to(gallery_public_url($gallery));
 }
 
 /**
@@ -363,7 +405,7 @@ function cms_share(): void
         return;
     }
     grant_gallery_public_access((int) $gallery['id']);
-    redirect_to(url_for('gallery', ['slug' => $gallery['slug']]));
+    redirect_to(gallery_public_url($gallery));
 }
 
 /**
@@ -387,16 +429,16 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {
-        echo '<img loading="lazy" src="' . e($coverAsset) . '" alt="">';
+        echo '<img decoding="async" loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo '<img loading="lazy" src="' . e(thumbnail_url($cover, 800)) . '" srcset="' . e(thumbnail_srcset($cover, [300, 800])) . '" sizes="(max-width: 299px) 300px, 800px" alt="">';
+        echo thumbnail_picture_html($cover, 800, [300, 800, 960], '(max-width: 299px) 300px, 800px', '', 'loading="lazy"');
     } else {
         // Variable $collage stores this steps working value.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo '<img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" srcset="' . e(thumbnail_srcset($image, [300, 800])) . '" sizes="(max-width: 299px) 300px, 800px" alt="">';
+                echo thumbnail_picture_html($image, 800, [300, 800, 960], '(max-width: 299px) 300px, 800px', '', 'loading="lazy"');
             }
             echo '</span>';
         }
@@ -503,7 +545,7 @@ function render_lightbox(bool $votingAllowed = true): void
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">Close</button>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="Previous image">&lt;</button>';
-    echo '<figure><a class="lightbox-stage-link" data-lightbox-original-link href="#"><img data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="Toggle fullscreen" title="Toggle fullscreen">F fullscreen</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; Map</button></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p>' . ($votingAllowed ? '<div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div>' : '') . '</figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="Close map split">Close map</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
+    echo '<figure><a class="lightbox-stage-link" data-lightbox-original-link href="#"><img decoding="async" data-lightbox-img alt=""></a><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><a class="lightbox-original-button" data-lightbox-original-link href="#">Open original</a><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="Toggle fullscreen" title="Toggle fullscreen">F fullscreen</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; Map</button></div><div class="lightbox-score-badge">Score <strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p>' . ($votingAllowed ? '<div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">Vote</span><button type="submit" name="vote" value="1" aria-label="Vote up" title="Vote up">&#9650;</button><button type="submit" name="vote" value="-1" aria-label="Vote down" title="Vote down">&#9660;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>No vote</span></form></div>' : '') . '</figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="Close map split">Close map</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="Next image">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="Toggle fullscreen" title="Toggle fullscreen">F</button>';
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="Toggle fullscreen" title="Toggle fullscreen">&#9974;</button>';
@@ -519,7 +561,9 @@ function cms_thumb(): void
     $image = find_image((int) ($_GET['id'] ?? 0));
     // Variable $size stores this steps working value.
     $size = (int) ($_GET['size'] ?? 0);
-    if (!$image || !in_array($size, thumbnail_sizes(), true)) {
+    // Variable $format stores this steps working value.
+    $format = (string) ($_GET['format'] ?? 'jpg');
+    if (!$image || !in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
         cms_not_found();
         return;
     }
@@ -531,7 +575,7 @@ function cms_thumb(): void
     }
     try {
         // Variable $path stores this steps working value.
-        $path = thumbnail_abs_path($image, $gallery, $size);
+        $path = thumbnail_abs_path($image, $gallery, $size, $format);
     } catch (RuntimeException) {
         cms_not_found();
         return;
@@ -540,11 +584,93 @@ function cms_thumb(): void
         cms_not_found();
         return;
     }
-    header('Content-Type: image/jpeg');
+    header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
+    $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
-    header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
+    readfile($path);
+}
+
+
+/**
+ * Stream a generated thumbnail addressed through the clean public image URL.
+ */
+function cms_public_thumb(): void
+{
+    $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
+    $gallery = $resolved['gallery'];
+    $image = $resolved['image'];
+    $size = (int) ($_GET['size'] ?? 0);
+    $format = (string) ($_GET['format'] ?? 'jpg');
+
+    if (!$gallery || !$image || !in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
+        cms_not_found();
+        return;
+    }
+    if (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user()) {
+        cms_not_found();
+        return;
+    }
+
+    try {
+        $path = thumbnail_abs_path($image, $gallery, $size, $format);
+    } catch (RuntimeException) {
+        cms_not_found();
+        return;
+    }
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+
+    header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: inline; filename="' . basename($path) . '"');
+    $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    send_conditional_file_headers($path, $cacheControl);
+    header('Content-Length: ' . filesize($path));
+    readfile($path);
+}
+
+/**
+ * Stream an original image addressed through the clean public image URL.
+ */
+function cms_public_media(): void
+{
+    $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
+    $gallery = $resolved['gallery'];
+    $image = $resolved['image'];
+
+    if (!$gallery || !$image) {
+        cms_not_found();
+        return;
+    }
+    if (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user()) {
+        cms_not_found();
+        return;
+    }
+
+    $path = image_abs_path($image, $gallery);
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
+    if (!str_starts_with($mime, 'image/')) {
+        cms_not_found();
+        return;
+    }
+
+    header('Content-Type: ' . $mime);
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    send_conditional_file_headers($path, $cacheControl);
+    header('Content-Length: ' . filesize($path));
     readfile($path);
 }
 
@@ -638,8 +764,9 @@ function cms_media(): void
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
-    header('Cache-Control: ' . (gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=604800'));
     readfile($path);
 }
 
@@ -1176,6 +1303,7 @@ function cms_admin(): void
     $updatePending = application_update_pending();
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     $updateLabel = application_update_nav_label($updatePending);
+    $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
@@ -1192,7 +1320,15 @@ function cms_admin(): void
     }
     echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
     echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
+    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="inline-action-form" onsubmit="return confirm(\'Regenerate clean public URLs for all galleries and images?\');">' . csrf_field();
+    echo '<button type="submit" class="secondary">Regenerate paths</button>';
+    echo '</form>';
     echo '</nav></section>';
+    if (isset($_GET['paths_regenerated'])) {
+        echo '<div class="notice">Regenerated clean public paths. Updated ' . (int) ($_GET['gallery_paths'] ?? 0) . ' gallery path(s) and ' . (int) ($_GET['image_paths'] ?? 0) . ' image path(s).</div>';
+    } elseif (isset($_GET['paths_error'])) {
+        echo '<div class="notice">Path regeneration failed: ' . e((string) $_GET['paths_error']) . '</div>';
+    }
     if (isset($_GET['migrations_ran'])) {
         echo '<div class="notice">Applied migrations: ' . e((string) $_GET['migrations_ran']) . '.</div>';
     } elseif (isset($_GET['migrations_current'])) {
@@ -1203,6 +1339,7 @@ function cms_admin(): void
     if ($migrationPending) {
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
+    render_admin_thumbnail_maintenance_notice($thumbnailSummary);
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
@@ -1238,7 +1375,7 @@ function cms_admin(): void
         echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
-        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(url_for('gallery', ['slug' => $gallery['slug']])) . '">' . e($gallery['title']) . '</a></span></td>';
+        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
         if ($accessReady) {
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
@@ -1415,6 +1552,30 @@ function cms_admin_log_update(): void
     return;
 }
 
+/**
+ * Render a thumbnail maintenance warning for admins without forcing public visitors to wait.
+ */
+function render_admin_thumbnail_maintenance_notice(array $summary): void
+{
+    if (($summary['images_with_missing'] ?? 0) <= 0 && ($summary['webp_skipped'] ?? 0) <= 0) {
+        return;
+    }
+    echo '<div class="notice">';
+    if (($summary['images_with_missing'] ?? 0) > 0) {
+        echo '<strong>Thumbnail maintenance required.</strong> ';
+        echo e((string) $summary['images_with_missing']) . ' image(s) are missing optimized thumbnails or have stale thumbnail files. ';
+        echo e((string) $summary['missing_variants']) . ' thumbnail variant(s) need to be created. ';
+        if (!empty($summary['limited'])) {
+            echo 'Only the first ' . e((string) $summary['images_scanned']) . ' image(s) were checked, so more may be pending. ';
+        }
+        echo 'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.';
+    }
+    if (($summary['webp_skipped'] ?? 0) > 0) {
+        echo (($summary['images_with_missing'] ?? 0) > 0 ? '<br>' : '');
+        echo 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.';
+    }
+    echo '</div>';
+}
 /**
  * Render an admin-only prompt that can run pending migrations.
  */
@@ -1798,6 +1959,30 @@ function cms_admin_run_migrations(): void
     }
 }
 
+
+/**
+ * Regenerate clean public gallery and image URL paths from current titles and filenames.
+ */
+function cms_admin_regenerate_paths(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    try {
+        $result = regenerate_public_paths();
+        redirect_to(url_for('admin', [
+            'paths_regenerated' => 1,
+            'gallery_paths' => (int) $result['galleries'],
+            'image_paths' => (int) $result['images'],
+        ]));
+    } catch (Throwable $exception) {
+        redirect_to(url_for('admin', ['paths_error' => $exception->getMessage()]));
+    }
+}
+
 /**
  * Create thumbnails for one gallery, selected images, or every gallery.
  */
@@ -1857,6 +2042,8 @@ function cms_admin_create_thumbnails_batch(): void
     $created = 0;
     // Variable $skipped stores this steps working value.
     $skipped = 0;
+    // Variable $webpSkipped stores this steps working value.
+    $webpSkipped = 0;
     // Variable $galleryCache stores this steps working value.
     $galleryCache = [];
     foreach ($batch as $imageId) {
@@ -1877,6 +2064,7 @@ function cms_admin_create_thumbnails_batch(): void
         $result = create_image_thumbnails_result($image, $galleryCache[$galleryId]);
         $created += (int) $result['created'];
         $skipped += (int) $result['skipped'];
+        $webpSkipped += (int) ($result['webp_skipped'] ?? 0);
     }
     // Variable $processed stores this steps working value.
     $processed = min($total, $offset + count($batch));
@@ -1885,6 +2073,7 @@ function cms_admin_create_thumbnails_batch(): void
         'total' => $total,
         'processed' => $processed,
         'next_offset' => $processed,
+        'webp_skipped' => $webpSkipped,
         'created' => $created,
         'skipped' => $skipped,
         'done' => $processed >= $total,
@@ -2245,7 +2434,7 @@ function cms_admin_edit_gallery(): void
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
-        echo '<td><img class="admin-thumb" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
+        echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
         echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
@@ -2352,7 +2541,7 @@ function cms_admin_public_update_gallery(): void
             // Variable $parent stores this steps working value.
             $parent = find_gallery((int) $gallery['parent_id']);
             if ($parent) {
-                $redirect = url_for('gallery', ['slug' => $parent['slug']]);
+                $redirect = gallery_public_url($parent);
             }
         }
         // Variable $stmt stores this steps working value.
@@ -2369,12 +2558,15 @@ function cms_admin_public_update_gallery(): void
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('UPDATE galleries SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
     $stmt->execute([$title, (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $gallery['id']]);
+    if (public_path_schema_ready()) {
+        regenerate_public_paths();
+    }
     // Variable $updated stores this steps working value.
     $updated = find_gallery((int) $gallery['id']);
     if ($updated) {
         write_gallery_sidecar($updated);
     }
-    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('gallery', ['slug' => $gallery['slug']])));
+    redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
 }
 
 /**
@@ -2413,6 +2605,9 @@ function cms_admin_public_update_image(): void
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
     $stmt->execute([trim((string) ($_POST['title'] ?? '')), (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $image['id']]);
+    if (public_path_schema_ready()) {
+        regenerate_public_paths();
+    }
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }
 
@@ -2436,10 +2631,13 @@ function cms_admin_edit_image(): void
         $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
         $stmt->execute([(string) $_POST['title'], (string) $_POST['description'], $visibility, (int) $_POST['sort_order'], now_sql(), (int) $image['id']]);
         sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
+        if (public_path_schema_ready()) {
+            regenerate_public_paths();
+        }
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
     render_header('Edit image');
-    echo '<section class="panel"><h1>Edit image</h1><p><img loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
+    echo '<section class="panel"><h1>Edit image</h1><p><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
@@ -2673,9 +2871,7 @@ function cms_theme_css(): void
     $updatePendingCss = '.nav a.is-update-pending,.button.is-update-pending,button.is-update-pending{border-color:#7f1d1d!important;background:repeating-linear-gradient(135deg,#b91c1c 0 .55rem,#f59e0b .55rem 1.1rem)!important;color:#fff!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #7f1d1d!important;font-weight:800;}';
     $themeBackground = theme_background_asset_url();
     header('Content-Type: text/css; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-    header('Expires: 0');
+    header('Cache-Control: public, max-age=31536000, immutable');
     $theme = theme_settings();
     $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
     $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
