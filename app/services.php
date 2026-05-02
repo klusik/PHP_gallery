@@ -4217,6 +4217,22 @@ function site_name(): string
 }
 
 /**
+ * Return true when admin-only JavaScript diagnostics should be rendered.
+ */
+function dev_mode_enabled(): bool
+{
+    return app_setting('dev_mode_enabled', '0') === '1';
+}
+
+/**
+ * Persist the admin-only JavaScript diagnostics switch.
+ */
+function set_dev_mode_enabled(bool $enabled): void
+{
+    set_app_setting('dev_mode_enabled', $enabled ? '1' : '0');
+}
+
+/**
  * Return gallery IDs whose admin tree rows should start collapsed.
  */
 function collapsed_gallery_ids(): array

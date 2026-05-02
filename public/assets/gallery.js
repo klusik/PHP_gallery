@@ -378,6 +378,30 @@
     let fullscreenHideTimer = null;
     let touchGesture = null;
     const isMobileTouchDevice = detectMobileTouchDevice();
+    const galleryDevModeEnabled = Boolean(document.body?.dataset.devMode === '1' || window.PHPGalleryDevMode?.enabled);
+    const galleryDevModeState = {
+        overlay: null,
+        text: null,
+        canvas: null,
+        canvasContext: null,
+        startedAt: performance.now(),
+        lastRenderAt: 0,
+        currentIndex: -1,
+        currentSource: '',
+        currentSourceKind: '',
+        sourceStats: new Map(),
+        eventLog: [],
+        samples: [],
+        preloadStarted: 0,
+        loadStarted: 0,
+        cacheHits: 0,
+        cacheMisses: 0,
+        decodeErrors: 0,
+        evictions: 0,
+        frameMs: 0,
+        lastFrameAt: 0,
+    };
+    setupGalleryDevModeOverlay();
     const supportsPointerGestures = Boolean(window.PointerEvent);
     const isLightboxDebugEnabled = detectLightboxDebugFlag();
     overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
@@ -433,19 +457,341 @@
         return loadedImage.decode().catch(() => undefined);
     }
 
+    function setupGalleryDevModeOverlay() {
+        if (!galleryDevModeEnabled) {
+            return;
+        }
+        const shell = document.createElement('section');
+        shell.className = 'gallery-dev-overlay';
+        shell.setAttribute('aria-label', 'Gallery dev mode diagnostics');
+        shell.innerHTML = '<header><strong>DEV</strong><span data-dev-title>viewer diagnostics</span></header><pre data-dev-text></pre><canvas width="340" height="72" data-dev-canvas></canvas><footer><span>Drag disabled</span><span>admin only</span></footer>';
+        galleryDevModeState.overlay = shell;
+        galleryDevModeState.text = shell.querySelector('[data-dev-text]');
+        galleryDevModeState.canvas = shell.querySelector('[data-dev-canvas]');
+        galleryDevModeState.canvasContext = galleryDevModeState.canvas ? galleryDevModeState.canvas.getContext('2d') : null;
+        overlay.append(shell);
+        cards.forEach((card, index) => {
+            devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
+            devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
+        });
+        requestAnimationFrame(devFrameTick);
+        window.setInterval(renderGalleryDevModeOverlay, 350);
+        renderGalleryDevModeOverlay();
+    }
+
+    function devFrameTick(timestamp) {
+        if (!galleryDevModeEnabled) {
+            return;
+        }
+        if (galleryDevModeState.lastFrameAt > 0) {
+            galleryDevModeState.frameMs = timestamp - galleryDevModeState.lastFrameAt;
+        }
+        galleryDevModeState.lastFrameAt = timestamp;
+        requestAnimationFrame(devFrameTick);
+    }
+
+    function devRegisterSource(src, kind, index, status) {
+        if (!galleryDevModeEnabled || !src) {
+            return null;
+        }
+        const existing = galleryDevModeState.sourceStats.get(src) || {};
+        const card = cards[index] || null;
+        const width = Number.parseInt(card?.dataset.imageWidth || '0', 10) || existing.width || 0;
+        const height = Number.parseInt(card?.dataset.imageHeight || '0', 10) || existing.height || 0;
+        const stat = {
+            src,
+            kind: existing.kind || kind,
+            index: Number.isInteger(existing.index) ? existing.index : index,
+            status: status || existing.status || 'idle',
+            width,
+            height,
+            naturalWidth: existing.naturalWidth || 0,
+            naturalHeight: existing.naturalHeight || 0,
+            startedAt: existing.startedAt || 0,
+            finishedAt: existing.finishedAt || 0,
+            lastUsedAt: performance.now(),
+            lastReason: existing.lastReason || '',
+        };
+        if (existing.kind && existing.kind !== kind) {
+            stat.kind = 'shared';
+        }
+        galleryDevModeState.sourceStats.set(src, stat);
+        return stat;
+    }
+
+    function devFindSourceKind(src) {
+        if (!src) {
+            return '';
+        }
+        for (const card of cards) {
+            if (card.dataset.previewSrc === src && card.dataset.fullSrc === src) {
+                return 'preview+full';
+            }
+            if (card.dataset.previewSrc === src) {
+                return 'preview';
+            }
+            if (card.dataset.fullSrc === src) {
+                return 'full';
+            }
+        }
+        return 'unknown';
+    }
+
+    function devFindSourceIndex(src) {
+        if (!src) {
+            return -1;
+        }
+        return cards.findIndex((card) => card.dataset.previewSrc === src || card.dataset.fullSrc === src);
+    }
+
+    function devMarkSource(src, status, reason, imageNode = null) {
+        if (!galleryDevModeEnabled || !src) {
+            return;
+        }
+        const index = devFindSourceIndex(src);
+        const kind = devFindSourceKind(src);
+        const stat = devRegisterSource(src, kind, index, status);
+        if (!stat) {
+            return;
+        }
+        stat.status = status;
+        stat.lastReason = reason || '';
+        stat.lastUsedAt = performance.now();
+        if (status === 'loading' || status === 'preloading') {
+            stat.startedAt = stat.startedAt || performance.now();
+        }
+        if (status === 'ready' || status === 'error') {
+            stat.finishedAt = performance.now();
+        }
+        if (imageNode) {
+            stat.naturalWidth = imageNode.naturalWidth || stat.naturalWidth || 0;
+            stat.naturalHeight = imageNode.naturalHeight || stat.naturalHeight || 0;
+        }
+        galleryDevModeState.sourceStats.set(src, stat);
+        devLog(`${kind}:${status}:${reason || 'state'}`);
+    }
+
+    function devLog(message) {
+        if (!galleryDevModeEnabled) {
+            return;
+        }
+        galleryDevModeState.eventLog.unshift(`${formatDevTime(performance.now() - galleryDevModeState.startedAt)} ${message}`);
+        galleryDevModeState.eventLog = galleryDevModeState.eventLog.slice(0, 8);
+    }
+
+    function devDecodedMemoryBytes() {
+        let total = 0;
+        galleryDevModeState.sourceStats.forEach((stat, src) => {
+            if (!decodedLightboxImages.has(src) || stat.status !== 'ready') {
+                return;
+            }
+            const width = stat.naturalWidth || stat.width || 0;
+            const height = stat.naturalHeight || stat.height || 0;
+            if (width > 0 && height > 0) {
+                total += width * height * 4;
+            }
+        });
+        return total;
+    }
+
+    function devStatusCounts() {
+        const counts = {idle: 0, preloading: 0, loading: 0, ready: 0, error: 0};
+        galleryDevModeState.sourceStats.forEach((stat) => {
+            counts[stat.status] = (counts[stat.status] || 0) + 1;
+        });
+        return counts;
+    }
+
+    function devCurrentWindowSummary() {
+        if (galleryDevModeState.currentIndex < 0) {
+            return 'not open';
+        }
+        const rows = [];
+        const current = galleryDevModeState.currentIndex;
+        for (let offset = -3; offset <= 3; offset += 1) {
+            const index = (current + offset + cards.length) % cards.length;
+            const card = cards[index];
+            const preview = galleryDevModeState.sourceStats.get(card?.dataset.previewSrc || '');
+            const full = galleryDevModeState.sourceStats.get(card?.dataset.fullSrc || '');
+            const mark = offset === 0 ? '*' : (offset > 0 ? '+' : '');
+            rows.push(`${mark}${offset}:P${devShortStatus(preview)} F${devShortStatus(full)}`);
+        }
+        return rows.join(' ');
+    }
+
+    function devShortStatus(stat) {
+        if (!stat) {
+            return '?';
+        }
+        return {idle: 'i', preloading: 'p', loading: 'l', ready: 'r', error: 'e'}[stat.status] || '?';
+    }
+
+    function devBrowserMemoryLine() {
+        const memory = performance.memory;
+        if (memory && typeof memory.usedJSHeapSize === 'number') {
+            return `heap ${formatBytes(memory.usedJSHeapSize)} / ${formatBytes(memory.jsHeapSizeLimit)}`;
+        }
+        if (navigator.deviceMemory) {
+            return `deviceMemory ${navigator.deviceMemory} GB, heap unavailable`;
+        }
+        return 'heap unavailable';
+    }
+
+    function devConnectionLine() {
+        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (!connection) {
+            return 'network hints unavailable';
+        }
+        const parts = [];
+        if (connection.effectiveType) {
+            parts.push(connection.effectiveType);
+        }
+        if (typeof connection.downlink === 'number') {
+            parts.push(`${connection.downlink} Mbps`);
+        }
+        if (connection.saveData) {
+            parts.push('save-data');
+        }
+        return parts.length ? parts.join(', ') : 'network hints unavailable';
+    }
+
+    function renderGalleryDevModeOverlay() {
+        if (!galleryDevModeEnabled || !galleryDevModeState.overlay || !galleryDevModeState.text) {
+            return;
+        }
+        const now = performance.now();
+        const counts = devStatusCounts();
+        const decodedBytes = devDecodedMemoryBytes();
+        const cacheLimit = lightboxDecodedImageCacheLimit;
+        const browserMode = isLightboxFullscreen() ? 'fullscreen' : (overlay.hidden ? 'closed' : 'normal');
+        const currentCard = cards[galleryDevModeState.currentIndex] || null;
+        const currentSize = currentCard ? `${currentCard.dataset.imageWidth || '?'}x${currentCard.dataset.imageHeight || '?'}` : 'n/a';
+        const historySample = {
+            ready: counts.ready,
+            cached: decodedLightboxImages.size,
+            memory: decodedBytes,
+            frame: galleryDevModeState.frameMs,
+            time: now,
+        };
+        galleryDevModeState.samples.push(historySample);
+        galleryDevModeState.samples = galleryDevModeState.samples.slice(-90);
+        const lines = [
+            `mode ${browserMode} | image ${galleryDevModeState.currentIndex + 1 || 0}/${cards.length} | ${currentSize} | src ${galleryDevModeState.currentSourceKind || 'none'}`,
+            `preload radius P${lightboxPreviewPreloadRadius}/F${lightboxFullPreloadRadius} | cache ${decodedLightboxImages.size}/${cacheLimit} | known ${galleryDevModeState.sourceStats.size}`,
+            `state idle ${counts.idle} | pre ${counts.preloading} | load ${counts.loading} | ready ${counts.ready} | err ${counts.error}`,
+            `events preload ${galleryDevModeState.preloadStarted} | load ${galleryDevModeState.loadStarted} | hit ${galleryDevModeState.cacheHits} | miss ${galleryDevModeState.cacheMisses} | evict ${galleryDevModeState.evictions}`,
+            `decoded estimate ${formatBytes(decodedBytes)} | ${devBrowserMemoryLine()} | frame ${galleryDevModeState.frameMs.toFixed(1)} ms`,
+            `network ${devConnectionLine()} | active ${shortenDevUrl(galleryDevModeState.currentSource)}`,
+            `window ${devCurrentWindowSummary()}`,
+            `recent ${galleryDevModeState.eventLog.slice(0, 3).join(' | ') || 'none'}`,
+        ];
+        galleryDevModeState.text.textContent = lines.join('\n');
+        drawGalleryDevModeGraph();
+    }
+
+    function drawGalleryDevModeGraph() {
+        const canvas = galleryDevModeState.canvas;
+        const context = galleryDevModeState.canvasContext;
+        if (!canvas || !context) {
+            return;
+        }
+        const width = canvas.width;
+        const height = canvas.height;
+        context.clearRect(0, 0, width, height);
+        context.globalAlpha = 1;
+        context.fillStyle = 'rgba(0,0,0,0.42)';
+        context.fillRect(0, 0, width, height);
+        const samples = galleryDevModeState.samples;
+        if (samples.length < 2) {
+            return;
+        }
+        const maxMemory = Math.max(1, ...samples.map((sample) => sample.memory));
+        const maxReady = Math.max(1, ...samples.map((sample) => sample.ready));
+        const maxFrame = Math.max(16, ...samples.map((sample) => sample.frame));
+        drawDevLine(samples, (sample) => sample.memory / maxMemory, height, width);
+        drawDevLine(samples, (sample) => sample.ready / maxReady, height, width, 0.66);
+        drawDevLine(samples, (sample) => Math.min(1, sample.frame / maxFrame), height, width, 0.36);
+        context.globalAlpha = 0.8;
+        context.fillStyle = 'rgba(255,255,255,0.85)';
+        context.font = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        context.fillText('memory / ready / frame', 8, 14);
+    }
+
+    function drawDevLine(samples, selector, height, width, alpha = 1) {
+        const context = galleryDevModeState.canvasContext;
+        if (!context) {
+            return;
+        }
+        context.beginPath();
+        samples.forEach((sample, index) => {
+            const x = (index / Math.max(1, samples.length - 1)) * width;
+            const y = height - (selector(sample) * (height - 18)) - 4;
+            if (index === 0) {
+                context.moveTo(x, y);
+            } else {
+                context.lineTo(x, y);
+            }
+        });
+        context.globalAlpha = alpha;
+        context.strokeStyle = 'rgba(255,255,255,0.92)';
+        context.lineWidth = 1.5;
+        context.stroke();
+        context.globalAlpha = 1;
+    }
+
+    function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) {
+            return '0 B';
+        }
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex += 1;
+        }
+        return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+    }
+
+    function formatDevTime(ms) {
+        return `${(ms / 1000).toFixed(1)}s`;
+    }
+
+    function shortenDevUrl(src) {
+        if (!src) {
+            return 'none';
+        }
+        try {
+            const url = new URL(src, window.location.href);
+            const last = url.pathname.split('/').filter(Boolean).pop() || url.pathname;
+            return decodeURIComponent(last).slice(0, 46);
+        } catch {
+            return src.slice(0, 46);
+        }
+    }
+
     function loadFreshDecodedLightboxImage(src) {
         return new Promise((resolve, reject) => {
             if (!src) {
                 reject(new Error('Missing lightbox image source.'));
                 return;
             }
+            galleryDevModeState.loadStarted += galleryDevModeEnabled ? 1 : 0;
+            devMarkSource(src, 'loading', 'fresh');
             const loadedImage = new Image();
             loadedImage.decoding = 'async';
             loadedImage.loading = 'eager';
             loadedImage.onload = () => {
-                decodeLoadedImage(loadedImage).then(() => resolve(loadedImage));
+                decodeLoadedImage(loadedImage).then(() => {
+                    devMarkSource(src, 'ready', 'decoded', loadedImage);
+                    resolve(loadedImage);
+                });
             };
-            loadedImage.onerror = reject;
+            loadedImage.onerror = () => {
+                galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
+                devMarkSource(src, 'error', 'load');
+                reject(new Error('Lightbox image load failed.'));
+            };
             loadedImage.src = src;
         });
     }
@@ -466,6 +812,10 @@
                 return;
             }
             decodedLightboxImages.delete(oldestKey);
+            if (galleryDevModeEnabled) {
+                galleryDevModeState.evictions += 1;
+                devLog(`evict:${shortenDevUrl(oldestKey)}`);
+            }
         }
     }
 
@@ -474,11 +824,16 @@
             return Promise.resolve(null);
         }
         if (decodedLightboxImages.has(src)) {
+            galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
+            devMarkSource(src, 'preloading', 'preload-hit');
             const cachedPromise = decodedLightboxImages.get(src);
             decodedLightboxImages.delete(src);
             decodedLightboxImages.set(src, cachedPromise);
             return cachedPromise;
         }
+        galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
+        galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
+        devMarkSource(src, 'preloading', 'preload-miss');
         const preloadPromise = loadFreshDecodedLightboxImage(src).catch(() => null);
         return rememberDecodedLightboxImage(src, preloadPromise);
     }
@@ -488,6 +843,8 @@
             return Promise.reject(new Error('Missing lightbox image source.'));
         }
         if (decodedLightboxImages.has(src)) {
+            galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
+            devMarkSource(src, 'loading', 'load-hit');
             const cachedPromise = decodedLightboxImages.get(src);
             decodedLightboxImages.delete(src);
             decodedLightboxImages.set(src, cachedPromise);
@@ -500,6 +857,7 @@
                 return freshPromise;
             });
         }
+        galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
         const freshPromise = loadFreshDecodedLightboxImage(src);
         rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
         return freshPromise;
@@ -542,7 +900,14 @@
     }
 
     function applyLightboxImageSource(src, altText) {
-        if (!src || image.getAttribute('src') === src) {
+        if (!src) {
+            image.alt = altText;
+            return;
+        }
+        galleryDevModeState.currentSource = src;
+        galleryDevModeState.currentSourceKind = devFindSourceKind(src);
+        devMarkSource(src, 'ready', 'display');
+        if (image.getAttribute('src') === src) {
             image.alt = altText;
             return;
         }
@@ -640,6 +1005,7 @@
             return;
         }
         currentIndex = index;
+        galleryDevModeState.currentIndex = index;
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearPendingFullImageSwap();
@@ -713,6 +1079,9 @@
         clearPendingFullImageSwap();
         removeTransitionImage();
         image.removeAttribute('src');
+        galleryDevModeState.currentSource = '';
+        galleryDevModeState.currentSourceKind = '';
+        galleryDevModeState.currentIndex = -1;
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
             window.history.replaceState({}, '', lightboxReturnUrl);
@@ -732,6 +1101,7 @@
                 return;
             }
             preloadedSources.add(src);
+            devMarkSource(src, 'preloading', includeFullImage && src === fullSrc ? 'adjacent-full' : 'adjacent-preview');
             preloadDecodedLightboxImage(src);
         });
     }
