@@ -1650,13 +1650,14 @@
             button.disabled = true;
         });
         try {
-            const result = await runGalleryUploadChunks(form, progress);
-            updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
-            if (form.querySelector('input[name="create_thumbnails"]')?.checked && Array.isArray(result.gallery_ids) && result.gallery_ids.length > 0) {
-                await runUploadThumbnailProgress(form, progress, result.gallery_ids, result);
-                return;
+            const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
+            const result = await runGalleryUploadFiles(form, progress, createThumbnails);
+            if (createThumbnails) {
+                updateThumbnailProgress(progress, result.uploaded || 0, result.total_files || 0, result.thumbnails || 0, result.thumbnail_skipped || 0, 'Upload and thumbnail job complete.');
+            } else {
+                updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
             }
-            window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0});
+            window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
         } catch (error) {
             updateBasicProgress(progress, 100, error.message || 'Upload failed.');
         } finally {
@@ -1704,55 +1705,71 @@
         return body;
     }
 
-    function galleryUploadBatchSize() {
-        return 10;
-    }
-
-    async function runGalleryUploadChunks(form, progress) {
+    async function runGalleryUploadFiles(form, progress, createThumbnails) {
         const files = selectedGalleryUploadFiles(form);
         if (files.length === 0) {
             throw new Error('Choose at least one image to upload.');
         }
-        const batchSize = galleryUploadBatchSize();
+
         let uploaded = 0;
         let scanned = 0;
+        let thumbnails = 0;
+        let thumbnailSkipped = 0;
         let galleryId = Number(form.querySelector('select[name="gallery_id"]')?.value || 0);
         let redirectUrl = '';
         const galleryIds = [];
-        for (let startIndex = 0; startIndex < files.length; startIndex += batchSize) {
-            const chunk = files.slice(startIndex, startIndex + batchSize);
-            const chunkNumber = Math.floor(startIndex / batchSize) + 1;
-            const chunkCount = Math.ceil(files.length / batchSize);
-            const percent = Math.round((startIndex / files.length) * 100);
-            updateBasicProgress(progress, percent, `Uploading images ${startIndex + 1}-${Math.min(startIndex + chunk.length, files.length)} of ${files.length}...`);
-            const result = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, chunk, galleryId), (event) => {
+
+        for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+            const file = files[fileIndex];
+            const humanIndex = fileIndex + 1;
+            updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+            const uploadResult = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
                 if (!event.lengthComputable) {
-                    updateBasicProgress(progress, percent, `Uploading batch ${chunkNumber} of ${chunkCount}...`);
+                    updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
                     return;
                 }
-                const completed = startIndex / files.length;
-                const current = (event.loaded / event.total) * (chunk.length / files.length);
-                updateBasicProgress(progress, Math.round((completed + current) * 100), `Uploading batch ${chunkNumber} of ${chunkCount}...`);
+                const completedPart = fileIndex / files.length;
+                const currentPart = (event.loaded / event.total) / files.length;
+                updateBasicProgress(progress, Math.round((completedPart + currentPart) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
             });
+
             if (!galleryId) {
-                galleryId = Number(result.gallery_id || 0);
+                galleryId = Number(uploadResult.gallery_id || 0);
             }
             if (galleryId && !galleryIds.includes(galleryId)) {
                 galleryIds.push(galleryId);
             }
-            uploaded += Number(result.uploaded || 0);
-            scanned += Number(result.scanned || 0);
-            redirectUrl = result.redirect_url || redirectUrl;
+            uploaded += Number(uploadResult.uploaded || 0);
+            scanned += Number(uploadResult.scanned || 0);
+            redirectUrl = uploadResult.redirect_url || redirectUrl;
+
+            if (createThumbnails) {
+                const imageIds = Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : [];
+                const thumbResult = await runUploadedImageThumbnailJob(form, progress, imageIds, humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
+                thumbnails += Number(thumbResult.created || 0);
+                thumbnailSkipped += Number(thumbResult.skipped || 0);
+            }
         }
+
         return {
             ok: true,
             gallery_id: galleryId,
             gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
             uploaded,
             scanned,
-            thumbnails: 0,
-            redirect_url: redirectUrl,
+            thumbnails,
+            thumbnail_skipped: thumbnailSkipped,
+            total_files: files.length,
+            redirect_url: appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails),
         };
+    }
+
+    function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails) {
+        const url = new URL(urlValue || window.location.href, window.location.href);
+        url.searchParams.set('uploaded', String(uploaded));
+        url.searchParams.set('scanned', String(scanned));
+        url.searchParams.set('thumbnails', String(thumbnails));
+        return url.toString();
     }
 
     function sendGalleryUploadChunk(form, body, progressHandler) {
@@ -1788,7 +1805,12 @@
         });
     }
 
-    async function runUploadThumbnailProgress(form, progress, galleryIds, uploadResult) {
+    async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex, totalFiles, filename, createdBefore, skippedBefore) {
+        if (!imageIds.length) {
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore, skippedBefore, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. No database image record was returned for thumbnails.`);
+            return {created: 0, skipped: 0};
+        }
+
         let offset = 0;
         let total = 0;
         let created = 0;
@@ -1798,9 +1820,10 @@
             body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
             body.set('ajax', '1');
             body.set('offset', String(offset));
-            body.set('batch_size', '6');
-            galleryIds.forEach((galleryId) => {
-                body.append('gallery_ids[]', String(galleryId));
+            body.set('batch_size', '1');
+            body.set('gallery_id', String(Number(form.querySelector('select[name="gallery_id"]')?.value || 0)));
+            imageIds.forEach((imageId) => {
+                body.append('image_ids[]', String(imageId));
             });
             const response = await fetch(thumbnailEndpoint(form, null), {
                 method: 'POST',
@@ -1811,17 +1834,14 @@
                 throw new Error('Thumbnail request failed.');
             }
             const result = await response.json();
-            total = result.total || 0;
+            total = result.total || imageIds.length;
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
-            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Uploaded ${uploadResult.uploaded || 0} images. Creating thumbnails...`);
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. Creating thumbnails ${Math.min(offset, total)} of ${total}...`);
             if (result.done) {
-                updateThumbnailProgress(progress, total, total, created, skipped, 'Upload and thumbnail job complete.');
-                const redirect = new URL(uploadResult.redirect_url || window.location.href, window.location.href);
-                redirect.searchParams.set('thumbnails', String(created));
-                window.location.href = redirect.toString();
-                break;
+                updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Finished ${fileIndex} of ${totalFiles}: ${filename}`);
+                return {created, skipped};
             }
         }
     }

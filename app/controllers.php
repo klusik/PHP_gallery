@@ -1823,6 +1823,8 @@ function cms_admin_upload(): void
                 'ok' => true,
                 'gallery_id' => (int) $gallery['id'],
                 'gallery_ids' => [(int) $gallery['id']],
+                'image_ids' => array_map('intval', $stored['image_ids'] ?? []),
+                'filenames' => array_values($stored['filenames'] ?? []),
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
                 'thumbnails' => $thumbnails,
@@ -2203,15 +2205,19 @@ function thumbnail_request_image_ids(array $post): array
     }
     // Variable $galleryId stores this steps working value.
     $galleryId = (int) ($post['gallery_id'] ?? 0);
-    if ($galleryId > 0 && !empty($post['image_ids']) && is_array($post['image_ids'])) {
+    if (!empty($post['image_ids']) && is_array($post['image_ids'])) {
         // Variable $ids stores this steps working value.
         $ids = [];
         foreach (array_map('intval', $post['image_ids']) as $imageId) {
             // Variable $image stores this steps working value.
             $image = find_image($imageId);
-            if ($image && (int) $image['gallery_id'] === $galleryId) {
-                $ids[] = $imageId;
+            if (!$image) {
+                continue;
             }
+            if ($galleryId > 0 && (int) $image['gallery_id'] !== $galleryId) {
+                continue;
+            }
+            $ids[] = $imageId;
         }
         return array_values(array_unique($ids));
     }

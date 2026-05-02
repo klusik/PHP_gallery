@@ -1188,7 +1188,35 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
     }
 
     $changed = scan_gallery_images($galleryId);
-    return ['uploaded' => count($stored), 'filenames' => $stored, 'scanned' => $changed];
+    $imageIds = uploaded_gallery_image_ids($galleryId, $stored);
+    return ['uploaded' => count($stored), 'filenames' => $stored, 'image_ids' => $imageIds, 'scanned' => $changed];
+}
+
+/**
+ * Return database image ids for uploaded direct gallery filenames.
+ */
+function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
+{
+    if (!$filenames) {
+        return [];
+    }
+
+    // Variable $hashes stores this steps working value.
+    $hashes = [];
+    foreach ($filenames as $filename) {
+        $hashes[] = hash('sha256', normalize_relative_path((string) $filename));
+    }
+    $hashes = array_values(array_unique($hashes));
+    if (!$hashes) {
+        return [];
+    }
+
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($hashes), '?'));
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash IN ($placeholders) ORDER BY id");
+    $stmt->execute(array_merge([$galleryId], $hashes));
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 }
 
 /**
