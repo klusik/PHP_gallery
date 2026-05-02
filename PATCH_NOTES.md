@@ -2,11 +2,20 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
-## Version 0.41
+## Version 0.42
 
 ### Major Changes
 
 - Added theme-managed favicon setup with admin upload, square crop preview, generated PNG icon sizes, and public favicon links.
+
+### Fixes
+
+- Prepared the application metadata for the 0.42 release cycle.
+
+## Version 0.41
+
+### Major Changes
+
 - Added slug-based public URLs for files so image pages can use stable, readable paths.
 - Optimized routing and public-path handling so gallery and file URLs resolve with less overhead.
 - Improved cache handling for public pages and navigation so repeated requests reuse more of the generated state.
