@@ -1403,6 +1403,9 @@ function cms_admin(): void
     } elseif (isset($_GET['delete_error'])) {
         echo '<div class="notice">Gallery delete failed: ' . e((string) $_GET['delete_error']) . '</div>';
     }
+    if (isset($_GET['devmode_saved'])) {
+        echo '<div class="notice">Dev mode setting saved.</div>';
+    }
     if (isset($_GET['paths_regenerated'])) {
         echo '<div class="notice">Regenerated clean public paths. Updated ' . (int) ($_GET['gallery_paths'] ?? 0) . ' gallery path(s) and ' . (int) ($_GET['image_paths'] ?? 0) . ' image path(s).</div>';
     } elseif (isset($_GET['paths_error'])) {
@@ -1474,7 +1477,36 @@ function cms_admin(): void
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
+    render_admin_devmode_panel();
     render_footer();
+}
+
+/**
+ * Render the dashboard control for the admin-only diagnostics overlay.
+ */
+function render_admin_devmode_panel(): void
+{
+    $enabled = dev_mode_enabled();
+    echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary"><h2>Dev mode</h2>';
+    echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="form-grid">' . csrf_field();
+    echo '<p class="muted">Optional admin-only diagnostics overlay for preload, cache, memory, network and frame-timing tuning in the public viewer and fullscreen viewer.</p>';
+    echo '<label class="admin-checkbox-row"><input type="checkbox" name="dev_mode_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>Enable viewer diagnostics overlay</span></label>';
+    echo '<button type="submit" class="secondary">Save dev mode</button></form></section>';
+}
+
+/**
+ * Persist the admin-only diagnostics overlay switch.
+ */
+function cms_admin_devmode(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    set_dev_mode_enabled(isset($_POST['dev_mode_enabled']));
+    redirect_to(url_for('admin', ['devmode_saved' => 1]));
 }
 
 /**
@@ -2647,6 +2679,7 @@ function cms_admin_edit_gallery(): void
         echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
+    render_admin_devmode_panel();
     render_footer();
 }
 

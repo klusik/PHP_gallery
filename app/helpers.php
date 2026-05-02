@@ -486,7 +486,8 @@ function render_header(string $title): void
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     echo cms_head_extras_html();
-    echo '</head><body class="' . e($bodyClass) . '">';
+    $devModeActive = $user && dev_mode_enabled();
+    echo '</head><body class="' . e($bodyClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
         echo '<div class="theme-background-shell" aria-hidden="true">';
         echo '<div class="theme-background-base"></div>';

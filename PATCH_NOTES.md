@@ -2,6 +2,92 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.45 – Diagnostics, Stability & UX Refinement
+
+### 🔬 Dev Mode (Admin-only Diagnostics Overlay)
+A new internal diagnostics system has been introduced to support performance tuning and preload optimization.
+
+- Added **Dev Mode toggle** in Admin settings (stored in `app_settings`)
+- Introduced **real-time diagnostics overlay** inside gallery viewer and fullscreen
+- Overlay is **visible only to logged-in admins**
+- Designed as a **compact, non-intrusive HUD**, inspired by "stats for nerds"
+
+#### Overlay capabilities:
+- Preload system:
+  - Current preload radius
+  - Active preload queue
+  - Preload hits / misses
+- Image lifecycle tracking:
+  - Loading / ready / error states
+  - Thumbnail vs full-resolution usage
+- Cache insights:
+  - Decoded image count
+  - Cache size estimation
+  - Eviction tracking
+- Memory monitoring:
+  - Estimated decoded image memory footprint
+  - Browser heap usage (when available via `performance.memory`)
+- Rendering performance:
+  - Frame timing (recent frame durations)
+  - Lightweight graph visualization (canvas-based)
+- Network hints:
+  - Connection type (if available)
+- Viewer context:
+  - Current image index
+  - Preload window boundaries
+
+This system is intentionally lightweight and runs only when enabled.
+
+---
+
+### 🎛 Admin UI Adjustments
+
+- **Dev Mode control moved**:
+  - Relocated to a less prominent position in Admin panel
+  - Now placed lower in the settings flow to avoid distracting standard users
+  - Maintains full functionality, just reduced visual priority
+
+---
+
+### 🎨 Checkbox Styling Improvements
+
+Global checkbox redesign applied across Admin and Upload UI:
+
+- Reduced overall size for better visual balance
+- Removed overly large "blocky" appearance
+- Improved alignment with surrounding UI elements
+- More subtle, modern styling
+- Consistent behavior across:
+  - Admin settings
+  - Upload interface
+  - Bulk actions
+
+---
+
+### 🧹 Minor UX Polishing
+
+- Improved spacing in Admin panels
+- Reduced visual noise in configuration sections
+- Better hierarchy between primary and secondary settings
+
+---
+
+### ⚙ Internal
+
+- Added dev-mode flag handling in bootstrap layer
+- Extended gallery runtime with instrumentation hooks
+- Introduced lightweight telemetry collector in `gallery.js`
+- No impact on public users or performance when disabled
+
+---
+
+### ⚠ Notes
+
+- Dev Mode is intended strictly for diagnostics and tuning
+- Not optimized for production usage visibility
+- Some metrics depend on browser support (e.g., memory API)
+
+
 ## Version 0.44
 
 ### Major Changes

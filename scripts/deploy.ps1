@@ -66,20 +66,25 @@ function Invoke-ManifestGenerator {
     # Variable $phpCommand stores this scripts working value.
     $phpCommand = Get-Command php -ErrorAction SilentlyContinue
     if (-not $phpCommand) {
-        throw "PHP executable was not found in PATH. Cannot update app/core-manifest.json."
+        Write-Warning "PHP executable was not found in PATH. Integrity manifest update was skipped."
+        return $false
     }
 
     # Variable $manifestScript stores this scripts working value.
     $manifestScript = Join-Path $root 'scripts\generate_manifest.php'
     if (-not (Test-Path $manifestScript)) {
-        throw "Manifest generator was not found: $manifestScript"
+        Write-Warning "Manifest generator was not found: $manifestScript. Integrity manifest update was skipped."
+        return $false
     }
 
     Write-Host "Updating integrity manifest..."
     & php $manifestScript
     if ($LASTEXITCODE -ne 0) {
-        throw "Manifest generator failed with exit code $LASTEXITCODE."
+        Write-Warning "Manifest generator failed with exit code $LASTEXITCODE. Deploy will continue without updating the integrity manifest."
+        return $false
     }
+
+    return $true
 }
 
 # Function `Get-DeployRelativePath` handles this script step.
@@ -213,9 +218,9 @@ if ($PSBoundParameters.ContainsKey('UpdateManifest')) {
     $refreshManifest = ($UpdateManifest -match '^(1|true|yes|y)$')
 } else {
     # Variable $manifestAnswer stores this scripts working value.
-    $manifestAnswer = Read-Host "Update integrity manifest before deploy? Y/n"
+    $manifestAnswer = Read-Host "Update integrity manifest before deploy? y/N"
     # Variable $refreshManifest stores this scripts working value.
-    $refreshManifest = -not ($manifestAnswer -match '^[Nn]')
+    $refreshManifest = ($manifestAnswer -match '^[Yy]')
 }
 
 if ($refreshManifest) {
