@@ -1299,6 +1299,85 @@ body.has-mobile-lightbox {
 }
 
 
+
+.gallery-list-frame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0;
+    column-gap: 0;
+    align-items: start;
+    overflow: visible;
+}
+
+.gallery-list-content {
+    min-width: 0;
+}
+
+.gallery-image-grid {
+    min-width: 0;
+}
+
+.back-to-top-button {
+    position: sticky;
+    top: calc(100dvh - 5.25rem);
+    z-index: 900;
+    margin-left: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: max-content;
+    padding: 0.7rem 0.95rem;
+    border: 1px solid rgba(255, 253, 248, 0.7);
+    background: var(--accent);
+    color: #fffdf8;
+    box-shadow: 0 14px 34px rgba(54, 38, 20, 0.24);
+    font-weight: 800;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.back-to-top-button[hidden] {
+    display: none;
+}
+
+.back-to-top-button.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.back-to-top-button:hover,
+.back-to-top-button:focus-visible {
+    box-shadow: 0 18px 44px rgba(54, 38, 20, 0.32);
+    transform: translateY(-2px);
+}
+
+.back-to-top-button span:first-child {
+    display: inline-grid;
+    place-items: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.18);
+    font-size: 1.05rem;
+}
+
+@media (max-width: 980px) {
+    .gallery-list-frame {
+        display: block;
+    }
+
+    .back-to-top-button {
+        position: fixed;
+        right: 0.85rem;
+        bottom: 0.85rem;
+        top: auto;
+        padding: 0.65rem 0.8rem;
+    }
+}
+
+
 /* Public design refinements */
 .public-page .hero {
     position: relative;

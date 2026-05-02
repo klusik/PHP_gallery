@@ -22,6 +22,15 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     }
 }
 
+
+/**
+ * Render the public scroll helper next to a listing without joining the listing grid.
+ */
+function render_back_to_top_button(): void
+{
+    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="Go back to top" title="Go back to top"><span aria-hidden="true">↑</span><span>Top</span></button>';
+}
+
 /**
  * Public homepage showing top-level public galleries.
  */
@@ -40,13 +49,14 @@ function cms_home(): void
     $galleries = $stmt->fetchAll();
     render_header(site_name());
     if ($galleries) {
-        echo '<section class="grid">';
-    }
-    foreach ($galleries as $gallery) {
-        render_gallery_card($gallery, true);
-    }
-    if ($galleries) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
+        foreach ($galleries as $gallery) {
+            render_gallery_card($gallery, true);
+        }
         echo '</section>';
+        render_back_to_top_button();
+        echo '</div>';
     }
     render_footer();
 }
@@ -156,6 +166,10 @@ function cms_gallery(): void
     render_breadcrumbs($gallery);
     echo '</section>';
     render_public_gallery_admin_form($gallery);
+    if ($children || $images) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<div class="gallery-list-content" data-back-to-top-list>';
+    }
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
         foreach ($children as $child) {
@@ -163,7 +177,9 @@ function cms_gallery(): void
         }
         echo '</div></section>';
     }
-    echo '<section class="grid">';
+    if ($images) {
+        echo '<section class="grid gallery-image-grid" data-gallery-image-list>';
+    }
     foreach ($images as $index => $image) {
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
@@ -193,7 +209,14 @@ function cms_gallery(): void
         render_public_image_admin_form($image);
         echo '</article>';
     }
-    echo '</section>';
+    if ($images) {
+        echo '</section>';
+    }
+    if ($children || $images) {
+        echo '</div>';
+        render_back_to_top_button();
+        echo '</div>';
+    }
     render_lightbox($votingAllowed);
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var card=document.querySelector("[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"]");if(card){card.click();}});');
@@ -217,11 +240,16 @@ function cms_tag(): void
     render_header('Tag: ' . (string) $tag['name']);
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs"><a href="' . e(url_for('home')) . '">Galleries</a><span aria-hidden="true">/</span><span>Tag: ' . e($tag['name']) . '</span></nav>';
     echo '<section class="hero"><h1>Tag: ' . e($tag['name']) . '</h1><p class="muted">' . count($galleries) . ' galleries</p></section>';
-    echo '<section class="grid">';
-    foreach ($galleries as $gallery) {
-        render_gallery_card($gallery, true);
+    if ($galleries) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
+        foreach ($galleries as $gallery) {
+            render_gallery_card($gallery, true);
+        }
+        echo '</section>';
+        render_back_to_top_button();
+        echo '</div>';
     }
-    echo '</section>';
     render_footer();
 }
 

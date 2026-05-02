@@ -247,6 +247,53 @@
         });
     });
 
+
+    // Function `setupBackToTopButton` executes this focused behavior.
+    function setupBackToTopButton() {
+        const scope = document.querySelector('[data-back-to-top-scope]');
+        const listing = document.querySelector('[data-back-to-top-list]') || document.querySelector('[data-gallery-image-list]');
+        const button = document.querySelector('[data-back-to-top-button]');
+        if (!scope || !listing || !button) {
+            return;
+        }
+
+        let ticking = false;
+
+        function shouldShowButton() {
+            if (document.body.classList.contains('has-lightbox') || document.body.classList.contains('has-mobile-lightbox') || document.fullscreenElement) {
+                return false;
+            }
+            const scopeRect = scope.getBoundingClientRect();
+            const listingRect = listing.getBoundingClientRect();
+            const enteredListing = listingRect.top < window.innerHeight * 0.72;
+            const stillInsideListing = scopeRect.bottom > window.innerHeight * 0.24;
+            return enteredListing && stillInsideListing && window.scrollY > 180;
+        }
+
+        function updateVisibility() {
+            ticking = false;
+            const visible = shouldShowButton();
+            button.hidden = !visible;
+            button.classList.toggle('is-visible', visible);
+        }
+
+        function requestVisibilityUpdate() {
+            if (ticking) {
+                return;
+            }
+            ticking = true;
+            window.requestAnimationFrame(updateVisibility);
+        }
+
+        button.addEventListener('click', () => {
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        });
+        window.addEventListener('scroll', requestVisibilityUpdate, {passive: true});
+        window.addEventListener('resize', requestVisibilityUpdate);
+        document.addEventListener('fullscreenchange', requestVisibilityUpdate);
+        updateVisibility();
+    }
+
     setupAdminGalleryFilters();
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
@@ -254,6 +301,7 @@
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
+    setupBackToTopButton();
     setupThemeOverrideForm();
     setupFaviconCropper();
 
