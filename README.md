@@ -583,7 +583,7 @@ The root `index.php` delegates to `public/index.php`, so the project can work wh
 
 Public gallery downloads include only public images from the selected gallery. Admin `Download all galleries` includes all imported images and preserves the original folder structure.
 
-ZIP files are cached under `zip_cache_path`. The cache key is derived from image relative paths, sizes, and modification times. JPG, PNG, GIF, and WebP files are stored without extra compression when ZipArchive supports it.
+ZIP files are cached under `zip_cache_path`. The cache key is derived from image relative paths, sizes, and modification times. Cached ZIP files are reused for up to 7 days. Expired cache entries are removed and regenerated automatically when a gallery ZIP or the admin all-galleries ZIP is requested. JPG, PNG, GIF, and WebP files are stored without extra compression when ZipArchive supports it.
 
 ## Voting
 
