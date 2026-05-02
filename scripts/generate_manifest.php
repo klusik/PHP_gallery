@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Run this script from the project root or from the scripts directory:
  * php scripts/generate_manifest.php
- * php scripts/generate_manifest.php --version=0.44
+ * php scripts/generate_manifest.php --version=0.45
  */
 
 /**
@@ -235,7 +235,7 @@ function manifest_hash_file(string $absolutePath): string
  */
 function manifest_print_usage(): void
 {
-    echo "Usage: php scripts/generate_manifest.php [--version=0.44] [--check]\n";
+    echo "Usage: php scripts/generate_manifest.php [--version=0.45] [--check]\n";
     echo "\n";
     echo "Options:\n";
     echo "  --version=VERSION  Override the version detected from app/bootstrap.php.\n";
