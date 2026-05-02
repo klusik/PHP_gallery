@@ -568,6 +568,31 @@
         }
     }
 
+    function updateNormalLightboxStageSize(card) {
+        if (!stageLink || !card || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
+            return;
+        }
+        const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
+        const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
+        if (!naturalWidth || !naturalHeight) {
+            stageLink.style.removeProperty('--lightbox-stage-width');
+            stageLink.style.removeProperty('--lightbox-stage-height');
+            return;
+        }
+        const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+        const availableWidth = Math.max(240, window.innerWidth - (12 * rootFontSize));
+        const availableHeight = Math.max(180, window.innerHeight * 0.78);
+        const imageRatio = naturalWidth / naturalHeight;
+        let stageWidth = availableWidth;
+        let stageHeight = stageWidth / imageRatio;
+        if (stageHeight > availableHeight) {
+            stageHeight = availableHeight;
+            stageWidth = stageHeight * imageRatio;
+        }
+        stageLink.style.setProperty('--lightbox-stage-width', `${Math.round(stageWidth)}px`);
+        stageLink.style.setProperty('--lightbox-stage-height', `${Math.round(stageHeight)}px`);
+    }
+
     function applyLightboxImageSource(src, altText) {
         if (!src || image.getAttribute('src') === src) {
             image.alt = altText;
@@ -683,6 +708,7 @@
         const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
         const fullSrc = card.dataset.fullSrc || previewSrc;
         const altText = card.dataset.title || '';
+        updateNormalLightboxStageSize(card);
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
         showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
@@ -856,6 +882,12 @@
     }
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
+    window.addEventListener('resize', () => {
+        if (overlay.hidden || currentIndex < 0) {
+            return;
+        }
+        updateNormalLightboxStageSize(cards[currentIndex]);
+    });
 
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {

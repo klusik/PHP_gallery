@@ -797,6 +797,19 @@ td {
     grid-area: 1 / 1;
 }
 
+.lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {
+    width: var(--lightbox-stage-width, auto);
+    height: var(--lightbox-stage-height, auto);
+}
+
+.lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link > img {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: contain;
+}
+
 .lightbox-transition-image {
     opacity: 0;
     pointer-events: none;
