@@ -1398,6 +1398,11 @@ function cms_admin(): void
     echo '<button type="submit" class="secondary">Regenerate paths</button>';
     echo '</form>';
     echo '</nav></section>';
+    if (isset($_GET['deleted_galleries'])) {
+        echo '<div class="notice">Deleted ' . (int) $_GET['deleted_galleries'] . ' gallery folder(s).</div>';
+    } elseif (isset($_GET['delete_error'])) {
+        echo '<div class="notice">Gallery delete failed: ' . e((string) $_GET['delete_error']) . '</div>';
+    }
     if (isset($_GET['paths_regenerated'])) {
         echo '<div class="notice">Regenerated clean public paths. Updated ' . (int) ($_GET['gallery_paths'] ?? 0) . ' gallery path(s) and ' . (int) ($_GET['image_paths'] ?? 0) . ' image path(s).</div>';
     } elseif (isset($_GET['paths_error'])) {
@@ -1418,7 +1423,7 @@ function cms_admin(): void
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
-    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
+    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
     if ($votingReady) {
         echo '<option value="vote_on">Enable voting</option><option value="vote_off">Disable voting</option>';
     }
@@ -1446,7 +1451,7 @@ function cms_admin(): void
         $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
@@ -1600,6 +1605,9 @@ function cms_admin_log_update(): void
                 'error' => $exception->getMessage(),
             ]);
             if ($wantsJson) {
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 http_response_code(422);
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
@@ -1779,6 +1787,9 @@ function cms_admin_upload(): void
     if (request_method() === 'POST') {
         verify_csrf();
         $wantsJson = admin_wants_json();
+        if ($wantsJson) {
+            ob_start();
+        }
         try {
             $entries = gallery_upload_entries($_FILES['images'] ?? null);
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
@@ -1818,6 +1829,9 @@ function cms_admin_upload(): void
                 'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails]),
             ];
             if ($wantsJson) {
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 header('Content-Type: application/json');
                 echo json_encode($response);
                 return;
@@ -1916,6 +1930,23 @@ function cms_admin_bulk_galleries(): void
             $count += create_gallery_thumbnails($galleryId);
         }
         redirect_to(url_for('admin', ['thumbnails' => $count]));
+    }
+    if ($action === 'delete' && $galleryIds) {
+        try {
+            $deleted = delete_gallery_subtrees($galleryIds);
+            admin_log_event('warning', 'gallery.bulk_deleted', 'Admin deleted selected gallery folders.', [
+                'gallery_ids' => $galleryIds,
+                'deleted_roots' => (int) $deleted['root_count'],
+                'deleted_rows' => (int) $deleted['row_count'],
+            ]);
+            redirect_to(url_for('admin', ['deleted_galleries' => (int) $deleted['root_count']]));
+        } catch (Throwable $exception) {
+            admin_log_event('error', 'gallery.bulk_delete_failed', 'Bulk gallery delete failed.', [
+                'gallery_ids' => $galleryIds,
+                'exception' => $exception->getMessage(),
+            ]);
+            redirect_to(url_for('admin', ['delete_error' => $exception->getMessage()]));
+        }
     }
     if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
         // Variable $placeholders stores this steps working value.

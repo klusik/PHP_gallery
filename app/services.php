@@ -486,6 +486,134 @@ function gallery_subtree_rows(int $galleryId): array
 }
 
 /**
+ * Delete selected gallery folder subtrees from disk and the database.
+ */
+function delete_gallery_subtrees(array $galleryIds): array
+{
+    // Variable $rootIds stores this steps working value.
+    $rootIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds))));
+    if (!$rootIds) {
+        return ['root_count' => 0, 'row_count' => 0];
+    }
+
+    // Variable $roots stores this steps working value.
+    $roots = [];
+    foreach ($rootIds as $galleryId) {
+        // Variable $gallery stores this steps working value.
+        $gallery = find_gallery($galleryId);
+        if (!$gallery) {
+            continue;
+        }
+        $roots[] = $gallery;
+    }
+    if (!$roots) {
+        return ['root_count' => 0, 'row_count' => 0];
+    }
+
+    usort($roots, static fn (array $left, array $right): int => strlen((string) $left['folder_path']) <=> strlen((string) $right['folder_path']));
+
+    // Variable $keptRoots stores this steps working value.
+    $keptRoots = [];
+    foreach ($roots as $gallery) {
+        // Variable $folderPath stores this steps working value.
+        $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+        // Variable $isCoveredByEarlierRoot stores this steps working value.
+        $isCoveredByEarlierRoot = false;
+        foreach ($keptRoots as $keptRoot) {
+            // Variable $keptPath stores this steps working value.
+            $keptPath = normalize_relative_path((string) $keptRoot['folder_path']);
+            if ($folderPath === $keptPath || str_starts_with($folderPath, $keptPath . '/')) {
+                $isCoveredByEarlierRoot = true;
+                break;
+            }
+        }
+        if (!$isCoveredByEarlierRoot) {
+            $keptRoots[] = $gallery;
+        }
+    }
+
+    // Variable $allRowIds stores this steps working value.
+    $allRowIds = [];
+    foreach ($keptRoots as $gallery) {
+        foreach (gallery_subtree_rows((int) $gallery['id']) as $row) {
+            $allRowIds[(int) $row['id']] = (int) $row['id'];
+        }
+    }
+
+    // Variable $deletedFolders stores this steps working value.
+    $deletedFolders = [];
+    foreach ($keptRoots as $gallery) {
+        // Variable $absolutePath stores this steps working value.
+        $absolutePath = gallery_abs_path((string) $gallery['folder_path']);
+        if (!is_dir($absolutePath)) {
+            throw new RuntimeException('Gallery folder does not exist on disk: ' . (string) $gallery['folder_path']);
+        }
+        delete_directory_tree($absolutePath, galleries_root());
+        $deletedFolders[] = $absolutePath;
+    }
+
+    if ($allRowIds) {
+        // Variable $pdo stores this steps working value.
+        $pdo = db();
+        // Variable $placeholders stores this steps working value.
+        $placeholders = implode(',', array_fill(0, count($allRowIds), '?'));
+        // Variable $stmt stores this steps working value.
+        $stmt = $pdo->prepare('DELETE FROM galleries WHERE id IN (' . $placeholders . ')');
+        $stmt->execute(array_values($allRowIds));
+    }
+
+    sync_gallery_parent_ids();
+    if (public_path_schema_ready()) {
+        regenerate_public_paths();
+    }
+
+    return ['root_count' => count($deletedFolders), 'row_count' => count($allRowIds)];
+}
+
+/**
+ * Remove one directory tree while refusing to operate outside the configured root.
+ */
+function delete_directory_tree(string $directory, string $allowedRoot): void
+{
+    // Variable $directory stores this steps working value.
+    $directory = rtrim($directory, DIRECTORY_SEPARATOR);
+    // Variable $allowedRoot stores this steps working value.
+    $allowedRoot = rtrim($allowedRoot, DIRECTORY_SEPARATOR);
+    if ($directory === '' || $directory === $allowedRoot || !path_inside($allowedRoot, $directory)) {
+        throw new RuntimeException('Refusing to delete an unsafe gallery path.');
+    }
+    if (!is_dir($directory)) {
+        return;
+    }
+
+    // Variable $iterator stores this steps working value.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $entry) {
+        // Variable $path stores this steps working value.
+        $path = $entry->getPathname();
+        if (!path_inside($allowedRoot, $path)) {
+            throw new RuntimeException('Refusing to delete a path outside the gallery root.');
+        }
+        if ($entry->isDir() && !$entry->isLink()) {
+            if (!@rmdir($path)) {
+                throw new RuntimeException('Could not remove directory: ' . $path);
+            }
+            continue;
+        }
+        if (!@unlink($path)) {
+            throw new RuntimeException('Could not remove file: ' . $path);
+        }
+    }
+
+    if (!@rmdir($directory)) {
+        throw new RuntimeException('Could not remove gallery folder: ' . $directory);
+    }
+}
+
+/**
  * Physically move one gallery folder subtree and then make DB paths follow it.
  */
 function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null): array

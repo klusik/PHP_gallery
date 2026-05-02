@@ -248,6 +248,42 @@
     });
 
 
+    // Confirm destructive gallery bulk deletes with the exact selected names.
+    document.addEventListener('submit', (event) => {
+        // Variable `form` stores this steps working value.
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-gallery-bulk-form]')) {
+            return;
+        }
+        // Variable `action` stores this steps working value.
+        const action = form.querySelector('select[name="action"]');
+        if (!(action instanceof HTMLSelectElement) || action.value !== 'delete') {
+            return;
+        }
+        // Variable `selectedRows` stores this steps working value.
+        const selectedRows = Array.from(form.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]:checked'))
+            .map((checkbox) => checkbox.closest('[data-gallery-row]'))
+            .filter((row) => row instanceof HTMLElement);
+        if (!selectedRows.length) {
+            event.preventDefault();
+            window.alert('Select at least one gallery to delete.');
+            return;
+        }
+        // Variable `names` stores this steps working value.
+        const names = selectedRows.map((row) => row.dataset.galleryTitle || row.querySelector('.tree-title a')?.textContent?.trim() || `Gallery ${row.dataset.galleryId || ''}`.trim());
+        // Variable `message` stores this steps working value.
+        const message = [
+            'Delete these gallery folders and all subgalleries?',
+            '',
+            ...names.map((name) => `• ${name}`),
+            '',
+            'This removes the folders from disk and deletes their database records. This cannot be undone.'
+        ].join('\n');
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+
     // Function `setupBackToTopButton` executes this focused behavior.
     function setupBackToTopButton() {
         const scope = document.querySelector('[data-back-to-top-scope]');
@@ -1607,57 +1643,149 @@
     }
 
     // Function `runGalleryUpload` executes this focused behavior.
-    function runGalleryUpload(form) {
+    async function runGalleryUpload(form) {
         const progress = ensureThumbnailProgress(form);
         const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
         buttons.forEach((button) => {
             button.disabled = true;
         });
-        updateBasicProgress(progress, 0, 'Preparing upload...');
-        const body = new FormData(form);
-        body.set('ajax', '1');
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action || window.location.href);
-        xhr.setRequestHeader('Accept', 'application/json');
-        xhr.upload.addEventListener('progress', (event) => {
-            if (!event.lengthComputable) {
-                updateBasicProgress(progress, 100, 'Uploading images...');
+        try {
+            const result = await runGalleryUploadChunks(form, progress);
+            updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
+            if (form.querySelector('input[name="create_thumbnails"]')?.checked && Array.isArray(result.gallery_ids) && result.gallery_ids.length > 0) {
+                await runUploadThumbnailProgress(form, progress, result.gallery_ids, result);
                 return;
             }
-            updateBasicProgress(progress, Math.round((event.loaded / event.total) * 100), 'Uploading images...');
-        });
-        xhr.addEventListener('load', async () => {
-            try {
-                const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
-                if (!contentType.includes('application/json')) {
-                    const snippet = (xhr.responseText || '').trim().slice(0, 120);
-                    throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Your session may have expired.' : 'Server returned an unexpected response.');
-                }
-                const result = JSON.parse(xhr.responseText || '{}');
-                if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
-                    throw new Error(result.error || 'Upload failed.');
-                }
-                updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
-                if (form.querySelector('input[name="create_thumbnails"]')?.checked && Array.isArray(result.gallery_ids) && result.gallery_ids.length > 0) {
-                    await runUploadThumbnailProgress(form, progress, result.gallery_ids, result);
-                    return;
-                }
-                window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0});
-            } catch (error) {
-                updateBasicProgress(progress, 100, error.message || 'Upload failed.');
-            } finally {
-                buttons.forEach((button) => {
-                    button.disabled = false;
-                });
-            }
-        });
-        xhr.addEventListener('error', () => {
-            updateBasicProgress(progress, 100, 'Upload failed.');
+            window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0});
+        } catch (error) {
+            updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+        } finally {
             buttons.forEach((button) => {
                 button.disabled = false;
             });
+        }
+    }
+
+    function selectedGalleryUploadFiles(form) {
+        const fileInput = form.querySelector('input[type="file"][name="images[]"]');
+        if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
+            return [];
+        }
+        return Array.from(fileInput.files);
+    }
+
+    function galleryUploadBaseBody(form) {
+        const body = new FormData();
+        Array.from(form.elements).forEach((field) => {
+            if (!(field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            if (!field.name || field.disabled || field.type === 'file') {
+                return;
+            }
+            if ((field.type === 'checkbox' || field.type === 'radio') && !field.checked) {
+                return;
+            }
+            body.append(field.name, field.value);
         });
-        xhr.send(body);
+        body.set('ajax', '1');
+        return body;
+    }
+
+    function cloneGalleryUploadBody(form, files, galleryId) {
+        const body = galleryUploadBaseBody(form);
+        if (galleryId > 0) {
+            body.set('upload_mode', 'existing');
+            body.set('gallery_id', String(galleryId));
+        }
+        files.forEach((file) => {
+            body.append('images[]', file, file.name);
+        });
+        return body;
+    }
+
+    function galleryUploadBatchSize() {
+        return 10;
+    }
+
+    async function runGalleryUploadChunks(form, progress) {
+        const files = selectedGalleryUploadFiles(form);
+        if (files.length === 0) {
+            throw new Error('Choose at least one image to upload.');
+        }
+        const batchSize = galleryUploadBatchSize();
+        let uploaded = 0;
+        let scanned = 0;
+        let galleryId = Number(form.querySelector('select[name="gallery_id"]')?.value || 0);
+        let redirectUrl = '';
+        const galleryIds = [];
+        for (let startIndex = 0; startIndex < files.length; startIndex += batchSize) {
+            const chunk = files.slice(startIndex, startIndex + batchSize);
+            const chunkNumber = Math.floor(startIndex / batchSize) + 1;
+            const chunkCount = Math.ceil(files.length / batchSize);
+            const percent = Math.round((startIndex / files.length) * 100);
+            updateBasicProgress(progress, percent, `Uploading images ${startIndex + 1}-${Math.min(startIndex + chunk.length, files.length)} of ${files.length}...`);
+            const result = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, chunk, galleryId), (event) => {
+                if (!event.lengthComputable) {
+                    updateBasicProgress(progress, percent, `Uploading batch ${chunkNumber} of ${chunkCount}...`);
+                    return;
+                }
+                const completed = startIndex / files.length;
+                const current = (event.loaded / event.total) * (chunk.length / files.length);
+                updateBasicProgress(progress, Math.round((completed + current) * 100), `Uploading batch ${chunkNumber} of ${chunkCount}...`);
+            });
+            if (!galleryId) {
+                galleryId = Number(result.gallery_id || 0);
+            }
+            if (galleryId && !galleryIds.includes(galleryId)) {
+                galleryIds.push(galleryId);
+            }
+            uploaded += Number(result.uploaded || 0);
+            scanned += Number(result.scanned || 0);
+            redirectUrl = result.redirect_url || redirectUrl;
+        }
+        return {
+            ok: true,
+            gallery_id: galleryId,
+            gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
+            uploaded,
+            scanned,
+            thumbnails: 0,
+            redirect_url: redirectUrl,
+        };
+    }
+
+    function sendGalleryUploadChunk(form, body, progressHandler) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', form.action || window.location.href);
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.upload.addEventListener('progress', progressHandler);
+            xhr.addEventListener('load', () => {
+                try {
+                    const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
+                    const responseText = xhr.responseText || '';
+                    if (!contentType.includes('application/json')) {
+                        const snippet = responseText.trim().slice(0, 180).replace(/\s+/g, ' ');
+                        if (snippet.includes('Maximum number of allowable file uploads exceeded')) {
+                            throw new Error('The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.');
+                        }
+                        throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Check the PHP error log for the exact upload error.' : 'Server returned an unexpected response.');
+                    }
+                    const result = JSON.parse(responseText || '{}');
+                    if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
+                        throw new Error(result.error || 'Upload failed.');
+                    }
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            xhr.addEventListener('error', () => {
+                reject(new Error('Upload failed.'));
+            });
+            xhr.send(body);
+        });
     }
 
     async function runUploadThumbnailProgress(form, progress, galleryIds, uploadResult) {
