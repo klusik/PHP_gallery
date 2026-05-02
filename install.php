@@ -19,15 +19,17 @@ $messages = [];
 $errors = [];
 // Variable $installLockFile stores this steps working value.
 $installLockFile = $root . '/cache/installed.lock';
+// Variable $installationFinished stores this steps working value.
+$installationFinished = false;
 
 if (is_file($configFile) || is_file($installLockFile)) {
     http_response_code(403);
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title></head><body><main><h1>Installer locked</h1><p>The installer is disabled because this gallery already has a configuration or installation lock. Remove <code>config.php</code> and <code>cache/installed.lock</code> manually only if you intentionally want to reinstall from scratch.</p></main></body></html>';
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Installer locked</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1f2937}code{background:#eef2f7;padding:2px 5px;border-radius:4px}</style></head><body><main><h1>Installer locked</h1><p>The installer is disabled because this gallery already has a configuration or installation lock. Remove <code>config.php</code> and <code>cache/installed.lock</code> manually only if you intentionally want to reinstall from scratch.</p></main></body></html>';
     exit;
 }
 
 /**
- * Function `installer_e` handles this scoped operation.
+ * Escape one value for safe HTML output.
  */
 function installer_e(?string $value): string
 {
@@ -35,7 +37,7 @@ function installer_e(?string $value): string
 }
 
 /**
- * Function `installer_post` handles this scoped operation.
+ * Read one POST value as a trimmed string.
  */
 function installer_post(string $name, string $default = ''): string
 {
@@ -43,7 +45,7 @@ function installer_post(string $name, string $default = ''): string
 }
 
 /**
- * Function `installer_random_secret` handles this scoped operation.
+ * Generate a random application secret.
  */
 function installer_random_secret(): string
 {
@@ -51,12 +53,13 @@ function installer_random_secret(): string
 }
 
 /**
- * Function `installer_default_base_url` handles this scoped operation.
+ * Detect the public base URL from the current installer request.
  */
 function installer_default_base_url(): string
 {
-    // Variable $https stores this steps working value.
+    // Variable $forwardedProto stores this steps working value.
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+    // Variable $https stores this steps working value.
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
         || $forwardedProto === 'https'
@@ -69,16 +72,18 @@ function installer_default_base_url(): string
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? '/install.php'));
     // Variable $dir stores this steps working value.
     $dir = rtrim(str_replace('/install.php', '', $script), '/');
-    return $scheme . '://' . $host . $dir;
+    return rtrim($scheme . '://' . $host . $dir, '/');
 }
 
 /**
- * Function `installer_mysql_dsn` handles this scoped operation.
+ * Build a MySQL PDO DSN from installer fields.
  */
 function installer_mysql_dsn(string $host, string $port = '', ?string $database = null): string
 {
+    // Variable $normalizedHost stores this steps working value.
+    $normalizedHost = $host !== '' ? $host : 'localhost';
     // Variable $dsn stores this steps working value.
-    $dsn = 'mysql:host=' . $host . ';charset=utf8mb4';
+    $dsn = 'mysql:host=' . $normalizedHost . ';charset=utf8mb4';
     if ($database !== null && $database !== '') {
         $dsn .= ';dbname=' . $database;
     }
@@ -89,80 +94,73 @@ function installer_mysql_dsn(string $host, string $port = '', ?string $database 
 }
 
 /**
- * Function `installer_mysql_identifier` handles this scoped operation.
+ * Connect to the existing application database.
  */
-function installer_mysql_identifier(string $name): string
+function installer_connect_database(array $database): PDO
 {
-    if (!preg_match('/^[A-Za-z0-9_]+$/', $name)) {
-        throw new InvalidArgumentException('Database names may only contain letters, numbers, and underscores.');
-    }
-    return '`' . str_replace('`', '``', $name) . '`';
+    return new PDO(
+        installer_mysql_dsn((string) $database['host'], (string) $database['port'], (string) $database['name']),
+        (string) $database['user'],
+        (string) $database['password'],
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
+    );
 }
 
 /**
- * Function `installer_mysql_account` handles this scoped operation.
+ * Validate and normalize the first installer step.
  */
-function installer_mysql_account(string $user, string $host): string
+function installer_collect_database_step(array $defaults): array
 {
-    return "'" . str_replace("'", "''", $user) . "'@'" . str_replace("'", "''", $host) . "'";
+    // Variable $siteName stores this steps working value.
+    $siteName = installer_post('site_name', $defaults['site_name']);
+    // Variable $baseUrl stores this steps working value.
+    $baseUrl = rtrim(installer_post('base_url', $defaults['base_url']), '/');
+    // Variable $dbHost stores this steps working value.
+    $dbHost = installer_post('db_host', $defaults['db_host']);
+    // Variable $dbPort stores this steps working value.
+    $dbPort = installer_post('db_port', $defaults['db_port']);
+    // Variable $dbName stores this steps working value.
+    $dbName = installer_post('db_name', $defaults['db_name']);
+    // Variable $dbUser stores this steps working value.
+    $dbUser = installer_post('db_user', $defaults['db_user']);
+    // Variable $dbPassword stores this steps working value.
+    $dbPassword = (string) ($_POST['db_password'] ?? '');
+
+    if ($siteName === '') {
+        throw new RuntimeException('Gallery name is required. You can change it later in Admin.');
+    }
+    if ($baseUrl === '') {
+        throw new RuntimeException('Domain is required. The detected value is usually correct.');
+    }
+    if ($dbName === '' || $dbUser === '' || $dbPassword === '') {
+        throw new RuntimeException('Database name, database user, and database password are required.');
+    }
+    if ($dbPort !== '' && (!ctype_digit($dbPort) || (int) $dbPort < 1 || (int) $dbPort > 65535)) {
+        throw new RuntimeException('Database port must be empty or a number between 1 and 65535.');
+    }
+    if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
+        throw new RuntimeException('Domain must be a valid absolute URL, for example https://galerie.example.com.');
+    }
+
+    return [
+        'site_name' => substr($siteName, 0, 120),
+        'base_url' => $baseUrl,
+        'database' => [
+            'host' => $dbHost !== '' ? $dbHost : 'localhost',
+            'port' => $dbPort,
+            'name' => $dbName,
+            'user' => $dbUser,
+            'password' => $dbPassword,
+            'charset' => 'utf8mb4',
+        ],
+    ];
 }
 
 /**
- * Function `installer_account_hosts` handles this scoped operation.
- */
-function installer_account_hosts(string $dbHost, string $accountHost): array
-{
-    if ($accountHost !== '') {
-        return [$accountHost];
-    }
-    if ($dbHost === '127.0.0.1' || $dbHost === 'localhost' || $dbHost === '::1') {
-        return ['127.0.0.1', 'localhost'];
-    }
-    return ['%'];
-}
-
-/**
- * Function `installer_create_or_update_user` handles this scoped operation.
- */
-function installer_create_or_update_user(PDO $pdo, string $appUser, string $appPassword, string $appHost, string $plugin): void
-{
-    if (!preg_match('/^[A-Za-z0-9_@.-]+$/', $appUser)) {
-        throw new InvalidArgumentException('Database usernames may only contain letters, numbers, dots, dashes, underscores, and @.');
-    }
-    if (!in_array($plugin, ['', 'caching_sha2_password', 'mysql_native_password'], true)) {
-        throw new InvalidArgumentException('Unsupported authentication plugin.');
-    }
-
-    // Variable $account stores this steps working value.
-    $account = installer_mysql_account($appUser, $appHost);
-    // Variable $password stores this steps working value.
-    $password = $pdo->quote($appPassword);
-    // Variable $serverVersion stores this steps working value.
-    $serverVersion = (string) $pdo->getAttribute(PDO::ATTR_SERVER_VERSION);
-    // Variable $isMariaDb stores this steps working value.
-    $isMariaDb = stripos($serverVersion, 'mariadb') !== false;
-    // Variable $identity stores this steps working value. MariaDB rejects MySQL plugin syntax such as IDENTIFIED WITH mysql_native_password BY ... on many shared hosts.
-    $identity = ($plugin === '' || $isMariaDb) ? ' IDENTIFIED BY ' . $password : ' IDENTIFIED WITH ' . $plugin . ' BY ' . $password;
-
-    try {
-        $pdo->exec('CREATE USER IF NOT EXISTS ' . $account . $identity);
-    } catch (PDOException $exception) {
-        if (!str_contains($exception->getMessage(), 'already exists')) {
-            throw $exception;
-        }
-    }
-    try {
-        $pdo->exec('ALTER USER ' . $account . $identity);
-    } catch (PDOException $exception) {
-        if (!$isMariaDb) {
-            throw $exception;
-        }
-        $pdo->exec('SET PASSWORD FOR ' . $account . ' = PASSWORD(' . $password . ')');
-    }
-}
-
-/**
- * Function `installer_run_migrations` handles this scoped operation.
+ * Run all pending database migrations.
  */
 function installer_run_migrations(PDO $pdo, string $migrationPath): array
 {
@@ -189,24 +187,20 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         }
         // Variable $statements stores this steps working value.
         $statements = require $file;
-        try {
-            foreach ($statements as $statement) {
-                installer_apply_migration_statement($pdo, $statement);
-            }
-            // Variable $stmt stores this steps working value.
-            $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
-            $stmt->execute([$version, date('Y-m-d H:i:s')]);
-            $ran[] = $version;
-        } catch (Throwable $exception) {
-            throw $exception;
+        foreach ($statements as $statement) {
+            installer_apply_migration_statement($pdo, $statement);
         }
+        // Variable $stmt stores this steps working value.
+        $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
+        $stmt->execute([$version, date('Y-m-d H:i:s')]);
+        $ran[] = $version;
     }
 
     return $ran;
 }
 
 /**
- * Function `installer_apply_migration_statement` handles this scoped operation.
+ * Apply one migration statement and tolerate duplicate schema objects.
  */
 function installer_apply_migration_statement(PDO $pdo, string $statement): void
 {
@@ -220,7 +214,7 @@ function installer_apply_migration_statement(PDO $pdo, string $statement): void
 }
 
 /**
- * Function `installer_duplicate_ddl_error` handles this scoped operation.
+ * Return true when a migration error is safe to ignore during reinstall-like recovery.
  */
 function installer_duplicate_ddl_error(PDOException $exception): bool
 {
@@ -240,7 +234,7 @@ function installer_duplicate_ddl_error(PDOException $exception): bool
 }
 
 /**
- * Function `installer_write_config` handles this scoped operation.
+ * Write the final application config.php file.
  */
 function installer_write_config(string $configFile, array $config): void
 {
@@ -251,200 +245,275 @@ function installer_write_config(string $configFile, array $config): void
     }
 }
 
+/**
+ * Create the galleries and ZIP cache folders if needed.
+ */
+function installer_prepare_writable_folders(array $paths): void
+{
+    foreach ($paths as $path) {
+        if (!is_dir($path) && !mkdir($path, 0775, true)) {
+            throw new RuntimeException('Could not create folder: ' . $path);
+        }
+        if (!is_writable($path)) {
+            throw new RuntimeException('Folder is not writable by PHP: ' . $path);
+        }
+    }
+}
+
+/**
+ * Create or replace the first web admin account.
+ */
+function installer_create_admin_user(PDO $pdo, string $username, string $password): void
+{
+    // Variable $stmt stores this steps working value.
+    $stmt = $pdo->prepare('INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role), updated_at = VALUES(updated_at)');
+    $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), 'admin', date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+}
+
+/**
+ * Store the public site name in application settings.
+ */
+function installer_save_site_name(PDO $pdo, string $siteName): void
+{
+    // Variable $stmt stores this steps working value.
+    $stmt = $pdo->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
+    $stmt->execute(['site_name', $siteName, date('Y-m-d H:i:s')]);
+}
+
+/**
+ * Build final application config from verified installer data.
+ */
+function installer_build_config(array $setup, string $root): array
+{
+    return [
+        'database' => [
+            'host' => (string) $setup['database']['host'],
+            'port' => (string) $setup['database']['port'] === '' ? null : (int) $setup['database']['port'],
+            'name' => (string) $setup['database']['name'],
+            'user' => (string) $setup['database']['user'],
+            'password' => (string) $setup['database']['password'],
+            'charset' => 'utf8mb4',
+        ],
+        'base_url' => (string) $setup['base_url'],
+        'galleries_root' => $root . '/galleries',
+        'zip_cache_path' => $root . '/cache/zips',
+        'admin_session_name' => 'gallery_admin_session',
+        'visitor_vote_secret' => installer_random_secret(),
+        'setup_key' => installer_random_secret(),
+    ];
+}
+
 if (empty($_SESSION['installer_token'])) {
     $_SESSION['installer_token'] = bin2hex(random_bytes(16));
 }
 
 // Variable $defaults stores this steps working value.
 $defaults = [
-    'db_host' => '127.0.0.1',
-    'db_port' => '3306',
-    'db_name' => 'gallery_cms',
-    'db_user' => 'gallery_user',
-    'db_user_host' => '',
-    'auth_plugin' => '',
-    'db_provisioning_mode' => 'existing_database_user',
+    'site_name' => 'My Gallery',
     'base_url' => installer_default_base_url(),
-    'galleries_root' => $root . '/galleries',
-    'zip_cache_path' => $root . '/cache/zips',
+    'db_host' => 'localhost',
+    'db_port' => '',
+    'db_name' => '',
+    'db_user' => '',
     'admin_username' => 'admin',
 ];
+
+// Variable $currentStep stores this steps working value.
+$currentStep = isset($_SESSION['installer_setup']) ? 2 : 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if (!hash_equals((string) $_SESSION['installer_token'], (string) ($_POST['token'] ?? ''))) {
             throw new RuntimeException('Invalid installer token. Reload the installer and try again.');
         }
-        if (is_file($configFile) && (string) ($_POST['overwrite_config'] ?? '') !== '1') {
-            throw new RuntimeException('config.php already exists. Tick the overwrite box if you want to replace it.');
-        }
 
-        // Variable $dbHost stores this steps working value.
-        $dbHost = installer_post('db_host', $defaults['db_host']);
-        // Variable $dbPort stores this steps working value.
-        $dbPort = installer_post('db_port', $defaults['db_port']);
-        // Variable $dbName stores this steps working value.
-        $dbName = installer_post('db_name', $defaults['db_name']);
-        // Variable $dbUser stores this steps working value.
-        $dbUser = installer_post('db_user', $defaults['db_user']);
-        // Variable $dbPassword stores this steps working value.
-        $dbPassword = (string) ($_POST['db_password'] ?? '');
-        // Variable $dbUserHost stores this steps working value.
-        $dbUserHost = installer_post('db_user_host', $defaults['db_user_host']);
-        // Variable $authPlugin stores this steps working value.
-        $authPlugin = installer_post('auth_plugin', $defaults['auth_plugin']);
-        // Variable $dbProvisioningMode stores this steps working value.
-        $dbProvisioningMode = installer_post('db_provisioning_mode', $defaults['db_provisioning_mode']);
-        // Variable $adminUser stores this steps working value.
-        $adminUser = installer_post('admin_username', $defaults['admin_username']);
-        // Variable $adminPassword stores this steps working value.
-        $adminPassword = (string) ($_POST['admin_password'] ?? '');
-        // Variable $baseUrl stores this steps working value.
-        $baseUrl = rtrim(installer_post('base_url', $defaults['base_url']), '/');
-        // Variable $galleriesRoot stores this steps working value.
-        $galleriesRoot = installer_post('galleries_root', $defaults['galleries_root']);
-        // Variable $zipCachePath stores this steps working value.
-        $zipCachePath = installer_post('zip_cache_path', $defaults['zip_cache_path']);
+        // Variable $action stores this steps working value.
+        $action = (string) ($_POST['installer_action'] ?? '');
 
-        if ($dbHost === '' || $dbName === '' || $dbUser === '' || $dbPassword === '') {
-            throw new RuntimeException('Database host, name, app user, and app user password are required.');
-        }
-        if (!in_array($dbProvisioningMode, ['existing_database_user', 'create_database_and_user'], true)) {
-            throw new RuntimeException('Unsupported database provisioning mode.');
-        }
-        if ($adminUser === '' || $adminPassword === '') {
-            throw new RuntimeException('Admin username and password are required.');
-        }
-        if ($dbPort !== '' && (!ctype_digit($dbPort) || (int) $dbPort < 1 || (int) $dbPort > 65535)) {
-            throw new RuntimeException('Database port must be a number between 1 and 65535.');
-        }
-
-        // Variable $dbIdentifier stores this steps working value.
-        $dbIdentifier = installer_mysql_identifier($dbName);
-
-        if ($dbProvisioningMode === 'create_database_and_user') {
-            // Variable $dbAdminUser stores this steps working value.
-            $dbAdminUser = installer_post('db_admin_user', '');
-            if ($dbAdminUser === '') {
-                throw new RuntimeException('Database admin user is required when the installer creates the database or database user.');
+        if ($action === 'reset_database_step') {
+            unset($_SESSION['installer_setup']);
+            $currentStep = 1;
+        } elseif ($action === 'database_step') {
+            // Variable $setup stores this steps working value.
+            $setup = installer_collect_database_step($defaults);
+            // Variable $pdo stores this steps working value.
+            $pdo = installer_connect_database($setup['database']);
+            $pdo->query('SELECT 1')->fetchColumn();
+            $_SESSION['installer_setup'] = $setup;
+            $_SESSION['installer_token'] = bin2hex(random_bytes(16));
+            $messages[] = 'Database connection verified. Continue with the web admin account.';
+            $currentStep = 2;
+        } elseif ($action === 'admin_step') {
+            if (empty($_SESSION['installer_setup']) || !is_array($_SESSION['installer_setup'])) {
+                throw new RuntimeException('Database setup was not verified yet. Start with the first step.');
             }
 
-            // Variable $adminPdo stores this steps working value.
-            $adminPdo = new PDO(installer_mysql_dsn($dbHost, $dbPort), $dbAdminUser, (string) ($_POST['db_admin_password'] ?? ''), [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
+            // Variable $setup stores this steps working value.
+            $setup = $_SESSION['installer_setup'];
+            // Variable $adminUser stores this steps working value.
+            $adminUser = installer_post('admin_username', $defaults['admin_username']);
+            // Variable $adminPassword stores this steps working value.
+            $adminPassword = (string) ($_POST['admin_password'] ?? '');
+            // Variable $adminPasswordConfirm stores this steps working value.
+            $adminPasswordConfirm = (string) ($_POST['admin_password_confirm'] ?? '');
 
-            $adminPdo->exec('CREATE DATABASE IF NOT EXISTS ' . $dbIdentifier . ' CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-            $messages[] = 'Database is ready.';
-
-            // Variable $accountHosts stores this steps working value.
-            $accountHosts = installer_account_hosts($dbHost, $dbUserHost);
-            foreach ($accountHosts as $accountHost) {
-                installer_create_or_update_user($adminPdo, $dbUser, $dbPassword, $accountHost, $authPlugin);
-                $adminPdo->exec('GRANT ALL PRIVILEGES ON ' . $dbIdentifier . '.* TO ' . installer_mysql_account($dbUser, $accountHost));
+            if ($adminUser === '' || $adminPassword === '') {
+                throw new RuntimeException('Admin username and password are required.');
             }
-            $adminPdo->exec('FLUSH PRIVILEGES');
-            $messages[] = 'Database user is ready.';
-        } else {
-            $messages[] = 'Using existing database and existing database user. User creation and GRANT statements were skipped.';
-        }
-
-        foreach ([$galleriesRoot, $zipCachePath] as $path) {
-            if (!is_dir($path) && !mkdir($path, 0775, true)) {
-                throw new RuntimeException('Could not create folder: ' . $path);
+            if (strlen($adminPassword) < 8) {
+                throw new RuntimeException('Admin password must be at least 8 characters.');
             }
-            if (!is_writable($path)) {
-                throw new RuntimeException('Folder is not writable by PHP: ' . $path);
+            if ($adminPassword !== $adminPasswordConfirm) {
+                throw new RuntimeException('Admin passwords do not match.');
             }
+
+            // Variable $galleriesRoot stores this steps working value.
+            $galleriesRoot = $root . '/galleries';
+            // Variable $zipCachePath stores this steps working value.
+            $zipCachePath = $root . '/cache/zips';
+            installer_prepare_writable_folders([$galleriesRoot, $zipCachePath]);
+
+            // Variable $pdo stores this steps working value.
+            $pdo = installer_connect_database($setup['database']);
+            // Variable $ran stores this steps working value.
+            $ran = installer_run_migrations($pdo, $migrationPath);
+            installer_create_admin_user($pdo, $adminUser, $adminPassword);
+            installer_save_site_name($pdo, (string) $setup['site_name']);
+            installer_write_config($configFile, installer_build_config($setup, $root));
+
+            if (!is_dir(dirname($installLockFile))) {
+                mkdir(dirname($installLockFile), 0775, true);
+            }
+            file_put_contents($installLockFile, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
+
+            unset($_SESSION['installer_setup']);
+            $_SESSION['installer_token'] = bin2hex(random_bytes(16));
+            $messages[] = 'Installation finished.';
+            $messages[] = $ran ? 'Applied migrations: ' . implode(', ', $ran) : 'No pending migrations.';
+            $messages[] = 'Admin user is ready.';
+            $messages[] = 'The installer is now disabled for future requests.';
+            $installationFinished = true;
+            $currentStep = 3;
         }
-        $messages[] = 'Writable folders are ready.';
-
-        // Variable $config stores this steps working value.
-        $config = [
-            'database' => [
-                'host' => $dbHost,
-                'port' => $dbPort === '' ? null : (int) $dbPort,
-                'name' => $dbName,
-                'user' => $dbUser,
-                'password' => $dbPassword,
-                'charset' => 'utf8mb4',
-            ],
-            'base_url' => $baseUrl,
-            'galleries_root' => $galleriesRoot,
-            'zip_cache_path' => $zipCachePath,
-            'admin_session_name' => 'gallery_admin_session',
-            'visitor_vote_secret' => installer_random_secret(),
-            'setup_key' => installer_random_secret(),
-        ];
-        installer_write_config($configFile, $config);
-        $messages[] = 'config.php was written.';
-
-        // Variable $appPdo stores this steps working value.
-        $appPdo = new PDO(installer_mysql_dsn($dbHost, $dbPort, $dbName), $dbUser, $dbPassword, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]);
-        // Variable $ran stores this steps working value.
-        $ran = installer_run_migrations($appPdo, $migrationPath);
-        $messages[] = $ran ? 'Applied migrations: ' . implode(', ', $ran) : 'No pending migrations.';
-
-        // Variable $stmt stores this steps working value.
-        $stmt = $appPdo->prepare('INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)');
-        $stmt->execute([$adminUser, password_hash($adminPassword, PASSWORD_DEFAULT), 'admin', date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
-        $messages[] = 'Admin user is ready.';
-        if (!is_dir(dirname($installLockFile))) {
-            mkdir(dirname($installLockFile), 0775, true);
-        }
-        file_put_contents($installLockFile, 'installed=' . gmdate('c') . PHP_EOL, LOCK_EX);
-        $messages[] = 'Installation lock was written to cache/installed.lock.';
-        $messages[] = 'The installer is now disabled for future requests.';
-        $_SESSION['installer_token'] = bin2hex(random_bytes(16));
     } catch (Throwable $exception) {
         $errors[] = $exception->getMessage();
+        $currentStep = empty($_SESSION['installer_setup']) ? 1 : 2;
     }
 }
 
+// Variable $setup stores this steps working value.
+$setup = (isset($_SESSION['installer_setup']) && is_array($_SESSION['installer_setup'])) ? $_SESSION['installer_setup'] : [];
+
 // Variable $value stores this steps working value.
-$value = static function (string $name) use ($defaults): string {
+$value = static function (string $name) use ($defaults, $setup): string {
+    if ($name === 'site_name' && isset($setup['site_name'])) {
+        return installer_e((string) $setup['site_name']);
+    }
+    if ($name === 'base_url' && isset($setup['base_url'])) {
+        return installer_e((string) $setup['base_url']);
+    }
+    if (isset($setup['database'][$name])) {
+        return installer_e((string) $setup['database'][$name]);
+    }
     return installer_e((string) ($_POST[$name] ?? $defaults[$name] ?? ''));
 };
+
+// Variable $adminUrl stores this steps working value.
+$adminUrl = 'index.php?page=admin_login';
 
 ?><!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Gallery CMS Installer 0.13</title>
+    <?php if ($installationFinished): ?>
+        <meta http-equiv="refresh" content="5;url=<?php echo installer_e($adminUrl); ?>">
+    <?php endif; ?>
+    <title>Gallery Installer</title>
     <style>
-        :root { color-scheme: light; font-family: Arial, sans-serif; color: #1f2933; background: #f5f7fa; }
-        body { margin: 0; }
-        main { max-width: 980px; margin: 0 auto; padding: 32px 18px 48px; }
-        h1 { margin: 0 0 8px; font-size: 32px; }
-        h2 { margin: 0 0 16px; font-size: 20px; }
-        p { line-height: 1.5; }
-        .panel { background: #fff; border: 1px solid #d9e2ec; border-radius: 8px; padding: 20px; margin-top: 18px; }
-        .section { border-top: 1px solid #d9e2ec; padding-top: 20px; margin-top: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
-        label { display: grid; gap: 6px; font-weight: 700; font-size: 14px; }
-        input, select { min-height: 42px; border: 1px solid #bcccdc; border-radius: 6px; padding: 0 10px; font: inherit; }
+        :root {
+            color-scheme: light;
+            --page: #f5f5f7;
+            --panel: rgba(255, 255, 255, 0.88);
+            --panel-strong: #ffffff;
+            --text: #1d1d1f;
+            --muted: #6e6e73;
+            --line: rgba(0, 0, 0, 0.12);
+            --accent: #0071e3;
+            --accent-dark: #005bbd;
+            --ok-bg: #edf8f1;
+            --ok-line: #b7e3c6;
+            --bad-bg: #fff0f0;
+            --bad-line: #ffc6c6;
+            --shadow: 0 24px 70px rgba(0, 0, 0, 0.10);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(0, 113, 227, 0.13), transparent 34rem),
+                linear-gradient(180deg, #fbfbfd 0%, var(--page) 100%);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; }
+        main { width: min(920px, calc(100vw - 32px)); margin: 0 auto; padding: 44px 0 54px; }
+        h1 { margin: 0; font-size: clamp(34px, 6vw, 58px); letter-spacing: -0.045em; line-height: 1.02; }
+        h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+        p { line-height: 1.55; }
+        a { color: var(--accent); font-weight: 700; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: rgba(0, 0, 0, 0.06); padding: 2px 5px; border-radius: 5px; }
+        .hero { text-align: center; margin-bottom: 26px; }
+        .hero p { max-width: 690px; margin: 14px auto 0; color: var(--muted); font-size: 17px; }
+        .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 24px 0; }
+        .step-pill { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.6); border-radius: 999px; padding: 10px 12px; color: var(--muted); text-align: center; font-size: 13px; font-weight: 700; }
+        .step-pill.is-active { color: #fff; background: var(--accent); border-color: var(--accent); }
+        .step-pill.is-done { color: var(--text); background: rgba(255, 255, 255, 0.92); }
+        .panel { background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 28px; padding: clamp(22px, 4vw, 34px); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+        .panel + .panel { margin-top: 18px; }
+        .panel-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 24px; }
+        .panel-header p { margin: 8px 0 0; color: var(--muted); }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        label { display: grid; gap: 7px; font-weight: 700; font-size: 14px; }
+        input { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 14px; padding: 0 13px; font: inherit; background: var(--panel-strong); color: var(--text); outline: none; transition: border-color 0.16s ease, box-shadow 0.16s ease; }
+        input:focus { border-color: rgba(0, 113, 227, 0.75); box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.13); }
         .full { grid-column: 1 / -1; }
-        .help { margin: 6px 0 0; color: #52606d; font-size: 13px; font-weight: 400; }
-        .notice { border-radius: 8px; padding: 12px 14px; margin-top: 14px; }
-        .ok { background: #e3f8ee; border: 1px solid #8eedbd; }
-        .bad { background: #ffe8e8; border: 1px solid #ffb4b4; }
-        .actions { display: flex; align-items: center; gap: 16px; margin-top: 18px; flex-wrap: wrap; }
-        button { min-height: 44px; border: 0; border-radius: 6px; padding: 0 18px; background: #1f6f8b; color: #fff; font-weight: 700; cursor: pointer; }
-        .check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
-        .check input { min-height: auto; }
-        code { background: #eef2f7; padding: 2px 5px; border-radius: 4px; }
-        @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } main { padding-top: 20px; } }
+        .help { margin: 0; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.45; }
+        .compact-note { margin: 18px 0 0; padding: 13px 15px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.62); color: var(--muted); font-size: 13px; }
+        .notice { border-radius: 18px; padding: 13px 15px; margin: 0 0 14px; }
+        .ok { background: var(--ok-bg); border: 1px solid var(--ok-line); }
+        .bad { background: var(--bad-bg); border: 1px solid var(--bad-line); }
+        .actions { display: flex; align-items: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+        button, .button-link { min-height: 46px; border: 0; border-radius: 999px; padding: 0 21px; background: var(--accent); color: #fff; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font: inherit; text-decoration: none; }
+        button:hover, .button-link:hover { background: var(--accent-dark); text-decoration: none; }
+        button.secondary { background: rgba(0, 0, 0, 0.06); color: var(--text); }
+        button.secondary:hover { background: rgba(0, 0, 0, 0.10); }
+        .summary-list { display: grid; gap: 10px; margin: 18px 0 0; }
+        .summary-item { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+        .summary-item span:first-child { color: var(--muted); }
+        .summary-item span:last-child { font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+        .success { text-align: center; }
+        .success h2 { font-size: clamp(30px, 5vw, 46px); }
+        .success p { color: var(--muted); }
+        @media (max-width: 760px) {
+            main { width: min(100vw - 22px, 920px); padding-top: 24px; }
+            .grid, .steps { grid-template-columns: 1fr; }
+            .panel-header { display: grid; }
+            .summary-item { display: grid; gap: 4px; }
+            .summary-item span:last-child { text-align: left; }
+        }
     </style>
 </head>
 <body>
 <main>
-    <h1>Gallery CMS Installer 0.13</h1>
-    <p>Use this once to create the database, write <code>config.php</code>, run migrations, create folders, and add the first admin user. This installer applies the protected-gallery migrations, including passwords, listed/unlisted access, and share links.</p>
+    <section class="hero">
+        <h1>Set up your gallery.</h1>
+        <p>The installer only asks for what is required. Existing database, web admin account, done. Technical paths are prepared automatically.</p>
+    </section>
+
+    <div class="steps" aria-label="Installation steps">
+        <div class="step-pill<?php echo $currentStep === 1 ? ' is-active' : ($currentStep > 1 ? ' is-done' : ''); ?>">1. Gallery and database</div>
+        <div class="step-pill<?php echo $currentStep === 2 ? ' is-active' : ($currentStep > 2 ? ' is-done' : ''); ?>">2. Web admin</div>
+        <div class="step-pill<?php echo $currentStep === 3 ? ' is-active' : ''; ?>">3. Finished</div>
+    </div>
 
     <?php foreach ($errors as $error): ?>
         <div class="notice bad"><?php echo installer_e($error); ?></div>
@@ -455,101 +524,125 @@ $value = static function (string $name) use ($defaults): string {
             <?php foreach ($messages as $message): ?>
                 <div><?php echo installer_e($message); ?></div>
             <?php endforeach; ?>
-            <p>Installation finished. Open <a href="index.php?page=admin_login">the admin login</a>, then keep <code>cache/installed.lock</code> in place and optionally delete <code>install.php</code>.</p>
         </div>
     <?php endif; ?>
 
-    <form method="post" class="panel">
-        <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+    <?php if ($installationFinished): ?>
+        <section class="panel success">
+            <h2>Your gallery is ready.</h2>
+            <p>You will be redirected to the admin login in 5 seconds.</p>
+            <p><a class="button-link" href="<?php echo installer_e($adminUrl); ?>">Open admin login now</a></p>
+            <p>Keep <code>cache/installed.lock</code> in place. You can delete <code>install.php</code> after confirming the site works.</p>
+        </section>
+    <?php elseif ($currentStep === 1): ?>
+        <form method="post" class="panel">
+            <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+            <input type="hidden" name="installer_action" value="database_step">
 
-        <h2>Database Connection</h2>
-        <div class="grid">
-            <label>Host
-                <input name="db_host" value="<?php echo $value('db_host'); ?>" required>
-            </label>
-            <label>Port
-                <input name="db_port" value="<?php echo $value('db_port'); ?>" inputmode="numeric">
-            </label>
-            <label class="full">Database provisioning mode
-                <?php $selectedProvisioningMode = (string) ($_POST['db_provisioning_mode'] ?? $defaults['db_provisioning_mode']); ?>
-                <select name="db_provisioning_mode">
-                    <option value="existing_database_user"<?php echo $selectedProvisioningMode === 'existing_database_user' ? ' selected' : ''; ?>>Use existing database and existing database user</option>
-                    <option value="create_database_and_user"<?php echo $selectedProvisioningMode === 'create_database_and_user' ? ' selected' : ''; ?>>Create database and database user</option>
-                </select>
-                <span class="help">Use the existing-user mode on shared hosting. It skips <code>CREATE USER</code>, <code>GRANT</code>, and <code>FLUSH PRIVILEGES</code>, because those privileges are commonly blocked by hosting providers.</span>
-            </label>
-            <label>Database admin user
-                <input name="db_admin_user" value="<?php echo installer_e((string) ($_POST['db_admin_user'] ?? 'root')); ?>">
-                <span class="help">Only needed when the installer creates the database or database user.</span>
-            </label>
-            <label>Database admin password
-                <input name="db_admin_password" type="password">
-                <span class="help">Only needed when the installer creates the database or database user.</span>
-            </label>
-        </div>
+            <div class="panel-header">
+                <div>
+                    <h2>Gallery and database</h2>
+                    <p>Name the site and connect to the database your hosting already created.</p>
+                </div>
+            </div>
 
-        <div class="section">
-            <h2>Gallery Database</h2>
             <div class="grid">
+                <label class="full">Gallery name
+                    <input name="site_name" value="<?php echo $value('site_name'); ?>" maxlength="120" autocomplete="organization" required>
+                    <span class="help">This is the public title shown in the header and browser title. You can change it later in Admin.</span>
+                </label>
+
+                <label class="full">Domain
+                    <input name="base_url" value="<?php echo $value('base_url'); ?>" inputmode="url" autocomplete="url" required>
+                    <span class="help">The installer detected this from the current page. Confirm it, or adjust it if your public gallery uses a different domain such as <code>https://galerie.klusik.cz</code>.</span>
+                </label>
+
+                <label>Database server
+                    <input name="db_host" value="<?php echo $value('db_host'); ?>" autocomplete="off" placeholder="localhost">
+                    <span class="help">Leave empty if your hosting does not show it. The installer will use <code>localhost</code>.</span>
+                </label>
+
+                <label>Database port
+                    <input name="db_port" value="<?php echo $value('db_port'); ?>" inputmode="numeric" autocomplete="off" placeholder="Leave empty">
+                    <span class="help">Leave empty unless your hosting explicitly gives you a port. MySQL normally uses its default port automatically.</span>
+                </label>
+
                 <label>Database name
-                    <input name="db_name" value="<?php echo $value('db_name'); ?>" required>
+                    <input name="db_name" value="<?php echo $value('db_name'); ?>" autocomplete="off" required>
                 </label>
-                <label>App database user
-                    <input name="db_user" value="<?php echo $value('db_user'); ?>" required>
+
+                <label>Database user
+                    <input name="db_user" value="<?php echo $value('db_user'); ?>" autocomplete="username" required>
                 </label>
-                <label>App database password
-                    <input name="db_password" type="password" required>
-                </label>
-                <label>MySQL account host
-                    <input name="db_user_host" value="<?php echo $value('db_user_host'); ?>" placeholder="Auto">
-                    <span class="help">Only used in create mode. Leave empty for local installs. The installer will create both <code>127.0.0.1</code> and <code>localhost</code> users.</span>
-                </label>
-                <label class="full">Authentication plugin
-                    <select name="auth_plugin">
-                        <?php $selectedPlugin = (string) ($_POST['auth_plugin'] ?? $defaults['auth_plugin']); ?>
-                        <option value=""<?php echo $selectedPlugin === '' ? ' selected' : ''; ?>>Server default</option>
-                        <option value="caching_sha2_password"<?php echo $selectedPlugin === 'caching_sha2_password' ? ' selected' : ''; ?>>caching_sha2_password</option>
-                        <option value="mysql_native_password"<?php echo $selectedPlugin === 'mysql_native_password' ? ' selected' : ''; ?>>mysql_native_password</option>
-                    </select>
-                    <span class="help">Only used in create mode. Use <code>caching_sha2_password</code> for newer MySQL. MariaDB is automatically forced to server-default password syntax.</span>
+
+                <label class="full">Database password
+                    <input name="db_password" type="password" autocomplete="current-password" required>
+                    <span class="help">This is the password for the database user from your hosting control panel.</span>
                 </label>
             </div>
-        </div>
 
-        <div class="section">
-            <h2>Application</h2>
+            <p class="compact-note">The installer will not create a database or database user. Most shared hosting providers block that anyway. Use the database name, user, and password you already created in hosting administration.</p>
+
+            <div class="actions">
+                <button type="submit">Continue</button>
+            </div>
+        </form>
+    <?php elseif ($currentStep === 2): ?>
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Verified database</h2>
+                    <p>The installer can connect to your existing database.</p>
+                </div>
+                <form method="post">
+                    <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+                    <input type="hidden" name="installer_action" value="reset_database_step">
+                    <button class="secondary" type="submit">Change database</button>
+                </form>
+            </div>
+
+            <div class="summary-list">
+                <div class="summary-item"><span>Gallery</span><span><?php echo installer_e((string) ($setup['site_name'] ?? '')); ?></span></div>
+                <div class="summary-item"><span>Domain</span><span><?php echo installer_e((string) ($setup['base_url'] ?? '')); ?></span></div>
+                <div class="summary-item"><span>Database</span><span><?php echo installer_e((string) ($setup['database']['name'] ?? '')); ?></span></div>
+                <div class="summary-item"><span>Automatic galleries folder</span><span><?php echo installer_e($root . '/galleries'); ?></span></div>
+                <div class="summary-item"><span>Automatic ZIP cache folder</span><span><?php echo installer_e($root . '/cache/zips'); ?></span></div>
+            </div>
+        </section>
+
+        <form method="post" class="panel">
+            <input type="hidden" name="token" value="<?php echo installer_e((string) $_SESSION['installer_token']); ?>">
+            <input type="hidden" name="installer_action" value="admin_step">
+
+            <div class="panel-header">
+                <div>
+                    <h2>Web admin account</h2>
+                    <p>This is not the database admin. This account is used to log in to the gallery Admin area, upload photos, edit galleries, and manage settings.</p>
+                </div>
+            </div>
+
             <div class="grid">
-                <label class="full">Base URL
-                    <input name="base_url" value="<?php echo $value('base_url'); ?>">
+                <label>Admin username
+                    <input name="admin_username" value="<?php echo installer_e((string) ($_POST['admin_username'] ?? $defaults['admin_username'])); ?>" autocomplete="username" required>
                 </label>
-                <label class="full">Galleries folder
-                    <input name="galleries_root" value="<?php echo $value('galleries_root'); ?>" required>
+
+                <label>Admin password
+                    <input name="admin_password" type="password" autocomplete="new-password" required>
+                    <span class="help">Use at least 8 characters.</span>
                 </label>
-                <label class="full">ZIP cache folder
-                    <input name="zip_cache_path" value="<?php echo $value('zip_cache_path'); ?>" required>
+
+                <label class="full">Confirm admin password
+                    <input name="admin_password_confirm" type="password" autocomplete="new-password" required>
                 </label>
             </div>
-        </div>
 
-        <div class="section">
-            <h2>First Admin</h2>
-            <div class="grid">
-                <label>Username
-                    <input name="admin_username" value="<?php echo $value('admin_username'); ?>" required>
-                </label>
-                <label>Password
-                    <input name="admin_password" type="password" required>
-                </label>
+            <p class="compact-note">After this step the installer writes <code>config.php</code>, runs database migrations, creates <code>/galleries</code> and <code>/cache/zips</code>, creates the admin user, and locks itself.</p>
+
+            <div class="actions">
+                <button type="submit">Finish setup</button>
             </div>
-        </div>
-
-        <div class="actions">
-            <button type="submit">Install Gallery CMS</button>
-            <?php if (is_file($configFile)): ?>
-                <label class="check"><input type="checkbox" name="overwrite_config" value="1"> Overwrite existing config.php</label>
-            <?php endif; ?>
-        </div>
-    </form>
+        </form>
+    <?php endif; ?>
 </main>
 </body>
 </html>
