@@ -6,7 +6,7 @@
     "files": {
         ".htaccess": "sha256:c3a22b08fd1bdaa18c051f1bca98515c97f52b110bc8283bf7fbc73ced52077a",
         "ARCHITECTURE.md": "sha256:0deb8da88df902d635d9b081e3653fc9e9ace0428c732f26011fb8ff97f190d5",
-        "PATCH_NOTES.md": "sha256:2fa9c8295d2c4653c411afb132ddee9a92420b37e1c9437cd6027717d2128ffa",
+        "PATCH_NOTES.md": "sha256:c2709e8eb26d4a2962aa00b7e5faf05597d4ab8bf3ef9b39718862e2b1d43fff",
         "README.md": "sha256:eb599f8c159a377e7e8c961f7c2e1cdf82c36c1a9f6c143f8e15535629740cba",
         "app/bootstrap.php": "sha256:81dd1134602964e80f69faf1341e3ce1ed2dea53e6c8523ba3c6b59d0d7b0eb5",
         "app/controllers.php": "sha256:4a485d4291f18fde34237059656dbb1afa8ae2a56b54b909a52b6bc49319a5f7",
