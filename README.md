@@ -2,6 +2,66 @@
 
 A small PHP 8+ gallery CMS for ordinary shared hosting. Media discovery comes from the filesystem, while gallery, image, vote, user, and ZIP cache state are stored in MySQL or MariaDB.
 
+## Recommended Installation: One-File Web Installer
+
+For normal shared hosting, the easiest installation is the new one-file bootstrap installer.
+You upload one PHP file by FTP, open it in the browser, and it downloads the full gallery package from GitHub directly on the server.
+
+### Fast Shared-Hosting Install
+
+1. Create an empty MySQL or MariaDB database in your hosting control panel.
+2. Upload only this file to the target web directory:
+
+```text
+setup-gallery.php
+```
+
+3. Open it in your browser:
+
+```text
+https://example.com/setup-gallery.php
+```
+
+4. Click `Download and start installer`.
+5. The bootstrap installer downloads the gallery archive from GitHub, unpacks it into the current directory, creates `cache/bootstrap-installed.lock`, and redirects to:
+
+```text
+https://example.com/install.php
+```
+
+6. Continue through the normal browser installer:
+   - enter the gallery name
+   - enter the existing database server, database name, database user, and password
+   - create the first gallery admin account
+   - finish the installation
+
+The bootstrap installer is intentionally small. It only delivers the application files onto the server. Database configuration, admin creation, migrations, folders, and the final installation lock are handled by `install.php`.
+
+### Bootstrap Installer Safety Rules
+
+`setup-gallery.php` refuses to run when the gallery already appears to be installed.
+It stops when any of these files exist:
+
+```text
+config.php
+cache/installed.lock
+cache/bootstrap-installed.lock
+```
+
+This prevents accidental overwrites after the site is configured.
+The script is not deleted automatically, because some webhostings make file deletion unreliable from PHP. After a successful installation, you can delete `setup-gallery.php` manually by FTP as an extra hardening step.
+
+### Bootstrap Installer Requirements
+
+The one-file installer needs:
+
+- PHP 8.0 or newer
+- writable target web directory
+- PHP `ZipArchive`
+- outbound HTTPS access to GitHub through cURL or `allow_url_fopen`
+
+If the hosting provider disables outbound downloads or ZIP extraction, use the experienced-user install below and upload the full package manually.
+
 ## Requirements
 
 - PHP 8.0 or newer
@@ -11,13 +71,11 @@ A small PHP 8+ gallery CMS for ordinary shared hosting. Media discovery comes fr
 
 No WordPress, Composer packages, npm build step, or framework is required.
 
-## Setup
+## Experienced-User Installation
 
-The easiest setup path is the browser installer. It is meant for ordinary shared
-hosting, local Laragon/XAMPP-style installs, and cases where you do not want to
-run console commands.
+Use this path if you prefer uploading the complete package yourself, you are installing locally, or your hosting environment blocks the one-file bootstrap installer.
 
-### Browser Installer
+### Browser Installer After Full Upload
 
 1. Upload or copy all project files to your webserver.
 2. Open the site in your browser. The application automatically redirects the
