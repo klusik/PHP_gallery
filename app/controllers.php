@@ -1378,6 +1378,7 @@ function cms_admin(): void
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     $updateLabel = application_update_nav_label($updatePending);
     $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
+    $integrityStatus = integrity_status(false);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
@@ -1386,6 +1387,7 @@ function cms_admin(): void
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_integrity')) . '">System integrity</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     if ($migrationPending) {
         echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -1419,6 +1421,7 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     render_admin_thumbnail_maintenance_notice($thumbnailSummary);
+    render_admin_integrity_summary($integrityStatus);
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
@@ -1527,6 +1530,104 @@ function render_admin_feature_flag(bool $enabled, string $symbol, string $label)
 /**
  * Show and manage the admin log.
  */
+
+/**
+ * Render the compact admin dashboard integrity summary.
+ */
+function render_admin_integrity_summary(array $integrityStatus): void
+{
+    $status = (string) ($integrityStatus['status'] ?? 'error');
+    $label = integrity_status_label($status);
+    $modifiedCount = count((array) ($integrityStatus['modified'] ?? []));
+    $missingCount = count((array) ($integrityStatus['missing'] ?? []));
+    $unknownCount = count((array) ($integrityStatus['unknown'] ?? []));
+    $checkedAt = (string) ($integrityStatus['checked_at_iso'] ?? '');
+
+    echo '<section class="panel"><h2>System integrity</h2>';
+    echo '<p><strong>Status:</strong> ' . e($label) . '</p>';
+    if ($status === 'ok') {
+        echo '<p class="muted">Core PHP, HTML, CSS and JavaScript files match the installed manifest.</p>';
+    } elseif ($status === 'warning') {
+        echo '<p class="notice">Core files match, but ' . (int) $unknownCount . ' unknown core-like file(s) were found.</p>';
+    } elseif ($status === 'modified') {
+        echo '<p class="notice">Detected ' . (int) $modifiedCount . ' modified and ' . (int) $missingCount . ' missing core file(s).</p>';
+    } else {
+        echo '<p class="notice">' . e((string) ($integrityStatus['manifest_error'] ?? 'Integrity check failed.')) . '</p>';
+    }
+    if ($checkedAt !== '') {
+        echo '<p class="muted">Last checked: ' . e($checkedAt) . '</p>';
+    }
+    echo '<p><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Show details</a></p>';
+    echo '</section>';
+}
+
+/**
+ * Render a list of integrity paths.
+ */
+function render_admin_integrity_path_list(string $title, array $paths): void
+{
+    echo '<h3>' . e($title) . '</h3>';
+    if (!$paths) {
+        echo '<p class="muted">None.</p>';
+        return;
+    }
+
+    echo '<ul>';
+    foreach ($paths as $path) {
+        echo '<li><code>' . e((string) $path) . '</code></li>';
+    }
+    echo '</ul>';
+}
+
+/**
+ * Show and refresh the admin-only system integrity check.
+ */
+function cms_admin_integrity(): void
+{
+    require_admin();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        verify_csrf();
+        $status = integrity_status(true);
+        admin_log_event('info', 'integrity.checked', 'Admin ran the system integrity check.', [
+            'status' => (string) ($status['status'] ?? 'unknown'),
+            'modified' => count((array) ($status['modified'] ?? [])),
+            'missing' => count((array) ($status['missing'] ?? [])),
+            'unknown' => count((array) ($status['unknown'] ?? [])),
+        ]);
+        redirect_to(url_for('admin_integrity', ['checked' => 1]));
+    }
+
+    $status = integrity_status(false);
+    render_header('System integrity');
+    echo '<section class="hero"><h1>System integrity</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<form method="post" action="' . e(url_for('admin_integrity')) . '" class="inline-action-form">' . csrf_field();
+    echo '<button type="submit">Check now</button>';
+    echo '</form>';
+    echo '</nav></section>';
+
+    if (isset($_GET['checked'])) {
+        echo '<div class="notice">Integrity check completed.</div>';
+    }
+
+    echo '<section class="panel">';
+    echo '<h2>Status: ' . e(integrity_status_label((string) ($status['status'] ?? 'error'))) . '</h2>';
+    echo '<p><strong>Manifest version:</strong> ' . e((string) ($status['version'] ?? '')) . '</p>';
+    echo '<p><strong>Last checked:</strong> ' . e((string) ($status['checked_at_iso'] ?? '')) . '</p>';
+
+    if (!empty($status['manifest_error'])) {
+        echo '<p class="notice">' . e((string) $status['manifest_error']) . '</p>';
+    }
+
+    render_admin_integrity_path_list('Modified core files', (array) ($status['modified'] ?? []));
+    render_admin_integrity_path_list('Missing core files', (array) ($status['missing'] ?? []));
+    render_admin_integrity_path_list('Unknown core-like files', (array) ($status['unknown'] ?? []));
+    echo '<p class="muted">Ignored folders include cache, galleries, custom CSS, local config, and common hosting/runtime files.</p>';
+    echo '</section>';
+    render_footer();
+}
+
 function cms_admin_logs(): void
 {
     require_admin();
@@ -3003,7 +3104,7 @@ function cms_theme_css(): void
     echo '.theme-background-base,.theme-background-image{position:absolute;inset:0;}';
     echo '.theme-background-base{background:var(--paper);}';
     echo '.theme-background-image{background-image:' . ($themeBackground !== '' ? 'url("' . css_value($themeBackground) . '")' : 'none') . ';background-size:cover;background-position:center center;background-repeat:no-repeat;opacity:' . number_format($backgroundOpacity / 100, 2, '.', '') . ';}';
-    echo '.public-page > *:not(.theme-background-shell):not(.map-overlay):not(.lightbox):not(.runtime-style-warning){position:relative;z-index:1;}';
+    echo '.public-page > *:not(.theme-background-shell):not(.map-overlay):not(.lightbox){position:relative;z-index:1;}';
     echo 'a{color:var(--accent-dark);}';
     echo '.site-header{background:rgba(255,255,255,0.10);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08);border-color:rgba(255,255,255,0.22);padding:clamp(1rem,3vw,2rem);margin-bottom:1rem;border-radius:var(--radius);}';
     echo '.admin-page .site-header{background:var(--paper);border-color:var(--line);}';

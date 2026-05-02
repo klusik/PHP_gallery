@@ -11,6 +11,7 @@ require __DIR__ . '/database.php';
 require __DIR__ . '/security.php';
 require __DIR__ . '/migrations.php';
 require __DIR__ . '/services.php';
+require __DIR__ . '/integrity.php';
 require __DIR__ . '/controllers.php';
 
 /**
@@ -135,6 +136,7 @@ function cms_run(): void
         'admin_account' => 'cms_admin_account',
         'admin_update' => 'cms_admin_update',
         'admin_reset' => 'cms_admin_reset',
+        'admin_integrity' => 'cms_admin_integrity',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',

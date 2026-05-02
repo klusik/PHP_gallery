@@ -1,62 +1,4 @@
 (() => {
-    const runtimeInlineStyleSelector = [
-        '[data-inline-style-allowed="true"]',
-        '.map-overlay',
-        '.lightbox-map-split',
-        '.leaflet-container',
-        '.leaflet-pane',
-        '.leaflet-tile-pane',
-        '.leaflet-tile-container',
-        '.leaflet-layer',
-        '.leaflet-tile',
-        '.leaflet-marker-icon',
-        '.leaflet-marker-shadow',
-        '.leaflet-popup',
-        '.leaflet-control',
-    ].join(',');
-
-    // Allow a small set of runtime-managed inline styles used by the app.
-    function isAllowedRuntimeInlineStyle(node) {
-        return Boolean(
-            node &&
-            (
-                node.dataset?.inlineStyleAllowed === 'true' ||
-                node.closest?.(runtimeInlineStyleSelector)
-            )
-        );
-    }
-
-    function showCompromiseWarning() {
-        if (!document.body || document.querySelector('[data-runtime-style-warning]')) {
-            return;
-        }
-        const warning = document.createElement('div');
-        warning.className = 'runtime-style-warning';
-        warning.dataset.runtimeStyleWarning = 'true';
-        warning.textContent = 'Unexpected inline styles were detected. The page was not modified by the theme system.';
-        document.body.prepend(warning);
-    }
-
-    // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
-    function hasUnauthorizedInlineStyle() {
-        return Array.from(document.querySelectorAll('[style]')).some((node) => !isAllowedRuntimeInlineStyle(node));
-    }
-
-    // Function `detectInlineStyleTampering` executes this focused behavior.
-    function detectInlineStyleTampering() {
-        if (hasUnauthorizedInlineStyle()) {
-            showCompromiseWarning();
-        }
-    }
-
-    detectInlineStyleTampering();
-    new MutationObserver(detectInlineStyleTampering).observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['style'],
-        childList: true,
-        subtree: true,
-    });
-
     function setupThemeOverrideForm() {
         const form = document.querySelector('[data-theme-form]');
         if (!form) {
@@ -1388,7 +1330,6 @@
             overlay = document.createElement('div');
             overlay.className = 'map-overlay';
             overlay.dataset.mapOverlay = 'true';
-            overlay.dataset.inlineStyleAllowed = 'true';
             overlay.innerHTML = '<div class="map-dialog"><button type="button" class="map-close" data-map-close>Close</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.</p></div>';
             document.body.append(overlay);
             overlay.addEventListener('click', (event) => {
