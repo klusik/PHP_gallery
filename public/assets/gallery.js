@@ -411,6 +411,12 @@
         lightboxVoteIndicator.textContent = vote === '1' ? 'Voted up' : vote === '-1' ? 'Voted down' : 'No vote';
     }
 
+    function clearLightboxStageFocus() {
+        if (stageLink && document.activeElement === stageLink) {
+            stageLink.blur();
+        }
+    }
+
     let activeLightboxImageToken = 0;
 
     function clearPendingFullImageSwap() {
@@ -773,7 +779,8 @@
         const action = actionTarget?.dataset.lightboxAction;
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
-            toggleLightboxFullscreen();
+            clearLightboxStageFocus();
+            toggleLightboxFullscreen().finally(clearLightboxStageFocus);
             return;
         }
         if (action === 'close' || event.target === overlay) {
@@ -806,6 +813,14 @@
 
     if (lightboxMapSplitClose) {
         lightboxMapSplitClose.addEventListener('click', closeLightboxMapSplit);
+    }
+
+    if (stageLink) {
+        stageLink.addEventListener('mousedown', (event) => {
+            if (event.button === 0) {
+                event.preventDefault();
+            }
+        });
     }
 
     overlay.addEventListener('mousemove', showLightboxHud);
@@ -931,6 +946,7 @@
                 // Ignore fullscreen exit failures.
             }
         }
+        clearLightboxStageFocus();
         debugLightbox('exit');
     }
 
@@ -943,6 +959,7 @@
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
             document.body.classList.remove('has-mobile-lightbox');
+            clearLightboxStageFocus();
             debugLightbox('sync:browser-exit');
             return;
         }

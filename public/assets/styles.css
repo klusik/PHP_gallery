@@ -774,6 +774,19 @@ td {
     cursor: zoom-in;
 }
 
+.lightbox-stage-link:hover,
+.lightbox-stage-link:focus,
+.lightbox-stage-link:focus-visible,
+.lightbox-stage-link:active {
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+
+.lightbox-stage-link::-moz-focus-inner {
+    border: 0 !important;
+}
+
 .lightbox.is-fullscreen .lightbox-stage-link,
 .lightbox.is-mobile-fullscreen .lightbox-stage-link {
     width: 100%;

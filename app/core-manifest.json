@@ -1,6 +1,6 @@
 {
   "version": "0.43",
-  "generated_at": "2026-05-02T19:04:09Z",
+  "generated_at": "2026-05-02T19:24:17Z",
   "algorithm": "sha256",
   "files": {
     ".htaccess": "sha256:c3a22b08fd1bdaa18c051f1bca98515c97f52b110bc8283bf7fbc73ced52077a",
@@ -8,7 +8,7 @@
     "PATCH_NOTES.md": "sha256:c1ef50c268834a714e97311daa9bc84541466fe2d74537a9db993e0d69083f99",
     "README.md": "sha256:eb599f8c159a377e7e8c961f7c2e1cdf82c36c1a9f6c143f8e15535629740cba",
     "app/bootstrap.php": "sha256:5f139eba3a6aa9857844fd0106c05c5945aa03a4bdd57fc4454cfd8dffefaf73",
-    "app/controllers.php": "sha256:cd8eaf754be9e3bbc4c53be486e644c981a08735d8573995fce04b891484641e",
+    "app/controllers.php": "sha256:7d5fdf2cc97abd35b57ec4dc65822905cd6661f5fd787ca5f3356f59cc076dfc",
     "app/database.php": "sha256:6cea4b37bb48aa59dc88d822900ad9938029cb266adbc9ad7b38c26c25356e00",
     "app/helpers.php": "sha256:ec007a8853ec7a0d6aa9a019efe1404a82f17f6191795e7c73afe6f51125f922",
     "app/integrity.php": "sha256:0bb1529ffc3973c76bd45f65a7c3fa1077c65325f3023438b4c883309f06be25",
@@ -32,8 +32,8 @@
     "index.php": "sha256:06517e86dfe03f91d0f71d12f52332eaec353b762bf31735a2c11c9c33eff457",
     "install.php": "sha256:2053894408c7a9154f9559778036806042a8a04a3a7cae774ec5128f0c0c4b9b",
     "public/.htaccess": "sha256:934ac0c2dc81aa01124cfe13217b4cb8e6ab3a471f520838a2d006df2d6e3293",
-    "public/assets/gallery.js": "sha256:873dcdb05e49212b037472477c3d9833af7ce07df0bad9d174ff6346e7c3ea33",
-    "public/assets/styles.css": "sha256:84a6eae1301f9db9cefb71c345812715734a7de39707215682734d5d5753722e",
+    "public/assets/gallery.js": "sha256:dcad938241f8fd3dea4fc5dade081fa477487ee527230232c17405aa47ef8f76",
+    "public/assets/styles.css": "sha256:84349927747f238eaa3c7e0f9fcad9121eccfb64eb45972611b3c285c73f5986",
     "public/index.php": "sha256:6dc300692f167f5f04b1963b58c347f9274d67969cf9c499549ca90a429d7f4a",
     "reset.php": "sha256:7ce488ba8cc93ac4952f98b89e550fb1d7fd9748334b0e6ef5b9f70105d4f151",
     "scripts/create_admin.php": "sha256:e53cad5ca4dfde516ed84bdd086410d07157120ae31bba32c780b2f19747cee0",
