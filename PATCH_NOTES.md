@@ -39,6 +39,7 @@ Additional improvements:
 - Removal of database creation logic
 - Reduced number of installer fields
 - Immediate validation of database connectivity
+- Admin redirects now land on clean URLs after destructive or expensive actions, so gallery deletes, migrations, and thumbnail regeneration do not leave repeatable action parameters in the address bar.
 - Clearer explanation of each step
 - Cleaner separation between setup phases
 - Automatic redirect after installation with visible fallback link
