@@ -383,6 +383,29 @@ function redirect_to(string $url): never
 }
 
 /**
+ * Store or retrieve a one-time flash message in the active session.
+ */
+function flash_message(string $key, ?string $message = null): ?string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return $message;
+    }
+
+    if ($message !== null) {
+        $_SESSION['flash_messages'][$key] = $message;
+        return null;
+    }
+
+    if (!isset($_SESSION['flash_messages'][$key])) {
+        return null;
+    }
+
+    $value = (string) $_SESSION['flash_messages'][$key];
+    unset($_SESSION['flash_messages'][$key]);
+    return $value;
+}
+
+/**
  * Normalize the current HTTP method for simple route guards.
  */
 function request_method(): string

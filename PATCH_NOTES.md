@@ -2,6 +2,53 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+
+
+## Version 0.46
+
+Version 0.46 focuses on the first-run installation experience. The installer has been redesigned into a simpler guided flow that avoids exposing technical configuration that the application can safely derive on its own.
+
+The installation process is now split into a clear two-step flow:
+
+Step 1:
+- Gallery name
+- Database server
+- Optional database port
+- Database name
+- Database username
+- Database password
+
+The installer now expects an existing database instead of attempting to create one. This aligns with how most shared hosting environments operate.
+
+The database connection is validated immediately. The user can only continue once the connection is confirmed to work.
+
+Step 2:
+- Admin username
+- Admin password
+
+The installer clearly distinguishes between database credentials and gallery admin credentials. The admin account is used for logging into the gallery itself and is not related to the database user.
+
+The installer no longer exposes internal configuration such as Base URL, galleries path, or cache paths. These values are now derived automatically using safe defaults:
+
+/galleries
+/cache/zips
+
+The detected domain is used automatically and only confirmed, rather than manually configured.
+
+Additional improvements:
+- Removal of database creation logic
+- Reduced number of installer fields
+- Immediate validation of database connectivity
+- Admin redirects now land on clean URLs after destructive or expensive actions, so gallery deletes, migrations, and thumbnail regeneration do not leave repeatable action parameters in the address bar.
+- Clearer explanation of each step
+- Cleaner separation between setup phases
+- Automatic redirect after installation with visible fallback link
+
+The installer now follows a simplified flow:
+Name the gallery, connect to database, create admin account, start using the application.
+
+This significantly reduces the cognitive load during installation and makes the system usable without requiring technical knowledge of filesystem paths or URL configuration.
+
 ## Version 0.45 – Diagnostics, Stability & UX Refinement
 
 ### 🔬 Dev Mode (Admin-only Diagnostics Overlay)

@@ -1398,6 +1398,10 @@ function cms_admin(): void
     echo '<button type="submit" class="secondary">Regenerate paths</button>';
     echo '</form>';
     echo '</nav></section>';
+    $adminNotice = (string) flash_message('admin_notice');
+    if ($adminNotice !== '') {
+        echo '<div class="notice">' . e($adminNotice) . '</div>';
+    }
     if (isset($_GET['deleted_galleries'])) {
         echo '<div class="notice">Deleted ' . (int) $_GET['deleted_galleries'] . ' gallery folder(s).</div>';
     } elseif (isset($_GET['delete_error'])) {
@@ -1506,7 +1510,8 @@ function cms_admin_devmode(): void
     }
     verify_csrf();
     set_dev_mode_enabled(isset($_POST['dev_mode_enabled']));
-    redirect_to(url_for('admin', ['devmode_saved' => 1]));
+    flash_message('admin_notice', 'Dev mode setting saved.');
+    redirect_to(url_for('admin'));
 }
 
 /**
@@ -1850,7 +1855,8 @@ function cms_admin_import(): void
     }
     // Variable $result stores this steps working value.
     $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
-    redirect_to(url_for('admin', $result));
+    flash_message('admin_notice', 'Imported ' . (int) ($result['imported'] ?? 0) . ' gallery folder(s) and created ' . (int) ($result['thumbnails'] ?? 0) . ' thumbnail(s).');
+    redirect_to(url_for('admin'));
 }
 
 /**
@@ -1875,7 +1881,8 @@ function cms_admin_new_gallery(): void
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
             ]);
-            redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
+            flash_message('admin_notice', 'Gallery folder created.');
+            redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
         } catch (Throwable $exception) {
             $error = $exception->getMessage();
             admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
@@ -2055,13 +2062,15 @@ function cms_admin_bulk_galleries(): void
         foreach ($galleryIds as $galleryId) {
             $count += scan_gallery_images($galleryId);
         }
-        redirect_to(url_for('admin', ['scanned' => $count]));
+        flash_message('admin_notice', 'Scanned ' . $count . ' image record(s).');
+        redirect_to(url_for('admin'));
     }
     if ($action === 'thumbs') {
         foreach ($galleryIds as $galleryId) {
             $count += create_gallery_thumbnails($galleryId);
         }
-        redirect_to(url_for('admin', ['thumbnails' => $count]));
+        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        redirect_to(url_for('admin'));
     }
     if ($action === 'delete' && $galleryIds) {
         try {
@@ -2071,13 +2080,15 @@ function cms_admin_bulk_galleries(): void
                 'deleted_roots' => (int) $deleted['root_count'],
                 'deleted_rows' => (int) $deleted['row_count'],
             ]);
-            redirect_to(url_for('admin', ['deleted_galleries' => (int) $deleted['root_count']]));
+            flash_message('admin_notice', 'Deleted ' . (int) $deleted['root_count'] . ' gallery folder(s).');
+            redirect_to(url_for('admin'));
         } catch (Throwable $exception) {
             admin_log_event('error', 'gallery.bulk_delete_failed', 'Bulk gallery delete failed.', [
                 'gallery_ids' => $galleryIds,
                 'exception' => $exception->getMessage(),
             ]);
-            redirect_to(url_for('admin', ['delete_error' => $exception->getMessage()]));
+            flash_message('admin_notice', 'Gallery delete failed: ' . $exception->getMessage());
+            redirect_to(url_for('admin'));
         }
     }
     if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
@@ -2093,7 +2104,8 @@ function cms_admin_bulk_galleries(): void
                 write_gallery_sidecar($gallery);
             }
         }
-        redirect_to(url_for('admin', ['updated' => count($galleryIds)]));
+        flash_message('admin_notice', 'Updated ' . count($galleryIds) . ' gallery folder(s).');
+        redirect_to(url_for('admin'));
     }
     if (in_array($action, ['maps_on', 'maps_off'], true) && $galleryIds) {
         if (!exif_gps_schema_ready()) {
@@ -2101,7 +2113,8 @@ function cms_admin_bulk_galleries(): void
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            redirect_to(url_for('admin', ['migration_required' => 1]));
+            flash_message('admin_notice', 'GPS maps require the latest database migration.');
+            redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
@@ -2116,7 +2129,8 @@ function cms_admin_bulk_galleries(): void
             $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([$action === 'maps_on' ? 1 : 0, now_sql()], $expandedIds));
         }
-        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        redirect_to(url_for('admin'));
     }
     if (in_array($action, ['vote_on', 'vote_off'], true) && $galleryIds) {
         if (!gallery_voting_schema_ready()) {
@@ -2124,7 +2138,8 @@ function cms_admin_bulk_galleries(): void
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            redirect_to(url_for('admin', ['migration_required' => 1]));
+            flash_message('admin_notice', 'Voting requires the latest database migration.');
+            redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
@@ -2143,7 +2158,8 @@ function cms_admin_bulk_galleries(): void
                 $stmt->execute(array_merge([now_sql()], $expandedIds));
             }
         }
-        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        redirect_to(url_for('admin'));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
         if (!admin_feature_schema_ready()) {
@@ -2151,7 +2167,8 @@ function cms_admin_bulk_galleries(): void
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            redirect_to(url_for('admin', ['migration_required' => 1]));
+            flash_message('admin_notice', 'Picture game requires the latest database migration.');
+            redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
@@ -2170,7 +2187,8 @@ function cms_admin_bulk_galleries(): void
                 $stmt->execute(array_merge([now_sql()], $expandedIds));
             }
         }
-        redirect_to(url_for('admin', ['updated' => count($expandedIds)]));
+        flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        redirect_to(url_for('admin'));
     }
     redirect_to(url_for('admin'));
 }
@@ -2186,13 +2204,16 @@ function cms_admin_run_migrations(): void
         $ran = run_migrations();
         if ($ran) {
             admin_log_event('info', 'migrations.ran', 'Admin ran pending migrations.', ['versions' => $ran]);
-            redirect_to(url_for('admin', ['migrations_ran' => implode(', ', $ran)]));
+            flash_message('admin_notice', 'Applied migrations: ' . implode(', ', $ran) . '.');
+            redirect_to(url_for('admin'));
         }
         admin_log_event('info', 'migrations.current', 'Admin checked migrations and database was already current.');
-        redirect_to(url_for('admin', ['migrations_current' => 1]));
+        flash_message('admin_notice', 'Database is already current.');
+        redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
         admin_log_event('error', 'migrations.failed', 'Admin migration run failed.', ['exception' => $exception->getMessage()]);
-        redirect_to(url_for('admin', ['migration_failed' => $exception->getMessage()]));
+        flash_message('admin_notice', 'Migration failed: ' . $exception->getMessage());
+        redirect_to(url_for('admin'));
     }
 }
 
@@ -2210,13 +2231,11 @@ function cms_admin_regenerate_paths(): void
     verify_csrf();
     try {
         $result = regenerate_public_paths();
-        redirect_to(url_for('admin', [
-            'paths_regenerated' => 1,
-            'gallery_paths' => (int) $result['galleries'],
-            'image_paths' => (int) $result['images'],
-        ]));
+        flash_message('admin_notice', 'Regenerated clean public paths. Updated ' . (int) $result['galleries'] . ' gallery path(s) and ' . (int) $result['images'] . ' image path(s).');
+        redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
-        redirect_to(url_for('admin', ['paths_error' => $exception->getMessage()]));
+        flash_message('admin_notice', 'Path regeneration failed: ' . $exception->getMessage());
+        redirect_to(url_for('admin'));
     }
 }
 
@@ -2236,7 +2255,8 @@ function cms_admin_create_thumbnails(): void
     if (($_POST['scope'] ?? '') === 'all') {
         // Variable $count stores this steps working value.
         $count = create_all_thumbnails();
-        redirect_to(url_for('admin', ['thumbnails' => $count]));
+        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        redirect_to(url_for('admin'));
     }
     // Variable $galleryId stores this steps working value.
     $galleryId = (int) ($_POST['thumbnail_gallery_id'] ?? $_POST['gallery_id'] ?? 0);
@@ -2250,12 +2270,14 @@ function cms_admin_create_thumbnails(): void
                 $count += create_image_thumbnails($image, $gallery);
             }
         }
-        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
+        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
     if ($gallery) {
         // Variable $count stores this steps working value.
         $count = create_gallery_thumbnails($galleryId);
-        redirect_to(url_for('admin', ['thumbnails' => $count]));
+        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        redirect_to(url_for('admin'));
     }
     redirect_to(url_for('admin'));
 }
@@ -2389,7 +2411,8 @@ function cms_admin_scan_images(): void
     foreach ($galleryIds as $galleryId) {
         $count += scan_gallery_images((int) $galleryId);
     }
-    redirect_to(url_for('admin', ['scanned' => $count]));
+    flash_message('admin_notice', 'Scanned ' . $count . ' image record(s).');
+    redirect_to(url_for('admin'));
 }
 
 /**
@@ -2476,7 +2499,8 @@ function cms_admin_edit_gallery(): void
                     'error' => $exception->getMessage(),
                 ]);
                 $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
-                redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'move_failed' => 1]));
+                flash_message('admin_notice', 'Gallery folder move failed: ' . $exception->getMessage());
+                redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
             }
         }
         // Variable $coverImageId stores this steps working value.
@@ -2573,11 +2597,12 @@ function cms_admin_edit_gallery(): void
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
-        $params = ['id' => $gallery['id'], 'saved' => 1];
+        $notice = 'Gallery saved.';
         if (!empty($moveResult['moved'])) {
-            $params['moved'] = 1;
+            $notice = 'Gallery saved and folder moved.';
         }
-        redirect_to(url_for('admin_edit_gallery', $params));
+        flash_message('admin_notice', $notice);
+        redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
     }
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
@@ -2586,6 +2611,10 @@ function cms_admin_edit_gallery(): void
     unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
     if ($galleryError !== '') {
         echo '<div class="notice">Gallery folder move failed: ' . e($galleryError) . '</div>';
+    }
+    $galleryNotice = (string) flash_message('admin_notice');
+    if ($galleryNotice !== '') {
+        echo '<div class="notice">' . e($galleryNotice) . '</div>';
     }
     if (isset($_GET['created'])) {
         echo '<div class="notice">Gallery folder created.</div>';
@@ -2728,7 +2757,8 @@ function cms_admin_bulk_images(): void
         if ($updated) {
             write_gallery_sidecar($updated);
         }
-        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'saved' => 1]));
+        flash_message('admin_notice', 'Gallery saved.');
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
     if (in_array($action, ['draft', 'public', 'private'], true)) {
         // Variable $placeholders stores this steps working value.
@@ -2745,9 +2775,11 @@ function cms_admin_bulk_images(): void
                 $count += create_image_thumbnails($image, $gallery);
             }
         }
-        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'thumbnails' => $count]));
+        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
-    redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId, 'updated' => count($ownedIds)]));
+    flash_message('admin_notice', 'Updated ' . count($ownedIds) . ' image(s).');
+    redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
 }
 
 /**
