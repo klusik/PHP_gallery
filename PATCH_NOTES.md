@@ -6,6 +6,7 @@ Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
 ### Major Changes
 
+- Added theme-managed favicon setup with admin upload, square crop preview, generated PNG icon sizes, and public favicon links.
 - Added slug-based public URLs for files so image pages can use stable, readable paths.
 - Optimized routing and public-path handling so gallery and file URLs resolve with less overhead.
 - Improved cache handling for public pages and navigation so repeated requests reuse more of the generated state.

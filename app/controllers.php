@@ -919,6 +919,8 @@ function cms_admin_theme(): void
                 unlink(custom_css_path());
             }
             set_app_setting('custom_css_preset', '');
+        } elseif (!empty($_POST['reset_favicon'])) {
+            remove_stored_favicon();
         } elseif (!empty($_POST['reset_theme_background'])) {
             $path = theme_background_path();
             if ($path !== null) {
@@ -956,6 +958,16 @@ function cms_admin_theme(): void
                     move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
                     set_app_setting('custom_css_preset', 'uploaded');
                     $customCssChanged = true;
+                }
+            }
+            if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
+                $name = strtolower((string) ($_FILES['favicon_source']['name'] ?? ''));
+                if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    $info = @getimagesize((string) $_FILES['favicon_source']['tmp_name']);
+                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                        throw new RuntimeException('The uploaded favicon source is not a valid image.');
+                    }
+                    store_uploaded_favicon($_FILES['favicon_source'], (string) ($_POST['favicon_cropped_png'] ?? '') ?: null);
                 }
             }
             if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
@@ -1001,6 +1013,18 @@ function cms_admin_theme(): void
     echo '<label>Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control></label>';
     echo '<label>Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control></label>';
     echo '<label>Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control></label>';
+    echo '<fieldset class="form-grid"><legend>Favicon</legend>';
+    $faviconUrl = favicon_asset_url();
+    if ($faviconUrl !== '') {
+        $faviconVersion = (string) app_setting('favicon_version', '1');
+        echo '<div class="favicon-current"><img src="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '" alt="Current favicon"><p class="muted">Current favicon is generated as 32px, 48px, and 180px PNG variants.</p></div>';
+    } else {
+        echo '<p class="muted">No favicon is stored yet. Browsers will use their default icon until one is saved.</p>';
+    }
+    echo '<label>Favicon source image<input type="file" name="favicon_source" accept="image/png,image/jpeg,image/gif,image/webp,image/*" data-favicon-input><span class="muted">Upload a square-friendly photo or logo. The cropper saves a browser-ready square PNG favicon.</span></label>';
+    echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
+    echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">Drag the image to place the square crop. The small preview shows the browser icon scale.</span></div></div>';
+    echo '</fieldset>';
     echo '<fieldset class="form-grid"><legend>Background</legend>';
     echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
     $themeBackgroundUrl = theme_background_asset_url();
@@ -1026,7 +1050,7 @@ function cms_admin_theme(): void
     echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button></div></form></section>';
+    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div></form></section>';
     render_footer();
 }
 
@@ -1049,6 +1073,28 @@ function cms_theme_background_asset(): void
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($absolute));
     header('Cache-Control: public, max-age=86400');
+    readfile($absolute);
+}
+
+/**
+ * Stream the stored favicon image variant.
+ */
+function cms_favicon_asset(): void
+{
+    $size = favicon_safe_size((int) ($_GET['s'] ?? 32));
+    $relative = favicon_path($size);
+    if ($relative === null) {
+        cms_not_found();
+        return;
+    }
+    $absolute = dirname(__DIR__) . '/' . ltrim($relative, '/');
+    if (!is_file($absolute)) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: image/png');
+    header('Content-Length: ' . (string) filesize($absolute));
+    header('Cache-Control: public, max-age=604800');
     readfile($absolute);
 }
 

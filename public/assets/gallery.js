@@ -86,6 +86,99 @@
         }
     }
 
+
+    function setupFaviconCropper() {
+        const input = document.querySelector('[data-favicon-input]');
+        const cropper = document.querySelector('[data-favicon-cropper]');
+        const canvas = document.querySelector('[data-favicon-canvas]');
+        const preview = document.querySelector('[data-favicon-preview]');
+        const zoom = document.querySelector('[data-favicon-zoom]');
+        const output = document.querySelector('[data-favicon-cropped]');
+        if (!input || !cropper || !canvas || !preview || !zoom || !output) {
+            return;
+        }
+        const context = canvas.getContext('2d');
+        const previewContext = preview.getContext('2d');
+        const image = new Image();
+        let imageLoaded = false;
+        let dragging = false;
+        let lastPointerX = 0;
+        let lastPointerY = 0;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        function drawFaviconCrop() {
+            if (!imageLoaded) {
+                return;
+            }
+            const scale = Math.max(canvas.width / image.width, canvas.height / image.height) * Number(zoom.value || 1);
+            const drawWidth = image.width * scale;
+            const drawHeight = image.height * scale;
+            const minOffsetX = canvas.width - drawWidth;
+            const minOffsetY = canvas.height - drawHeight;
+            offsetX = Math.min(0, Math.max(minOffsetX, offsetX));
+            offsetY = Math.min(0, Math.max(minOffsetY, offsetY));
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+            context.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+            previewContext.clearRect(0, 0, preview.width, preview.height);
+            previewContext.drawImage(canvas, 0, 0, preview.width, preview.height);
+            output.value = canvas.toDataURL('image/png');
+        }
+
+        input.addEventListener('change', () => {
+            const file = input.files && input.files[0] ? input.files[0] : null;
+            output.value = '';
+            if (!file || !file.type.startsWith('image/')) {
+                cropper.hidden = true;
+                imageLoaded = false;
+                return;
+            }
+            const reader = new FileReader();
+            reader.addEventListener('load', () => {
+                image.addEventListener('load', () => {
+                    imageLoaded = true;
+                    zoom.value = '1';
+                    const baseScale = Math.max(canvas.width / image.width, canvas.height / image.height);
+                    offsetX = (canvas.width - image.width * baseScale) / 2;
+                    offsetY = (canvas.height - image.height * baseScale) / 2;
+                    cropper.hidden = false;
+                    drawFaviconCrop();
+                }, {once: true});
+                image.src = String(reader.result || '');
+            });
+            reader.readAsDataURL(file);
+        });
+
+        zoom.addEventListener('input', drawFaviconCrop);
+        zoom.addEventListener('change', drawFaviconCrop);
+        canvas.addEventListener('pointerdown', (event) => {
+            if (!imageLoaded) {
+                return;
+            }
+            dragging = true;
+            lastPointerX = event.clientX;
+            lastPointerY = event.clientY;
+            canvas.setPointerCapture(event.pointerId);
+        });
+        canvas.addEventListener('pointermove', (event) => {
+            if (!dragging) {
+                return;
+            }
+            offsetX += event.clientX - lastPointerX;
+            offsetY += event.clientY - lastPointerY;
+            lastPointerX = event.clientX;
+            lastPointerY = event.clientY;
+            drawFaviconCrop();
+        });
+        canvas.addEventListener('pointerup', () => {
+            dragging = false;
+        });
+        canvas.addEventListener('pointercancel', () => {
+            dragging = false;
+        });
+    }
+
     // Submit votes through fetch so the selected state and score update without
     // leaving the lightbox/gallery page.
     document.addEventListener('submit', async (event) => {
@@ -162,6 +255,7 @@
     setupAdminLogStatusForms();
     setupGpsMaps();
     setupThemeOverrideForm();
+    setupFaviconCropper();
 
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.

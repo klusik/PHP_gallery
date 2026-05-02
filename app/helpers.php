@@ -464,6 +464,14 @@ function render_header(string $title): void
     echo '<!doctype html><html lang="cs" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
+    // Variable $faviconUrl stores this steps working value.
+    $faviconUrl = favicon_asset_url();
+    if ($faviconUrl !== '') {
+        $faviconVersion = (string) app_setting('favicon_version', '1');
+        echo '<link rel="icon" type="image/png" sizes="32x32" href="' . e($faviconUrl) . '&s=32&v=' . e($faviconVersion) . '">';
+        echo '<link rel="icon" type="image/png" sizes="48x48" href="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '">';
+        echo '<link rel="apple-touch-icon" sizes="180x180" href="' . e($faviconUrl) . '&s=180&v=' . e($faviconVersion) . '">';
+    }
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
