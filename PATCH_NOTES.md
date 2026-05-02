@@ -2,6 +2,22 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.47
+
+Version 0.47 adds the new online gallery setup flow in `setup-gallery.php`. The repository now includes a one-file bootstrap installer that can download the gallery archive, unpack it into the deployment directory, and create the bootstrap lock used to prevent repeat installs.
+
+The setup flow is intentionally minimal and is designed for first deployment on shared hosting:
+
+- Validates the runtime environment before starting
+- Downloads the published gallery archive from GitHub
+- Extracts the archive safely into the current project directory
+- Preserves `config.php` and `setup-gallery.php` while copying the rest of the project
+- Writes `cache/bootstrap-installed.lock` after a successful bootstrap
+
+Additional notes:
+- The bootstrap installer now has its own lock handling so it cannot be run again once setup is complete
+- The release manifest includes the new `setup-gallery.php` file hash
+
 
 
 ## Version 0.46
