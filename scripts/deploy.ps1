@@ -7,7 +7,8 @@
     [string]$RemoteFolder,
     [string]$DeployFolder,
     [string]$UploadMedia,
-    [string]$MakeZipDeploy
+    [string]$MakeZipDeploy,
+    [string]$UpdateManifest
 )
 
 if (-not $Mode) {
@@ -58,6 +59,28 @@ $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
 $excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
+
+
+# Function `Invoke-ManifestGenerator` handles manifest refresh before deployment.
+function Invoke-ManifestGenerator {
+    # Variable $phpCommand stores this scripts working value.
+    $phpCommand = Get-Command php -ErrorAction SilentlyContinue
+    if (-not $phpCommand) {
+        throw "PHP executable was not found in PATH. Cannot update app/core-manifest.json."
+    }
+
+    # Variable $manifestScript stores this scripts working value.
+    $manifestScript = Join-Path $root 'scripts\generate_manifest.php'
+    if (-not (Test-Path $manifestScript)) {
+        throw "Manifest generator was not found: $manifestScript"
+    }
+
+    Write-Host "Updating integrity manifest..."
+    & php $manifestScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Manifest generator failed with exit code $LASTEXITCODE."
+    }
+}
 
 # Function `Get-DeployRelativePath` handles this script step.
 function Get-DeployRelativePath($Path) {
@@ -182,6 +205,22 @@ function Ensure-RemoteDirectory($Uri) {
 }
 
 Set-Location $root
+
+# Variable $refreshManifest stores this scripts working value.
+$refreshManifest = $true
+if ($PSBoundParameters.ContainsKey('UpdateManifest')) {
+    # Variable $refreshManifest stores this scripts working value.
+    $refreshManifest = ($UpdateManifest -match '^(1|true|yes|y)$')
+} else {
+    # Variable $manifestAnswer stores this scripts working value.
+    $manifestAnswer = Read-Host "Update integrity manifest before deploy? Y/n"
+    # Variable $refreshManifest stores this scripts working value.
+    $refreshManifest = -not ($manifestAnswer -match '^[Nn]')
+}
+
+if ($refreshManifest) {
+    Invoke-ManifestGenerator
+}
 if ($Mode -eq 'local') {
     $script:DeployTarget = if ([System.IO.Path]::IsPathRooted($DeployFolder)) {
         $DeployFolder

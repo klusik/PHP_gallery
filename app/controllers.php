@@ -22,6 +22,15 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     }
 }
 
+
+/**
+ * Render the public scroll helper next to a listing without joining the listing grid.
+ */
+function render_back_to_top_button(): void
+{
+    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="Go back to top" title="Go back to top"><span aria-hidden="true">↑</span><span>Top</span></button>';
+}
+
 /**
  * Public homepage showing top-level public galleries.
  */
@@ -40,13 +49,14 @@ function cms_home(): void
     $galleries = $stmt->fetchAll();
     render_header(site_name());
     if ($galleries) {
-        echo '<section class="grid">';
-    }
-    foreach ($galleries as $gallery) {
-        render_gallery_card($gallery, true);
-    }
-    if ($galleries) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
+        foreach ($galleries as $gallery) {
+            render_gallery_card($gallery, true);
+        }
         echo '</section>';
+        render_back_to_top_button();
+        echo '</div>';
     }
     render_footer();
 }
@@ -156,6 +166,10 @@ function cms_gallery(): void
     render_breadcrumbs($gallery);
     echo '</section>';
     render_public_gallery_admin_form($gallery);
+    if ($children || $images) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<div class="gallery-list-content" data-back-to-top-list>';
+    }
     if ($children) {
         echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
         foreach ($children as $child) {
@@ -163,7 +177,9 @@ function cms_gallery(): void
         }
         echo '</div></section>';
     }
-    echo '<section class="grid">';
+    if ($images) {
+        echo '<section class="grid gallery-image-grid" data-gallery-image-list>';
+    }
     foreach ($images as $index => $image) {
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
@@ -181,7 +197,7 @@ function cms_gallery(): void
         $altText = image_alt_text($image, $gallery, $index + 1);
         // Variable $vote stores this steps working value.
         $vote = $votesById[(int) $image['id']] ?? 0;
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '" data-image-width="' . (int) ($image['width'] ?? 0) . '" data-image-height="' . (int) ($image['height'] ?? 0) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
         echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], '(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw', $altText, 'loading="lazy"') . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
@@ -193,7 +209,14 @@ function cms_gallery(): void
         render_public_image_admin_form($image);
         echo '</article>';
     }
-    echo '</section>';
+    if ($images) {
+        echo '</section>';
+    }
+    if ($children || $images) {
+        echo '</div>';
+        render_back_to_top_button();
+        echo '</div>';
+    }
     render_lightbox($votingAllowed);
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var card=document.querySelector("[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"]");if(card){card.click();}});');
@@ -217,11 +240,16 @@ function cms_tag(): void
     render_header('Tag: ' . (string) $tag['name']);
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs"><a href="' . e(url_for('home')) . '">Galleries</a><span aria-hidden="true">/</span><span>Tag: ' . e($tag['name']) . '</span></nav>';
     echo '<section class="hero"><h1>Tag: ' . e($tag['name']) . '</h1><p class="muted">' . count($galleries) . ' galleries</p></section>';
-    echo '<section class="grid">';
-    foreach ($galleries as $gallery) {
-        render_gallery_card($gallery, true);
+    if ($galleries) {
+        echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
+        foreach ($galleries as $gallery) {
+            render_gallery_card($gallery, true);
+        }
+        echo '</section>';
+        render_back_to_top_button();
+        echo '</div>';
     }
-    echo '</section>';
     render_footer();
 }
 
@@ -1370,6 +1398,11 @@ function cms_admin(): void
     echo '<button type="submit" class="secondary">Regenerate paths</button>';
     echo '</form>';
     echo '</nav></section>';
+    if (isset($_GET['deleted_galleries'])) {
+        echo '<div class="notice">Deleted ' . (int) $_GET['deleted_galleries'] . ' gallery folder(s).</div>';
+    } elseif (isset($_GET['delete_error'])) {
+        echo '<div class="notice">Gallery delete failed: ' . e((string) $_GET['delete_error']) . '</div>';
+    }
     if (isset($_GET['paths_regenerated'])) {
         echo '<div class="notice">Regenerated clean public paths. Updated ' . (int) ($_GET['gallery_paths'] ?? 0) . ' gallery path(s) and ' . (int) ($_GET['image_paths'] ?? 0) . ' image path(s).</div>';
     } elseif (isset($_GET['paths_error'])) {
@@ -1390,7 +1423,7 @@ function cms_admin(): void
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
-    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option>';
+    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
     if ($votingReady) {
         echo '<option value="vote_on">Enable voting</option><option value="vote_off">Disable voting</option>';
     }
@@ -1418,7 +1451,7 @@ function cms_admin(): void
         $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
@@ -1494,6 +1527,104 @@ function render_admin_feature_flag(bool $enabled, string $symbol, string $label)
 /**
  * Show and manage the admin log.
  */
+
+/**
+ * Render the compact admin dashboard integrity summary.
+ */
+function render_admin_integrity_summary(array $integrityStatus): void
+{
+    $status = (string) ($integrityStatus['status'] ?? 'error');
+    $label = integrity_status_label($status);
+    $modifiedCount = count((array) ($integrityStatus['modified'] ?? []));
+    $missingCount = count((array) ($integrityStatus['missing'] ?? []));
+    $unknownCount = count((array) ($integrityStatus['unknown'] ?? []));
+    $checkedAt = (string) ($integrityStatus['checked_at_iso'] ?? '');
+
+    echo '<section class="panel"><h2>System integrity</h2>';
+    echo '<p><strong>Status:</strong> ' . e($label) . '</p>';
+    if ($status === 'ok') {
+        echo '<p class="muted">Core PHP, HTML, CSS and JavaScript files match the installed manifest.</p>';
+    } elseif ($status === 'warning') {
+        echo '<p class="notice">Core files match, but ' . (int) $unknownCount . ' unknown core-like file(s) were found.</p>';
+    } elseif ($status === 'modified') {
+        echo '<p class="notice">Detected ' . (int) $modifiedCount . ' modified and ' . (int) $missingCount . ' missing core file(s).</p>';
+    } else {
+        echo '<p class="notice">' . e((string) ($integrityStatus['manifest_error'] ?? 'Integrity check failed.')) . '</p>';
+    }
+    if ($checkedAt !== '') {
+        echo '<p class="muted">Last checked: ' . e($checkedAt) . '</p>';
+    }
+    echo '<p><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Show details</a></p>';
+    echo '</section>';
+}
+
+/**
+ * Render a list of integrity paths.
+ */
+function render_admin_integrity_path_list(string $title, array $paths): void
+{
+    echo '<h3>' . e($title) . '</h3>';
+    if (!$paths) {
+        echo '<p class="muted">None.</p>';
+        return;
+    }
+
+    echo '<ul>';
+    foreach ($paths as $path) {
+        echo '<li><code>' . e((string) $path) . '</code></li>';
+    }
+    echo '</ul>';
+}
+
+/**
+ * Show and refresh the admin-only system integrity check.
+ */
+function cms_admin_integrity(): void
+{
+    require_admin();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        verify_csrf();
+        $status = integrity_status(true);
+        admin_log_event('info', 'integrity.checked', 'Admin ran the system integrity check.', [
+            'status' => (string) ($status['status'] ?? 'unknown'),
+            'modified' => count((array) ($status['modified'] ?? [])),
+            'missing' => count((array) ($status['missing'] ?? [])),
+            'unknown' => count((array) ($status['unknown'] ?? [])),
+        ]);
+        redirect_to(url_for('admin_integrity', ['checked' => 1]));
+    }
+
+    $status = integrity_status(false);
+    render_header('System integrity');
+    echo '<section class="hero"><h1>System integrity</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<form method="post" action="' . e(url_for('admin_integrity')) . '" class="inline-action-form">' . csrf_field();
+    echo '<button type="submit">Check now</button>';
+    echo '</form>';
+    echo '</nav></section>';
+
+    if (isset($_GET['checked'])) {
+        echo '<div class="notice">Integrity check completed.</div>';
+    }
+
+    echo '<section class="panel">';
+    echo '<h2>Status: ' . e(integrity_status_label((string) ($status['status'] ?? 'error'))) . '</h2>';
+    echo '<p><strong>Manifest version:</strong> ' . e((string) ($status['version'] ?? '')) . '</p>';
+    echo '<p><strong>Last checked:</strong> ' . e((string) ($status['checked_at_iso'] ?? '')) . '</p>';
+
+    if (!empty($status['manifest_error'])) {
+        echo '<p class="notice">' . e((string) $status['manifest_error']) . '</p>';
+    }
+
+    render_admin_integrity_path_list('Modified core files', (array) ($status['modified'] ?? []));
+    render_admin_integrity_path_list('Missing core files', (array) ($status['missing'] ?? []));
+    render_admin_integrity_path_list('Unknown core-like files', (array) ($status['unknown'] ?? []));
+    echo '<p class="muted">Ignored folders include cache, galleries, custom CSS, local config, and common hosting/runtime files.</p>';
+    echo '</section>';
+    render_footer();
+}
+
 function cms_admin_logs(): void
 {
     require_admin();
@@ -1572,6 +1703,9 @@ function cms_admin_log_update(): void
                 'error' => $exception->getMessage(),
             ]);
             if ($wantsJson) {
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 http_response_code(422);
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => false, 'error' => $exception->getMessage()]);
@@ -1751,6 +1885,9 @@ function cms_admin_upload(): void
     if (request_method() === 'POST') {
         verify_csrf();
         $wantsJson = admin_wants_json();
+        if ($wantsJson) {
+            ob_start();
+        }
         try {
             $entries = gallery_upload_entries($_FILES['images'] ?? null);
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
@@ -1784,12 +1921,17 @@ function cms_admin_upload(): void
                 'ok' => true,
                 'gallery_id' => (int) $gallery['id'],
                 'gallery_ids' => [(int) $gallery['id']],
+                'image_ids' => array_map('intval', $stored['image_ids'] ?? []),
+                'filenames' => array_values($stored['filenames'] ?? []),
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
                 'thumbnails' => $thumbnails,
                 'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails]),
             ];
             if ($wantsJson) {
+                if (ob_get_level() > 0) {
+                    ob_end_clean();
+                }
                 header('Content-Type: application/json');
                 echo json_encode($response);
                 return;
@@ -1888,6 +2030,23 @@ function cms_admin_bulk_galleries(): void
             $count += create_gallery_thumbnails($galleryId);
         }
         redirect_to(url_for('admin', ['thumbnails' => $count]));
+    }
+    if ($action === 'delete' && $galleryIds) {
+        try {
+            $deleted = delete_gallery_subtrees($galleryIds);
+            admin_log_event('warning', 'gallery.bulk_deleted', 'Admin deleted selected gallery folders.', [
+                'gallery_ids' => $galleryIds,
+                'deleted_roots' => (int) $deleted['root_count'],
+                'deleted_rows' => (int) $deleted['row_count'],
+            ]);
+            redirect_to(url_for('admin', ['deleted_galleries' => (int) $deleted['root_count']]));
+        } catch (Throwable $exception) {
+            admin_log_event('error', 'gallery.bulk_delete_failed', 'Bulk gallery delete failed.', [
+                'gallery_ids' => $galleryIds,
+                'exception' => $exception->getMessage(),
+            ]);
+            redirect_to(url_for('admin', ['delete_error' => $exception->getMessage()]));
+        }
     }
     if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
         // Variable $placeholders stores this steps working value.
@@ -2144,15 +2303,19 @@ function thumbnail_request_image_ids(array $post): array
     }
     // Variable $galleryId stores this steps working value.
     $galleryId = (int) ($post['gallery_id'] ?? 0);
-    if ($galleryId > 0 && !empty($post['image_ids']) && is_array($post['image_ids'])) {
+    if (!empty($post['image_ids']) && is_array($post['image_ids'])) {
         // Variable $ids stores this steps working value.
         $ids = [];
         foreach (array_map('intval', $post['image_ids']) as $imageId) {
             // Variable $image stores this steps working value.
             $image = find_image($imageId);
-            if ($image && (int) $image['gallery_id'] === $galleryId) {
-                $ids[] = $imageId;
+            if (!$image) {
+                continue;
             }
+            if ($galleryId > 0 && (int) $image['gallery_id'] !== $galleryId) {
+                continue;
+            }
+            $ids[] = $imageId;
         }
         return array_values(array_unique($ids));
     }
@@ -2938,7 +3101,7 @@ function cms_theme_css(): void
     echo '.theme-background-base,.theme-background-image{position:absolute;inset:0;}';
     echo '.theme-background-base{background:var(--paper);}';
     echo '.theme-background-image{background-image:' . ($themeBackground !== '' ? 'url("' . css_value($themeBackground) . '")' : 'none') . ';background-size:cover;background-position:center center;background-repeat:no-repeat;opacity:' . number_format($backgroundOpacity / 100, 2, '.', '') . ';}';
-    echo '.public-page > *:not(.theme-background-shell):not(.map-overlay):not(.lightbox):not(.runtime-style-warning){position:relative;z-index:1;}';
+    echo '.public-page > *:not(.theme-background-shell):not(.map-overlay):not(.lightbox){position:relative;z-index:1;}';
     echo 'a{color:var(--accent-dark);}';
     echo '.site-header{background:rgba(255,255,255,0.10);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08);border-color:rgba(255,255,255,0.22);padding:clamp(1rem,3vw,2rem);margin-bottom:1rem;border-radius:var(--radius);}';
     echo '.admin-page .site-header{background:var(--paper);border-color:var(--line);}';
@@ -2946,8 +3109,8 @@ function cms_theme_css(): void
     echo '.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
     echo '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
     echo '.nav a:hover,.button:hover,button:hover,input[type="submit"]:hover{border-color:var(--accent-dark);background:var(--accent-dark);}';
-    echo '.lightbox .lightbox-stage-link,.lightbox .lightbox-stage-link:hover,.lightbox .lightbox-stage-link:focus,.lightbox .lightbox-stage-link:active{border:0!important;background:transparent!important;color:inherit!important;box-shadow:none!important;text-decoration:none!important;}';
-    echo '.lightbox .lightbox-stage-link:focus-visible{outline:2px solid rgba(255,253,248,.75);outline-offset:-.35rem;}';
+    echo '.lightbox .lightbox-stage-link,.lightbox .lightbox-stage-link:hover,.lightbox .lightbox-stage-link:focus,.lightbox .lightbox-stage-link:focus-visible,.lightbox .lightbox-stage-link:active{border:0!important;background:transparent!important;color:inherit!important;box-shadow:none!important;text-decoration:none!important;outline:0!important;}';
+    echo '.lightbox .lightbox-stage-link::-moz-focus-inner{border:0!important;}';
     echo '.button.secondary,button.secondary{border-color:var(--accent-dark);background:transparent;color:var(--accent-dark);}';
     echo '.hero,.panel,.gallery-card,.image-card,.admin-page .hero,.admin-page .panel{background:var(--panel);border-color:var(--line);border-radius:var(--radius);}';
     echo '.public-page .hero{background:rgba(255,255,255,0.18);backdrop-filter:blur(10px) saturate(1.06);-webkit-backdrop-filter:blur(10px) saturate(1.06);position:relative;overflow:hidden;border-color:rgba(255,255,255,0.28);}';

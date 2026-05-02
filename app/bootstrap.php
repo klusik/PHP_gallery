@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.43';
+const CMS_VERSION = '0.44';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -11,6 +11,7 @@ require __DIR__ . '/database.php';
 require __DIR__ . '/security.php';
 require __DIR__ . '/migrations.php';
 require __DIR__ . '/services.php';
+require __DIR__ . '/integrity.php';
 require __DIR__ . '/controllers.php';
 
 /**

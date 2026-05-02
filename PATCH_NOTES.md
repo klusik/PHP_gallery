@@ -2,6 +2,21 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.44
+
+### Major Changes
+
+- Added a system integrity manifest and admin integrity dashboard so core files can be checked for modifications, missing files, and unknown release-surface files.
+- Added deployment support for refreshing the integrity manifest automatically before a release upload.
+- Added a floating back-to-top button for long gallery and tag listings, with responsive placement for desktop and mobile layouts.
+- Reworked gallery uploads so files can be sent in smaller batches and thumbnail generation tracks each uploaded image more reliably.
+- Added bulk gallery deletion from the admin gallery table.
+- Refined lightbox interaction and focus styling so the image stage behaves more naturally in normal view and the mouse-focused outline boxes are gone.
+
+### Fixes
+
+- Prepared the application metadata for the 0.44 release cycle.
+
 ## Version 0.43
 
 ### Major Changes

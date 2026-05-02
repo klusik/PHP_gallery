@@ -1,62 +1,4 @@
 (() => {
-    const runtimeInlineStyleSelector = [
-        '[data-inline-style-allowed="true"]',
-        '.map-overlay',
-        '.lightbox-map-split',
-        '.leaflet-container',
-        '.leaflet-pane',
-        '.leaflet-tile-pane',
-        '.leaflet-tile-container',
-        '.leaflet-layer',
-        '.leaflet-tile',
-        '.leaflet-marker-icon',
-        '.leaflet-marker-shadow',
-        '.leaflet-popup',
-        '.leaflet-control',
-    ].join(',');
-
-    // Allow a small set of runtime-managed inline styles used by the app.
-    function isAllowedRuntimeInlineStyle(node) {
-        return Boolean(
-            node &&
-            (
-                node.dataset?.inlineStyleAllowed === 'true' ||
-                node.closest?.(runtimeInlineStyleSelector)
-            )
-        );
-    }
-
-    function showCompromiseWarning() {
-        if (!document.body || document.querySelector('[data-runtime-style-warning]')) {
-            return;
-        }
-        const warning = document.createElement('div');
-        warning.className = 'runtime-style-warning';
-        warning.dataset.runtimeStyleWarning = 'true';
-        warning.textContent = 'Unexpected inline styles were detected. The page was not modified by the theme system.';
-        document.body.prepend(warning);
-    }
-
-    // Function `hasUnauthorizedInlineStyle` executes this focused behavior.
-    function hasUnauthorizedInlineStyle() {
-        return Array.from(document.querySelectorAll('[style]')).some((node) => !isAllowedRuntimeInlineStyle(node));
-    }
-
-    // Function `detectInlineStyleTampering` executes this focused behavior.
-    function detectInlineStyleTampering() {
-        if (hasUnauthorizedInlineStyle()) {
-            showCompromiseWarning();
-        }
-    }
-
-    detectInlineStyleTampering();
-    new MutationObserver(detectInlineStyleTampering).observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['style'],
-        childList: true,
-        subtree: true,
-    });
-
     function setupThemeOverrideForm() {
         const form = document.querySelector('[data-theme-form]');
         if (!form) {
@@ -247,6 +189,89 @@
         });
     });
 
+
+    // Confirm destructive gallery bulk deletes with the exact selected names.
+    document.addEventListener('submit', (event) => {
+        // Variable `form` stores this steps working value.
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-gallery-bulk-form]')) {
+            return;
+        }
+        // Variable `action` stores this steps working value.
+        const action = form.querySelector('select[name="action"]');
+        if (!(action instanceof HTMLSelectElement) || action.value !== 'delete') {
+            return;
+        }
+        // Variable `selectedRows` stores this steps working value.
+        const selectedRows = Array.from(form.querySelectorAll('input[type="checkbox"][name="gallery_ids[]"]:checked'))
+            .map((checkbox) => checkbox.closest('[data-gallery-row]'))
+            .filter((row) => row instanceof HTMLElement);
+        if (!selectedRows.length) {
+            event.preventDefault();
+            window.alert('Select at least one gallery to delete.');
+            return;
+        }
+        // Variable `names` stores this steps working value.
+        const names = selectedRows.map((row) => row.dataset.galleryTitle || row.querySelector('.tree-title a')?.textContent?.trim() || `Gallery ${row.dataset.galleryId || ''}`.trim());
+        // Variable `message` stores this steps working value.
+        const message = [
+            'Delete these gallery folders and all subgalleries?',
+            '',
+            ...names.map((name) => `• ${name}`),
+            '',
+            'This removes the folders from disk and deletes their database records. This cannot be undone.'
+        ].join('\n');
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+
+    // Function `setupBackToTopButton` executes this focused behavior.
+    function setupBackToTopButton() {
+        const scope = document.querySelector('[data-back-to-top-scope]');
+        const listing = document.querySelector('[data-back-to-top-list]') || document.querySelector('[data-gallery-image-list]');
+        const button = document.querySelector('[data-back-to-top-button]');
+        if (!scope || !listing || !button) {
+            return;
+        }
+
+        let ticking = false;
+
+        function shouldShowButton() {
+            if (document.body.classList.contains('has-lightbox') || document.body.classList.contains('has-mobile-lightbox') || document.fullscreenElement) {
+                return false;
+            }
+            const scopeRect = scope.getBoundingClientRect();
+            const listingRect = listing.getBoundingClientRect();
+            const enteredListing = listingRect.top < window.innerHeight * 0.72;
+            const stillInsideListing = scopeRect.bottom > window.innerHeight * 0.24;
+            return enteredListing && stillInsideListing && window.scrollY > 180;
+        }
+
+        function updateVisibility() {
+            ticking = false;
+            const visible = shouldShowButton();
+            button.hidden = !visible;
+            button.classList.toggle('is-visible', visible);
+        }
+
+        function requestVisibilityUpdate() {
+            if (ticking) {
+                return;
+            }
+            ticking = true;
+            window.requestAnimationFrame(updateVisibility);
+        }
+
+        button.addEventListener('click', () => {
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        });
+        window.addEventListener('scroll', requestVisibilityUpdate, {passive: true});
+        window.addEventListener('resize', requestVisibilityUpdate);
+        document.addEventListener('fullscreenchange', requestVisibilityUpdate);
+        updateVisibility();
+    }
+
     setupAdminGalleryFilters();
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
@@ -254,6 +279,7 @@
     setupPictureGame();
     setupAdminLogStatusForms();
     setupGpsMaps();
+    setupBackToTopButton();
     setupThemeOverrideForm();
     setupFaviconCropper();
 
@@ -385,6 +411,12 @@
         lightboxVoteIndicator.textContent = vote === '1' ? 'Voted up' : vote === '-1' ? 'Voted down' : 'No vote';
     }
 
+    function clearLightboxStageFocus() {
+        if (stageLink && document.activeElement === stageLink) {
+            stageLink.blur();
+        }
+    }
+
     let activeLightboxImageToken = 0;
 
     function clearPendingFullImageSwap() {
@@ -482,6 +514,31 @@
         if (!node || transitionImage === node) {
             transitionImage = null;
         }
+    }
+
+    function updateNormalLightboxStageSize(card) {
+        if (!stageLink || !card || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
+            return;
+        }
+        const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
+        const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
+        if (!naturalWidth || !naturalHeight) {
+            stageLink.style.removeProperty('--lightbox-stage-width');
+            stageLink.style.removeProperty('--lightbox-stage-height');
+            return;
+        }
+        const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+        const availableWidth = Math.max(240, window.innerWidth - (12 * rootFontSize));
+        const availableHeight = Math.max(180, window.innerHeight * 0.78);
+        const imageRatio = naturalWidth / naturalHeight;
+        let stageWidth = availableWidth;
+        let stageHeight = stageWidth / imageRatio;
+        if (stageHeight > availableHeight) {
+            stageHeight = availableHeight;
+            stageWidth = stageHeight * imageRatio;
+        }
+        stageLink.style.setProperty('--lightbox-stage-width', `${Math.round(stageWidth)}px`);
+        stageLink.style.setProperty('--lightbox-stage-height', `${Math.round(stageHeight)}px`);
     }
 
     function applyLightboxImageSource(src, altText) {
@@ -599,6 +656,7 @@
         const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
         const fullSrc = card.dataset.fullSrc || previewSrc;
         const altText = card.dataset.title || '';
+        updateNormalLightboxStageSize(card);
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
         showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
@@ -721,7 +779,8 @@
         const action = actionTarget?.dataset.lightboxAction;
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
-            toggleLightboxFullscreen();
+            clearLightboxStageFocus();
+            toggleLightboxFullscreen().finally(clearLightboxStageFocus);
             return;
         }
         if (action === 'close' || event.target === overlay) {
@@ -756,6 +815,14 @@
         lightboxMapSplitClose.addEventListener('click', closeLightboxMapSplit);
     }
 
+    if (stageLink) {
+        stageLink.addEventListener('mousedown', (event) => {
+            if (event.button === 0) {
+                event.preventDefault();
+            }
+        });
+    }
+
     overlay.addEventListener('mousemove', showLightboxHud);
     overlay.addEventListener('pointermove', showLightboxHud);
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud);
@@ -772,6 +839,12 @@
     }
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
+    window.addEventListener('resize', () => {
+        if (overlay.hidden || currentIndex < 0) {
+            return;
+        }
+        updateNormalLightboxStageSize(cards[currentIndex]);
+    });
 
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {
@@ -873,6 +946,7 @@
                 // Ignore fullscreen exit failures.
             }
         }
+        clearLightboxStageFocus();
         debugLightbox('exit');
     }
 
@@ -885,6 +959,7 @@
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
             document.body.classList.remove('has-mobile-lightbox');
+            clearLightboxStageFocus();
             debugLightbox('sync:browser-exit');
             return;
         }
@@ -1272,7 +1347,6 @@
             overlay = document.createElement('div');
             overlay.className = 'map-overlay';
             overlay.dataset.mapOverlay = 'true';
-            overlay.dataset.inlineStyleAllowed = 'true';
             overlay.innerHTML = '<div class="map-dialog"><button type="button" class="map-close" data-map-close>Close</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.</p></div>';
             document.body.append(overlay);
             overlay.addEventListener('click', (event) => {
@@ -1559,60 +1633,174 @@
     }
 
     // Function `runGalleryUpload` executes this focused behavior.
-    function runGalleryUpload(form) {
+    async function runGalleryUpload(form) {
         const progress = ensureThumbnailProgress(form);
         const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
         buttons.forEach((button) => {
             button.disabled = true;
         });
-        updateBasicProgress(progress, 0, 'Preparing upload...');
-        const body = new FormData(form);
-        body.set('ajax', '1');
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action || window.location.href);
-        xhr.setRequestHeader('Accept', 'application/json');
-        xhr.upload.addEventListener('progress', (event) => {
-            if (!event.lengthComputable) {
-                updateBasicProgress(progress, 100, 'Uploading images...');
-                return;
-            }
-            updateBasicProgress(progress, Math.round((event.loaded / event.total) * 100), 'Uploading images...');
-        });
-        xhr.addEventListener('load', async () => {
-            try {
-                const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
-                if (!contentType.includes('application/json')) {
-                    const snippet = (xhr.responseText || '').trim().slice(0, 120);
-                    throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Your session may have expired.' : 'Server returned an unexpected response.');
-                }
-                const result = JSON.parse(xhr.responseText || '{}');
-                if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
-                    throw new Error(result.error || 'Upload failed.');
-                }
+        try {
+            const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
+            const result = await runGalleryUploadFiles(form, progress, createThumbnails);
+            if (createThumbnails) {
+                updateThumbnailProgress(progress, result.uploaded || 0, result.total_files || 0, result.thumbnails || 0, result.thumbnail_skipped || 0, 'Upload and thumbnail job complete.');
+            } else {
                 updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
-                if (form.querySelector('input[name="create_thumbnails"]')?.checked && Array.isArray(result.gallery_ids) && result.gallery_ids.length > 0) {
-                    await runUploadThumbnailProgress(form, progress, result.gallery_ids, result);
-                    return;
-                }
-                window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0});
-            } catch (error) {
-                updateBasicProgress(progress, 100, error.message || 'Upload failed.');
-            } finally {
-                buttons.forEach((button) => {
-                    button.disabled = false;
-                });
             }
-        });
-        xhr.addEventListener('error', () => {
-            updateBasicProgress(progress, 100, 'Upload failed.');
+            window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
+        } catch (error) {
+            updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+        } finally {
             buttons.forEach((button) => {
                 button.disabled = false;
             });
-        });
-        xhr.send(body);
+        }
     }
 
-    async function runUploadThumbnailProgress(form, progress, galleryIds, uploadResult) {
+    function selectedGalleryUploadFiles(form) {
+        const fileInput = form.querySelector('input[type="file"][name="images[]"]');
+        if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
+            return [];
+        }
+        return Array.from(fileInput.files);
+    }
+
+    function galleryUploadBaseBody(form) {
+        const body = new FormData();
+        Array.from(form.elements).forEach((field) => {
+            if (!(field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            if (!field.name || field.disabled || field.type === 'file') {
+                return;
+            }
+            if ((field.type === 'checkbox' || field.type === 'radio') && !field.checked) {
+                return;
+            }
+            body.append(field.name, field.value);
+        });
+        body.set('ajax', '1');
+        return body;
+    }
+
+    function cloneGalleryUploadBody(form, files, galleryId) {
+        const body = galleryUploadBaseBody(form);
+        if (galleryId > 0) {
+            body.set('upload_mode', 'existing');
+            body.set('gallery_id', String(galleryId));
+        }
+        files.forEach((file) => {
+            body.append('images[]', file, file.name);
+        });
+        return body;
+    }
+
+    async function runGalleryUploadFiles(form, progress, createThumbnails) {
+        const files = selectedGalleryUploadFiles(form);
+        if (files.length === 0) {
+            throw new Error('Choose at least one image to upload.');
+        }
+
+        let uploaded = 0;
+        let scanned = 0;
+        let thumbnails = 0;
+        let thumbnailSkipped = 0;
+        let galleryId = Number(form.querySelector('select[name="gallery_id"]')?.value || 0);
+        let redirectUrl = '';
+        const galleryIds = [];
+
+        for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+            const file = files[fileIndex];
+            const humanIndex = fileIndex + 1;
+            updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+            const uploadResult = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
+                if (!event.lengthComputable) {
+                    updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+                    return;
+                }
+                const completedPart = fileIndex / files.length;
+                const currentPart = (event.loaded / event.total) / files.length;
+                updateBasicProgress(progress, Math.round((completedPart + currentPart) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+            });
+
+            if (!galleryId) {
+                galleryId = Number(uploadResult.gallery_id || 0);
+            }
+            if (galleryId && !galleryIds.includes(galleryId)) {
+                galleryIds.push(galleryId);
+            }
+            uploaded += Number(uploadResult.uploaded || 0);
+            scanned += Number(uploadResult.scanned || 0);
+            redirectUrl = uploadResult.redirect_url || redirectUrl;
+
+            if (createThumbnails) {
+                const imageIds = Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : [];
+                const thumbResult = await runUploadedImageThumbnailJob(form, progress, imageIds, humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
+                thumbnails += Number(thumbResult.created || 0);
+                thumbnailSkipped += Number(thumbResult.skipped || 0);
+            }
+        }
+
+        return {
+            ok: true,
+            gallery_id: galleryId,
+            gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
+            uploaded,
+            scanned,
+            thumbnails,
+            thumbnail_skipped: thumbnailSkipped,
+            total_files: files.length,
+            redirect_url: appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails),
+        };
+    }
+
+    function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails) {
+        const url = new URL(urlValue || window.location.href, window.location.href);
+        url.searchParams.set('uploaded', String(uploaded));
+        url.searchParams.set('scanned', String(scanned));
+        url.searchParams.set('thumbnails', String(thumbnails));
+        return url.toString();
+    }
+
+    function sendGalleryUploadChunk(form, body, progressHandler) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', form.action || window.location.href);
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.upload.addEventListener('progress', progressHandler);
+            xhr.addEventListener('load', () => {
+                try {
+                    const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
+                    const responseText = xhr.responseText || '';
+                    if (!contentType.includes('application/json')) {
+                        const snippet = responseText.trim().slice(0, 180).replace(/\s+/g, ' ');
+                        if (snippet.includes('Maximum number of allowable file uploads exceeded')) {
+                            throw new Error('The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.');
+                        }
+                        throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Check the PHP error log for the exact upload error.' : 'Server returned an unexpected response.');
+                    }
+                    const result = JSON.parse(responseText || '{}');
+                    if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
+                        throw new Error(result.error || 'Upload failed.');
+                    }
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            xhr.addEventListener('error', () => {
+                reject(new Error('Upload failed.'));
+            });
+            xhr.send(body);
+        });
+    }
+
+    async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex, totalFiles, filename, createdBefore, skippedBefore) {
+        if (!imageIds.length) {
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore, skippedBefore, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. No database image record was returned for thumbnails.`);
+            return {created: 0, skipped: 0};
+        }
+
         let offset = 0;
         let total = 0;
         let created = 0;
@@ -1622,9 +1810,10 @@
             body.set('csrf_token', form.querySelector('input[name="csrf_token"]')?.value || '');
             body.set('ajax', '1');
             body.set('offset', String(offset));
-            body.set('batch_size', '6');
-            galleryIds.forEach((galleryId) => {
-                body.append('gallery_ids[]', String(galleryId));
+            body.set('batch_size', '1');
+            body.set('gallery_id', String(Number(form.querySelector('select[name="gallery_id"]')?.value || 0)));
+            imageIds.forEach((imageId) => {
+                body.append('image_ids[]', String(imageId));
             });
             const response = await fetch(thumbnailEndpoint(form, null), {
                 method: 'POST',
@@ -1635,17 +1824,14 @@
                 throw new Error('Thumbnail request failed.');
             }
             const result = await response.json();
-            total = result.total || 0;
+            total = result.total || imageIds.length;
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
-            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Uploaded ${uploadResult.uploaded || 0} images. Creating thumbnails...`);
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. Creating thumbnails ${Math.min(offset, total)} of ${total}...`);
             if (result.done) {
-                updateThumbnailProgress(progress, total, total, created, skipped, 'Upload and thumbnail job complete.');
-                const redirect = new URL(uploadResult.redirect_url || window.location.href, window.location.href);
-                redirect.searchParams.set('thumbnails', String(created));
-                window.location.href = redirect.toString();
-                break;
+                updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Finished ${fileIndex} of ${totalFiles}: ${filename}`);
+                return {created, skipped};
             }
         }
     }
