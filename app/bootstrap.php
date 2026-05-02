@@ -136,7 +136,6 @@ function cms_run(): void
         'admin_account' => 'cms_admin_account',
         'admin_update' => 'cms_admin_update',
         'admin_reset' => 'cms_admin_reset',
-        'admin_integrity' => 'cms_admin_integrity',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',

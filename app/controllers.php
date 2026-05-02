@@ -1378,7 +1378,6 @@ function cms_admin(): void
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     $updateLabel = application_update_nav_label($updatePending);
     $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
-    $integrityStatus = integrity_status(false);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
@@ -1387,7 +1386,6 @@ function cms_admin(): void
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_integrity')) . '">System integrity</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
     if ($migrationPending) {
         echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -1421,7 +1419,6 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     render_admin_thumbnail_maintenance_notice($thumbnailSummary);
-    render_admin_integrity_summary($integrityStatus);
     echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';

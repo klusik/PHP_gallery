@@ -1,14 +1,14 @@
 {
   "version": "0.43",
-  "generated_at": "2026-05-02T19:24:17Z",
+  "generated_at": "2026-05-02T19:45:00Z",
   "algorithm": "sha256",
   "files": {
     ".htaccess": "sha256:c3a22b08fd1bdaa18c051f1bca98515c97f52b110bc8283bf7fbc73ced52077a",
     "ARCHITECTURE.md": "sha256:0deb8da88df902d635d9b081e3653fc9e9ace0428c732f26011fb8ff97f190d5",
     "PATCH_NOTES.md": "sha256:c1ef50c268834a714e97311daa9bc84541466fe2d74537a9db993e0d69083f99",
     "README.md": "sha256:eb599f8c159a377e7e8c961f7c2e1cdf82c36c1a9f6c143f8e15535629740cba",
-    "app/bootstrap.php": "sha256:5f139eba3a6aa9857844fd0106c05c5945aa03a4bdd57fc4454cfd8dffefaf73",
-    "app/controllers.php": "sha256:7d5fdf2cc97abd35b57ec4dc65822905cd6661f5fd787ca5f3356f59cc076dfc",
+    "app/bootstrap.php": "sha256:8365f1cfc64a29babb55bd0e4cab208df0feec5f39b75678ed19272f7c4f2be7",
+    "app/controllers.php": "sha256:a98a159a7759aff2f8b4d713958a77c3b8bb7065be54ae641deeadc0ab19a2a6",
     "app/database.php": "sha256:6cea4b37bb48aa59dc88d822900ad9938029cb266adbc9ad7b38c26c25356e00",
     "app/helpers.php": "sha256:ec007a8853ec7a0d6aa9a019efe1404a82f17f6191795e7c73afe6f51125f922",
     "app/integrity.php": "sha256:0bb1529ffc3973c76bd45f65a7c3fa1077c65325f3023438b4c883309f06be25",
