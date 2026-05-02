@@ -2,6 +2,23 @@
 
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
+## Version 0.43
+
+### Major Changes
+
+- Reworked gallery and full-site ZIP downloads so generated archives can now include the gallery folder structure and nested subfolders instead of flattening everything into a single-level file list.
+- Added ZIP cache expiry handling with a 7-day lifetime for generated downloads. Expired cache files are removed automatically and rebuilt on demand for both per-gallery and all-galleries ZIP exports.
+- Updated ZIP signature handling so cached downloads are invalidated more reliably when gallery structure, image metadata, visibility, or update timestamps change.
+- Improved the lightbox interaction model so the preview image now acts as the fullscreen toggle, making the primary image area behave more naturally on desktop and mobile.
+- Removed the separate "Open original" link from the lightbox toolbar and streamlined the fullscreen controls to match the new stage toggle behavior.
+- Reduced lightbox transition timing to make image swaps feel faster and more responsive during navigation and decode swaps.
+- Tightened the fullscreen styling for the lightbox so the image stage fills the available area more cleanly and the fullscreen background stays consistently dark.
+
+### Fixes
+
+- Prepared the application metadata for the 0.43 release cycle.
+- Kept release and update version detection aligned with the new 0.43 branch metadata.
+
 ## Version 0.42
 
 ### Major Changes

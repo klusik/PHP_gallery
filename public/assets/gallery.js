@@ -317,16 +317,14 @@
     // Variable `image` stores this steps working value.
     const image = overlay.querySelector('[data-lightbox-img]');
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
-    const lightboxImageTransitionDuration = 300;
+    const lightboxImageTransitionDuration = 80;
     const lightboxPreviewPreloadRadius = 8;
     const lightboxFullPreloadRadius = 2;
-    const lightboxFullSwapIdleDelay = 450;
+    const lightboxFullSwapIdleDelay = 80;
     const lightboxDecodedImageCacheLimit = 48;
     let transitionImage = null;
     let activeLightboxTransitionToken = 0;
     let pendingFullImageSwapTimer = null;
-    // Variable `originalLinks` stores this steps working value.
-    const originalLinks = Array.from(overlay.querySelectorAll('[data-lightbox-original-link]'));
     // Variable `title` stores this steps working value.
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
@@ -609,9 +607,6 @@
             }
             swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
         });
-        originalLinks.forEach((originalLink) => {
-            originalLink.href = card.dataset.fullSrc || '#';
-        });
         title.textContent = card.dataset.title || '';
         description.textContent = card.dataset.description || 'No description.';
         score.textContent = card.dataset.score || '0';
@@ -724,23 +719,27 @@
         const actionTarget = target?.closest('[data-lightbox-action]');
         // Variable `action` stores this steps working value.
         const action = actionTarget?.dataset.lightboxAction;
-        if (isMobileTouchDevice && isLightboxFullscreen() && target?.closest('.lightbox-stage-link')) {
+        if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
-            showLightboxHud();
+            toggleLightboxFullscreen();
             return;
         }
         if (action === 'close' || event.target === overlay) {
             close();
+            return;
         }
         if (action === 'previous') {
             step(-1);
+            return;
         }
         if (action === 'next') {
             step(1);
+            return;
         }
         if (action === 'fullscreen') {
             event.preventDefault();
             toggleLightboxFullscreen();
+            return;
         }
         const mapButton = target?.closest('[data-lightbox-map]');
         if (mapButton) {

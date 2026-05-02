@@ -669,7 +669,6 @@ td {
     backdrop-filter: blur(8px);
 }
 
-.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-original-button,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     display: inline-flex;
@@ -706,7 +705,6 @@ td {
     max-width: 100%;
 }
 
-.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-original-button,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     width: auto;
@@ -775,16 +773,24 @@ td {
     text-align: center;
 }
 
-.lightbox figure a {
-    display: grid;
-    place-items: center;
-    color: inherit;
-    max-width: 100%;
-    min-width: 0;
-}
-
 .lightbox-stage-link {
     position: relative;
+    display: grid;
+    place-items: center;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: zoom-in;
+}
+
+.lightbox.is-fullscreen .lightbox-stage-link,
+.lightbox.is-mobile-fullscreen .lightbox-stage-link {
+    width: 100%;
+    height: 100%;
+    cursor: zoom-out;
 }
 
 .lightbox-stage-link > img {
@@ -794,7 +800,7 @@ td {
 .lightbox-transition-image {
     opacity: 0;
     pointer-events: none;
-    transition: opacity 300ms ease;
+    transition: opacity 80ms ease;
 }
 
 .lightbox-transition-image.is-visible {
@@ -2043,4 +2049,10 @@ body.has-map-overlay {
     display: flex;
     align-items: center;
     gap: 0.8rem;
+}
+
+.lightbox.is-fullscreen,
+.lightbox.is-mobile-fullscreen,
+.lightbox:fullscreen {
+    background: #050505 !important;
 }
