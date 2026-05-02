@@ -800,7 +800,7 @@ td {
 .lightbox-transition-image {
     opacity: 0;
     pointer-events: none;
-    transition: opacity 300ms ease;
+    transition: opacity 80ms ease;
 }
 
 .lightbox-transition-image.is-visible {

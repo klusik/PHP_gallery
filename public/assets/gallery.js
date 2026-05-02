@@ -317,10 +317,10 @@
     // Variable `image` stores this steps working value.
     const image = overlay.querySelector('[data-lightbox-img]');
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
-    const lightboxImageTransitionDuration = 300;
+    const lightboxImageTransitionDuration = 80;
     const lightboxPreviewPreloadRadius = 8;
     const lightboxFullPreloadRadius = 2;
-    const lightboxFullSwapIdleDelay = 450;
+    const lightboxFullSwapIdleDelay = 80;
     const lightboxDecodedImageCacheLimit = 48;
     let transitionImage = null;
     let activeLightboxTransitionToken = 0;
