@@ -1995,3 +1995,52 @@ body.has-map-overlay {
     object-fit: contain;
     border-radius: var(--radius-lg);
 }
+
+.favicon-current {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.favicon-current img,
+.favicon-preview-row canvas {
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--line, #d6cfc2);
+    border-radius: 0.5rem;
+    background: #fff;
+    image-rendering: auto;
+}
+
+.favicon-cropper {
+    display: grid;
+    gap: 0.8rem;
+    max-width: 360px;
+}
+
+.favicon-crop-stage {
+    width: 256px;
+    height: 256px;
+    border: 1px solid var(--line, #d6cfc2);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #fff;
+    touch-action: none;
+}
+
+.favicon-crop-stage canvas {
+    display: block;
+    width: 256px;
+    height: 256px;
+    cursor: grab;
+}
+
+.favicon-crop-stage canvas:active {
+    cursor: grabbing;
+}
+
+.favicon-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}

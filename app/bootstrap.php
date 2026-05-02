@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.41';
+const CMS_VERSION = '0.42';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -122,6 +122,7 @@ function cms_run(): void
         'public_thumb' => 'cms_public_thumb',
         'gallery_cover_asset' => 'cms_gallery_cover_asset',
         'theme_background_asset' => 'cms_theme_background_asset',
+        'favicon_asset' => 'cms_favicon_asset',
         'vote' => 'cms_vote',
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',
@@ -200,6 +201,9 @@ function cms_route_from_request(): array
     }
     if ($segments === ['sitemap.xml']) {
         return ['page' => 'sitemap', 'params' => []];
+    }
+    if ($segments === ['favicon.ico'] || $segments === ['favicon.png']) {
+        return ['page' => 'favicon_asset', 'params' => ['s' => '32']];
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
         $gallerySegments = array_slice($segments, 1);

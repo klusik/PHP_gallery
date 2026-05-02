@@ -6,14 +6,15 @@
     [string]$Password,
     [string]$RemoteFolder,
     [string]$DeployFolder,
-    [string]$UploadMedia
+    [string]$UploadMedia,
+    [string]$MakeZipDeploy
 )
 
 if (-not $Mode) {
     # Variable $answer stores this scripts working value.
-    $answer = Read-Host "Deployment mode: FTP upload or local deploy folder? [F/l]"
+    $answer = Read-Host "Deployment mode: local deploy folder or FTP upload? [L/f]"
     # Variable $Mode stores this scripts working value.
-    $Mode = if ($answer -match '^[Ll]') { 'local' } else { 'ftp' }
+    $Mode = if ($answer -match '^[Ff]') { 'ftp' } else { 'local' }
 }
 # Variable $includeMedia stores this scripts working value.
 $includeMedia = $false
@@ -36,6 +37,20 @@ if ($Mode -eq 'local' -and -not $DeployFolder) {
     if (-not $DeployFolder) { $DeployFolder = 'deploy' }
 }
 
+# Variable $zipDeploy stores this scripts working value.
+$zipDeploy = $false
+if ($Mode -eq 'local') {
+    if ($PSBoundParameters.ContainsKey('MakeZipDeploy')) {
+        # Variable $zipDeploy stores this scripts working value.
+        $zipDeploy = ($MakeZipDeploy -match '^(1|true|yes|y)$')
+    } else {
+        # Variable $zipAnswer stores this scripts working value.
+        $zipAnswer = Read-Host "Make a zip deploy? Y/n"
+        # Variable $zipDeploy stores this scripts working value.
+        $zipDeploy = -not ($zipAnswer -match '^[Nn]')
+    }
+}
+
 # Variable $root stores this scripts working value.
 $root = Resolve-Path "$PSScriptRoot\.."
 # Variable $excludeDirs stores this scripts working value.
@@ -55,6 +70,16 @@ function Get-DeployRelativePath($Path) {
 
 # Function `Should-Skip` handles this script step.
 function Should-Skip($Path) {
+    if ($Mode -eq 'local' -and $script:DeployTarget) {
+        # Variable $fullPath stores this scripts working value.
+        $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+        # Variable $deployTargetPath stores this scripts working value.
+        $deployTargetPath = [System.IO.Path]::GetFullPath($script:DeployTarget).TrimEnd('\', '/')
+        if ($fullPath -eq $deployTargetPath -or $fullPath.StartsWith($deployTargetPath + [System.IO.Path]::DirectorySeparatorChar)) {
+            return $true
+        }
+    }
+
     # Variable $relative stores this scripts working value.
     $relative = Get-DeployRelativePath $Path
     # Variable $portableRelative stores this scripts working value.
@@ -116,6 +141,23 @@ function Copy-DeployFile($LocalPath) {
     Write-Host "Copied $relative"
 }
 
+# Function `New-CompatibleZipArchive` handles this script step.
+function New-CompatibleZipArchive($SourceDirectory, $DestinationZip) {
+    if (Test-Path $DestinationZip) {
+        Remove-Item -LiteralPath $DestinationZip -Force
+    }
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    # NoCompression creates a plain stored ZIP archive. That keeps the file format simple for older hosting tools.
+    [System.IO.Compression.ZipFile]::CreateFromDirectory(
+        $SourceDirectory,
+        $DestinationZip,
+        [System.IO.Compression.CompressionLevel]::NoCompression,
+        $false
+    )
+}
+
 # Function `Ensure-RemoteDirectory` handles this script step.
 function Ensure-RemoteDirectory($Uri) {
     # Variable $parts stores this scripts working value.
@@ -140,23 +182,59 @@ function Ensure-RemoteDirectory($Uri) {
 }
 
 Set-Location $root
-# Variable $files stores this scripts working value.
-$files = Get-ChildItem -Recurse -File | Where-Object { -not (Should-Skip $_.FullName) }
-
 if ($Mode -eq 'local') {
     $script:DeployTarget = if ([System.IO.Path]::IsPathRooted($DeployFolder)) {
         $DeployFolder
     } else {
         Join-Path $root $DeployFolder
     }
+
+    # Variable $rootPath stores this scripts working value.
+    $rootPath = [System.IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+    # Variable $deployTargetPath stores this scripts working value.
+    $deployTargetPath = [System.IO.Path]::GetFullPath($script:DeployTarget).TrimEnd('\', '/')
+    if ($deployTargetPath -eq $rootPath) {
+        throw "Local deploy folder cannot be the project root."
+    }
+}
+
+# Variable $files stores this scripts working value.
+$files = Get-ChildItem -Recurse -File | Where-Object { -not (Should-Skip $_.FullName) }
+
+if ($Mode -eq 'local') {
     if (Test-Path $script:DeployTarget) {
         Remove-Item -LiteralPath $script:DeployTarget -Recurse -Force
     }
     New-Item -ItemType Directory -Path $script:DeployTarget -Force | Out-Null
-    $files | ForEach-Object {
-        Copy-DeployFile $_.FullName
+
+    if ($zipDeploy) {
+        # Variable $deployStaging stores this scripts working value.
+        $deployStaging = Join-Path $env:TEMP ("php-gallery-deploy-{0}" -f ([guid]::NewGuid().ToString('N')))
+        # Variable $previousDeployTarget stores this scripts working value.
+        $previousDeployTarget = $script:DeployTarget
+        try {
+            $script:DeployTarget = $deployStaging
+            New-Item -ItemType Directory -Path $script:DeployTarget -Force | Out-Null
+            $files | ForEach-Object {
+                Copy-DeployFile $_.FullName
+            }
+
+            # Variable $zipPath stores this scripts working value.
+            $zipPath = Join-Path $previousDeployTarget 'php-gallery-deploy.zip'
+            New-CompatibleZipArchive -SourceDirectory $deployStaging -DestinationZip $zipPath
+            Write-Host "Local zip deploy created at $zipPath"
+        } finally {
+            $script:DeployTarget = $previousDeployTarget
+            if (Test-Path $deployStaging) {
+                Remove-Item -LiteralPath $deployStaging -Recurse -Force
+            }
+        }
+    } else {
+        $files | ForEach-Object {
+            Copy-DeployFile $_.FullName
+        }
+        Write-Host "Local deploy folder created at $script:DeployTarget"
     }
-    Write-Host "Local deploy folder created at $script:DeployTarget"
 } else {
     $files | ForEach-Object {
         Upload-File $_.FullName
