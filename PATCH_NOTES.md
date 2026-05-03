@@ -1,5 +1,16 @@
 # Patch Notes
 
+## Version 0.50
+
+Version 0.50 adds drag-based picture sorting inside gallery management. It lets admins reorder photos directly from the gallery view, and updates the related admin upload, image scanning, and front-end assets so the new ordering workflow stays consistent.
+
+### Gallery ordering
+
+- Added drag-and-drop picture sorting to the gallery admin interface.
+- Extended the gallery script and styles to support the new ordering interaction.
+- Updated admin upload and image scanning behavior to respect picture order changes.
+- Refreshed the release manifest for the 0.50 file set.
+
 ## Version 0.49
 
 Version 0.49 focuses on the admin zone and updater workflow. It adds a dedicated admin integrity screen, expands gallery administration, improves theme and thumbnail maintenance, and hardens public gallery and media routing. The updater also gains sturdier branch/version handling and safer restore logic.
