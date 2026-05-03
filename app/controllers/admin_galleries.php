@@ -11,9 +11,11 @@ declare(strict_types=1);
 function cms_admin_discover(): void
 {
     require_admin();
+    // $refresh stores an intermediate value used by the surrounding gallery workflow.
     $refresh = null;
     if (request_method() === 'POST') {
         verify_csrf();
+        // $refresh stores an intermediate value used by the surrounding gallery workflow.
         $refresh = scan_all_imported_gallery_images();
         admin_log_event('info', 'galleries.refresh_scanned', 'Admin refreshed imported galleries from filesystem.', $refresh);
     }
@@ -40,6 +42,10 @@ function cms_admin_discover(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin import logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_import(): void
 {
     require_admin();
@@ -57,13 +63,19 @@ function cms_admin_import(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles cms admin new gallery logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_new_gallery(): void
 {
     require_admin();
+    // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = '';
     if (request_method() === 'POST') {
         verify_csrf();
         try {
+            // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = create_empty_gallery([
                 'title' => $_POST['title'] ?? '',
                 'folder_name' => $_POST['folder_name'] ?? '',
@@ -79,6 +91,7 @@ function cms_admin_new_gallery(): void
             flash_message('admin_notice', 'Gallery folder created.');
             redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
         } catch (Throwable $exception) {
+            // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
             admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
         }
@@ -100,6 +113,10 @@ function cms_admin_new_gallery(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin bulk galleries logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_bulk_galleries(): void
 {
     require_admin();
@@ -126,6 +143,7 @@ function cms_admin_bulk_galleries(): void
     }
     if ($action === 'delete' && $galleryIds) {
         try {
+            // $deleted stores an intermediate value used by the surrounding gallery workflow.
             $deleted = delete_gallery_subtrees($galleryIds);
             admin_log_event('warning', 'gallery.bulk_deleted', 'Admin deleted selected gallery folders.', [
                 'gallery_ids' => $galleryIds,
@@ -171,8 +189,10 @@ function cms_admin_bulk_galleries(): void
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
         foreach ($galleryIds as $galleryId) {
+            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
             $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
         }
+        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
         $expandedIds = array_values(array_unique(array_filter($expandedIds)));
         if ($expandedIds) {
             // Variable $placeholders stores this steps working value.
@@ -196,8 +216,10 @@ function cms_admin_bulk_galleries(): void
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
         foreach ($galleryIds as $galleryId) {
+            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
             $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
         }
+        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
         $expandedIds = array_values(array_unique(array_filter($expandedIds)));
         if ($expandedIds) {
             // Variable $placeholders stores this steps working value.
@@ -206,6 +228,7 @@ function cms_admin_bulk_galleries(): void
             $stmt = db()->prepare('UPDATE galleries SET voting_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([$action === 'vote_on' ? 1 : 0, now_sql()], $expandedIds));
             if ($action === 'vote_off') {
+                // $stmt stores an intermediate value used by the surrounding gallery workflow.
                 $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = 0, updated_at = ? WHERE id IN (' . $placeholders . ')');
                 $stmt->execute(array_merge([now_sql()], $expandedIds));
             }
@@ -225,8 +248,10 @@ function cms_admin_bulk_galleries(): void
         // Variable $expandedIds stores this steps working value.
         $expandedIds = [];
         foreach ($galleryIds as $galleryId) {
+            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
             $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
         }
+        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
         $expandedIds = array_values(array_unique(array_filter($expandedIds)));
         if ($expandedIds) {
             // Variable $placeholders stores this steps working value.
@@ -235,6 +260,7 @@ function cms_admin_bulk_galleries(): void
             $stmt = db()->prepare('UPDATE galleries SET picture_game_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([$action === 'game_on' ? 1 : 0, now_sql()], $expandedIds));
             if ($action === 'game_on') {
+                // $stmt stores an intermediate value used by the surrounding gallery workflow.
                 $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE id IN (' . $placeholders . ')');
                 $stmt->execute(array_merge([now_sql()], $expandedIds));
             }
@@ -245,6 +271,10 @@ function cms_admin_bulk_galleries(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles cms admin regenerate paths logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_regenerate_paths(): void
 {
     require_admin();
@@ -254,6 +284,7 @@ function cms_admin_regenerate_paths(): void
     }
     verify_csrf();
     try {
+        // $result stores an intermediate value used by the surrounding gallery workflow.
         $result = regenerate_public_paths();
         flash_message('admin_notice', 'Regenerated clean public paths. Updated ' . (int) $result['galleries'] . ' gallery path(s) and ' . (int) $result['images'] . ' image path(s).');
         redirect_to(url_for('admin'));
@@ -263,6 +294,10 @@ function cms_admin_regenerate_paths(): void
     }
 }
 
+/**
+ * Handles cms admin save gallery collapse logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_save_gallery_collapse(): void
 {
     require_admin();
@@ -274,6 +309,10 @@ function cms_admin_save_gallery_collapse(): void
     echo json_encode(['ok' => true]);
 }
 
+/**
+ * Handles cms admin scan images logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_scan_images(): void
 {
     require_admin();
@@ -293,6 +332,10 @@ function cms_admin_scan_images(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles cms admin edit gallery logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_edit_gallery(): void
 {
     require_admin();
@@ -324,9 +367,11 @@ function cms_admin_edit_gallery(): void
         // Variable $votingEnabled stores this steps working value.
         $votingEnabled = gallery_voting_schema_ready() && !empty($_POST['voting_enabled']) ? 1 : 0;
         if ($pictureGameEnabled) {
+            // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
             $votingEnabled = 1;
         }
         if (!$votingEnabled) {
+            // $pictureGameEnabled stores an intermediate value used by the surrounding gallery workflow.
             $pictureGameEnabled = 0;
         }
         // Variable $accessType stores this steps working value.
@@ -338,26 +383,34 @@ function cms_admin_edit_gallery(): void
         // Variable $accessPasswordHash stores this steps working value.
         $accessPasswordHash = $accessReady ? ($gallery['access_password_hash'] ?? null) : null;
         if ($accessType === 'share') {
+            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = null;
         }
         if ($accessReady && !empty($_POST['clear_access_password'])) {
+            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = null;
         }
         // Variable $newAccessPassword stores this steps working value.
         $newAccessPassword = trim((string) ($_POST['access_password'] ?? ''));
         if ($accessReady && $accessType === 'password' && $newAccessPassword !== '') {
+            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = password_hash($newAccessPassword, PASSWORD_DEFAULT);
         }
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
         // Variable $parentId stores this steps working value.
         $parentId = $parentId > 0 && find_gallery($parentId) ? $parentId : null;
+        // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
         $currentFolderName = gallery_folder_name_from_path((string) $gallery['folder_path']);
+        // $submittedFolderName stores an intermediate value used by the surrounding gallery workflow.
         $submittedFolderName = trim((string) ($_POST['folder_name'] ?? $currentFolderName));
+        // $folderNameChanged stores an intermediate value used by the surrounding gallery workflow.
         $folderNameChanged = $submittedFolderName !== '' && $submittedFolderName !== $currentFolderName;
+        // $moveResult stores an intermediate value used by the surrounding gallery workflow.
         $moveResult = null;
         if ((int) ($gallery['parent_id'] ?? 0) !== (int) ($parentId ?? 0) || $folderNameChanged) {
             try {
+                // $moveResult stores an intermediate value used by the surrounding gallery workflow.
                 $moveResult = move_gallery_folder_to_parent((int) $gallery['id'], $parentId, $folderNameChanged ? $submittedFolderName : null);
                 if (!empty($moveResult['moved'])) {
                     admin_log_event('info', 'gallery.folder_moved', 'Admin moved a gallery folder.', [
@@ -367,6 +420,7 @@ function cms_admin_edit_gallery(): void
                         'galleries' => (int) $moveResult['galleries'],
                     ]);
                 }
+                // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) $gallery['id']) ?: $gallery;
             } catch (Throwable $exception) {
                 admin_log_event('error', 'gallery.folder_move_failed', 'Admin gallery folder move failed.', [
@@ -384,34 +438,44 @@ function cms_admin_edit_gallery(): void
         $coverImage = $coverImageId > 0 ? find_image($coverImageId) : null;
         // Variable $coverImageId stores this steps working value.
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
+        // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
         $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = null;
         if (gallery_background_source_schema_ready()) {
+            // $submittedBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $submittedBackgroundSource = (string) ($_POST['background_source'] ?? '');
             if (in_array($submittedBackgroundSource, ['upload', 'existing', 'collage'], true)) {
+                // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
                 $backgroundSource = $submittedBackgroundSource;
             }
         }
         if (gallery_cover_asset_schema_ready() && !empty($_FILES['cover_upload']['name'] ?? '')) {
+            // $uploadError stores an intermediate value used by the surrounding gallery workflow.
             $uploadError = (int) ($_FILES['cover_upload']['error'] ?? UPLOAD_ERR_NO_FILE);
             if ($uploadError !== UPLOAD_ERR_NO_FILE) {
                 if ($uploadError !== UPLOAD_ERR_OK) {
                     throw new RuntimeException(upload_error_message($uploadError));
                 }
+                // $tmpName stores an intermediate value used by the surrounding gallery workflow.
                 $tmpName = (string) ($_FILES['cover_upload']['tmp_name'] ?? '');
                 if ($tmpName === '' || !is_uploaded_file($tmpName)) {
                     throw new RuntimeException('Uploaded thumbnail is not available.');
                 }
+                // $info stores an intermediate value used by the surrounding gallery workflow.
                 $info = @getimagesize($tmpName);
                 if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
                     throw new RuntimeException('The uploaded gallery thumbnail is not a valid image.');
                 }
+                // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
                 $coverImagePath = store_uploaded_gallery_cover((int) $gallery['id'], $_FILES['cover_upload']);
+                // $coverImageId stores an intermediate value used by the surrounding gallery workflow.
                 $coverImageId = null;
             }
         }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
+        // $fields stores an intermediate value used by the surrounding gallery workflow.
         $fields = [
             'parent_id = ?' => $parentId,
             'cover_image_id = ?' => $coverImageId,
@@ -449,19 +513,25 @@ function cms_admin_edit_gallery(): void
             $fields['background_source = ?'] = $backgroundSource;
         }
         $fields['updated_at = ?'] = now_sql();
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
         if ($accessReady) {
+            // $accessAction stores an intermediate value used by the surrounding gallery workflow.
             $accessAction = (string) ($_POST['access_action'] ?? 'save');
             if ($accessAction === 'revoke_link') {
                 revoke_gallery_share_token((int) $gallery['id']);
             }
         }
         if ($accessReady && $accessMode === 'password') {
+            // $needsShareLink stores an intermediate value used by the surrounding gallery workflow.
             $needsShareLink = $accessType === 'share' && empty($gallery['access_token_hash']);
             if ($accessAction === 'generate_link' || $needsShareLink) {
+                // $expires stores an intermediate value used by the surrounding gallery workflow.
                 $expires = trim((string) ($_POST['access_token_expires_at'] ?? ''));
+                // $expiresTimestamp stores an intermediate value used by the surrounding gallery workflow.
                 $expiresTimestamp = $expires !== '' ? strtotime($expires) : false;
+                // $expiresAt stores an intermediate value used by the surrounding gallery workflow.
                 $expiresAt = $expiresTimestamp !== false ? date('Y-m-d H:i:s', $expiresTimestamp) : null;
                 $_SESSION['new_gallery_share_token_' . (int) $gallery['id']] = regenerate_gallery_share_token((int) $gallery['id'], $expiresAt);
             }
@@ -472,8 +542,10 @@ function cms_admin_edit_gallery(): void
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
+        // $notice stores an intermediate value used by the surrounding gallery workflow.
         $notice = 'Gallery saved.';
         if (!empty($moveResult['moved'])) {
+            // $notice stores an intermediate value used by the surrounding gallery workflow.
             $notice = 'Gallery saved and folder moved.';
         }
         flash_message('admin_notice', $notice);
@@ -482,11 +554,13 @@ function cms_admin_edit_gallery(): void
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
     render_header('Edit gallery');
+    // $galleryError stores an intermediate value used by the surrounding gallery workflow.
     $galleryError = (string) ($_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? '');
     unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
     if ($galleryError !== '') {
         echo '<div class="notice">Gallery folder move failed: ' . e($galleryError) . '</div>';
     }
+    // $galleryNotice stores an intermediate value used by the surrounding gallery workflow.
     $galleryNotice = (string) flash_message('admin_notice');
     if ($galleryNotice !== '') {
         echo '<div class="notice">' . e($galleryNotice) . '</div>';
@@ -512,10 +586,13 @@ function cms_admin_edit_gallery(): void
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     if ($accessReady) {
+        // $newShareToken stores an intermediate value used by the surrounding gallery workflow.
         $newShareToken = (string) ($_SESSION['new_gallery_share_token_' . (int) $gallery['id']] ?? '');
         unset($_SESSION['new_gallery_share_token_' . (int) $gallery['id']]);
+        // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
         $currentAccessType = 'normal';
         if ((string) ($gallery['access_mode'] ?? 'normal') === 'password') {
+            // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
             $currentAccessType = empty($gallery['access_password_hash']) ? 'share' : 'password';
         }
         echo '<fieldset class="form-grid"><legend>Protected access</legend>';
@@ -526,8 +603,10 @@ function cms_admin_edit_gallery(): void
             echo '<label><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
         }
         echo '<label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
+        // $visibleShareToken stores an intermediate value used by the surrounding gallery workflow.
         $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
         if ($visibleShareToken !== null && $visibleShareToken !== '') {
+            // $shareLabel stores an intermediate value used by the surrounding gallery workflow.
             $shareLabel = $newShareToken !== '' ? 'Generated share link' : 'Active share link';
             echo '<label>' . $shareLabel . '<input readonly value="' . e(gallery_share_url((int) $gallery['id'], $visibleShareToken)) . '"></label>';
         } elseif (!empty($gallery['access_token_hash'])) {
@@ -560,6 +639,7 @@ function cms_admin_edit_gallery(): void
         echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
     }
     if (gallery_background_source_schema_ready()) {
+        // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = gallery_background_source($gallery);
         echo '<label>Background source<select name="background_source"><option value=""' . ($backgroundSource === null ? ' selected' : '') . '>Use theme background</option><option value="upload"' . ($backgroundSource === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . ($backgroundSource === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . ($backgroundSource === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">If unset, the gallery inherits the Theme background.</span></label>';
     } else {
@@ -587,6 +667,10 @@ function cms_admin_edit_gallery(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin bulk images logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_bulk_images(): void
 {
     require_admin();
@@ -654,6 +738,10 @@ function cms_admin_bulk_images(): void
     redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
 }
 
+/**
+ * Handles cms admin public update gallery logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_public_update_gallery(): void
 {
     require_admin();
@@ -671,6 +759,7 @@ function cms_admin_public_update_gallery(): void
     // Variable $title stores this steps working value.
     $title = trim((string) ($_POST['title'] ?? ''));
     if ($title === '') {
+        // $title stores an intermediate value used by the surrounding gallery workflow.
         $title = (string) $gallery['title'];
     }
     // Variable $visibility stores this steps working value.
@@ -684,6 +773,7 @@ function cms_admin_public_update_gallery(): void
             // Variable $parent stores this steps working value.
             $parent = find_gallery((int) $gallery['parent_id']);
             if ($parent) {
+                // $redirect stores an intermediate value used by the surrounding gallery workflow.
                 $redirect = gallery_public_url($parent);
             }
         }
@@ -693,9 +783,11 @@ function cms_admin_public_update_gallery(): void
         redirect_to($redirect);
     }
     if ($action === 'publish') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
     }
     if ($action === 'hide') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
     // Variable $stmt stores this steps working value.
@@ -712,6 +804,10 @@ function cms_admin_public_update_gallery(): void
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
 }
 
+/**
+ * Handles cms admin public update image logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_public_update_image(): void
 {
     require_admin();
@@ -737,9 +833,11 @@ function cms_admin_public_update_image(): void
         redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
     }
     if ($action === 'publish') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
     }
     if ($action === 'hide') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
     // Variable $stmt stores this steps working value.
@@ -751,6 +849,10 @@ function cms_admin_public_update_image(): void
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
 }
 
+/**
+ * Handles cms admin edit image logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_edit_image(): void
 {
     require_admin();
@@ -796,6 +898,11 @@ function cms_admin_edit_image(): void
     render_footer();
 }
 
+/**
+ * Handles visibility options logic for the gallery application.
+ * @param mixed $selected Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function visibility_options(string $selected): string
 {
     // Variable $html stores this steps working value.
@@ -806,6 +913,10 @@ function visibility_options(string $selected): string
     return $html;
 }
 
+/**
+ * Handles render tag datalist logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function render_tag_datalist(): void
 {
     echo '<datalist id="tag-suggestions">';
@@ -815,6 +926,11 @@ function render_tag_datalist(): void
     echo '</datalist>';
 }
 
+/**
+ * Handles gallery parent options logic for the gallery application.
+ * @param mixed $currentGallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_parent_options(array $currentGallery): string
 {
     // Variable $galleries stores this steps working value.
@@ -839,9 +955,15 @@ function gallery_parent_options(array $currentGallery): string
     return $html;
 }
 
+/**
+ * Handles gallery parent options for new logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_parent_options_for_new(): string
 {
+    // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
+    // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
         $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
@@ -849,9 +971,15 @@ function gallery_parent_options_for_new(): string
     return $html;
 }
 
+/**
+ * Handles gallery options for select logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_options_for_select(): string
 {
+    // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
+    // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
         $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
@@ -859,18 +987,28 @@ function gallery_options_for_select(): string
     return $html;
 }
 
+/**
+ * Handles gallery cover options logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $selectedImageId Input used by this operation.
+ * @param mixed $includeDescendants Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_options(int $galleryId, int $selectedImageId, bool $includeDescendants = false): string
 {
+    // $images stores an intermediate value used by the surrounding gallery workflow.
     $images = $includeDescendants ? gallery_cover_choices($galleryId, false) : array_map(static fn (array $image): array => ['image' => $image], gallery_images($galleryId, false));
     // Variable $html stores this steps working value.
     $html = '';
     foreach ($images as $entry) {
+        // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = $entry['image'];
         // Variable $selected stores this steps working value.
         $selected = $selectedImageId === (int) $image['id'] ? ' selected' : '';
         // Variable $label stores this steps working value.
         $label = ($image['title'] ?: $image['filename']) . ' (' . $image['relative_path'] . ')';
         if ($includeDescendants && !empty($entry['gallery_title'])) {
+            // $label stores an intermediate value used by the surrounding gallery workflow.
             $label = $entry['gallery_title'] . ' - ' . $label;
         }
         $html .= '<option value="' . (int) $image['id'] . '"' . $selected . '>' . e($label) . '</option>';
@@ -878,6 +1016,12 @@ function gallery_cover_options(int $galleryId, int $selectedImageId, bool $inclu
     return $html;
 }
 
+/**
+ * Handles unique slug for value logic for the gallery application.
+ * @param mixed $slug Input used by this operation.
+ * @param mixed $excludeGalleryId Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function unique_slug_for_value(string $slug, int $excludeGalleryId): string
 {
     // Variable $pdo stores this steps working value.

@@ -55,6 +55,7 @@ function integrity_ignored_unknown_patterns(): array
  */
 function integrity_is_ignored_unknown_path(string $relativePath): bool
 {
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = str_replace('\\', '/', ltrim($relativePath, '/'));
     foreach (integrity_ignored_unknown_patterns() as $pattern) {
         if (preg_match($pattern, $normalizedPath) === 1) {
@@ -74,15 +75,18 @@ function integrity_is_ignored_unknown_path(string $relativePath): bool
  */
 function integrity_hash_file(string $absolutePath): string
 {
+    // $contents stores an intermediate value used by the surrounding gallery workflow.
     $contents = file_get_contents($absolutePath);
     if ($contents === false) {
         return '';
     }
 
     if (str_starts_with($contents, "\xEF\xBB\xBF")) {
+        // $contents stores an intermediate value used by the surrounding gallery workflow.
         $contents = substr($contents, 3);
     }
 
+    // $contents stores an intermediate value used by the surrounding gallery workflow.
     $contents = str_replace(["\r\n", "\r"], "\n", $contents);
     return 'sha256:' . hash('sha256', $contents);
 }
@@ -92,11 +96,13 @@ function integrity_hash_file(string $absolutePath): string
  */
 function integrity_manifest_fingerprint(): string
 {
+    // $manifestPath stores an intermediate value used by the surrounding gallery workflow.
     $manifestPath = integrity_manifest_path();
     if (!is_file($manifestPath)) {
         return '';
     }
 
+    // $contents stores an intermediate value used by the surrounding gallery workflow.
     $contents = file_get_contents($manifestPath);
     if ($contents === false) {
         return '';
@@ -110,6 +116,7 @@ function integrity_manifest_fingerprint(): string
  */
 function integrity_load_manifest(): array
 {
+    // $manifestPath stores an intermediate value used by the surrounding gallery workflow.
     $manifestPath = integrity_manifest_path();
     if (!is_file($manifestPath)) {
         return [
@@ -119,6 +126,7 @@ function integrity_load_manifest(): array
         ];
     }
 
+    // $manifestJson stores an intermediate value used by the surrounding gallery workflow.
     $manifestJson = file_get_contents($manifestPath);
     if ($manifestJson === false || trim($manifestJson) === '') {
         return [
@@ -128,6 +136,7 @@ function integrity_load_manifest(): array
         ];
     }
 
+    // $manifest stores an intermediate value used by the surrounding gallery workflow.
     $manifest = json_decode($manifestJson, true);
     if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest['files'])) {
         return [
@@ -149,13 +158,16 @@ function integrity_load_manifest(): array
  */
 function integrity_discover_core_like_files(): array
 {
+    // $rootPath stores an intermediate value used by the surrounding gallery workflow.
     $rootPath = integrity_root_path();
+    // $allowedRoots stores an intermediate value used by the surrounding gallery workflow.
     $allowedRoots = [
         'app',
         'database',
         'public',
         'scripts',
     ];
+    // $allowedRootFiles stores an intermediate value used by the surrounding gallery workflow.
     $allowedRootFiles = [
         '.htaccess' => true,
         'index.php' => true,
@@ -166,6 +178,7 @@ function integrity_discover_core_like_files(): array
         'PATCH_NOTES.md' => true,
         'ARCHITECTURE.md' => true,
     ];
+    // $allowedExtensions stores an intermediate value used by the surrounding gallery workflow.
     $allowedExtensions = [
         'php' => true,
         'js' => true,
@@ -176,7 +189,9 @@ function integrity_discover_core_like_files(): array
         'htaccess' => true,
     ];
 
+    // $files stores an intermediate value used by the surrounding gallery workflow.
     $files = [];
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS)
     );
@@ -186,12 +201,15 @@ function integrity_discover_core_like_files(): array
             continue;
         }
 
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
         $absolutePath = str_replace('\\', '/', $fileInfo->getPathname());
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
         $relativePath = ltrim(substr($absolutePath, strlen(str_replace('\\', '/', $rootPath))), '/');
         if ($relativePath === '') {
             continue;
         }
 
+        // $firstSegment stores an intermediate value used by the surrounding gallery workflow.
         $firstSegment = explode('/', $relativePath, 2)[0];
         if (isset($allowedRootFiles[$relativePath])) {
             $files[] = $relativePath;
@@ -206,7 +224,9 @@ function integrity_discover_core_like_files(): array
             continue;
         }
 
+        // $extension stores an intermediate value used by the surrounding gallery workflow.
         $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
+        // $basename stores an intermediate value used by the surrounding gallery workflow.
         $basename = basename($relativePath);
         if ($basename === '.htaccess' || isset($allowedExtensions[$extension])) {
             $files[] = $relativePath;
@@ -222,8 +242,11 @@ function integrity_discover_core_like_files(): array
  */
 function integrity_calculate_status(): array
 {
+    // $loadedManifest stores an intermediate value used by the surrounding gallery workflow.
     $loadedManifest = integrity_load_manifest();
+    // $checkedAt stores an intermediate value used by the surrounding gallery workflow.
     $checkedAt = time();
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = [
         'checked_at' => $checkedAt,
         'checked_at_iso' => gmdate('c', $checkedAt),
@@ -244,25 +267,32 @@ function integrity_calculate_status(): array
         return $status;
     }
 
+    // $manifest stores an intermediate value used by the surrounding gallery workflow.
     $manifest = $loadedManifest['manifest'];
     $status['version'] = (string) ($manifest['version'] ?? '');
+    // $manifestFiles stores an intermediate value used by the surrounding gallery workflow.
     $manifestFiles = $manifest['files'];
+    // $rootPath stores an intermediate value used by the surrounding gallery workflow.
     $rootPath = integrity_root_path();
 
     foreach ($manifestFiles as $relativePath => $expectedHash) {
+        // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
         $normalizedPath = str_replace('\\', '/', ltrim((string) $relativePath, '/'));
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
         $absolutePath = $rootPath . '/' . $normalizedPath;
         if (!is_file($absolutePath)) {
             $status['missing'][] = $normalizedPath;
             continue;
         }
 
+        // $actualHash stores an intermediate value used by the surrounding gallery workflow.
         $actualHash = integrity_hash_file($absolutePath);
         if (!hash_equals((string) $expectedHash, $actualHash)) {
             $status['modified'][] = $normalizedPath;
         }
     }
 
+    // $manifestPathSet stores an intermediate value used by the surrounding gallery workflow.
     $manifestPathSet = array_fill_keys(array_map(
         static fn (string $path): string => str_replace('\\', '/', ltrim($path, '/')),
         array_keys($manifestFiles)
@@ -296,7 +326,9 @@ function integrity_calculate_status(): array
  */
 function integrity_write_cached_status(array $status): void
 {
+    // $cachePath stores an intermediate value used by the surrounding gallery workflow.
     $cachePath = integrity_cache_path();
+    // $cacheDir stores an intermediate value used by the surrounding gallery workflow.
     $cacheDir = dirname($cachePath);
     if (!is_dir($cacheDir)) {
         return;
@@ -314,14 +346,21 @@ function integrity_write_cached_status(array $status): void
  */
 function integrity_status(bool $forceRefresh = false): array
 {
+    // $cachePath stores an intermediate value used by the surrounding gallery workflow.
     $cachePath = integrity_cache_path();
+    // $currentManifestFingerprint stores an intermediate value used by the surrounding gallery workflow.
     $currentManifestFingerprint = integrity_manifest_fingerprint();
     if (!$forceRefresh && is_file($cachePath)) {
+        // $cacheJson stores an intermediate value used by the surrounding gallery workflow.
         $cacheJson = file_get_contents($cachePath);
+        // $cachedStatus stores an intermediate value used by the surrounding gallery workflow.
         $cachedStatus = $cacheJson === false ? null : json_decode($cacheJson, true);
         if (is_array($cachedStatus) && isset($cachedStatus['checked_at'])) {
+            // $age stores an intermediate value used by the surrounding gallery workflow.
             $age = time() - (int) $cachedStatus['checked_at'];
+            // $cachedManifestFingerprint stores an intermediate value used by the surrounding gallery workflow.
             $cachedManifestFingerprint = (string) ($cachedStatus['manifest_fingerprint'] ?? '');
+            // $manifestMatchesCache stores an intermediate value used by the surrounding gallery workflow.
             $manifestMatchesCache = $currentManifestFingerprint !== ''
                 && hash_equals($currentManifestFingerprint, $cachedManifestFingerprint);
 
@@ -331,6 +370,7 @@ function integrity_status(bool $forceRefresh = false): array
         }
     }
 
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = integrity_calculate_status();
     integrity_write_cached_status($status);
     return $status;

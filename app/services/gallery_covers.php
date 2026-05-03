@@ -28,12 +28,22 @@ function ensure_gallery_cover(int $galleryId): void
     $update->execute([(int) $coverId, now_sql(), $galleryId]);
 }
 
+/**
+ * Handles gallery cover path logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_path(array $gallery): ?string
 {
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = trim((string) ($gallery['cover_image_path'] ?? ''));
     return $path !== '' ? $path : null;
 }
 
+/**
+ * Handles gallery cover asset schema ready logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_asset_schema_ready(): bool
 {
     static $ready = null;
@@ -41,31 +51,54 @@ function gallery_cover_asset_schema_ready(): bool
         return $ready;
     }
     try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
+        // $ready stores an intermediate value used by the surrounding gallery workflow.
         $ready = (bool) $stmt->fetch();
     } catch (Throwable) {
+        // $ready stores an intermediate value used by the surrounding gallery workflow.
         $ready = false;
     }
     return $ready;
 }
 
+/**
+ * Handles set gallery cover path logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $relativePath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
 {
     if (!gallery_cover_asset_schema_ready()) {
         return;
     }
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ? WHERE id = ?');
     $stmt->execute([$relativePath !== null && $relativePath !== '' ? $relativePath : null, now_sql(), $galleryId]);
 }
 
+/**
+ * Handles gallery cover image logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
 {
     return gallery_direct_cover_image($galleryId, $publicOnly);
 }
 
+/**
+ * Handles gallery direct cover image logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -96,11 +129,18 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
     return $cache[$cacheKey] = ($image ?: null);
 }
 
+/**
+ * Handles gallery cover asset url logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
 {
     if ($publicOnly && gallery_access_requirement($gallery) !== null) {
         return '';
     }
+    // $coverPath stores an intermediate value used by the surrounding gallery workflow.
     $coverPath = gallery_cover_path($gallery);
     if ($coverPath === null) {
         return '';
@@ -108,9 +148,17 @@ function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
     return url_for('gallery_cover_asset', ['id' => (int) $gallery['id']]);
 }
 
+/**
+ * Handles gallery cover collage images logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @param mixed $limit Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . $limit;
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -140,16 +188,27 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
     return $cache[$cacheKey] = array_values($images);
 }
 
+/**
+ * Handles gallery cover choices logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_cover_choices(int $galleryId, bool $publicOnly): array
 {
+    // $choices stores an intermediate value used by the surrounding gallery workflow.
     $choices = [];
+    // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = find_gallery($galleryId);
     if (!$root) {
         return [];
     }
+    // $stack stores an intermediate value used by the surrounding gallery workflow.
     $stack = [$root];
     while ($stack) {
+        // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = array_shift($stack);
+        // $cover stores an intermediate value used by the surrounding gallery workflow.
         $cover = gallery_direct_cover_image((int) $gallery['id'], $publicOnly);
         if ($cover) {
             $choices[] = [
@@ -165,6 +224,11 @@ function gallery_cover_choices(int $galleryId, bool $publicOnly): array
     return $choices;
 }
 
+/**
+ * Handles apply gallery cover from sidecar logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function apply_gallery_cover_from_sidecar(array $gallery): void
 {
     // Variable $metadata stores this steps working value.

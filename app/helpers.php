@@ -15,6 +15,7 @@ function e(?string $value): string
  */
 function request_is_https(): bool
 {
+    // $https stores an intermediate value used by the surrounding gallery workflow.
     $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
     if ($https !== '' && $https !== 'off') {
         return true;
@@ -22,6 +23,7 @@ function request_is_https(): bool
     if ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
         return true;
     }
+    // $forwardedProto stores an intermediate value used by the surrounding gallery workflow.
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
     if ($forwardedProto === 'https') {
         return true;
@@ -34,6 +36,7 @@ function request_is_https(): bool
  */
 function request_host_name(): string
 {
+    // $host stores an intermediate value used by the surrounding gallery workflow.
     $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
     return preg_replace('/:\d+$/', '', $host) ?: '';
 }
@@ -43,7 +46,9 @@ function request_host_name(): string
  */
 function request_script_base_path(): string
 {
+    // $script stores an intermediate value used by the surrounding gallery workflow.
     $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    // $dir stores an intermediate value used by the surrounding gallery workflow.
     $dir = rtrim(str_replace('/index.php', '', $script), '/');
     if ($dir === '/public') {
         return '';
@@ -62,28 +67,37 @@ function request_aware_base_url(string $base): string
     if ($base === '') {
         return $base;
     }
+    // $parts stores an intermediate value used by the surrounding gallery workflow.
     $parts = parse_url($base);
     if (!is_array($parts) || empty($parts['host'])) {
         return $base;
     }
+    // $configuredHost stores an intermediate value used by the surrounding gallery workflow.
     $configuredHost = strtolower((string) ($parts['host'] ?? ''));
     if ($configuredHost === '' || $configuredHost !== request_host_name()) {
         return $base;
     }
 
+    // $scheme stores an intermediate value used by the surrounding gallery workflow.
     $scheme = strtolower((string) ($parts['scheme'] ?? 'http'));
     if (request_is_https() && $scheme === 'http') {
+        // $scheme stores an intermediate value used by the surrounding gallery workflow.
         $scheme = 'https';
     }
 
+    // $configuredPath stores an intermediate value used by the surrounding gallery workflow.
     $configuredPath = rtrim((string) ($parts['path'] ?? ''), '/');
+    // $scriptBasePath stores an intermediate value used by the surrounding gallery workflow.
     $scriptBasePath = request_script_base_path();
     if ($configuredPath !== '' && $scriptBasePath !== '' && !str_starts_with($scriptBasePath . '/', $configuredPath . '/')) {
+        // $configuredPath stores an intermediate value used by the surrounding gallery workflow.
         $configuredPath = $scriptBasePath;
     } elseif ($configuredPath !== '' && $scriptBasePath === '') {
+        // $configuredPath stores an intermediate value used by the surrounding gallery workflow.
         $configuredPath = '';
     }
 
+    // $url stores an intermediate value used by the surrounding gallery workflow.
     $url = $scheme . '://' . $configuredHost;
     if (!empty($parts['port']) && (int) $parts['port'] !== 80 && (int) $parts['port'] !== 443) {
         $url .= ':' . (int) $parts['port'];
@@ -125,11 +139,14 @@ function url_for(string $page, array $params = []): string
  */
 function public_base_url(): string
 {
+    // $configured stores an intermediate value used by the surrounding gallery workflow.
     $configured = rtrim(request_aware_base_url(rtrim((string) cms_config()['base_url'], '/')), '/');
     if ($configured !== '') {
         return $configured;
     }
+    // $host stores an intermediate value used by the surrounding gallery workflow.
     $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    // $scheme stores an intermediate value used by the surrounding gallery workflow.
     $scheme = request_is_https() ? 'https' : 'http';
     return rtrim($scheme . '://' . $host . request_script_base_path(), '/');
 }
@@ -143,7 +160,9 @@ function absolute_public_url(string $url): string
         return $url;
     }
     if (str_starts_with($url, '/')) {
+        // $parts stores an intermediate value used by the surrounding gallery workflow.
         $parts = parse_url(public_base_url());
+        // $origin stores an intermediate value used by the surrounding gallery workflow.
         $origin = (string) ($parts['scheme'] ?? 'http') . '://' . (string) ($parts['host'] ?? 'localhost');
         if (!empty($parts['port'])) {
             $origin .= ':' . (int) $parts['port'];
@@ -158,11 +177,13 @@ function absolute_public_url(string $url): string
  */
 function public_path_segment(string $path): string
 {
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = trim(str_replace('\\', '/', $path), '/');
     if ($normalizedPath === '') {
         return rawurlencode('gallery');
     }
 
+    // $segments stores an intermediate value used by the surrounding gallery workflow.
     $segments = array_values(array_filter(explode('/', $normalizedPath), static fn (string $segment): bool => $segment !== ''));
     return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
 }
@@ -180,11 +201,14 @@ function gallery_public_path_segment(string $folderPath): string
  */
 function gallery_public_url(array $gallery): string
 {
+    // $urlPath stores an intermediate value used by the surrounding gallery workflow.
     $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($urlPath === '') {
+        // $urlPath stores an intermediate value used by the surrounding gallery workflow.
         $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
     }
     if ($urlPath === '') {
+        // $urlPath stores an intermediate value used by the surrounding gallery workflow.
         $urlPath = (string) ($gallery['slug'] ?? 'gallery');
     }
     return public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
@@ -195,10 +219,13 @@ function gallery_public_url(array $gallery): string
  */
 function image_public_url(array $image, array $gallery): string
 {
+    // $slug stores an intermediate value used by the surrounding gallery workflow.
     $slug = trim((string) ($image['url_slug'] ?? ''));
     if ($slug === '') {
+        // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify(pathinfo((string) ($image['filename'] ?? 'image'), PATHINFO_FILENAME));
     } else {
+        // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify($slug);
     }
     return rtrim(gallery_public_url($gallery), '/') . '/' . rawurlencode($slug) . '/';
@@ -218,6 +245,7 @@ function image_public_media_url(array $image, array $gallery): string
  */
 function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
+    // $format stores an intermediate value used by the surrounding gallery workflow.
     $format = $format === 'webp' ? 'webp' : 'jpg';
     return rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format;
 }
@@ -235,6 +263,7 @@ function canonical_url_for_gallery(array $gallery): string
  */
 function gallery_seo_title(array $gallery): string
 {
+    // $metadata stores an intermediate value used by the surrounding gallery workflow.
     $metadata = public_gallery_metadata($gallery);
     return $metadata['title'];
 }
@@ -244,6 +273,7 @@ function gallery_seo_title(array $gallery): string
  */
 function gallery_seo_description(array $gallery): string
 {
+    // $metadata stores an intermediate value used by the surrounding gallery workflow.
     $metadata = public_gallery_metadata($gallery);
     return $metadata['description'];
 }
@@ -253,14 +283,17 @@ function gallery_seo_description(array $gallery): string
  */
 function image_alt_text(array $image, array $gallery, int $index = 1): string
 {
+    // $caption stores an intermediate value used by the surrounding gallery workflow.
     $caption = trim((string) ($image['description'] ?? ''));
     if ($caption !== '') {
         return $caption;
     }
+    // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = trim((string) ($image['title'] ?? ''));
     if ($title !== '') {
         return $title;
     }
+    // $filename stores an intermediate value used by the surrounding gallery workflow.
     $filename = trim((string) ($image['filename'] ?? ''));
     if ($filename !== '') {
         return trim(preg_replace('/[-_]+/', ' ', pathinfo($filename, PATHINFO_FILENAME)) ?: $filename);
@@ -273,13 +306,19 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
 {
+    // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = gallery_seo_title($gallery);
+    // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = gallery_seo_description($gallery);
+    // $canonical stores an intermediate value used by the surrounding gallery workflow.
     $canonical = canonical_url_for_gallery($gallery);
+    // $ogImage stores an intermediate value used by the surrounding gallery workflow.
     $ogImage = '';
     foreach ($images as $image) {
+        // $preview stores an intermediate value used by the surrounding gallery workflow.
         $preview = thumbnail_url($image, 800);
         if ($preview !== '') {
+            // $ogImage stores an intermediate value used by the surrounding gallery workflow.
             $ogImage = absolute_public_url($preview);
             break;
         }
@@ -307,7 +346,9 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  */
 function render_gallery_json_ld(array $gallery, array $images = []): void
 {
+    // $items stores an intermediate value used by the surrounding gallery workflow.
     $items = [];
+    // $position stores an intermediate value used by the surrounding gallery workflow.
     $position = 1;
     foreach ($images as $image) {
         $items[] = [
@@ -318,6 +359,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
             'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
     }
+    // $jsonLd stores an intermediate value used by the surrounding gallery workflow.
     $jsonLd = [
         '@context' => 'https://schema.org',
         '@type' => 'ImageGallery',
@@ -326,10 +368,12 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
         'url' => canonical_url_for_gallery($gallery),
         'image' => $items,
     ];
+    // $metadata stores an intermediate value used by the surrounding gallery workflow.
     $metadata = public_gallery_metadata($gallery);
     if (!empty($metadata['tags'])) {
         $jsonLd['keywords'] = $metadata['tags'];
     }
+    // $json stores an intermediate value used by the surrounding gallery workflow.
     $json = json_encode($jsonLd, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
         return;
@@ -343,6 +387,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
 function output_sitemap_xml(): void
 {
     header('Content-Type: application/xml; charset=utf-8');
+    // $base stores an intermediate value used by the surrounding gallery workflow.
     $base = public_base_url();
     echo '<?xml version="1.0" encoding="UTF-8"?>';
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
@@ -400,6 +445,7 @@ function flash_message(string $key, ?string $message = null): ?string
         return null;
     }
 
+    // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = (string) $_SESSION['flash_messages'][$key];
     unset($_SESSION['flash_messages'][$key]);
     return $value;
@@ -469,6 +515,114 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
     }
 }
 
+
+/**
+ * Return the canonical admin menu model used by the dashboard and admin shell.
+ */
+function admin_menu_structure(): array
+{
+    // $updatePending stores an intermediate value used by the surrounding gallery workflow.
+    $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
+    // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
+    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : 'Updates';
+    return [
+        [
+            'label' => 'Dashboard',
+            'items' => [
+                ['label' => 'Overview', 'page' => 'admin', 'url' => url_for('admin')],
+            ],
+        ],
+        [
+            'label' => 'Galleries',
+            'items' => [
+                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-galleries'],
+                ['label' => 'Create gallery', 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
+                ['label' => 'Upload photos', 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => 'Ordering', 'page' => 'admin', 'url' => url_for('admin') . '#admin-ordering'],
+            ],
+        ],
+        [
+            'label' => 'Media',
+            'items' => [
+                ['label' => 'Thumbnails', 'page' => 'admin', 'url' => url_for('admin') . '#admin-thumbnails'],
+                ['label' => 'Cache', 'page' => 'admin', 'url' => url_for('admin') . '#admin-cache'],
+                ['label' => 'ZIP downloads', 'page' => 'download_all', 'url' => url_for('download_all')],
+            ],
+        ],
+        [
+            'label' => 'Appearance',
+            'items' => [
+                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-theme'],
+                ['label' => 'Custom CSS', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-custom-css'],
+                ['label' => 'Favicon', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-favicon'],
+                ['label' => 'Backgrounds', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-backgrounds'],
+            ],
+        ],
+        [
+            'label' => 'Maintenance',
+            'items' => [
+                ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
+                ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
+                ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
+                ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
+                ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
+            ],
+        ],
+        [
+            'label' => 'Account',
+            'items' => [
+                ['label' => 'Profile', 'page' => 'admin_account', 'url' => url_for('admin_account')],
+                ['label' => 'Logout', 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Return true when one admin menu item should be marked as active.
+ */
+function admin_menu_item_is_active(array $item, string $currentPage): bool
+{
+    // $itemPage stores an intermediate value used by the surrounding gallery workflow.
+    $itemPage = (string) ($item['page'] ?? '');
+    if ($itemPage === '') {
+        return false;
+    }
+    if ($currentPage === $itemPage) {
+        if ($itemPage === 'admin') {
+            return !str_contains((string) ($item['url'] ?? ''), '#');
+        }
+        return true;
+    }
+    if ($itemPage === 'admin' && in_array($currentPage, ['admin_edit_gallery', 'admin_edit_image'], true)) {
+        return str_contains((string) ($item['url'] ?? ''), '#admin-galleries');
+    }
+    return false;
+}
+
+/**
+ * Render the persistent admin sidebar used by all authenticated admin pages.
+ */
+function render_admin_sidebar(string $currentPage): void
+{
+    echo '<aside class="admin-sidebar" aria-label="Admin navigation">';
+    echo '<div class="admin-sidebar-title">Admin</div>';
+    foreach (admin_menu_structure() as $group) {
+        echo '<section class="admin-menu-group">';
+        echo '<h2>' . e((string) $group['label']) . '</h2>';
+        echo '<nav class="admin-menu-links">';
+        foreach ((array) $group['items'] as $item) {
+            // $activeClass stores an intermediate value used by the surrounding gallery workflow.
+            $activeClass = admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
+            // $highlightClass stores an intermediate value used by the surrounding gallery workflow.
+            $highlightClass = !empty($item['highlight']) ? ' is-update-pending' : '';
+            echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . e((string) $item['label']) . '</a>';
+        }
+        echo '</nav></section>';
+    }
+    echo '</aside>';
+}
+
 /**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
@@ -490,6 +644,7 @@ function render_header(string $title): void
     // Variable $faviconUrl stores this steps working value.
     $faviconUrl = favicon_asset_url();
     if ($faviconUrl !== '') {
+        // $faviconVersion stores an intermediate value used by the surrounding gallery workflow.
         $faviconVersion = (string) app_setting('favicon_version', '1');
         echo '<link rel="icon" type="image/png" sizes="32x32" href="' . e($faviconUrl) . '&s=32&v=' . e($faviconVersion) . '">';
         echo '<link rel="icon" type="image/png" sizes="48x48" href="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '">';
@@ -509,6 +664,7 @@ function render_header(string $title): void
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
     echo cms_head_extras_html();
+    // $devModeActive stores an intermediate value used by the surrounding gallery workflow.
     $devModeActive = $user && dev_mode_enabled();
     echo '</head><body class="' . e($bodyClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
@@ -521,18 +677,28 @@ function render_header(string $title): void
     echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
-        $updatePending = application_update_pending();
-        $updateClass = $updatePending ? ' class="is-update-pending"' : '';
-        $updateLabel = application_update_nav_label($updatePending);
-        echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
-        echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
-        echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
-        echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        if ($bodyClass === 'public-page') {
+            // $updatePending stores an intermediate value used by the surrounding gallery workflow.
+            $updatePending = application_update_pending();
+            // $updateClass stores an intermediate value used by the surrounding gallery workflow.
+            $updateClass = $updatePending ? ' class="is-update-pending"' : '';
+            // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
+            $updateLabel = application_update_nav_label($updatePending);
+            echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
+            echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        }
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
     }
-    echo '</nav></header><main class="site-main">';
+    echo '</nav></header>';
+    if ($bodyClass === 'admin-page' && $user) {
+        echo '<div class="admin-shell">';
+        render_admin_sidebar($page);
+        echo '<main class="site-main admin-content">';
+    } else {
+        echo '<main class="site-main">';
+    }
 }
 
 /**
@@ -556,6 +722,7 @@ function append_cms_head_extras(string $html): void
  */
 function cms_head_extras_html(): string
 {
+    // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = (string) ($GLOBALS['cms_head_extras'] ?? '');
     $GLOBALS['cms_head_extras'] = '';
     return $html;
@@ -575,8 +742,10 @@ function append_cms_footer_script(string $script): void
  */
 function cms_footer_scripts_html(): string
 {
+    // $scripts stores an intermediate value used by the surrounding gallery workflow.
     $scripts = (array) ($GLOBALS['cms_footer_scripts'] ?? []);
     $GLOBALS['cms_footer_scripts'] = [];
+    // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
     foreach ($scripts as $script) {
         $html .= '<script>' . $script . '</script>';
@@ -594,9 +763,12 @@ function cms_current_version(): string
         return $version;
     }
 
+    // $bootstrapPath stores an intermediate value used by the surrounding gallery workflow.
     $bootstrapPath = dirname(__DIR__) . '/app/bootstrap.php';
+    // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
     $bootstrap = is_file($bootstrapPath) ? (string) file_get_contents($bootstrapPath) : '';
     if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
+        // $version stores an intermediate value used by the surrounding gallery workflow.
         $version = trim((string) $match[1]);
         return $version;
     }
@@ -609,7 +781,11 @@ function cms_current_version(): string
  */
 function render_footer(): void
 {
-    echo '</main><footer class="site-footer muted">';
+    // $page stores an intermediate value used by the surrounding gallery workflow.
+    $page = (string) ($_GET['page'] ?? 'home');
+    // $hasAdminShell stores an intermediate value used by the surrounding gallery workflow.
+    $hasAdminShell = (str_starts_with($page, 'admin') || $page === 'setup') && current_user();
+    echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
@@ -624,6 +800,7 @@ function render_footer(): void
  */
 function supported_image_extensions(): array
 {
+    // $extensions stores an intermediate value used by the surrounding gallery workflow.
     $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     if (function_exists('heic_conversion_supported') && heic_conversion_supported()) {
         $extensions[] = 'heic';

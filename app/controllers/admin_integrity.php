@@ -10,11 +10,17 @@ declare(strict_types=1);
 
 function render_admin_integrity_summary(array $integrityStatus): void
 {
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = (string) ($integrityStatus['status'] ?? 'error');
+    // $label stores an intermediate value used by the surrounding gallery workflow.
     $label = integrity_status_label($status);
+    // $modifiedCount stores an intermediate value used by the surrounding gallery workflow.
     $modifiedCount = count((array) ($integrityStatus['modified'] ?? []));
+    // $missingCount stores an intermediate value used by the surrounding gallery workflow.
     $missingCount = count((array) ($integrityStatus['missing'] ?? []));
+    // $unknownCount stores an intermediate value used by the surrounding gallery workflow.
     $unknownCount = count((array) ($integrityStatus['unknown'] ?? []));
+    // $checkedAt stores an intermediate value used by the surrounding gallery workflow.
     $checkedAt = (string) ($integrityStatus['checked_at_iso'] ?? '');
 
     echo '<section class="panel"><h2>System integrity</h2>';
@@ -35,6 +41,12 @@ function render_admin_integrity_summary(array $integrityStatus): void
     echo '</section>';
 }
 
+/**
+ * Handles render admin integrity path list logic for the gallery application.
+ * @param mixed $title Input used by this operation.
+ * @param mixed $paths Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_integrity_path_list(string $title, array $paths): void
 {
     echo '<h3>' . e($title) . '</h3>';
@@ -50,12 +62,17 @@ function render_admin_integrity_path_list(string $title, array $paths): void
     echo '</ul>';
 }
 
+/**
+ * Handles cms admin integrity logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_integrity(): void
 {
     require_admin();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         verify_csrf();
+        // $status stores an intermediate value used by the surrounding gallery workflow.
         $status = integrity_status(true);
         admin_log_event('info', 'integrity.checked', 'Admin ran the system integrity check.', [
             'status' => (string) ($status['status'] ?? 'unknown'),
@@ -66,6 +83,7 @@ function cms_admin_integrity(): void
         redirect_to(url_for('admin_integrity', ['checked' => 1]));
     }
 
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = integrity_status(false);
     render_header('System integrity');
     echo '<section class="hero"><h1>System integrity</h1><nav class="nav">';

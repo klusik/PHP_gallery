@@ -16,6 +16,7 @@ Read-oriented gallery and image lookup helpers.
 function child_galleries(int $parentId, bool $publicOnly): array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $parentId . ':' . ($publicOnly ? '1' : '0');
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -43,6 +44,7 @@ function child_galleries(int $parentId, bool $publicOnly): array
 function gallery_ancestors(array $gallery, bool $publicOnly): array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = (int) $gallery['id'] . ':' . ($publicOnly ? '1' : '0');
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -74,6 +76,7 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
 function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -84,7 +87,9 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
         return $cache[$cacheKey] = 0;
     }
     if ($publicOnly) {
+        // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
         $galleryIds = array_values(array_filter($galleryIds, static function (int $candidateId): bool {
+            // $candidate stores an intermediate value used by the surrounding gallery workflow.
             $candidate = find_gallery($candidateId);
             return $candidate && visitor_can_access_gallery($candidate);
         }));
@@ -161,6 +166,7 @@ function find_gallery_by_folder_path(string $folderPath): ?array
 {
     static $cache = [];
 
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = normalize_relative_path($folderPath);
     if (array_key_exists($normalizedPath, $cache)) {
         return $cache[$normalizedPath];
@@ -220,7 +226,9 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
 {
     static $cache = [];
 
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = normalize_relative_path($relativePath);
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $galleryId . '|' . $normalizedPath;
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];

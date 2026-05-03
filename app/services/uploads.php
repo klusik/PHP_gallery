@@ -13,8 +13,10 @@ function gallery_upload_entries(?array $files): array
     if (!$files || empty($files['name']) || !is_array($files['name'])) {
         throw new RuntimeException('Choose at least one image to upload.');
     }
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = [];
     foreach ($files['name'] as $index => $name) {
+        // $error stores an intermediate value used by the surrounding gallery workflow.
         $error = (int) ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
         if ($error === UPLOAD_ERR_NO_FILE) {
             continue;
@@ -22,22 +24,29 @@ function gallery_upload_entries(?array $files): array
         if ($error !== UPLOAD_ERR_OK) {
             throw new RuntimeException(upload_error_message($error));
         }
+        // $tmpName stores an intermediate value used by the surrounding gallery workflow.
         $tmpName = (string) ($files['tmp_name'][$index] ?? '');
         if ($tmpName === '' || !is_uploaded_file($tmpName)) {
             throw new RuntimeException('Uploaded file is not available.');
         }
+        // $originalName stores an intermediate value used by the surrounding gallery workflow.
         $originalName = (string) $name;
         if (!is_supported_image_path($originalName)) {
+            // $message stores an intermediate value used by the surrounding gallery workflow.
             $message = 'Only JPG, PNG, GIF, and WebP images can be uploaded.';
             if (heic_conversion_supported() && raw_conversion_supported()) {
+                // $message stores an intermediate value used by the surrounding gallery workflow.
                 $message = 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.';
             } elseif (heic_conversion_supported()) {
+                // $message stores an intermediate value used by the surrounding gallery workflow.
                 $message = 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.';
             } elseif (raw_conversion_supported()) {
+                // $message stores an intermediate value used by the surrounding gallery workflow.
                 $message = 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.';
             }
             throw new RuntimeException($message . ' Offending file: ' . $originalName . '.');
         }
+        // $info stores an intermediate value used by the surrounding gallery workflow.
         $info = @getimagesize($tmpName);
         if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
             throw new RuntimeException('One uploaded file is not a valid image.');
@@ -54,16 +63,22 @@ function gallery_upload_entries(?array $files): array
     return $entries;
 }
 
+/**
+ * Handles heic conversion supported logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function heic_conversion_supported(): bool
 {
     if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
         return false;
     }
     try {
+        // $formats stores an intermediate value used by the surrounding gallery workflow.
         $formats = Imagick::queryFormats('HEIC');
         if ($formats) {
             return true;
         }
+        // $formats stores an intermediate value used by the surrounding gallery workflow.
         $formats = Imagick::queryFormats('HEIF');
         return (bool) $formats;
     } catch (Throwable) {
@@ -71,16 +86,22 @@ function heic_conversion_supported(): bool
     }
 }
 
+/**
+ * Handles raw conversion supported logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function raw_conversion_supported(): bool
 {
     if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
         return false;
     }
     try {
+        // $formats stores an intermediate value used by the surrounding gallery workflow.
         $formats = Imagick::queryFormats('DNG');
         if ($formats) {
             return true;
         }
+        // $formats stores an intermediate value used by the surrounding gallery workflow.
         $formats = Imagick::queryFormats('RAW');
         return (bool) $formats;
     } catch (Throwable) {
@@ -88,6 +109,11 @@ function raw_conversion_supported(): bool
     }
 }
 
+/**
+ * Handles upload error message logic for the gallery application.
+ * @param mixed $error Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function upload_error_message(int $error): string
 {
     return match ($error) {
@@ -100,39 +126,68 @@ function upload_error_message(int $error): string
     };
 }
 
+/**
+ * Handles safe uploaded image filename logic for the gallery application.
+ * @param mixed $name Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function safe_uploaded_image_filename(string $name): string
 {
+    // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    // $base stores an intermediate value used by the surrounding gallery workflow.
     $base = pathinfo($name, PATHINFO_FILENAME);
     return slugify($base) . '.' . $extension;
 }
 
+/**
+ * Handles unique gallery upload target logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $filename Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function unique_gallery_upload_target(array $gallery, string $filename): array
 {
+    // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    // $safeName stores an intermediate value used by the surrounding gallery workflow.
     $safeName = safe_uploaded_image_filename($filename);
+    // $base stores an intermediate value used by the surrounding gallery workflow.
     $base = pathinfo($safeName, PATHINFO_FILENAME);
+    // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = pathinfo($safeName, PATHINFO_EXTENSION);
+    // $candidate stores an intermediate value used by the surrounding gallery workflow.
     $candidate = $safeName;
+    // $counter stores an intermediate value used by the surrounding gallery workflow.
     $counter = 2;
     while (file_exists($galleryRoot . DIRECTORY_SEPARATOR . $candidate) || find_image_by_path((int) $gallery['id'], $candidate)) {
+        // $candidate stores an intermediate value used by the surrounding gallery workflow.
         $candidate = $base . '-' . $counter . '.' . $extension;
         $counter++;
     }
     return [$candidate, $galleryRoot . DIRECTORY_SEPARATOR . $candidate];
 }
 
+/**
+ * Handles store uploaded gallery images logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $entries Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function store_uploaded_gallery_images(int $galleryId, array $entries): array
 {
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException('Gallery not found.');
     }
+    // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
         throw new RuntimeException('Gallery folder is not writable.');
     }
 
+    // $stored stores an intermediate value used by the surrounding gallery workflow.
     $stored = [];
     foreach ($entries as $entry) {
         [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
@@ -142,11 +197,19 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
         $stored[] = $filename;
     }
 
+    // $changed stores an intermediate value used by the surrounding gallery workflow.
     $changed = scan_gallery_images($galleryId);
+    // $imageIds stores an intermediate value used by the surrounding gallery workflow.
     $imageIds = uploaded_gallery_image_ids($galleryId, $stored);
     return ['uploaded' => count($stored), 'filenames' => $stored, 'image_ids' => $imageIds, 'scanned' => $changed];
 }
 
+/**
+ * Handles uploaded gallery image ids logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $filenames Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
 {
     if (!$filenames) {
@@ -158,6 +221,7 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
     foreach ($filenames as $filename) {
         $hashes[] = hash('sha256', normalize_relative_path((string) $filename));
     }
+    // $hashes stores an intermediate value used by the surrounding gallery workflow.
     $hashes = array_values(array_unique($hashes));
     if (!$hashes) {
         return [];
@@ -171,13 +235,22 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 }
 
+/**
+ * Handles store uploaded gallery cover logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $file Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function store_uploaded_gallery_cover(int $galleryId, array $file): string
 {
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException('Gallery not found.');
     }
+    // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    // $coverDir stores an intermediate value used by the surrounding gallery workflow.
     $coverDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbnail';
     if (!is_dir($coverDir) && !mkdir($coverDir, 0775, true)) {
         throw new RuntimeException('Could not create thumbnail folder.');
@@ -185,13 +258,16 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     if (!path_inside($galleryRoot, $coverDir)) {
         throw new RuntimeException('Thumbnail path is outside its gallery.');
     }
+    // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.jpg';
     foreach (glob($coverDir . DIRECTORY_SEPARATOR . 'cover.*') ?: [] as $oldFile) {
         if (is_file($oldFile) && $oldFile !== $target) {
             @unlink($oldFile);
         }
     }
+    // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
     $tmpPath = (string) ($file['tmp_name'] ?? '');
+    // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
         throw new RuntimeException('Could not read the uploaded gallery thumbnail image.');
@@ -199,6 +275,7 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     if (!extension_loaded('gd')) {
         throw new RuntimeException('Gallery thumbnail resizing requires the GD extension.');
     }
+    // $source stores an intermediate value used by the surrounding gallery workflow.
     $source = image_create_from_path($tmpPath, (string) $info['mime']);
     if (!$source) {
         throw new RuntimeException('Could not decode the uploaded gallery thumbnail image.');
@@ -208,6 +285,7 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
         throw new RuntimeException('Could not store gallery thumbnail.');
     }
     imagedestroy($source);
+    // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'thumbnail/cover.jpg';
     if (!is_file($target)) {
         throw new RuntimeException('Could not store gallery thumbnail.');

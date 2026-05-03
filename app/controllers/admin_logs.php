@@ -16,8 +16,10 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
     // Variable $context stores this steps working value.
     $context = [];
     if (!empty($entry['context_json'])) {
+        // $decoded stores an intermediate value used by the surrounding gallery workflow.
         $decoded = json_decode((string) $entry['context_json'], true);
         if (is_array($decoded)) {
+            // $context stores an intermediate value used by the surrounding gallery workflow.
             $context = $decoded;
         }
     }
@@ -26,6 +28,7 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
     // Variable $statusForm stores this steps working value.
     $statusForm = '';
     if ($withActions) {
+        // $statusForm stores an intermediate value used by the surrounding gallery workflow.
         $statusForm = '<form method="post" action="' . e(url_for('admin_log_update')) . '" class="inline-action-form">' . csrf_field()
             . '<input type="hidden" name="log_id" value="' . (int) $entry['id'] . '">'
             . '<select name="status">';
@@ -44,6 +47,13 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
         . '</tr>';
 }
 
+/**
+ * Handles render admin feature flag logic for the gallery application.
+ * @param mixed $enabled Input used by this operation.
+ * @param mixed $symbol Input used by this operation.
+ * @param mixed $label Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
 {
     if (!$enabled) {
@@ -52,6 +62,10 @@ function render_admin_feature_flag(bool $enabled, string $symbol, string $label)
     return '<span class="admin-flag is-enabled" title="' . e($label) . '" aria-label="' . e($label) . '">' . e($symbol) . '</span>';
 }
 
+/**
+ * Handles cms admin logs logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_logs(): void
 {
     require_admin();
@@ -100,6 +114,10 @@ function cms_admin_logs(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin log update logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_log_update(): void
 {
     require_admin();

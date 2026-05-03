@@ -150,12 +150,20 @@ function scan_gallery_images(int $galleryId): int
     return $count;
 }
 
+/**
+ * Handles scan all imported gallery images logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function scan_all_imported_gallery_images(): array
 {
+    // $scanned stores an intermediate value used by the surrounding gallery workflow.
     $scanned = 0;
+    // $changed stores an intermediate value used by the surrounding gallery workflow.
     $changed = 0;
+    // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
     $galleryIds = db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN);
     foreach ($galleryIds as $galleryId) {
+        // $current stores an intermediate value used by the surrounding gallery workflow.
         $current = scan_gallery_images((int) $galleryId);
         $scanned++;
         $changed += $current;

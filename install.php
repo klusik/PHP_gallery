@@ -332,6 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($action === 'reset_database_step') {
             unset($_SESSION['installer_setup']);
+            // $currentStep stores an intermediate value used by the surrounding gallery workflow.
             $currentStep = 1;
         } elseif ($action === 'database_step') {
             // Variable $setup stores this steps working value.
@@ -342,6 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['installer_setup'] = $setup;
             $_SESSION['installer_token'] = bin2hex(random_bytes(16));
             $messages[] = 'Database connection verified. Continue with the web admin account.';
+            // $currentStep stores an intermediate value used by the surrounding gallery workflow.
             $currentStep = 2;
         } elseif ($action === 'admin_step') {
             if (empty($_SESSION['installer_setup']) || !is_array($_SESSION['installer_setup'])) {
@@ -392,11 +394,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messages[] = $ran ? 'Applied migrations: ' . implode(', ', $ran) : 'No pending migrations.';
             $messages[] = 'Admin user is ready.';
             $messages[] = 'The installer is now disabled for future requests.';
+            // $installationFinished stores an intermediate value used by the surrounding gallery workflow.
             $installationFinished = true;
+            // $currentStep stores an intermediate value used by the surrounding gallery workflow.
             $currentStep = 3;
         }
     } catch (Throwable $exception) {
         $errors[] = $exception->getMessage();
+        // $currentStep stores an intermediate value used by the surrounding gallery workflow.
         $currentStep = empty($_SESSION['installer_setup']) ? 1 : 2;
     }
 }

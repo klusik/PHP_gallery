@@ -34,30 +34,54 @@ function cms_admin(): void
     $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
+    // $updatePending stores an intermediate value used by the surrounding gallery workflow.
     $updatePending = application_update_pending();
+    // $updateButtonClass stores an intermediate value used by the surrounding gallery workflow.
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
+    // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
+    // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
+    // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
+    $totalGalleries = count($galleries);
+    // $totalImages stores an intermediate value used by the surrounding gallery workflow.
+    $totalImages = array_sum(array_map(static fn (array $gallery): int => (int) ($gallery['image_count'] ?? 0), $galleries));
+    // $draftGalleries stores an intermediate value used by the surrounding gallery workflow.
+    $draftGalleries = count(array_filter($galleries, static fn (array $gallery): bool => (string) ($gallery['visibility'] ?? '') === 'draft'));
+    // $privateGalleries stores an intermediate value used by the surrounding gallery workflow.
+    $privateGalleries = count(array_filter($galleries, static fn (array $gallery): bool => (string) ($gallery['visibility'] ?? '') === 'private'));
+    // $missingThumbnailVariants stores an intermediate value used by the surrounding gallery workflow.
+    $missingThumbnailVariants = (int) ($thumbnailSummary['missing_variants'] ?? 0);
     render_header('Admin dashboard');
-    echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
-    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="inline-action-form" data-refresh-galleries-form>' . csrf_field();
-    echo '<button type="submit">Check for new gallery folders</button>';
-    echo '</form>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a>';
+    echo '<section class="hero admin-dashboard-hero"><div><p class="admin-kicker">Admin</p><h1>Dashboard</h1><p class="muted">Operational overview, gallery management, media maintenance, appearance, and system tools are now grouped into one admin workspace.</p></div>';
+    echo '<div class="admin-hero-actions">';
+    echo '<a class="button" href="' . e(url_for('admin_new_gallery')) . '">Create gallery</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a>';
     echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+    echo '</div></section>';
+    echo '<nav class="admin-section-tabs" aria-label="Admin dashboard sections">';
+    echo '<a href="#admin-galleries">Galleries</a><a href="#admin-ordering">Ordering</a><a href="#admin-thumbnails">Thumbnails</a><a href="#admin-cache">Cache</a><a href="#admin-appearance">Appearance</a><a href="#admin-migrations">Maintenance</a>';
+    echo '</nav>';
+    echo '<section class="admin-metric-grid" aria-label="Admin summary">';
+    echo '<article class="admin-metric-card"><span>Galleries</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $draftGalleries . ' draft, ' . (int) $privateGalleries . ' private</small></article>';
+    echo '<article class="admin-metric-card"><span>Top-level images</span><strong>' . (int) $totalImages . '</strong><small>Imported images shown in gallery lists</small></article>';
+    echo '<article class="admin-metric-card"><span>Thumbnail gaps</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' images sampled</small></article>';
+    echo '<article class="admin-metric-card"><span>System state</span><strong>' . ($migrationPending ? 'Action' : 'Ready') . '</strong><small>' . ($migrationPending ? 'Database migration pending' : 'No migration warning') . '</small></article>';
+    echo '</section>';
+    echo '<section class="panel admin-quick-panel"><h2>Quick actions</h2><div class="admin-action-grid">';
+    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form>' . csrf_field();
+    echo '<strong>Discover folders</strong><span>Scan the galleries directory for new folders.</span><button type="submit">Check for new gallery folders</button></form>';
+    echo '<div class="admin-action-card"><strong>Gallery tools</strong><span>Create galleries or upload photos using the existing workflows.</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></div></div>';
+    echo '<div class="admin-action-card"><strong>Media tools</strong><span>Generate thumbnails or download the complete gallery archive.</span><div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button><a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a></div></div>';
+    echo '<div class="admin-action-card"><strong>Maintenance</strong><span>Review logs, paths, integrity, updates, and migrations.</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">View log</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Integrity</a></div></div>';
+    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-action-card" onsubmit="return confirm(\'Regenerate clean public URLs for all galleries and images?\');">' . csrf_field();
+    echo '<strong>Public paths</strong><span>Regenerate clean public URLs for galleries and images.</span><button type="submit" class="secondary">Regenerate paths</button></form>';
     if ($migrationPending) {
-        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
-        echo '<button type="submit" class="button is-update-pending">Run database migration</button>';
-        echo '</form>';
+        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="admin-action-card is-attention">' . csrf_field();
+        echo '<strong>Database migrations</strong><span>Some admin features need database migrations.</span><button type="submit" class="button is-update-pending">Run database migration</button></form>';
     }
-    echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a>';
-    echo '<button type="button" class="secondary" data-create-all-thumbnails>Create all thumbnails</button>';
-    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="inline-action-form" onsubmit="return confirm(\'Regenerate clean public URLs for all galleries and images?\');">' . csrf_field();
-    echo '<button type="submit" class="secondary">Regenerate paths</button>';
-    echo '</form>';
-    echo '</nav></section>';
+    echo '</div></section>';
+    // $adminNotice stores an intermediate value used by the surrounding gallery workflow.
     $adminNotice = (string) flash_message('admin_notice');
     if ($adminNotice !== '') {
         echo '<div class="notice">' . e($adminNotice) . '</div>';
@@ -86,7 +110,7 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     render_admin_thumbnail_maintenance_notice($thumbnailSummary);
-    echo '<section class="panel"><h2>Galleries</h2><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
+    echo '<section class="panel admin-data-panel" id="admin-galleries"><div class="admin-panel-heading"><div><p class="admin-kicker">Galleries</p><h2>All galleries</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></div><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
@@ -124,6 +148,7 @@ function cms_admin(): void
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
         if ($accessReady) {
+            // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
             echo '<td>' . e($accessLabel) . '</td>';
         }
@@ -141,12 +166,22 @@ function cms_admin(): void
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
+    echo '<section class="panel admin-info-panel" id="admin-ordering"><p class="admin-kicker">Galleries</p><h2>Ordering</h2><p class="muted">Ordering is handled by the existing gallery and image edit screens. This section is linked from the unified menu so the admin structure has a stable place for the ordering workflow.</p></section>';
+    echo '<section class="panel admin-info-panel" id="admin-thumbnails"><p class="admin-kicker">Media</p><h2>Thumbnails</h2><p class="muted">The existing thumbnail maintenance workflow is unchanged. Use the quick action above, gallery row Thumbs buttons, or image bulk tools inside each gallery.</p></section>';
+    echo '<section class="panel admin-info-panel" id="admin-cache"><p class="admin-kicker">Media</p><h2>Cache and ZIP downloads</h2><p class="muted">ZIP archives use the existing generated ZIP cache lifecycle. Existing download routes and cache cleanup behaviour remain unchanged.</p><p><a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a></p></section>';
+    echo '<section class="panel admin-info-panel" id="admin-appearance"><p class="admin-kicker">Appearance</p><h2>Theme, custom CSS, favicon, and backgrounds</h2><p class="muted">Appearance settings are consolidated under the admin menu instead of the old header shortcut.</p><p><a class="button secondary" href="' . e(url_for('admin_theme')) . '">Open appearance settings</a></p></section>';
+    echo '<section class="panel admin-info-panel" id="admin-migrations"><p class="admin-kicker">Maintenance</p><h2>Health, logs, integrity, migrations, and updates</h2><p class="muted">Maintenance tools keep their original controllers and actions. The new layout only reorganizes access to them.</p><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">Logs</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Integrity</a><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></div></section>';
     render_admin_devmode_panel();
     render_footer();
 }
 
+/**
+ * Handles render admin devmode panel logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_devmode_panel(): void
 {
+    // $enabled stores an intermediate value used by the surrounding gallery workflow.
     $enabled = dev_mode_enabled();
     echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary"><h2>Dev mode</h2>';
     echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="form-grid">' . csrf_field();
@@ -155,6 +190,10 @@ function render_admin_devmode_panel(): void
     echo '<button type="submit" class="secondary">Save dev mode</button></form></section>';
 }
 
+/**
+ * Handles cms admin devmode logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_devmode(): void
 {
     require_admin();
@@ -168,6 +207,11 @@ function cms_admin_devmode(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles render admin migration notice logic for the gallery application.
+ * @param mixed $message Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_migration_notice(string $message): void
 {
     echo '<div class="notice is-alert"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -176,11 +220,16 @@ function render_admin_migration_notice(string $message): void
     echo '</form></div>';
 }
 
+/**
+ * Handles cms admin run migrations logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_run_migrations(): void
 {
     require_admin();
     verify_csrf();
     try {
+        // $ran stores an intermediate value used by the surrounding gallery workflow.
         $ran = run_migrations();
         if ($ran) {
             admin_log_event('info', 'migrations.ran', 'Admin ran pending migrations.', ['versions' => $ran]);

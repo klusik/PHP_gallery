@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 function cms_home(): void
 {
+    // $listingCondition stores an intermediate value used by the surrounding gallery workflow.
     $listingCondition = public_gallery_listing_condition('g');
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
@@ -35,6 +36,10 @@ function cms_home(): void
     render_footer();
 }
 
+/**
+ * Handles cms gallery logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_gallery(): void
 {
     // Variable $viewer stores this steps working value.
@@ -44,25 +49,33 @@ function cms_gallery(): void
     // Variable $requestedImage stores this steps working value.
     $requestedImage = null;
     if (isset($_GET['public_path'])) {
+        // $resolved stores an intermediate value used by the surrounding gallery workflow.
         $resolved = resolve_public_gallery_path((string) $_GET['public_path'], !$viewer);
+        // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = $resolved['gallery'];
+        // $requestedImage stores an intermediate value used by the surrounding gallery workflow.
         $requestedImage = $resolved['image'];
     }
     if (!$gallery && isset($_GET['gallery_path'])) {
         try {
+            // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = find_gallery_by_folder_path((string) $_GET['gallery_path']);
         } catch (RuntimeException) {
+            // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = null;
         }
     }
     if (!$gallery && isset($_GET['slug'])) {
         try {
+            // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = find_gallery_by_folder_path((string) $_GET['slug']);
         } catch (RuntimeException) {
+            // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = null;
         }
     }
     if (!$gallery) {
+        // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
     if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
@@ -87,6 +100,7 @@ function cms_gallery(): void
     $sql .= "
         GROUP BY i.id
         ORDER BY i.sort_order, i.filename";
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare($sql);
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
@@ -195,6 +209,11 @@ function cms_gallery(): void
     render_footer();
 }
 
+/**
+ * Handles render breadcrumbs logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_breadcrumbs(?array $gallery = null): void
 {
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs">';
@@ -208,8 +227,15 @@ function render_breadcrumbs(?array $gallery = null): void
     echo '</nav>';
 }
 
+/**
+ * Handles render gallery access gate logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $error Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_gallery_access_gate(array $gallery, string $error = ''): void
 {
+    // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery) ?: $gallery;
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
@@ -231,6 +257,10 @@ function render_gallery_access_gate(array $gallery, string $error = ''): void
     render_footer();
 }
 
+/**
+ * Handles cms gallery access logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_gallery_access(): void
 {
     if (request_method() !== 'POST') {
@@ -238,16 +268,19 @@ function cms_gallery_access(): void
         return;
     }
     verify_csrf();
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
     if (!$gallery || (string) $gallery['visibility'] !== 'public') {
         cms_not_found();
         return;
     }
+    // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery);
     if (!$requirement || empty($requirement['access_password_hash'])) {
         render_gallery_access_gate($gallery, 'This gallery does not have a password login configured.');
         return;
     }
+    // $password stores an intermediate value used by the surrounding gallery workflow.
     $password = (string) ($_POST['gallery_password'] ?? '');
     if (!password_verify($password, (string) $requirement['access_password_hash'])) {
         render_gallery_access_gate($gallery, 'The password is incorrect.');
@@ -257,21 +290,30 @@ function cms_gallery_access(): void
     redirect_to(gallery_public_url($gallery));
 }
 
+/**
+ * Handles cms share logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_share(): void
 {
+    // $token stores an intermediate value used by the surrounding gallery workflow.
     $token = trim((string) ($_GET['token'] ?? ''));
     if ($token === '' || !gallery_access_schema_ready()) {
         cms_not_found();
         return;
     }
+    // $galleryId stores an intermediate value used by the surrounding gallery workflow.
     $galleryId = (int) ($_GET['id'] ?? 0);
     if ($galleryId > 0) {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? AND visibility = 'public' LIMIT 1");
         $stmt->execute([$galleryId, hash('sha256', $token)]);
     } else {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? AND visibility = 'public' ORDER BY updated_at DESC, id DESC LIMIT 1");
         $stmt->execute([hash('sha256', $token)]);
     }
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $stmt->fetch();
     if (!$gallery || (!empty($gallery['access_token_expires_at']) && strtotime((string) $gallery['access_token_expires_at']) < time())) {
         cms_not_found();
@@ -281,16 +323,30 @@ function cms_share(): void
     redirect_to(gallery_public_url($gallery));
 }
 
+/**
+ * Handles gallery share url logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $token Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_share_url(int $galleryId, string $token): string
 {
     return url_for('share', ['id' => $galleryId, 'token' => $token]);
 }
 
+/**
+ * Handles render gallery card logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $publicOnly Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_gallery_card(array $gallery, bool $publicOnly): void
 {
+    // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
     $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
+    // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
@@ -327,6 +383,11 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     echo '</article>';
 }
 
+/**
+ * Handles render public gallery admin form logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_public_gallery_admin_form(array $gallery): void
 {
     if (!current_user()) {
@@ -345,6 +406,11 @@ function render_public_gallery_admin_form(array $gallery): void
     echo '</form></details>';
 }
 
+/**
+ * Handles render public image admin form logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_public_image_admin_form(array $image): void
 {
     if (!current_user()) {
@@ -363,6 +429,11 @@ function render_public_image_admin_form(array $image): void
     echo '</form></details>';
 }
 
+/**
+ * Handles render lightbox logic for the gallery application.
+ * @param mixed $votingAllowed Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_lightbox(bool $votingAllowed = true): void
 {
     echo '<div class="lightbox" data-lightbox hidden>';

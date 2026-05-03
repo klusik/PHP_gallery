@@ -15,6 +15,7 @@ Gallery discovery and sidecar metadata helpers.
  */
 function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
 {
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
     return file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
 }
@@ -134,34 +135,43 @@ function public_gallery_metadata(array $gallery): array
     // Variable $sidecar stores this steps working value.
     $sidecar = [];
     try {
+        // $sidecar stores an intermediate value used by the surrounding gallery workflow.
         $sidecar = read_gallery_sidecar(gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json');
     } catch (Throwable) {
+        // $sidecar stores an intermediate value used by the surrounding gallery workflow.
         $sidecar = [];
     }
 
     // Variable $title stores this steps working value.
     $title = trim((string) ($sidecar['title'] ?? ''));
     if ($title === '') {
+        // $title stores an intermediate value used by the surrounding gallery workflow.
         $title = trim((string) ($gallery['title'] ?? ''));
     }
     if ($title === '') {
+        // $title stores an intermediate value used by the surrounding gallery workflow.
         $title = gallery_folder_name_from_path($folderPath);
     }
 
     // Variable $description stores this steps working value.
     $description = trim((string) ($sidecar['description'] ?? ''));
     if ($description === '') {
+        // $description stores an intermediate value used by the surrounding gallery workflow.
         $description = trim((string) ($gallery['description'] ?? ''));
     }
     if ($description === '') {
+        // $description stores an intermediate value used by the surrounding gallery workflow.
         $description = $title;
     }
 
     // Variable $tags stores this steps working value.
     $tags = [];
+    // $rawTags stores an intermediate value used by the surrounding gallery workflow.
     $rawTags = $sidecar['tags'] ?? '';
+    // $tagValues stores an intermediate value used by the surrounding gallery workflow.
     $tagValues = is_array($rawTags) ? $rawTags : (preg_split('/[,;\n]+/', (string) $rawTags) ?: []);
     foreach ($tagValues as $tag) {
+        // $tag stores an intermediate value used by the surrounding gallery workflow.
         $tag = trim((string) $tag);
         if ($tag !== '') {
             $tags[] = $tag;
@@ -263,8 +273,11 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $candidate = gallery_folder_candidate_metadata($folderPath);
     // Variable $visibility stores this steps working value.
     $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
+    // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
+    // $accessListing stores an intermediate value used by the surrounding gallery workflow.
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
     $parent = find_parent_gallery_for_path($folderPath);
@@ -272,6 +285,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $pdo = db();
     // Variable $stmt stores this steps working value.
     $columns = ['parent_id', 'folder_path', 'folder_path_hash', 'slug', 'title', 'description', 'sort_order', 'visibility', 'voting_enabled'];
+    // $values stores an intermediate value used by the surrounding gallery workflow.
     $values = [
         $parent ? (int) $parent['id'] : null,
         $folderPath,
@@ -293,6 +307,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $columns[] = 'updated_at';
     $values[] = now_sql();
     $values[] = now_sql();
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = $pdo->prepare('INSERT INTO galleries (' . implode(', ', $columns) . ') VALUES (' . implode(', ', array_fill(0, count($columns), '?')) . ')');
     $stmt->execute($values);
 
@@ -309,21 +324,30 @@ function create_gallery_row_for_folder(string $folderPath): ?array
  */
 function create_empty_gallery(array $input): array
 {
+    // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = trim((string) ($input['title'] ?? ''));
     if ($title === '') {
         throw new RuntimeException('Gallery title is required.');
     }
+    // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
+    // $visibility stores an intermediate value used by the surrounding gallery workflow.
     $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
+    // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
+    // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
+    // $parent stores an intermediate value used by the surrounding gallery workflow.
     $parent = $parentId > 0 ? find_gallery($parentId) : null;
     if ($parentId > 0 && !$parent) {
         throw new RuntimeException('Selected parent gallery does not exist.');
     }
 
+    // $folderName stores an intermediate value used by the surrounding gallery workflow.
     $folderName = trim((string) ($input['folder_name'] ?? ''));
+    // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = unique_gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
+    // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = gallery_target_abs_path($folderPath);
     if (file_exists($target)) {
         throw new RuntimeException('Gallery folder already exists.');
@@ -332,6 +356,7 @@ function create_empty_gallery(array $input): array
         throw new RuntimeException('Could not create gallery folder.');
     }
 
+    // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, [
         'title' => $title,
         'description' => $description,
@@ -343,11 +368,13 @@ function create_empty_gallery(array $input): array
         throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
     }
 
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = create_gallery_row_for_folder($folderPath);
     if (!$gallery) {
         throw new RuntimeException('Gallery folder was created, but the database row could not be created.');
     }
     sync_gallery_parent_ids();
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $gallery['id']) ?: $gallery;
     write_gallery_sidecar($gallery);
     return $gallery;

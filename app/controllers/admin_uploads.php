@@ -10,7 +10,9 @@ declare(strict_types=1);
 
 function cms_admin_upload(): void
 {
+    // $isAjaxUpload stores an intermediate value used by the surrounding gallery workflow.
     $isAjaxUpload = request_method() === 'POST' && admin_wants_json();
+    // $user stores an intermediate value used by the surrounding gallery workflow.
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
         if ($isAjaxUpload) {
@@ -23,14 +25,18 @@ function cms_admin_upload(): void
     }
     if (request_method() === 'POST') {
         verify_csrf();
+        // $wantsJson stores an intermediate value used by the surrounding gallery workflow.
         $wantsJson = admin_wants_json();
         if ($wantsJson) {
             ob_start();
         }
         try {
+            // $entries stores an intermediate value used by the surrounding gallery workflow.
             $entries = gallery_upload_entries($_FILES['images'] ?? null);
+            // $mode stores an intermediate value used by the surrounding gallery workflow.
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
             if ($mode === 'new') {
+                // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = create_empty_gallery([
                     'title' => $_POST['title'] ?? '',
                     'folder_name' => $_POST['folder_name'] ?? '',
@@ -39,15 +45,19 @@ function cms_admin_upload(): void
                     'parent_id' => $_POST['parent_id'] ?? 0,
                 ]);
             } else {
+                // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
                 if (!$gallery) {
                     throw new RuntimeException('Choose an existing gallery.');
                 }
             }
 
+            // $stored stores an intermediate value used by the surrounding gallery workflow.
             $stored = store_uploaded_gallery_images((int) $gallery['id'], $entries);
+            // $thumbnails stores an intermediate value used by the surrounding gallery workflow.
             $thumbnails = 0;
             if (!$wantsJson && !empty($_POST['create_thumbnails'])) {
+                // $thumbnails stores an intermediate value used by the surrounding gallery workflow.
                 $thumbnails = create_gallery_thumbnails((int) $gallery['id']);
             }
             admin_log_event('info', 'gallery.images_uploaded', 'Admin uploaded images into a gallery folder.', [
@@ -56,6 +66,7 @@ function cms_admin_upload(): void
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
             ]);
+            // $response stores an intermediate value used by the surrounding gallery workflow.
             $response = [
                 'ok' => true,
                 'gallery_id' => (int) $gallery['id'],
@@ -89,9 +100,12 @@ function cms_admin_upload(): void
         }
     }
 
+    // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
+    // $heicSupported stores an intermediate value used by the surrounding gallery workflow.
     $heicSupported = heic_conversion_supported();
+    // $rawSupported stores an intermediate value used by the surrounding gallery workflow.
     $rawSupported = raw_conversion_supported();
     render_header('Upload photos');
     echo '<section class="hero"><h1>Upload photos</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a></nav></section>';
@@ -107,6 +121,7 @@ function cms_admin_upload(): void
     echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
     echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
     echo '</tr></tbody></table></section>';
+    // $acceptTypes stores an intermediate value used by the surrounding gallery workflow.
     $acceptTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     if ($heicSupported) {
         $acceptTypes[] = '.heic';
@@ -116,6 +131,7 @@ function cms_admin_upload(): void
         $acceptTypes[] = '.dng';
     }
     $acceptTypes[] = 'image/*';
+    // $acceptValue stores an intermediate value used by the surrounding gallery workflow.
     $acceptValue = implode(',', $acceptTypes);
     echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="existing">';
@@ -137,6 +153,10 @@ function cms_admin_upload(): void
     render_footer();
 }
 
+/**
+ * Handles admin wants json logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function admin_wants_json(): bool
 {
     return !empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');

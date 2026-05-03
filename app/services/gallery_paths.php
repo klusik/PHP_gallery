@@ -38,11 +38,14 @@ function gallery_abs_path(string $relativePath): string
  */
 function gallery_target_abs_path(string $relativePath): string
 {
+    // $relativePath stores an intermediate value used by the surrounding gallery workflow.
     $relativePath = normalize_relative_path($relativePath);
     if ($relativePath === '') {
         throw new RuntimeException('Gallery folder path cannot be empty.');
     }
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = galleries_root() . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    // $parent stores an intermediate value used by the surrounding gallery workflow.
     $parent = dirname($path);
     if (!is_dir($parent) || !path_inside(galleries_root(), $parent)) {
         throw new RuntimeException('Gallery target parent is outside the configured root or does not exist.');
@@ -63,6 +66,7 @@ function gallery_folder_segment(string $value): string
  */
 function gallery_folder_name_from_path(string $folderPath): string
 {
+    // $segments stores an intermediate value used by the surrounding gallery workflow.
     $segments = explode('/', normalize_relative_path($folderPath));
     return (string) end($segments);
 }
@@ -72,6 +76,7 @@ function gallery_folder_name_from_path(string $folderPath): string
  */
 function gallery_child_folder_path(?array $parent, string $folderName): string
 {
+    // $segment stores an intermediate value used by the surrounding gallery workflow.
     $segment = gallery_folder_segment($folderName);
     if ($segment === '') {
         throw new RuntimeException('Gallery folder name cannot be empty.');
@@ -87,10 +92,14 @@ function gallery_child_folder_path(?array $parent, string $folderName): string
  */
 function unique_gallery_child_folder_path(?array $parent, string $folderName): string
 {
+    // $segment stores an intermediate value used by the surrounding gallery workflow.
     $segment = gallery_folder_segment($folderName);
+    // $candidate stores an intermediate value used by the surrounding gallery workflow.
     $candidate = gallery_child_folder_path($parent, $segment);
+    // $counter stores an intermediate value used by the surrounding gallery workflow.
     $counter = 2;
     while (is_dir(gallery_target_abs_path($candidate)) || find_gallery_by_folder_path($candidate)) {
+        // $candidate stores an intermediate value used by the surrounding gallery workflow.
         $candidate = gallery_child_folder_path($parent, $segment . '-' . $counter);
         $counter++;
     }

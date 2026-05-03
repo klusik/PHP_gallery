@@ -30,6 +30,10 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
     echo '</div>';
 }
 
+/**
+ * Handles cms admin create thumbnails logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_create_thumbnails(): void
 {
     require_admin();
@@ -70,6 +74,10 @@ function cms_admin_create_thumbnails(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles cms admin create thumbnails batch logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_create_thumbnails_batch(): void
 {
     // Variable $imageIds stores this steps working value.
@@ -124,6 +132,11 @@ function cms_admin_create_thumbnails_batch(): void
     ]);
 }
 
+/**
+ * Handles thumbnail request image ids logic for the gallery application.
+ * @param mixed $post Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_request_image_ids(array $post): array
 {
     if (($post['scope'] ?? '') === 'all') {

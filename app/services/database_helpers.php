@@ -15,12 +15,15 @@ declare(strict_types=1);
  */
 function db_column_exists(string $table, string $column): bool
 {
+    // $safeTable stores an intermediate value used by the surrounding gallery workflow.
     $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    // $safeColumn stores an intermediate value used by the surrounding gallery workflow.
     $safeColumn = str_replace(["\\", "'"], ['', "\\'"], $column);
     if ($safeTable === '' || $safeColumn === '') {
         return false;
     }
 
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
     return (bool) $stmt->fetch();
 }

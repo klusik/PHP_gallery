@@ -37,12 +37,20 @@ function cms_admin_login(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin logout logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_logout(): void
 {
     unset($_SESSION['user_id']);
     redirect_to(url_for('home'));
 }
 
+/**
+ * Handles cms admin account logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_account(): void
 {
     require_admin();
@@ -90,6 +98,7 @@ function cms_admin_account(): void
             }
         }
         if (!$errors) {
+            // $sql stores an intermediate value used by the surrounding gallery workflow.
             $sql = 'UPDATE users SET username = ?, updated_at = ?';
             // Variable $params stores this steps working value.
             $params = [$newUsername, now_sql()];
@@ -127,20 +136,29 @@ function cms_admin_account(): void
     render_footer();
 }
 
+/**
+ * Handles cms admin reset logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_reset(): void
 {
     require_admin();
+    // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = null;
+    // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = '';
 
     if (request_method() === 'POST') {
         verify_csrf();
         try {
+            // $result stores an intermediate value used by the surrounding gallery workflow.
             $result = restore_application_stable_release();
             admin_log_event('info', 'update.stable_restored', 'Admin restored the stable branch head from the reset page.', $result);
+            // $notice stores an intermediate value used by the surrounding gallery workflow.
             $notice = 'Restored the stable branch head. Copied ' . (int) $result['files_copied'] . ' files.';
         } catch (Throwable $exception) {
             admin_log_event('warning', 'update.reset_failed', 'Stable branch reset failed.', ['error' => $exception->getMessage()]);
+            // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
         }
     }

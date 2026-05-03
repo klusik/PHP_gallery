@@ -10,16 +10,24 @@ declare(strict_types=1);
 
 function gallery_subtree_rows(int $galleryId): array
 {
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         return [];
     }
+    // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('SELECT * FROM galleries WHERE folder_path = ? OR folder_path LIKE ? ORDER BY folder_path');
     $stmt->execute([$folderPath, $folderPath . '/%']);
     return $stmt->fetchAll();
 }
 
+/**
+ * Handles delete gallery subtrees logic for the gallery application.
+ * @param mixed $galleryIds Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function delete_gallery_subtrees(array $galleryIds): array
 {
     // Variable $rootIds stores this steps working value.
@@ -55,6 +63,7 @@ function delete_gallery_subtrees(array $galleryIds): array
             // Variable $keptPath stores this steps working value.
             $keptPath = normalize_relative_path((string) $keptRoot['folder_path']);
             if ($folderPath === $keptPath || str_starts_with($folderPath, $keptPath . '/')) {
+                // $isCoveredByEarlierRoot stores an intermediate value used by the surrounding gallery workflow.
                 $isCoveredByEarlierRoot = true;
                 break;
             }
@@ -102,6 +111,12 @@ function delete_gallery_subtrees(array $galleryIds): array
     return ['root_count' => count($deletedFolders), 'row_count' => count($allRowIds)];
 }
 
+/**
+ * Handles delete directory tree logic for the gallery application.
+ * @param mixed $directory Input used by this operation.
+ * @param mixed $allowedRoot Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function delete_directory_tree(string $directory, string $allowedRoot): void
 {
     // Variable $directory stores this steps working value.
@@ -142,18 +157,29 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
     }
 }
 
+/**
+ * Handles move gallery folder to parent logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $parentId Input used by this operation.
+ * @param mixed $folderName Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $folderName = null): array
 {
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
         throw new RuntimeException('Gallery not found.');
     }
+    // $oldPath stores an intermediate value used by the surrounding gallery workflow.
     $oldPath = normalize_relative_path((string) $gallery['folder_path']);
+    // $oldAbs stores an intermediate value used by the surrounding gallery workflow.
     $oldAbs = gallery_abs_path($oldPath);
     if (!is_dir($oldAbs)) {
         throw new RuntimeException('Current gallery folder does not exist on disk.');
     }
 
+    // $parent stores an intermediate value used by the surrounding gallery workflow.
     $parent = $parentId !== null && $parentId > 0 ? find_gallery($parentId) : null;
     if ($parentId !== null && $parentId > 0 && !$parent) {
         throw new RuntimeException('Selected parent gallery does not exist.');
@@ -162,6 +188,7 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
         throw new RuntimeException('A gallery cannot be moved under itself.');
     }
     if ($parent) {
+        // $parentPath stores an intermediate value used by the surrounding gallery workflow.
         $parentPath = normalize_relative_path((string) $parent['folder_path']);
         if ($parentPath === $oldPath || str_starts_with($parentPath . '/', $oldPath . '/')) {
             throw new RuntimeException('A gallery cannot be moved under one of its own subgalleries.');
@@ -171,11 +198,14 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
         }
     }
 
+    // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
     $currentFolderName = gallery_folder_name_from_path($oldPath);
+    // $targetFolderName stores an intermediate value used by the surrounding gallery workflow.
     $targetFolderName = $folderName !== null && trim($folderName) !== '' ? gallery_folder_segment($folderName) : $currentFolderName;
     if ($targetFolderName === '') {
         throw new RuntimeException('Gallery folder name cannot be empty.');
     }
+    // $newPath stores an intermediate value used by the surrounding gallery workflow.
     $newPath = $parent ? normalize_relative_path((string) $parent['folder_path'] . '/' . $targetFolderName) : $targetFolderName;
     if ($newPath === $oldPath) {
         return ['moved' => false, 'from' => $oldPath, 'to' => $newPath, 'galleries' => 0];
@@ -183,32 +213,44 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
     if (find_gallery_by_folder_path($newPath)) {
         throw new RuntimeException('Another gallery already uses the destination folder path.');
     }
+    // $newAbs stores an intermediate value used by the surrounding gallery workflow.
     $newAbs = gallery_target_abs_path($newPath);
     if (file_exists($newAbs)) {
         throw new RuntimeException('Destination folder already exists on disk.');
     }
 
+    // $rows stores an intermediate value used by the surrounding gallery workflow.
     $rows = gallery_subtree_rows($galleryId);
+    // $pathMap stores an intermediate value used by the surrounding gallery workflow.
     $pathMap = [];
     foreach ($rows as $row) {
+        // $rowPath stores an intermediate value used by the surrounding gallery workflow.
         $rowPath = normalize_relative_path((string) $row['folder_path']);
+        // $suffix stores an intermediate value used by the surrounding gallery workflow.
         $suffix = $rowPath === $oldPath ? '' : substr($rowPath, strlen($oldPath) + 1);
         $pathMap[(int) $row['id']] = $suffix === '' ? $newPath : normalize_relative_path($newPath . '/' . $suffix);
     }
 
+    // $pdo stores an intermediate value used by the surrounding gallery workflow.
     $pdo = db();
+    // $moved stores an intermediate value used by the surrounding gallery workflow.
     $moved = false;
     try {
         $pdo->beginTransaction();
         if (!rename($oldAbs, $newAbs)) {
             throw new RuntimeException('Could not move gallery folder on disk.');
         }
+        // $moved stores an intermediate value used by the surrounding gallery workflow.
         $moved = true;
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = $pdo->prepare('UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ? WHERE id = ?');
         foreach ($pathMap as $id => $path) {
+            // $rowParentId stores an intermediate value used by the surrounding gallery workflow.
             $rowParentId = $id === $galleryId ? ($parent ? (int) $parent['id'] : null) : null;
             if ($id !== $galleryId) {
+                // $rowParent stores an intermediate value used by the surrounding gallery workflow.
                 $rowParent = find_parent_gallery_for_path($path);
+                // $rowParentId stores an intermediate value used by the surrounding gallery workflow.
                 $rowParentId = $rowParent ? (int) $rowParent['id'] : null;
             }
             $stmt->execute([$path, hash('sha256', $path), $rowParentId, now_sql(), $id]);
@@ -226,6 +268,7 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
 
     sync_gallery_parent_ids();
     foreach (array_keys($pathMap) as $id) {
+        // $updated stores an intermediate value used by the surrounding gallery workflow.
         $updated = find_gallery((int) $id);
         if ($updated) {
             write_gallery_sidecar($updated);
@@ -235,6 +278,11 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
     return ['moved' => true, 'from' => $oldPath, 'to' => $newPath, 'galleries' => count($pathMap)];
 }
 
+/**
+ * Handles ensure gallery ancestors for path logic for the gallery application.
+ * @param mixed $folderPath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function ensure_gallery_ancestors_for_path(string $folderPath): array
 {
     // Variable $segments stores this steps working value.
@@ -264,6 +312,12 @@ function ensure_gallery_ancestors_for_path(string $folderPath): array
     return $createdIds;
 }
 
+/**
+ * Handles import galleries logic for the gallery application.
+ * @param mixed $folderPaths Input used by this operation.
+ * @param mixed $createThumbnails Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
     // Variable $candidates stores this steps working value.
@@ -342,6 +396,11 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
     return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs];
 }
 
+/**
+ * Handles import galleries without thumbnails logic for the gallery application.
+ * @param mixed $folderPaths Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function import_galleries_without_thumbnails(array $folderPaths): array
 {
     // Variable $candidates stores this steps working value.
@@ -358,10 +417,13 @@ function import_galleries_without_thumbnails(array $folderPaths): array
         if ($requestedPath === '') {
             continue;
         }
+        // $segments stores an intermediate value used by the surrounding gallery workflow.
         $segments = explode('/', $requestedPath);
+        // $ancestorSegments stores an intermediate value used by the surrounding gallery workflow.
         $ancestorSegments = [];
         while (count($segments) > 1) {
             $ancestorSegments[] = array_shift($segments);
+            // $ancestorPath stores an intermediate value used by the surrounding gallery workflow.
             $ancestorPath = implode('/', $ancestorSegments);
             if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
                 $folderPaths[$ancestorPath] = $ancestorPath;
@@ -375,13 +437,17 @@ function import_galleries_without_thumbnails(array $folderPaths): array
     }
     usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
 
+    // $imported stores an intermediate value used by the surrounding gallery workflow.
     $imported = 0;
+    // $scanned stores an intermediate value used by the surrounding gallery workflow.
     $scanned = 0;
+    // $importedIds stores an intermediate value used by the surrounding gallery workflow.
     $importedIds = [];
     foreach ($folderPaths as $folderPath) {
         if (find_gallery_by_folder_path($folderPath)) {
             continue;
         }
+        // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = create_gallery_row_for_folder($folderPath);
         if (!$gallery) {
             continue;
@@ -396,6 +462,10 @@ function import_galleries_without_thumbnails(array $folderPaths): array
     return ['imported' => $imported, 'scanned' => $scanned, 'gallery_ids' => $importedIds, 'thumbnails' => 0];
 }
 
+/**
+ * Handles sync gallery parent ids logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function sync_gallery_parent_ids(): void
 {
     // Variable $galleries stores this steps working value.
@@ -422,6 +492,11 @@ function sync_gallery_parent_ids(): void
     }
 }
 
+/**
+ * Handles gallery subtree ids logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_subtree_ids(int $galleryId): array
 {
     // Variable $gallery stores this steps working value.

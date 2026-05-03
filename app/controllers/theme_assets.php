@@ -15,16 +15,19 @@ declare(strict_types=1);
  */
 function cms_theme_background_asset(): void
 {
+    // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = theme_background_path();
     if ($relative === null) {
         cms_not_found();
         return;
     }
+    // $absolute stores an intermediate value used by the surrounding gallery workflow.
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
     if (!is_file($absolute)) {
         cms_not_found();
         return;
     }
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = mime_content_type($absolute) ?: 'application/octet-stream';
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($absolute));
@@ -37,12 +40,15 @@ function cms_theme_background_asset(): void
  */
 function cms_favicon_asset(): void
 {
+    // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = favicon_safe_size((int) ($_GET['s'] ?? 32));
+    // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = favicon_path($size);
     if ($relative === null) {
         cms_not_found();
         return;
     }
+    // $absolute stores an intermediate value used by the surrounding gallery workflow.
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($relative, '/');
     if (!is_file($absolute)) {
         cms_not_found();
@@ -60,12 +66,17 @@ function cms_favicon_asset(): void
 
 function cms_theme_css(): void
 {
+    // $updatePendingCss stores an intermediate value used by the surrounding gallery workflow.
     $updatePendingCss = '.nav a.is-update-pending,.button.is-update-pending,button.is-update-pending{border-color:#7f1d1d!important;background:repeating-linear-gradient(135deg,#b91c1c 0 .55rem,#f59e0b .55rem 1.1rem)!important;color:#fff!important;box-shadow:0 0 0 2px #fff,0 0 0 4px #7f1d1d!important;font-weight:800;}';
+    // $themeBackground stores an intermediate value used by the surrounding gallery workflow.
     $themeBackground = theme_background_asset_url();
     header('Content-Type: text/css; charset=utf-8');
     header('Cache-Control: public, max-age=31536000, immutable');
+    // $theme stores an intermediate value used by the surrounding gallery workflow.
     $theme = theme_settings();
+    // $fontFamily stores an intermediate value used by the surrounding gallery workflow.
     $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
+    // $backgroundOpacity stores an intermediate value used by the surrounding gallery workflow.
     $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';

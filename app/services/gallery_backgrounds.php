@@ -25,9 +25,12 @@ function gallery_background_source_schema_ready(): bool
         return $ready;
     }
     try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'background_source'");
+        // $ready stores an intermediate value used by the surrounding gallery workflow.
         $ready = (bool) $stmt->fetch();
     } catch (Throwable) {
+        // $ready stores an intermediate value used by the surrounding gallery workflow.
         $ready = false;
     }
     return $ready;
@@ -38,6 +41,7 @@ function gallery_background_source_schema_ready(): bool
  */
 function theme_background_source(): ?string
 {
+    // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim((string) app_setting('theme_background_source', ''));
     return in_array($value, ['upload', 'existing', 'collage'], true) ? $value : null;
 }
@@ -47,6 +51,7 @@ function theme_background_source(): ?string
  */
 function gallery_background_source(array $gallery): ?string
 {
+    // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim((string) ($gallery['background_source'] ?? ''));
     return in_array($value, ['upload', 'existing', 'collage'], true) ? $value : null;
 }
@@ -66,6 +71,7 @@ function resolved_gallery_background_source(array $gallery): string
  */
 function gallery_background_asset_url(array $gallery, bool $publicOnly): string
 {
+    // $source stores an intermediate value used by the surrounding gallery workflow.
     $source = resolved_gallery_background_source($gallery);
     if ($source === '') {
         return '';
@@ -74,10 +80,12 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
         return gallery_cover_asset_url($gallery, $publicOnly);
     }
     if ($source === 'existing') {
+        // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = gallery_cover_image((int) $gallery['id'], $publicOnly);
         return $image ? thumbnail_url($image, 800) : '';
     }
     if ($source === 'collage') {
+        // $collage stores an intermediate value used by the surrounding gallery workflow.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly, 1);
         return $collage ? thumbnail_url($collage[0], 800) : '';
     }
@@ -89,10 +97,12 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
  */
 function theme_background_path(): ?string
 {
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = trim((string) app_setting('theme_background_path', ''));
     if ($path === '') {
         return null;
     }
+    // $absolute stores an intermediate value used by the surrounding gallery workflow.
     $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
     return is_file($absolute) ? $path : null;
 }
@@ -110,6 +120,7 @@ function theme_background_asset_url(): string
  */
 function theme_background_storage_dir(): string
 {
+    // $dir stores an intermediate value used by the surrounding gallery workflow.
     $dir = dirname(__DIR__, 2) . '/cache/theme-background';
     if (!is_dir($dir)) {
         mkdir($dir, 0775, true);
@@ -122,9 +133,13 @@ function theme_background_storage_dir(): string
  */
 function store_uploaded_theme_background(array $file): string
 {
+    // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = strtolower(pathinfo((string) ($file['name'] ?? 'background.jpg'), PATHINFO_EXTENSION));
+    // $safeExtension stores an intermediate value used by the surrounding gallery workflow.
     $safeExtension = in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true) ? $extension : 'jpg';
+    // $filename stores an intermediate value used by the surrounding gallery workflow.
     $filename = 'background.' . $safeExtension;
+    // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = theme_background_storage_dir() . DIRECTORY_SEPARATOR . $filename;
     foreach (glob(theme_background_storage_dir() . DIRECTORY_SEPARATOR . 'background.*') ?: [] as $oldFile) {
         if (is_file($oldFile) && $oldFile !== $target) {
@@ -134,6 +149,7 @@ function store_uploaded_theme_background(array $file): string
     if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
         throw new RuntimeException('Could not store theme background image.');
     }
+    // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'cache/theme-background/' . $filename;
     set_app_setting('theme_background_path', $relative);
     return $relative;

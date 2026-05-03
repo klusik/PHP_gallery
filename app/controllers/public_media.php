@@ -40,18 +40,28 @@ function cms_thumb(): void
     header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
+    // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
     readfile($path);
 }
 
+/**
+ * Handles cms public thumb logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_public_thumb(): void
 {
+    // $resolved stores an intermediate value used by the surrounding gallery workflow.
     $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $resolved['gallery'];
+    // $image stores an intermediate value used by the surrounding gallery workflow.
     $image = $resolved['image'];
+    // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = (int) ($_GET['size'] ?? 0);
+    // $format stores an intermediate value used by the surrounding gallery workflow.
     $format = (string) ($_GET['format'] ?? 'jpg');
 
     if (!$gallery || !$image || !in_array($size, thumbnail_sizes(), true) || !in_array($format, ['jpg', 'webp'], true)) {
@@ -64,6 +74,7 @@ function cms_public_thumb(): void
     }
 
     try {
+        // $path stores an intermediate value used by the surrounding gallery workflow.
         $path = thumbnail_abs_path($image, $gallery, $size, $format);
     } catch (RuntimeException) {
         cms_not_found();
@@ -77,16 +88,24 @@ function cms_public_thumb(): void
     header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
+    // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
     readfile($path);
 }
 
+/**
+ * Handles cms public media logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_public_media(): void
 {
+    // $resolved stores an intermediate value used by the surrounding gallery workflow.
     $resolved = resolve_public_gallery_path((string) ($_GET['public_path'] ?? ''), !current_user());
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $resolved['gallery'];
+    // $image stores an intermediate value used by the surrounding gallery workflow.
     $image = $resolved['image'];
 
     if (!$gallery || !$image) {
@@ -98,13 +117,16 @@ function cms_public_media(): void
         return;
     }
 
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = image_abs_path($image, $gallery);
     if (!is_file($path)) {
         cms_not_found();
         return;
     }
 
+    // $finfo stores an intermediate value used by the surrounding gallery workflow.
     $finfo = new finfo(FILEINFO_MIME_TYPE);
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
     if (!str_starts_with($mime, 'image/')) {
         cms_not_found();
@@ -114,43 +136,60 @@ function cms_public_media(): void
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
     readfile($path);
 }
 
+/**
+ * Handles cms gallery cover asset logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_gallery_cover_asset(): void
 {
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_GET['id'] ?? 0));
     if (!$gallery) {
         cms_not_found();
         return;
     }
+    // $coverPath stores an intermediate value used by the surrounding gallery workflow.
     $coverPath = gallery_cover_path($gallery);
     if ($coverPath === null) {
         cms_not_found();
         return;
     }
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $coverPath);
     if (!is_file($path)) {
         cms_not_found();
         return;
     }
+    // $finfo stores an intermediate value used by the surrounding gallery workflow.
     $finfo = new finfo(FILEINFO_MIME_TYPE);
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
     if (!str_starts_with($mime, 'image/')) {
         cms_not_found();
         return;
     }
     if (extension_loaded('gd')) {
+        // $info stores an intermediate value used by the surrounding gallery workflow.
         $info = @getimagesize($path);
+        // $source stores an intermediate value used by the surrounding gallery workflow.
         $source = $info !== false ? image_create_from_path($path, (string) ($info['mime'] ?? $mime)) : false;
         if ($info !== false && $source && ((int) $info[0] > 800 || (int) $info[1] > 800)) {
+            // $scale stores an intermediate value used by the surrounding gallery workflow.
             $scale = min(1.0, 800 / max((int) $info[0], (int) $info[1]));
+            // $targetWidth stores an intermediate value used by the surrounding gallery workflow.
             $targetWidth = max(1, (int) round((int) $info[0] * $scale));
+            // $targetHeight stores an intermediate value used by the surrounding gallery workflow.
             $targetHeight = max(1, (int) round((int) $info[1] * $scale));
+            // $target stores an intermediate value used by the surrounding gallery workflow.
             $target = imagecreatetruecolor($targetWidth, $targetHeight);
+            // $white stores an intermediate value used by the surrounding gallery workflow.
             $white = imagecolorallocate($target, 255, 255, 255);
             imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $white);
             imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, (int) $info[0], (int) $info[1]);
@@ -173,6 +212,10 @@ function cms_gallery_cover_asset(): void
     readfile($path);
 }
 
+/**
+ * Handles cms media logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_media(): void
 {
     // Variable $image stores this steps working value.
@@ -204,12 +247,17 @@ function cms_media(): void
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
     header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = gallery_access_requirement($gallery) && !current_user() ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     header('Content-Length: ' . filesize($path));
     readfile($path);
 }
 
+/**
+ * Handles cms robots txt logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_robots_txt(): void
 {
     header('Content-Type: text/plain; charset=utf-8');
@@ -221,6 +269,10 @@ function cms_robots_txt(): void
     echo "Sitemap: " . public_base_url() . "/sitemap.xml\n";
 }
 
+/**
+ * Handles cms sitemap xml logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_sitemap_xml(): void
 {
     output_sitemap_xml();

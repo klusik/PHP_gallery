@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.48';
+const CMS_VERSION = '0.49';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -35,12 +35,16 @@ function cms_has_config(): bool
  */
 function cms_redirect_to_installer(): void
 {
+    // $base stores an intermediate value used by the surrounding gallery workflow.
     $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
     if ($base === '/public') {
+        // $base stores an intermediate value used by the surrounding gallery workflow.
         $base = '';
     } elseif (str_ends_with($base, '/public')) {
+        // $base stores an intermediate value used by the surrounding gallery workflow.
         $base = substr($base, 0, -7);
     }
+    // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = ($base === '' ? '' : $base) . '/install.php';
     header('Location: ' . ($target === '/install.php' ? 'install.php' : $target));
     exit;
@@ -147,6 +151,7 @@ function cms_run(): void
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
+        'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
@@ -208,7 +213,9 @@ function cms_route_from_request(): array
         return ['page' => 'favicon_asset', 'params' => ['s' => '32']];
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
+        // $gallerySegments stores an intermediate value used by the surrounding gallery workflow.
         $gallerySegments = array_slice($segments, 1);
+        // $lastSegment stores an intermediate value used by the surrounding gallery workflow.
         $lastSegment = end($gallerySegments);
         if (is_string($lastSegment) && preg_match('/^thumb-([0-9]+)\.(jpg|webp)$/', $lastSegment, $thumbnailMatch)) {
             array_pop($gallerySegments);

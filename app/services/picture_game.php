@@ -17,10 +17,12 @@ declare(strict_types=1);
 function picture_game_schema_ready(): bool
 {
     try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'picture_game_enabled'");
         if (!$stmt || !$stmt->fetch()) {
             return false;
         }
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW TABLES LIKE 'picture_game_votes'");
         return $stmt && (bool) $stmt->fetch();
     } catch (PDOException) {
@@ -34,6 +36,7 @@ function picture_game_schema_ready(): bool
 function gallery_voting_schema_ready(): bool
 {
     try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'voting_enabled'");
         return $stmt && (bool) $stmt->fetch();
     } catch (PDOException) {
@@ -57,6 +60,7 @@ function sync_gallery_voting_game_state(): int
     if (!gallery_voting_schema_ready() || !picture_game_schema_ready()) {
         return 0;
     }
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE picture_game_enabled = 1 AND voting_enabled = 0');
     $stmt->execute([now_sql()]);
     return $stmt->rowCount();
@@ -75,6 +79,7 @@ function picture_game_gallery_ids(array $gallery): array
     try {
         // Variable $stmt stores this steps working value.
         $listingCondition = public_gallery_listing_condition('g');
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
         $stmt->execute([$folderPath, $folderPath . '/%']);
     } catch (PDOException) {
@@ -109,6 +114,7 @@ function picture_game_gallery_ids(array $gallery): array
 function picture_game_images(array $gallery): array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = (int) $gallery['id'];
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -188,6 +194,7 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
     for ($i = 0, $count = count($ids); $i < $count; $i++) {
         for ($j = $i + 1; $j < $count; $j++) {
             [$imageAId, $imageBId] = picture_game_pair_key((int) $ids[$i], (int) $ids[$j]);
+            // $key stores an intermediate value used by the surrounding gallery workflow.
             $key = $imageAId . ':' . $imageBId;
             if (!isset($seen[$key])) {
                 $pairs[] = [$imageAId, $imageBId];
@@ -226,6 +233,7 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
     }
     // Variable $allowedIds stores this steps working value.
     $images ??= picture_game_images($gallery);
+    // $allowedIds stores an intermediate value used by the surrounding gallery workflow.
     $allowedIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     if (!in_array($imageAId, $allowedIds, true) || !in_array($imageBId, $allowedIds, true)) {
         throw new RuntimeException('Image pair is not available in this game.');
@@ -246,10 +254,12 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
     // Variable $user stores this steps working value.
     $user = current_user();
     if ($user) {
+        // $vote stores an intermediate value used by the surrounding gallery workflow.
         $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
         $vote->execute([$winnerImageId, (int) $user['id'], now_sql(), now_sql()]);
         return;
     }
+    // $vote stores an intermediate value used by the surrounding gallery workflow.
     $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
     $vote->execute([$winnerImageId, visitor_hash(), now_sql(), now_sql()]);
 }
