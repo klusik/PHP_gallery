@@ -151,6 +151,7 @@ function cms_run(): void
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_scan_images' => 'cms_admin_scan_images',
+        'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',

@@ -515,6 +515,114 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
     }
 }
 
+
+/**
+ * Return the canonical admin menu model used by the dashboard and admin shell.
+ */
+function admin_menu_structure(): array
+{
+    // $updatePending stores an intermediate value used by the surrounding gallery workflow.
+    $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
+    // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
+    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : 'Updates';
+    return [
+        [
+            'label' => 'Dashboard',
+            'items' => [
+                ['label' => 'Overview', 'page' => 'admin', 'url' => url_for('admin')],
+            ],
+        ],
+        [
+            'label' => 'Galleries',
+            'items' => [
+                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-galleries'],
+                ['label' => 'Create gallery', 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
+                ['label' => 'Upload photos', 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => 'Ordering', 'page' => 'admin', 'url' => url_for('admin') . '#admin-ordering'],
+            ],
+        ],
+        [
+            'label' => 'Media',
+            'items' => [
+                ['label' => 'Thumbnails', 'page' => 'admin', 'url' => url_for('admin') . '#admin-thumbnails'],
+                ['label' => 'Cache', 'page' => 'admin', 'url' => url_for('admin') . '#admin-cache'],
+                ['label' => 'ZIP downloads', 'page' => 'download_all', 'url' => url_for('download_all')],
+            ],
+        ],
+        [
+            'label' => 'Appearance',
+            'items' => [
+                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-theme'],
+                ['label' => 'Custom CSS', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-custom-css'],
+                ['label' => 'Favicon', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-favicon'],
+                ['label' => 'Backgrounds', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-backgrounds'],
+            ],
+        ],
+        [
+            'label' => 'Maintenance',
+            'items' => [
+                ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
+                ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
+                ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
+                ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
+                ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
+            ],
+        ],
+        [
+            'label' => 'Account',
+            'items' => [
+                ['label' => 'Profile', 'page' => 'admin_account', 'url' => url_for('admin_account')],
+                ['label' => 'Logout', 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Return true when one admin menu item should be marked as active.
+ */
+function admin_menu_item_is_active(array $item, string $currentPage): bool
+{
+    // $itemPage stores an intermediate value used by the surrounding gallery workflow.
+    $itemPage = (string) ($item['page'] ?? '');
+    if ($itemPage === '') {
+        return false;
+    }
+    if ($currentPage === $itemPage) {
+        if ($itemPage === 'admin') {
+            return !str_contains((string) ($item['url'] ?? ''), '#');
+        }
+        return true;
+    }
+    if ($itemPage === 'admin' && in_array($currentPage, ['admin_edit_gallery', 'admin_edit_image'], true)) {
+        return str_contains((string) ($item['url'] ?? ''), '#admin-galleries');
+    }
+    return false;
+}
+
+/**
+ * Render the persistent admin sidebar used by all authenticated admin pages.
+ */
+function render_admin_sidebar(string $currentPage): void
+{
+    echo '<aside class="admin-sidebar" aria-label="Admin navigation">';
+    echo '<div class="admin-sidebar-title">Admin</div>';
+    foreach (admin_menu_structure() as $group) {
+        echo '<section class="admin-menu-group">';
+        echo '<h2>' . e((string) $group['label']) . '</h2>';
+        echo '<nav class="admin-menu-links">';
+        foreach ((array) $group['items'] as $item) {
+            // $activeClass stores an intermediate value used by the surrounding gallery workflow.
+            $activeClass = admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
+            // $highlightClass stores an intermediate value used by the surrounding gallery workflow.
+            $highlightClass = !empty($item['highlight']) ? ' is-update-pending' : '';
+            echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . e((string) $item['label']) . '</a>';
+        }
+        echo '</nav></section>';
+    }
+    echo '</aside>';
+}
+
 /**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
@@ -569,21 +677,28 @@ function render_header(string $title): void
     echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
-        // $updatePending stores an intermediate value used by the surrounding gallery workflow.
-        $updatePending = application_update_pending();
-        // $updateClass stores an intermediate value used by the surrounding gallery workflow.
-        $updateClass = $updatePending ? ' class="is-update-pending"' : '';
-        // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
-        $updateLabel = application_update_nav_label($updatePending);
-        echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
-        echo '<a href="' . e(url_for('admin_theme')) . '">Theme</a>';
-        echo '<a href="' . e(url_for('admin_account')) . '">Account</a>';
-        echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        if ($bodyClass === 'public-page') {
+            // $updatePending stores an intermediate value used by the surrounding gallery workflow.
+            $updatePending = application_update_pending();
+            // $updateClass stores an intermediate value used by the surrounding gallery workflow.
+            $updateClass = $updatePending ? ' class="is-update-pending"' : '';
+            // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
+            $updateLabel = application_update_nav_label($updatePending);
+            echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
+            echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        }
         echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
     } else {
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
     }
-    echo '</nav></header><main class="site-main">';
+    echo '</nav></header>';
+    if ($bodyClass === 'admin-page' && $user) {
+        echo '<div class="admin-shell">';
+        render_admin_sidebar($page);
+        echo '<main class="site-main admin-content">';
+    } else {
+        echo '<main class="site-main">';
+    }
 }
 
 /**
@@ -666,7 +781,11 @@ function cms_current_version(): string
  */
 function render_footer(): void
 {
-    echo '</main><footer class="site-footer muted">';
+    // $page stores an intermediate value used by the surrounding gallery workflow.
+    $page = (string) ($_GET['page'] ?? 'home');
+    // $hasAdminShell stores an intermediate value used by the surrounding gallery workflow.
+    $hasAdminShell = (str_starts_with($page, 'admin') || $page === 'setup') && current_user();
+    echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.

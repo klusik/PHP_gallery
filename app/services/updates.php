@@ -145,7 +145,7 @@ function install_application_beta(string $commitId): array
     }
 
     // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = dirname(__DIR__);
+    $root = application_update_project_root();
     // $updateDir stores an intermediate value used by the surrounding gallery workflow.
     $updateDir = $root . '/cache/updates';
     // $backupDir stores an intermediate value used by the surrounding gallery workflow.
@@ -180,6 +180,8 @@ function install_application_beta(string $commitId): array
 
     // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($extractDir);
+    application_update_assert_source_root($sourceRoot);
+    application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
     // $copied stores an intermediate value used by the surrounding gallery workflow.
@@ -207,7 +209,7 @@ function install_application_beta(string $commitId): array
 function restore_application_stable_release(): array
 {
     // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = dirname(__DIR__);
+    $root = application_update_project_root();
     // $branch stores an intermediate value used by the surrounding gallery workflow.
     $branch = application_update_branch_candidates()[0] ?? '';
     if ($branch === '') {
@@ -243,6 +245,8 @@ function restore_application_stable_release(): array
 
     // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($restoreDir);
+    application_update_assert_source_root($sourceRoot);
+    application_update_cleanup_transient_extracts($updateDir, $restoreDir);
     // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = application_update_copy_files($sourceRoot, $root, $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip');
     application_update_invalidate_opcache($root, $sourceRoot);
@@ -300,7 +304,7 @@ function install_application_update(): array
     }
 
     // $root stores an intermediate value used by the surrounding gallery workflow.
-    $root = dirname(__DIR__);
+    $root = application_update_project_root();
     // $updateDir stores an intermediate value used by the surrounding gallery workflow.
     $updateDir = $root . '/cache/updates';
     // $backupDir stores an intermediate value used by the surrounding gallery workflow.
@@ -335,6 +339,8 @@ function install_application_update(): array
 
     // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($extractDir);
+    application_update_assert_source_root($sourceRoot);
+    application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
     // $copied stores an intermediate value used by the surrounding gallery workflow.
@@ -561,6 +567,74 @@ function application_update_ensure_dir(string $path): void
     }
 }
 
+
+/**
+ * Return the application project root that contains index.php, app, public, and cache.
+ */
+function application_update_project_root(): string
+{
+    // $root stores an intermediate value used by the surrounding gallery workflow.
+    $root = dirname(__DIR__, 2);
+    application_update_assert_project_root($root);
+    return $root;
+}
+
+/**
+ * Reject dangerous updater destinations before any files are copied or removed.
+ */
+function application_update_assert_project_root(string $root): void
+{
+    // $normalizedRoot stores an intermediate value used by the surrounding gallery workflow.
+    $normalizedRoot = rtrim(str_replace('\\', '/', $root), '/');
+    if ($normalizedRoot === '' || basename($normalizedRoot) === 'app') {
+        throw new RuntimeException('Updater refused to run because the destination root resolved to the app directory instead of the project root.');
+    }
+
+    // $requiredPaths stores an intermediate value used by the surrounding gallery workflow.
+    $requiredPaths = [
+        'index.php',
+        'app/bootstrap.php',
+        'app/services/updates.php',
+        'public/assets/styles.css',
+    ];
+    foreach ($requiredPaths as $requiredPath) {
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
+        $absolutePath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
+        if (!is_file($absolutePath)) {
+            throw new RuntimeException('Updater refused to run because the project root is missing: ' . $requiredPath);
+        }
+    }
+
+    foreach (['app', 'public', 'cache'] as $requiredDirectory) {
+        // $absoluteDirectory stores an intermediate value used by the surrounding gallery workflow.
+        $absoluteDirectory = $root . '/' . $requiredDirectory;
+        if (!is_dir($absoluteDirectory)) {
+            throw new RuntimeException('Updater refused to run because the project root is missing directory: ' . $requiredDirectory);
+        }
+    }
+}
+
+/**
+ * Validate that the extracted archive looks like a PHP Gallery repository snapshot.
+ */
+function application_update_assert_source_root(string $sourceRoot): void
+{
+    // $requiredPaths stores an intermediate value used by the surrounding gallery workflow.
+    $requiredPaths = [
+        'index.php',
+        'app/bootstrap.php',
+        'app/services/updates.php',
+        'public/assets/styles.css',
+    ];
+    foreach ($requiredPaths as $requiredPath) {
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
+        $absolutePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
+        if (!is_file($absolutePath)) {
+            throw new RuntimeException('Downloaded update archive is not a valid PHP Gallery repository snapshot. Missing: ' . $requiredPath);
+        }
+    }
+}
+
 /**
  * Find the single root directory produced by GitHub zip extraction.
  */
@@ -588,6 +662,9 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
     if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException('Could not create update backup archive.');
     }
+
+    application_update_assert_project_root($destinationRoot);
+    application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
 
     // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = 0;
@@ -631,6 +708,207 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
 
     $backup->close();
     return $copied;
+}
+
+
+/**
+ * Back up and remove a full project copy that was accidentally written inside app.
+ */
+function application_update_backup_and_remove_misplaced_project_copy(string $root, ZipArchive $backup): void
+{
+    // $appDirectory stores an intermediate value used by the surrounding gallery workflow.
+    $appDirectory = $root . '/app';
+    if (!is_dir($appDirectory)) {
+        return;
+    }
+
+    // $misplacedPaths stores an intermediate value used by the surrounding gallery workflow.
+    $misplacedPaths = application_update_misplaced_project_paths($root);
+    foreach ($misplacedPaths as $relativePath) {
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
+        $absolutePath = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if (!file_exists($absolutePath)) {
+            continue;
+        }
+        application_update_add_path_to_backup($backup, $absolutePath, 'misplaced-before-update/' . $relativePath);
+        application_update_remove_path($absolutePath);
+    }
+}
+
+/**
+ * Return known wrong locations created when the updater used app as the project root.
+ */
+function application_update_misplaced_project_paths(string $root): array
+{
+    // $knownMisplacedPaths stores an intermediate value used by the surrounding gallery workflow.
+    $knownMisplacedPaths = [
+        'app/app',
+        'app/public',
+        'app/database',
+        'app/galleries',
+        'app/cache',
+        'app/custom_css',
+        'app/scripts',
+        'app/_for_codex',
+        'app/.git',
+        'app/.github',
+        'app/.htaccess',
+        'app/index.php',
+        'app/install.php',
+        'app/reset.php',
+        'app/setup-gallery.php',
+        'app/deploy.bat',
+        'app/config.php',
+        'app/config.example.php',
+        'app/README.md',
+        'app/PATCH_NOTES.md',
+        'app/ARCHITECTURE.md',
+    ];
+
+    // $appDirectory stores an intermediate value used by the surrounding gallery workflow.
+    $appDirectory = $root . '/app';
+    if (!is_dir($appDirectory)) {
+        return $knownMisplacedPaths;
+    }
+
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
+    $entries = scandir($appDirectory) ?: [];
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
+        $relativePath = 'app/' . $entry;
+        if (application_update_app_entry_is_expected($entry)) {
+            continue;
+        }
+        if (!in_array($relativePath, $knownMisplacedPaths, true)) {
+            $knownMisplacedPaths[] = $relativePath;
+        }
+    }
+
+    return $knownMisplacedPaths;
+}
+
+/**
+ * Return true for normal entries that belong directly inside the app directory.
+ */
+function application_update_app_entry_is_expected(string $entry): bool
+{
+    // $expectedEntries stores an intermediate value used by the surrounding gallery workflow.
+    $expectedEntries = [
+        'bootstrap.php',
+        'controllers.php',
+        'controllers',
+        'core-manifest.json',
+        'database.php',
+        'helpers.php',
+        'integrity.php',
+        'migrations.php',
+        'security.php',
+        'services.php',
+        'services',
+    ];
+    return in_array($entry, $expectedEntries, true);
+}
+
+/**
+ * Add one file or directory tree to the updater backup archive.
+ */
+function application_update_add_path_to_backup(ZipArchive $backup, string $path, string $archivePath): void
+{
+    // $archivePath stores an intermediate value used by the surrounding gallery workflow.
+    $archivePath = ltrim(str_replace('\\', '/', $archivePath), '/');
+    if (is_file($path)) {
+        $backup->addFile($path, $archivePath);
+        return;
+    }
+    if (!is_dir($path)) {
+        return;
+    }
+
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($iterator as $item) {
+        if ($item->isLink() || $item->isDir()) {
+            continue;
+        }
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
+        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($path) + 1));
+        $backup->addFile($item->getPathname(), rtrim($archivePath, '/') . '/' . $relativePath);
+    }
+}
+
+/**
+ * Remove a file or directory tree after it has been captured in the updater backup.
+ */
+function application_update_remove_path(string $path): void
+{
+    if (is_file($path) || is_link($path)) {
+        if (!unlink($path)) {
+            throw new RuntimeException('Could not remove misplaced updater artifact: ' . $path);
+        }
+        return;
+    }
+    if (!is_dir($path)) {
+        return;
+    }
+
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        if ($item->isDir() && !$item->isLink()) {
+            if (!rmdir($item->getPathname())) {
+                throw new RuntimeException('Could not remove misplaced updater directory: ' . $item->getPathname());
+            }
+            continue;
+        }
+        if (!unlink($item->getPathname())) {
+            throw new RuntimeException('Could not remove misplaced updater file: ' . $item->getPathname());
+        }
+    }
+    if (!rmdir($path)) {
+        throw new RuntimeException('Could not remove misplaced updater directory: ' . $path);
+    }
+}
+
+/**
+ * Remove stale temporary extraction directories from cache/updates.
+ */
+function application_update_cleanup_transient_extracts(string $updateDir, string $activeExtractDir = ''): void
+{
+    if (!is_dir($updateDir)) {
+        return;
+    }
+
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
+    $entries = scandir($updateDir) ?: [];
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..' || $entry === 'backups') {
+            continue;
+        }
+        if (!preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $entry)) {
+            continue;
+        }
+        // $path stores an intermediate value used by the surrounding gallery workflow.
+        $path = $updateDir . '/' . $entry;
+        // $activeExtractRealPath stores an intermediate value used by the surrounding gallery workflow.
+        $activeExtractRealPath = $activeExtractDir !== '' ? realpath($activeExtractDir) : false;
+        // $pathRealPath stores an intermediate value used by the surrounding gallery workflow.
+        $pathRealPath = realpath($path);
+        if ($activeExtractRealPath !== false && $pathRealPath !== false && $activeExtractRealPath === $pathRealPath) {
+            continue;
+        }
+        if (is_dir($path)) {
+            application_update_remove_path($path);
+        }
+    }
 }
 
 /**

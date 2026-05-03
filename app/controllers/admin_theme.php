@@ -229,7 +229,7 @@ function cms_admin_theme(): void
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
     render_header('Theme');
-    echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
+    echo '<section class="panel" id="admin-theme"><h1>Appearance</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
     echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
     echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control></label>';
@@ -239,7 +239,7 @@ function cms_admin_theme(): void
     echo '<label>Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control></label>';
     echo '<label>Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control></label>';
     echo '<label>Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control></label>';
-    echo '<fieldset class="form-grid"><legend>Favicon</legend>';
+    echo '<fieldset class="form-grid" id="admin-favicon"><legend>Favicon</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
     if ($faviconUrl !== '') {
@@ -253,7 +253,7 @@ function cms_admin_theme(): void
     echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
     echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">Drag the image to place the square crop. The small preview shows the browser icon scale.</span></div></div>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid"><legend>Background</legend>';
+    echo '<fieldset class="form-grid" id="admin-backgrounds"><legend>Background</legend>';
     echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
     // $themeBackgroundUrl stores an intermediate value used by the surrounding gallery workflow.
     $themeBackgroundUrl = theme_background_asset_url();
@@ -270,7 +270,7 @@ function cms_admin_theme(): void
     echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
-    echo '<label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    echo '<div id="admin-custom-css"></div><label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
         $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
