@@ -1,0 +1,271 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Admin theme controller.
+ *
+ * Renders and processes the visual theme configuration page. The code remains
+ * intentionally close to the original controller so existing POST field names,
+ * uploads, reset actions, and redirects keep behaving exactly as before.
+ */
+
+/**
+ * Send validators for a streamed file and stop on a matching browser cache entry.
+ */
+
+
+
+/**
+ * Render the public scroll helper next to a listing without joining the listing grid.
+ */
+
+
+/**
+ * Public homepage showing top-level public galleries.
+ */
+
+
+/**
+ * Public gallery detail page with breadcrumbs, subgalleries, images, tags, and votes.
+ */
+
+
+/**
+ * Render gallery ancestor links for public navigation.
+ */
+
+
+/**
+ * Render the password prompt for a protected public gallery.
+ */
+
+
+/**
+ * Process a public protected-gallery password unlock.
+ */
+
+
+/**
+ * Resolve a share token and redirect to its protected gallery.
+ */
+
+
+/**
+ * Build the canonical copyable share URL for one gallery/token pair.
+ */
+
+
+/**
+ * Render one gallery card, including direct cover or child-cover collage.
+ */
+
+
+/**
+ * Render logged-in admin metadata controls directly on public gallery pages.
+ */
+
+
+/**
+ * Render logged-in admin metadata controls for a public image card.
+ */
+
+
+/**
+ * Render the lightbox shell used by public gallery JavaScript.
+ */
+
+
+/**
+ * Stream a generated thumbnail after the same visibility checks as originals.
+ */
+
+
+
+/**
+ * Stream a generated thumbnail addressed through the clean public image URL.
+ */
+
+
+/**
+ * Stream an original image addressed through the clean public image URL.
+ */
+
+
+/**
+ * Stream an uploaded gallery thumbnail asset.
+ */
+
+
+/**
+ * Stream a protected image file after checking gallery/image visibility.
+ */
+
+
+/**
+ * Serve robots.txt for search engines.
+ */
+
+
+/**
+ * Serve sitemap.xml for public gallery pages.
+ */
+
+
+/**
+ * Render and process the admin login form.
+ */
+
+
+/**
+ * Log the admin out of the current session.
+ */
+
+
+/**
+ * Render and process visual theme settings.
+ */
+function cms_admin_theme(): void
+{
+    require_admin();
+    if (request_method() === 'POST') {
+        verify_csrf();
+        if (!empty($_POST['reset_custom_css'])) {
+            if (is_file(custom_css_path())) {
+                unlink(custom_css_path());
+            }
+            set_app_setting('custom_css_preset', '');
+        } elseif (!empty($_POST['reset_favicon'])) {
+            remove_stored_favicon();
+        } elseif (!empty($_POST['reset_theme_background'])) {
+            $path = theme_background_path();
+            if ($path !== null) {
+                $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
+                if (is_file($absolute)) {
+                    @unlink($absolute);
+                }
+            }
+            set_app_setting('theme_background_path', '');
+        } elseif (!empty($_POST['reset_all_gallery_backgrounds'])) {
+            if (gallery_background_source_schema_ready()) {
+                db()->exec("UPDATE galleries SET background_source = NULL, updated_at = " . db()->quote(now_sql()) . " WHERE background_source IS NOT NULL");
+            }
+        } elseif (!empty($_POST['reset_theme_overrides'])) {
+            clear_theme_overrides();
+        } else {
+            // Variable $siteName stores this steps working value.
+            $siteName = trim((string) ($_POST['site_name'] ?? ''));
+            set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
+            $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
+            // Variable $preset stores this steps working value.
+            $preset = (string) ($_POST['custom_css_preset'] ?? '');
+            // Variable $presetPath stores this steps working value.
+            $presetPath = custom_css_preset_path($preset);
+            $customCssChanged = false;
+            if ($presetPath !== null) {
+                copy($presetPath, custom_css_path());
+                set_app_setting('custom_css_preset', $preset);
+                $customCssChanged = true;
+            }
+            if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
+                // Variable $name stores this steps working value.
+                $name = strtolower((string) ($_FILES['custom_css']['name'] ?? ''));
+                if (str_ends_with($name, '.css')) {
+                    move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
+                    set_app_setting('custom_css_preset', 'uploaded');
+                    $customCssChanged = true;
+                }
+            }
+            if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
+                $name = strtolower((string) ($_FILES['favicon_source']['name'] ?? ''));
+                if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    $info = @getimagesize((string) $_FILES['favicon_source']['tmp_name']);
+                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                        throw new RuntimeException('The uploaded favicon source is not a valid image.');
+                    }
+                    store_uploaded_favicon($_FILES['favicon_source'], (string) ($_POST['favicon_cropped_png'] ?? '') ?: null);
+                }
+            }
+            if (!empty($_FILES['theme_background']['tmp_name']) && is_uploaded_file($_FILES['theme_background']['tmp_name'])) {
+                // Variable $name stores this steps working value.
+                $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
+                if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
+                    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+                        throw new RuntimeException('The uploaded theme background is not a valid image.');
+                    }
+                    store_uploaded_theme_background($_FILES['theme_background']);
+                }
+            }
+            set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
+            set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+            if ($themeControlsChanged) {
+                set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
+                set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
+                set_app_setting('theme_paper', sanitize_hex_color((string) $_POST['theme_paper'], '#f8f4ec'));
+                set_app_setting('theme_panel', sanitize_hex_color((string) $_POST['theme_panel'], '#fffaf0'));
+                set_app_setting('theme_gallery_panel', sanitize_hex_color((string) $_POST['theme_gallery_panel'], '#fffaf0'));
+                set_app_setting('theme_header_text', sanitize_hex_color((string) $_POST['theme_header_text'], '#0f172a'));
+                set_app_setting('theme_hero_text', sanitize_hex_color((string) $_POST['theme_hero_text'], '#0f172a'));
+                set_app_setting('theme_radius', (string) max(0, min(32, (int) $_POST['theme_radius'])));
+                set_app_setting('theme_font', in_array($_POST['theme_font'] ?? '', ['serif', 'sans'], true) ? (string) $_POST['theme_font'] : 'serif');
+            } elseif ($customCssChanged) {
+                clear_theme_overrides();
+            }
+        }
+        redirect_to(url_for('admin_theme', ['saved' => 1]));
+    }
+    // Variable $theme stores this steps working value.
+    $theme = theme_settings();
+    render_header('Theme');
+    echo '<section class="panel"><h1>Theme</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
+    echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
+    echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
+    echo '<label>Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control></label>';
+    echo '<label>Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '" data-theme-override-control></label>';
+    echo '<label>Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '" data-theme-override-control></label>';
+    echo '<label>Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '" data-theme-override-control></label>';
+    echo '<label>Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control></label>';
+    echo '<label>Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control></label>';
+    echo '<label>Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control></label>';
+    echo '<fieldset class="form-grid"><legend>Favicon</legend>';
+    $faviconUrl = favicon_asset_url();
+    if ($faviconUrl !== '') {
+        $faviconVersion = (string) app_setting('favicon_version', '1');
+        echo '<div class="favicon-current"><img src="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '" alt="Current favicon"><p class="muted">Current favicon is generated as 32px, 48px, and 180px PNG variants.</p></div>';
+    } else {
+        echo '<p class="muted">No favicon is stored yet. Browsers will use their default icon until one is saved.</p>';
+    }
+    echo '<label>Favicon source image<input type="file" name="favicon_source" accept="image/png,image/jpeg,image/gif,image/webp,image/*" data-favicon-input><span class="muted">Upload a square-friendly photo or logo. The cropper saves a browser-ready square PNG favicon.</span></label>';
+    echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
+    echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">Drag the image to place the square crop. The small preview shows the browser icon scale.</span></div></div>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid"><legend>Background</legend>';
+    echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
+    $themeBackgroundUrl = theme_background_asset_url();
+    if ($themeBackgroundUrl !== '') {
+        echo '<p class="muted">Current theme background: <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">view stored image</a></p>';
+    } else {
+        echo '<p class="muted">No global theme background image is stored yet.</p>';
+    }
+    echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
+    echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button></div>';
+    echo '</fieldset>';
+    echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
+    echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    // Variable $selectedPreset stores this steps working value.
+    $selectedPreset = (string) app_setting('custom_css_preset', '');
+    echo '<label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    foreach (custom_css_presets() as $filename => $path) {
+        // Variable $label stores this steps working value.
+        $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
+        echo '<option value="' . e((string) $filename) . '"' . ($selectedPreset === $filename ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
+    echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
+    echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
+    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div></form></section>';
+    render_footer();
+}
