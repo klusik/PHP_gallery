@@ -1,5 +1,37 @@
 # Patch Notes
 
+## Version 0.49
+
+Version 0.49 focuses on the admin zone and updater workflow. It adds a dedicated admin integrity screen, expands gallery administration, improves theme and thumbnail maintenance, and hardens public gallery and media routing. The updater also gains sturdier branch/version handling and safer restore logic.
+
+### Admin zone rework
+
+- Added a dedicated admin integrity controller and screen for manifest and application checks.
+- Expanded the admin dashboard with the new integrity entry point and related admin actions.
+- Reworked gallery administration into a dedicated controller with clearer gallery mutation handling.
+- Tightened admin log, thumbnail, upload, and theme controllers around their specific responsibilities.
+- Extended the bootstrap route map to include the new integrity admin route.
+
+### Updater improvements
+
+- Strengthened GitHub version detection and branch handling in the update service.
+- Improved release ZIP download, copy, backup, and restore flow for safer update installs.
+- Preserved protected local areas such as config, galleries, cache, and custom CSS during update operations.
+- Added clearer update status and messaging in the admin update screen.
+
+### Public rendering and media handling
+
+- Expanded public gallery routing and media streaming helpers.
+- Added gallery access, cover, background, sidecar, and public path service modules to keep public rendering logic separated and easier to maintain.
+- Tightened thumbnail generation and public asset serving paths.
+- Improved theme asset generation, including stylesheet and custom CSS handling.
+
+### Installation and maintenance
+
+- Updated installer and setup flow support for the current application structure.
+- Added integrity helpers and manifest generation support for release validation.
+- Expanded upload and download helpers for safer file handling.
+
 ## Version 0.48
 
 Version 0.48 is a major internal architecture release. It restructures the PHP Gallery codebase by splitting the large service and controller files into focused modules, while preserving the existing public function names, route handlers, include contracts, gallery data model, filesystem-first behavior, theme settings, favicon storage, custom CSS handling, and public rendering behavior.
