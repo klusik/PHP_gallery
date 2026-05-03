@@ -92,7 +92,9 @@ function cms_vote(): void
     verify_vote_rate_limit($imageId);
     // Variable $vote stores this steps working value.
     $vote = (int) ($_POST['vote'] ?? 0);
+    // $image stores an intermediate value used by the surrounding gallery workflow.
     $image = find_image($imageId);
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $image ? find_gallery((int) $image['gallery_id']) : null;
     if (!in_array($vote, [-1, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         http_response_code(422);

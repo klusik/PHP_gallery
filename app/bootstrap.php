@@ -35,12 +35,16 @@ function cms_has_config(): bool
  */
 function cms_redirect_to_installer(): void
 {
+    // $base stores an intermediate value used by the surrounding gallery workflow.
     $base = rtrim(str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? ''))), '/');
     if ($base === '/public') {
+        // $base stores an intermediate value used by the surrounding gallery workflow.
         $base = '';
     } elseif (str_ends_with($base, '/public')) {
+        // $base stores an intermediate value used by the surrounding gallery workflow.
         $base = substr($base, 0, -7);
     }
+    // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = ($base === '' ? '' : $base) . '/install.php';
     header('Location: ' . ($target === '/install.php' ? 'install.php' : $target));
     exit;
@@ -208,7 +212,9 @@ function cms_route_from_request(): array
         return ['page' => 'favicon_asset', 'params' => ['s' => '32']];
     }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
+        // $gallerySegments stores an intermediate value used by the surrounding gallery workflow.
         $gallerySegments = array_slice($segments, 1);
+        // $lastSegment stores an intermediate value used by the surrounding gallery workflow.
         $lastSegment = end($gallerySegments);
         if (is_string($lastSegment) && preg_match('/^thumb-([0-9]+)\.(jpg|webp)$/', $lastSegment, $thumbnailMatch)) {
             array_pop($gallerySegments);

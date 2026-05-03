@@ -13,24 +13,50 @@ function thumbnail_sizes(): array
     return [300, 600, 800, 960, 1280, 1600];
 }
 
+/**
+ * Handles thumbnail srcset logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $sizes Input used by this operation.
+ * @param mixed 600 Input used by this operation.
+ * @param mixed 800] Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
     return thumbnail_srcset_for_format($image, $sizes, 'jpg');
 }
 
+/**
+ * Handles thumbnail webp srcset logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $sizes Input used by this operation.
+ * @param mixed 600 Input used by this operation.
+ * @param mixed 800] Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
     return thumbnail_srcset_for_format($image, $sizes, 'webp');
 }
 
+/**
+ * Handles thumbnail srcset for format logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $sizes Input used by this operation.
+ * @param mixed $format Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_srcset_for_format(array $image, array $sizes, string $format): string
 {
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = [];
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) $image['gallery_id']);
     if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
         return '';
     }
     foreach ($sizes as $size) {
+        // $size stores an intermediate value used by the surrounding gallery workflow.
         $size = (int) $size;
         if (!in_array($size, thumbnail_sizes(), true)) {
             continue;
@@ -47,6 +73,12 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     return implode(', ', $entries);
 }
 
+/**
+ * Handles gallery thumbs dir logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $create Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_thumbs_dir(array $gallery, bool $create = false): string
 {
     // Variable $path stores this steps working value.
@@ -60,6 +92,13 @@ function gallery_thumbs_dir(array $gallery, bool $create = false): string
     return $path;
 }
 
+/**
+ * Handles thumbnail filename logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $size Input used by this operation.
+ * @param mixed $format Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_filename(array $image, int $size, string $format = 'jpg'): string
 {
     if (!in_array($format, ['jpg', 'webp'], true)) {
@@ -68,6 +107,14 @@ function thumbnail_filename(array $image, int $size, string $format = 'jpg'): st
     return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.' . $format;
 }
 
+/**
+ * Handles thumbnail abs path logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $size Input used by this operation.
+ * @param mixed $format Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
     if (!in_array($size, thumbnail_sizes(), true)) {
@@ -76,35 +123,62 @@ function thumbnail_abs_path(array $image, array $gallery, int $size, string $for
     return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
 }
 
+/**
+ * Handles thumbnail can use static public url logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
 {
     if ((string) ($image['visibility'] ?? '') !== 'public' || gallery_access_requirement($gallery) !== null) {
         return false;
     }
+    // $configuredRoot stores an intermediate value used by the surrounding gallery workflow.
     $configuredRoot = realpath(galleries_root());
+    // $defaultRoot stores an intermediate value used by the surrounding gallery workflow.
     $defaultRoot = realpath(dirname(__DIR__) . '/galleries');
     return $configuredRoot !== false && $defaultRoot !== false && $configuredRoot === $defaultRoot;
 }
 
+/**
+ * Handles gallery static file url logic for the gallery application.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $relativeFilePath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function gallery_static_file_url(array $gallery, string $relativeFilePath): string
 {
+    // $galleryPath stores an intermediate value used by the surrounding gallery workflow.
     $galleryPath = normalize_relative_path((string) $gallery['folder_path']);
+    // $filePath stores an intermediate value used by the surrounding gallery workflow.
     $filePath = normalize_relative_path($relativeFilePath);
+    // $segments stores an intermediate value used by the surrounding gallery workflow.
     $segments = array_filter(explode('/', trim($galleryPath . '/' . $filePath, '/')), static fn (string $segment): bool => $segment !== '');
+    // $encoded stores an intermediate value used by the surrounding gallery workflow.
     $encoded = array_map('rawurlencode', $segments);
     return base_url('galleries/' . implode('/', $encoded));
 }
 
+/**
+ * Handles thumbnail url logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $size Input used by this operation.
+ * @param mixed $format Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
 {
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
         try {
+            // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = thumbnail_abs_path($image, $gallery, $size, $format);
             if (is_file($path)) {
                 return thumbnail_serving_url($image, $gallery, $size, $format);
             }
+            // $fallback stores an intermediate value used by the surrounding gallery workflow.
             $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
             if ($fallback !== null) {
                 return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
@@ -117,6 +191,14 @@ function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
     return url_for('media', ['id' => $image['id']]);
 }
 
+/**
+ * Handles thumbnail serving url logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $size Input used by this operation.
+ * @param mixed $format Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_serving_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
     if (public_path_schema_ready()) {
@@ -128,6 +210,14 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
     return url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]);
 }
 
+/**
+ * Handles thumbnail existing fallback logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $preferredSize Input used by this operation.
+ * @param mixed $preferredFormat Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_existing_fallback(array $image, array $gallery, int $preferredSize, string $preferredFormat = 'jpg'): ?array
 {
     // Variable $sizes stores this steps working value.
@@ -150,12 +240,27 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
     return null;
 }
 
+/**
+ * Handles thumbnail picture html logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $fallbackSize Input used by this operation.
+ * @param mixed $srcsetSizes Input used by this operation.
+ * @param mixed $sizes Input used by this operation.
+ * @param mixed $alt Input used by this operation.
+ * @param mixed $extraAttributes Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = ''): string
 {
+    // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.
     $fallbackUrl = thumbnail_url($image, $fallbackSize);
+    // $webpSrcset stores an intermediate value used by the surrounding gallery workflow.
     $webpSrcset = thumbnail_webp_srcset($image, $srcsetSizes);
+    // $jpegSrcset stores an intermediate value used by the surrounding gallery workflow.
     $jpegSrcset = thumbnail_srcset($image, $srcsetSizes);
+    // $attributes stores an intermediate value used by the surrounding gallery workflow.
     $attributes = trim($extraAttributes);
+    // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '<picture>';
     if ($webpSrcset !== '') {
         $html .= '<source type="image/webp" srcset="' . e($webpSrcset) . '" sizes="' . e($sizes) . '">';
@@ -168,6 +273,12 @@ function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSi
     return $html;
 }
 
+/**
+ * Handles thumbnail webp required for source logic for the gallery application.
+ * @param mixed $sourcePath Input used by this operation.
+ * @param mixed $mime Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_webp_required_for_source(string $sourcePath, string $mime): bool
 {
     if (!function_exists('imagewebp')) {
@@ -179,6 +290,12 @@ function thumbnail_webp_required_for_source(string $sourcePath, string $mime): b
     return class_exists('Imagick');
 }
 
+/**
+ * Handles thumbnail maintenance status logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_maintenance_status(array $image, array $gallery): array
 {
     // Variable $sourcePath stores this steps working value.
@@ -190,12 +307,16 @@ function thumbnail_maintenance_status(array $image, array $gallery): array
     $sourceMtime = filemtime($sourcePath) ?: 0;
     // Variable $info stores this steps working value.
     $info = @getimagesize($sourcePath);
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+    // $formats stores an intermediate value used by the surrounding gallery workflow.
     $formats = ['jpg'];
+    // $webpSkipped stores an intermediate value used by the surrounding gallery workflow.
     $webpSkipped = 0;
     if ($mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime)) {
         $formats[] = 'webp';
     } elseif ($mime === 'image/jpeg' && function_exists('imagewebp') && image_source_has_exif($sourcePath, $mime) && !class_exists('Imagick')) {
+        // $webpSkipped stores an intermediate value used by the surrounding gallery workflow.
         $webpSkipped = count(thumbnail_sizes());
     }
     // Variable $required stores this steps working value.
@@ -206,6 +327,7 @@ function thumbnail_maintenance_status(array $image, array $gallery): array
         foreach ($formats as $format) {
             $required++;
             try {
+                // $targetPath stores an intermediate value used by the surrounding gallery workflow.
                 $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
             } catch (RuntimeException) {
                 $missing++;
@@ -219,23 +341,36 @@ function thumbnail_maintenance_status(array $image, array $gallery): array
     return ['required' => $required, 'missing' => $missing, 'webp_skipped' => $webpSkipped];
 }
 
+/**
+ * Handles thumbnail maintenance summary logic for the gallery application.
+ * @param mixed $galleryIds Input used by this operation.
+ * @param mixed $maxImagesToScan Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000): array
 {
     // Variable $params stores this steps working value.
     $params = [];
+    // $where stores an intermediate value used by the surrounding gallery workflow.
     $where = "i.relative_path NOT LIKE '%/%'";
     if ($galleryIds !== null) {
+        // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
         if (!$galleryIds) {
             return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false];
         }
         $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        // $params stores an intermediate value used by the surrounding gallery workflow.
         $params = $galleryIds;
     }
+    // $limit stores an intermediate value used by the surrounding gallery workflow.
     $limit = max(1, $maxImagesToScan + 1);
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare("SELECT i.*, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename LIMIT $limit");
     $stmt->execute($params);
+    // $rows stores an intermediate value used by the surrounding gallery workflow.
     $rows = $stmt->fetchAll();
+    // $limited stores an intermediate value used by the surrounding gallery workflow.
     $limited = count($rows) > $maxImagesToScan;
     if ($limited) {
         array_pop($rows);
@@ -249,6 +384,7 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
     // Variable $webpSkipped stores this steps working value.
     $webpSkipped = 0;
     foreach ($rows as $image) {
+        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
         $galleryId = (int) $image['gallery_id'];
         if (!isset($galleryCache[$galleryId])) {
             $galleryCache[$galleryId] = find_gallery($galleryId);
@@ -256,6 +392,7 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
         if (!$galleryCache[$galleryId]) {
             continue;
         }
+        // $status stores an intermediate value used by the surrounding gallery workflow.
         $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
         if ($status['missing'] > 0) {
             $imagesWithMissing++;
@@ -272,6 +409,11 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
     ];
 }
 
+/**
+ * Handles create gallery thumbnails logic for the gallery application.
+ * @param mixed $galleryId Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function create_gallery_thumbnails(int $galleryId): int
 {
     // Variable $galleryIds stores this steps working value.
@@ -295,6 +437,10 @@ function create_gallery_thumbnails(int $galleryId): int
     return $count;
 }
 
+/**
+ * Handles create all thumbnails logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function create_all_thumbnails(): int
 {
     // Variable $count stores this steps working value.
@@ -305,11 +451,23 @@ function create_all_thumbnails(): int
     return $count;
 }
 
+/**
+ * Handles create image thumbnails logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function create_image_thumbnails(array $image, array $gallery): int
 {
     return create_image_thumbnails_result($image, $gallery)['created'];
 }
 
+/**
+ * Handles create image thumbnails result logic for the gallery application.
+ * @param mixed $image Input used by this operation.
+ * @param mixed $gallery Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function create_image_thumbnails_result(array $image, array $gallery): array
 {
     // Variable $sourcePath stores this steps working value.
@@ -360,6 +518,7 @@ function create_image_thumbnails_result(array $image, array $gallery): array
             $created++;
         }
         if (isset($formatTargets['webp'])) {
+            // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
             $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['webp'], (string) $info['mime']);
             if ($webpWritten) {
                 $created++;
@@ -372,6 +531,11 @@ function create_image_thumbnails_result(array $image, array $gallery): array
     return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
 }
 
+/**
+ * Handles image ids for galleries logic for the gallery application.
+ * @param mixed $galleryIds Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function image_ids_for_galleries(array $galleryIds): array
 {
     // Variable $galleryIds stores this steps working value.
@@ -387,6 +551,10 @@ function image_ids_for_galleries(array $galleryIds): array
     return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
 }
 
+/**
+ * Handles all image ids logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function all_image_ids(): array
 {
     // Variable $rows stores this steps working value.
@@ -394,6 +562,12 @@ function all_image_ids(): array
     return array_map('intval', $rows);
 }
 
+/**
+ * Handles image create from path logic for the gallery application.
+ * @param mixed $path Input used by this operation.
+ * @param mixed $mime Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function image_create_from_path(string $path, string $mime): GdImage|false
 {
     return match ($mime) {
@@ -405,6 +579,15 @@ function image_create_from_path(string $path, string $mime): GdImage|false
     };
 }
 
+/**
+ * Handles write resized jpeg logic for the gallery application.
+ * @param mixed $source Input used by this operation.
+ * @param mixed $width Input used by this operation.
+ * @param mixed $height Input used by this operation.
+ * @param mixed $maxSide Input used by this operation.
+ * @param mixed $targetPath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
 {
     // Variable $scale stores this steps working value.
@@ -426,15 +609,33 @@ function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSi
     return $written;
 }
 
+/**
+ * Handles image source has exif logic for the gallery application.
+ * @param mixed $sourcePath Input used by this operation.
+ * @param mixed $mime Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function image_source_has_exif(string $sourcePath, string $mime): bool
 {
     if ($mime !== 'image/jpeg' || !function_exists('exif_read_data')) {
         return false;
     }
+    // $exif stores an intermediate value used by the surrounding gallery workflow.
     $exif = @exif_read_data($sourcePath, null, true, false);
     return is_array($exif) && $exif !== [];
 }
 
+/**
+ * Handles write resized webp preserving exif when needed logic for the gallery application.
+ * @param mixed $sourcePath Input used by this operation.
+ * @param mixed $source Input used by this operation.
+ * @param mixed $width Input used by this operation.
+ * @param mixed $height Input used by this operation.
+ * @param mixed $maxSide Input used by this operation.
+ * @param mixed $targetPath Input used by this operation.
+ * @param mixed $mime Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdImage $source, int $width, int $height, int $maxSide, string $targetPath, string $mime): bool
 {
     if (!function_exists('imagewebp')) {
@@ -446,6 +647,15 @@ function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdIm
     return write_resized_webp_with_gd($source, $width, $height, $maxSide, $targetPath);
 }
 
+/**
+ * Handles write resized webp with gd logic for the gallery application.
+ * @param mixed $source Input used by this operation.
+ * @param mixed $width Input used by this operation.
+ * @param mixed $height Input used by this operation.
+ * @param mixed $maxSide Input used by this operation.
+ * @param mixed $targetPath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function write_resized_webp_with_gd(GdImage $source, int $width, int $height, int $maxSide, string $targetPath): bool
 {
     // Variable $scale stores this steps working value.
@@ -468,13 +678,22 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
     return $written;
 }
 
+/**
+ * Handles write resized webp with imagick exif logic for the gallery application.
+ * @param mixed $sourcePath Input used by this operation.
+ * @param mixed $maxSide Input used by this operation.
+ * @param mixed $targetPath Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath): bool
 {
     if (!class_exists('Imagick')) {
         return false;
     }
     try {
+        // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = new Imagick($sourcePath);
+        // $profiles stores an intermediate value used by the surrounding gallery workflow.
         $profiles = $image->getImageProfiles('exif', true);
         $image->thumbnailImage($maxSide, $maxSide, true, true);
         $image->setImageFormat('webp');
@@ -482,6 +701,7 @@ function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, 
         if (isset($profiles['exif']) && $profiles['exif'] !== '') {
             $image->profileImage('exif', $profiles['exif']);
         }
+        // $written stores an intermediate value used by the surrounding gallery workflow.
         $written = $image->writeImage($targetPath);
         $image->clear();
         $image->destroy();

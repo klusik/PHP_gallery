@@ -34,9 +34,13 @@ function cms_admin(): void
     $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
+    // $updatePending stores an intermediate value used by the surrounding gallery workflow.
     $updatePending = application_update_pending();
+    // $updateButtonClass stores an intermediate value used by the surrounding gallery workflow.
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
+    // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
+    // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
     render_header('Admin dashboard');
     echo '<section class="hero"><h1>Admin dashboard</h1><nav class="nav">';
@@ -58,6 +62,7 @@ function cms_admin(): void
     echo '<button type="submit" class="secondary">Regenerate paths</button>';
     echo '</form>';
     echo '</nav></section>';
+    // $adminNotice stores an intermediate value used by the surrounding gallery workflow.
     $adminNotice = (string) flash_message('admin_notice');
     if ($adminNotice !== '') {
         echo '<div class="notice">' . e($adminNotice) . '</div>';
@@ -124,6 +129,7 @@ function cms_admin(): void
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
         echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
         if ($accessReady) {
+            // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
             echo '<td>' . e($accessLabel) . '</td>';
         }
@@ -145,8 +151,13 @@ function cms_admin(): void
     render_footer();
 }
 
+/**
+ * Handles render admin devmode panel logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_devmode_panel(): void
 {
+    // $enabled stores an intermediate value used by the surrounding gallery workflow.
     $enabled = dev_mode_enabled();
     echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary"><h2>Dev mode</h2>';
     echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="form-grid">' . csrf_field();
@@ -155,6 +166,10 @@ function render_admin_devmode_panel(): void
     echo '<button type="submit" class="secondary">Save dev mode</button></form></section>';
 }
 
+/**
+ * Handles cms admin devmode logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_devmode(): void
 {
     require_admin();
@@ -168,6 +183,11 @@ function cms_admin_devmode(): void
     redirect_to(url_for('admin'));
 }
 
+/**
+ * Handles render admin migration notice logic for the gallery application.
+ * @param mixed $message Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
 function render_admin_migration_notice(string $message): void
 {
     echo '<div class="notice is-alert"><form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="inline-action-form">' . csrf_field();
@@ -176,11 +196,16 @@ function render_admin_migration_notice(string $message): void
     echo '</form></div>';
 }
 
+/**
+ * Handles cms admin run migrations logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_admin_run_migrations(): void
 {
     require_admin();
     verify_csrf();
     try {
+        // $ran stores an intermediate value used by the surrounding gallery workflow.
         $ran = run_migrations();
         if ($ran) {
             admin_log_event('info', 'migrations.ran', 'Admin ran pending migrations.', ['versions' => $ran]);

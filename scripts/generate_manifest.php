@@ -41,6 +41,7 @@ function manifest_option_value(string $name): ?string
 {
     global $argv;
 
+    // $prefix stores an intermediate value used by the surrounding gallery workflow.
     $prefix = $name . '=';
     foreach ($argv as $argument) {
         if (str_starts_with($argument, $prefix)) {
@@ -56,11 +57,13 @@ function manifest_option_value(string $name): ?string
  */
 function manifest_detect_version(string $rootPath): string
 {
+    // $bootstrapPath stores an intermediate value used by the surrounding gallery workflow.
     $bootstrapPath = $rootPath . '/app/bootstrap.php';
     if (!is_file($bootstrapPath)) {
         return '';
     }
 
+    // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
     $bootstrap = file_get_contents($bootstrapPath);
     if ($bootstrap === false) {
         return '';
@@ -147,6 +150,7 @@ function manifest_ignored_patterns(): array
  */
 function manifest_is_ignored_path(string $relativePath): bool
 {
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = str_replace('\\', '/', ltrim($relativePath, '/'));
     foreach (manifest_ignored_patterns() as $pattern) {
         if (preg_match($pattern, $normalizedPath) === 1) {
@@ -162,23 +166,29 @@ function manifest_is_ignored_path(string $relativePath): bool
  */
 function manifest_is_core_like_path(string $relativePath): bool
 {
+    // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = str_replace('\\', '/', ltrim($relativePath, '/'));
     if ($normalizedPath === '' || manifest_is_ignored_path($normalizedPath)) {
         return false;
     }
 
+    // $allowedRootFiles stores an intermediate value used by the surrounding gallery workflow.
     $allowedRootFiles = manifest_allowed_root_files();
     if (isset($allowedRootFiles[$normalizedPath])) {
         return true;
     }
 
+    // $firstSegment stores an intermediate value used by the surrounding gallery workflow.
     $firstSegment = explode('/', $normalizedPath, 2)[0];
     if (!in_array($firstSegment, manifest_allowed_roots(), true)) {
         return false;
     }
 
+    // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION));
+    // $basename stores an intermediate value used by the surrounding gallery workflow.
     $basename = basename($normalizedPath);
+    // $allowedExtensions stores an intermediate value used by the surrounding gallery workflow.
     $allowedExtensions = manifest_allowed_extensions();
 
     return $basename === '.htaccess' || isset($allowedExtensions[$extension]);
@@ -189,7 +199,9 @@ function manifest_is_core_like_path(string $relativePath): bool
  */
 function manifest_discover_files(string $rootPath): array
 {
+    // $files stores an intermediate value used by the surrounding gallery workflow.
     $files = [];
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($rootPath, FilesystemIterator::SKIP_DOTS)
     );
@@ -199,7 +211,9 @@ function manifest_discover_files(string $rootPath): array
             continue;
         }
 
+        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
         $absolutePath = str_replace('\\', '/', $fileInfo->getPathname());
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
         $relativePath = ltrim(substr($absolutePath, strlen(str_replace('\\', '/', $rootPath))), '/');
         if (!manifest_is_core_like_path($relativePath)) {
             continue;
@@ -217,15 +231,18 @@ function manifest_discover_files(string $rootPath): array
  */
 function manifest_hash_file(string $absolutePath): string
 {
+    // $contents stores an intermediate value used by the surrounding gallery workflow.
     $contents = file_get_contents($absolutePath);
     if ($contents === false) {
         throw new RuntimeException('Unable to read file: ' . $absolutePath);
     }
 
     if (str_starts_with($contents, "\xEF\xBB\xBF")) {
+        // $contents stores an intermediate value used by the surrounding gallery workflow.
         $contents = substr($contents, 3);
     }
 
+    // $contents stores an intermediate value used by the surrounding gallery workflow.
     $contents = str_replace(["\r\n", "\r"], "\n", $contents);
     return 'sha256:' . hash('sha256', $contents);
 }
@@ -247,14 +264,18 @@ if (manifest_has_flag('--help') || manifest_has_flag('-h')) {
     exit(0);
 }
 
+// $rootPath stores an intermediate value used by the surrounding gallery workflow.
 $rootPath = manifest_root_path();
+// $version stores an intermediate value used by the surrounding gallery workflow.
 $version = manifest_option_value('--version') ?? manifest_detect_version($rootPath);
 if ($version === '') {
     fwrite(STDERR, "Unable to detect CMS version. Use --version=VERSION.\n");
     exit(1);
 }
 
+// $files stores an intermediate value used by the surrounding gallery workflow.
 $files = manifest_discover_files($rootPath);
+// $manifest stores an intermediate value used by the surrounding gallery workflow.
 $manifest = [
     'version' => $version,
     'generated_at' => gmdate('c'),
@@ -267,7 +288,9 @@ foreach ($files as $relativePath) {
     $manifest['files'][$relativePath] = manifest_hash_file($rootPath . '/' . $relativePath);
 }
 
+// $outputPath stores an intermediate value used by the surrounding gallery workflow.
 $outputPath = $rootPath . '/app/core-manifest.json';
+// $output stores an intermediate value used by the surrounding gallery workflow.
 $output = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 if ($output === false) {
     fwrite(STDERR, "Unable to encode manifest JSON.\n");
@@ -275,19 +298,23 @@ if ($output === false) {
 }
 
 if (manifest_has_flag('--check')) {
+    // $currentJson stores an intermediate value used by the surrounding gallery workflow.
     $currentJson = is_file($outputPath) ? file_get_contents($outputPath) : '';
+    // $currentManifest stores an intermediate value used by the surrounding gallery workflow.
     $currentManifest = $currentJson === false ? null : json_decode($currentJson, true);
     if (!is_array($currentManifest)) {
         fwrite(STDERR, "Manifest is missing or invalid. Run php scripts/generate_manifest.php.\n");
         exit(1);
     }
 
+    // $currentComparable stores an intermediate value used by the surrounding gallery workflow.
     $currentComparable = [
         'version' => (string) ($currentManifest['version'] ?? ''),
         'algorithm' => (string) ($currentManifest['algorithm'] ?? ''),
         'hash_mode' => (string) ($currentManifest['hash_mode'] ?? ''),
         'files' => $currentManifest['files'] ?? [],
     ];
+    // $generatedComparable stores an intermediate value used by the surrounding gallery workflow.
     $generatedComparable = [
         'version' => $manifest['version'],
         'algorithm' => $manifest['algorithm'],

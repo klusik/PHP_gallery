@@ -10,14 +10,19 @@ declare(strict_types=1);
 
 function send_conditional_file_headers(string $path, string $cacheControl): void
 {
+    // $mtime stores an intermediate value used by the surrounding gallery workflow.
     $mtime = (int) filemtime($path);
+    // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = (int) filesize($path);
+    // $etag stores an intermediate value used by the surrounding gallery workflow.
     $etag = '"' . sha1($path . '|' . $mtime . '|' . $size) . '"';
     header('ETag: ' . $etag);
     header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
     header('Cache-Control: ' . $cacheControl);
 
+    // $clientEtag stores an intermediate value used by the surrounding gallery workflow.
     $clientEtag = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+    // $clientModifiedSince stores an intermediate value used by the surrounding gallery workflow.
     $clientModifiedSince = (string) ($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '');
     if ($clientEtag === $etag || ($clientModifiedSince !== '' && (int) strtotime($clientModifiedSince) >= $mtime)) {
         http_response_code(304);
@@ -25,11 +30,19 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     }
 }
 
+/**
+ * Handles render back to top button logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function render_back_to_top_button(): void
 {
     echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="Go back to top" title="Go back to top"><span aria-hidden="true">↑</span><span>Top</span></button>';
 }
 
+/**
+ * Handles cms not found logic for the gallery application.
+ * @return mixed Result produced by this operation.
+ */
 function cms_not_found(): void
 {
     http_response_code(404);

@@ -39,6 +39,7 @@ function zip_cache_ttl_seconds(): int
 function zip_cache_file_is_fresh(string $filePath, ?int $now = null): bool
 {
     if ($now === null) {
+        // $now stores an intermediate value used by the surrounding gallery workflow.
         $now = time();
     }
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
@@ -58,6 +59,7 @@ function zip_cache_file_is_fresh(string $filePath, ?int $now = null): bool
 function cleanup_expired_zip_cache(?int $now = null): array
 {
     if ($now === null) {
+        // $now stores an intermediate value used by the surrounding gallery workflow.
         $now = time();
     }
     // Variable $dir stores this steps working value.
@@ -77,8 +79,10 @@ function cleanup_expired_zip_cache(?int $now = null): array
         // Variable $removeRow stores this steps working value.
         $removeRow = false;
         if (!path_inside($dir, $filePath)) {
+            // $removeRow stores an intermediate value used by the surrounding gallery workflow.
             $removeRow = true;
         } elseif (!is_file($filePath)) {
+            // $removeRow stores an intermediate value used by the surrounding gallery workflow.
             $removeRow = true;
         } else {
             // Variable $modifiedAt stores this steps working value.
@@ -87,6 +91,7 @@ function cleanup_expired_zip_cache(?int $now = null): array
                 if (@unlink($filePath)) {
                     $deletedFiles++;
                 }
+                // $removeRow stores an intermediate value used by the surrounding gallery workflow.
                 $removeRow = true;
             }
         }
@@ -314,6 +319,7 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
             $parentDirectory = dirname(str_replace('\\', '/', $zipPath));
             while ($parentDirectory !== '.' && $parentDirectory !== '') {
                 $directories[$parentDirectory] = $parentDirectory;
+                // $parentDirectory stores an intermediate value used by the surrounding gallery workflow.
                 $parentDirectory = dirname($parentDirectory);
             }
         }

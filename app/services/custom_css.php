@@ -36,14 +36,17 @@ function custom_css_preset_dir(): string
  */
 function custom_css_presets(): array
 {
+    // $dir stores an intermediate value used by the surrounding gallery workflow.
     $dir = custom_css_preset_dir();
     if (!is_dir($dir)) {
         return [];
     }
 
+    // $files stores an intermediate value used by the surrounding gallery workflow.
     $files = glob($dir . '/*.css') ?: [];
     sort($files, SORT_NATURAL | SORT_FLAG_CASE);
 
+    // $presets stores an intermediate value used by the surrounding gallery workflow.
     $presets = [];
     foreach ($files as $file) {
         $presets[basename($file)] = $file;
@@ -63,6 +66,7 @@ function custom_css_preset_path(string $filename): ?string
         return null;
     }
 
+    // $presets stores an intermediate value used by the surrounding gallery workflow.
     $presets = custom_css_presets();
     return $presets[$filename] ?? null;
 }

@@ -10,13 +10,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+// $root stores an intermediate value used by the surrounding gallery workflow.
 $root = __DIR__;
+// $configFile stores an intermediate value used by the surrounding gallery workflow.
 $configFile = $root . '/config.php';
+// $cachePath stores an intermediate value used by the surrounding gallery workflow.
 $cachePath = $root . '/cache';
+// $installLockFile stores an intermediate value used by the surrounding gallery workflow.
 $installLockFile = $cachePath . '/installed.lock';
+// $bootstrapLockFile stores an intermediate value used by the surrounding gallery workflow.
 $bootstrapLockFile = $cachePath . '/bootstrap-installed.lock';
+// $errors stores an intermediate value used by the surrounding gallery workflow.
 $errors = [];
+// $messages stores an intermediate value used by the surrounding gallery workflow.
 $messages = [];
+// $downloadStarted stores an intermediate value used by the surrounding gallery workflow.
 $downloadStarted = false;
 
 if (empty($_SESSION['bootstrap_token'])) {
@@ -34,7 +42,9 @@ if (is_file($bootstrapLockFile)) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // $downloadStarted stores an intermediate value used by the surrounding gallery workflow.
     $downloadStarted = true;
+    // $postedToken stores an intermediate value used by the surrounding gallery workflow.
     $postedToken = (string) ($_POST['bootstrap_token'] ?? '');
 
     if (!hash_equals((string) $_SESSION['bootstrap_token'], $postedToken)) {
@@ -58,10 +68,13 @@ gallery_bootstrap_render_page($messages, $errors, $downloadStarted);
  */
 function gallery_bootstrap_render_page(array $messages, array $errors, bool $downloadStarted): void
 {
+    // $checks stores an intermediate value used by the surrounding gallery workflow.
     $checks = gallery_bootstrap_environment_checks(__DIR__);
+    // $hasBlockingCheck stores an intermediate value used by the surrounding gallery workflow.
     $hasBlockingCheck = false;
     foreach ($checks as $check) {
         if (!$check['ok'] && $check['required']) {
+            // $hasBlockingCheck stores an intermediate value used by the surrounding gallery workflow.
             $hasBlockingCheck = true;
             break;
         }
@@ -93,7 +106,9 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
 
     echo '<section><h2>Environment check</h2><div class="checks">';
     foreach ($checks as $check) {
+        // $className stores an intermediate value used by the surrounding gallery workflow.
         $className = $check['ok'] ? 'check ok' : ($check['required'] ? 'check fail' : 'check warn');
+        // $status stores an intermediate value used by the surrounding gallery workflow.
         $status = $check['ok'] ? 'OK' : ($check['required'] ? 'Required' : 'Optional');
         echo '<div class="' . $className . '"><strong>' . gallery_bootstrap_e($check['label']) . '</strong><span>' . gallery_bootstrap_e($status) . '</span><p>' . gallery_bootstrap_e($check['detail']) . '</p></div>';
     }
@@ -125,15 +140,20 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
  */
 function gallery_bootstrap_run(string $root, string $cachePath, string $bootstrapLockFile): array
 {
+    // $messages stores an intermediate value used by the surrounding gallery workflow.
     $messages = [];
+    // $errors stores an intermediate value used by the surrounding gallery workflow.
     $errors = [];
 
     if (!gallery_bootstrap_ensure_directory($cachePath)) {
         return [$messages, ['Cannot create or write the cache directory: ' . $cachePath]];
     }
 
+    // $temporaryRoot stores an intermediate value used by the surrounding gallery workflow.
     $temporaryRoot = $cachePath . '/bootstrap-' . date('Ymd-His') . '-' . bin2hex(random_bytes(4));
+    // $archivePath stores an intermediate value used by the surrounding gallery workflow.
     $archivePath = $temporaryRoot . '/package.zip';
+    // $extractPath stores an intermediate value used by the surrounding gallery workflow.
     $extractPath = $temporaryRoot . '/extract';
 
     if (!mkdir($temporaryRoot, 0755, true) && !is_dir($temporaryRoot)) {
@@ -149,6 +169,7 @@ function gallery_bootstrap_run(string $root, string $cachePath, string $bootstra
         gallery_bootstrap_download(GALLERY_BOOTSTRAP_ARCHIVE_URL, $archivePath);
         $messages[] = 'Downloaded the GitHub archive.';
 
+        // $projectRoot stores an intermediate value used by the surrounding gallery workflow.
         $projectRoot = gallery_bootstrap_extract($archivePath, $extractPath);
         $messages[] = 'Extracted the archive.';
 
@@ -177,11 +198,13 @@ function gallery_bootstrap_run(string $root, string $cachePath, string $bootstra
 function gallery_bootstrap_download(string $url, string $targetPath): void
 {
     if (function_exists('curl_init')) {
+        // $targetHandle stores an intermediate value used by the surrounding gallery workflow.
         $targetHandle = fopen($targetPath, 'wb');
         if ($targetHandle === false) {
             throw new RuntimeException('Cannot write downloaded archive: ' . $targetPath);
         }
 
+        // $curlHandle stores an intermediate value used by the surrounding gallery workflow.
         $curlHandle = curl_init($url);
         if ($curlHandle === false) {
             fclose($targetHandle);
@@ -197,8 +220,11 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
             CURLOPT_FAILONERROR => true,
         ]);
 
+        // $result stores an intermediate value used by the surrounding gallery workflow.
         $result = curl_exec($curlHandle);
+        // $error stores an intermediate value used by the surrounding gallery workflow.
         $error = curl_error($curlHandle);
+        // $statusCode stores an intermediate value used by the surrounding gallery workflow.
         $statusCode = (int) curl_getinfo($curlHandle, CURLINFO_RESPONSE_CODE);
         curl_close($curlHandle);
         fclose($targetHandle);
@@ -212,6 +238,7 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
             throw new RuntimeException('Neither cURL nor allow_url_fopen is available. Upload the full project ZIP manually or enable one of them on the server.');
         }
 
+        // $context stores an intermediate value used by the surrounding gallery workflow.
         $context = stream_context_create([
             'http' => [
                 'follow_location' => 1,
@@ -223,6 +250,7 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
             ],
         ]);
 
+        // $downloadedBytes stores an intermediate value used by the surrounding gallery workflow.
         $downloadedBytes = @file_put_contents($targetPath, fopen($url, 'rb', false, $context));
         if ($downloadedBytes === false) {
             @unlink($targetPath);
@@ -245,13 +273,16 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
         throw new RuntimeException('PHP ZipArchive extension is missing. Ask the host to enable zip support or upload the extracted project manually.');
     }
 
+    // $zip stores an intermediate value used by the surrounding gallery workflow.
     $zip = new ZipArchive();
+    // $openResult stores an intermediate value used by the surrounding gallery workflow.
     $openResult = $zip->open($archivePath);
     if ($openResult !== true) {
         throw new RuntimeException('Cannot open downloaded ZIP archive. ZipArchive error code: ' . $openResult);
     }
 
     for ($index = 0; $index < $zip->numFiles; $index++) {
+        // $entryName stores an intermediate value used by the surrounding gallery workflow.
         $entryName = (string) $zip->getNameIndex($index);
         if (gallery_bootstrap_zip_entry_is_unsafe($entryName)) {
             $zip->close();
@@ -266,6 +297,7 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
 
     $zip->close();
 
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = array_values(array_filter(scandir($extractPath) ?: [], static function (string $entry): bool {
         return $entry !== '.' && $entry !== '..';
     }));
@@ -282,6 +314,7 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
  */
 function gallery_bootstrap_zip_entry_is_unsafe(string $entryName): bool
 {
+    // $normalized stores an intermediate value used by the surrounding gallery workflow.
     $normalized = str_replace('\\', '/', $entryName);
     return $normalized === ''
         || str_starts_with($normalized, '/')
@@ -294,6 +327,7 @@ function gallery_bootstrap_zip_entry_is_unsafe(string $entryName): bool
  */
 function gallery_bootstrap_validate_project_root(string $projectRoot): void
 {
+    // $requiredFiles stores an intermediate value used by the surrounding gallery workflow.
     $requiredFiles = ['index.php', 'install.php', 'app/bootstrap.php', 'config.example.php'];
     foreach ($requiredFiles as $requiredFile) {
         if (!is_file($projectRoot . '/' . $requiredFile)) {
@@ -307,6 +341,7 @@ function gallery_bootstrap_validate_project_root(string $projectRoot): void
  */
 function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, array $excludedRootFiles = []): void
 {
+    // $directory stores an intermediate value used by the surrounding gallery workflow.
     $directory = opendir($sourcePath);
     if ($directory === false) {
         throw new RuntimeException('Cannot read extracted project directory: ' . $sourcePath);
@@ -326,7 +361,9 @@ function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, arr
             continue;
         }
 
+        // $sourceEntry stores an intermediate value used by the surrounding gallery workflow.
         $sourceEntry = $sourcePath . '/' . $entry;
+        // $targetEntry stores an intermediate value used by the surrounding gallery workflow.
         $targetEntry = $targetPath . '/' . $entry;
 
         if (is_dir($sourceEntry)) {
@@ -360,11 +397,13 @@ function gallery_bootstrap_ensure_directory(string $path): bool
  */
 function gallery_bootstrap_write_lock(string $path): void
 {
+    // $directory stores an intermediate value used by the surrounding gallery workflow.
     $directory = dirname($path);
     if (!gallery_bootstrap_ensure_directory($directory)) {
         throw new RuntimeException('Cannot write lock directory: ' . $directory);
     }
 
+    // $content stores an intermediate value used by the surrounding gallery workflow.
     $content = 'Bootstrap installer completed at ' . date('c') . PHP_EOL;
     if (file_put_contents($path, $content, LOCK_EX) === false) {
         throw new RuntimeException('Cannot write bootstrap lock file: ' . $path);
@@ -385,6 +424,7 @@ function gallery_bootstrap_remove_tree(string $path): void
         return;
     }
 
+    // $items stores an intermediate value used by the surrounding gallery workflow.
     $items = scandir($path);
     if ($items === false) {
         return;

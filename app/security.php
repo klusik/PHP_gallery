@@ -45,6 +45,7 @@ function current_user(): ?array
         return $cachedUser;
     }
     if (empty($_SESSION['user_id'])) {
+        // $cache stores an intermediate value used by the surrounding gallery workflow.
         $cache = true;
         return $cachedUser = null;
     }
@@ -53,6 +54,7 @@ function current_user(): ?array
     $stmt->execute([(int) $_SESSION['user_id']]);
     // Variable $user stores this steps working value.
     $user = $stmt->fetch();
+    // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
     return $cachedUser = ($user ?: null);
 }
@@ -96,8 +98,11 @@ function send_security_headers(): void
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
 
+    // $page stores an intermediate value used by the surrounding gallery workflow.
     $page = (string) ($_GET['page'] ?? 'home');
+    // $isAnonymousGet stores an intermediate value used by the surrounding gallery workflow.
     $isAnonymousGet = request_method() === 'GET' && current_user() === null;
+    // $isPublicCacheCandidate stores an intermediate value used by the surrounding gallery workflow.
     $isPublicCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game', 'robots', 'sitemap', 'theme_css'], true);
 
     if ($isAnonymousGet && $isPublicCacheCandidate) {
@@ -115,8 +120,11 @@ function send_security_headers(): void
  */
 function verify_vote_rate_limit(int $imageId): void
 {
+    // $now stores an intermediate value used by the surrounding gallery workflow.
     $now = time();
+    // $key stores an intermediate value used by the surrounding gallery workflow.
     $key = 'vote_rate_' . $imageId;
+    // $lastVote stores an intermediate value used by the surrounding gallery workflow.
     $lastVote = (int) ($_SESSION[$key] ?? 0);
     if ($lastVote > 0 && ($now - $lastVote) < 2) {
         http_response_code(429);
@@ -151,6 +159,7 @@ function cms_admin_user_exists(): bool
  */
 function cms_write_setup_lock(): void
 {
+    // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = dirname(__DIR__) . '/cache/installed.lock';
     if (!is_dir(dirname($path))) {
         mkdir(dirname($path), 0775, true);

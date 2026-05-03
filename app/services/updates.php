@@ -28,16 +28,22 @@ function cms_github_project_url(): string
  */
 function check_application_update(): array
 {
+    // $lastError stores an intermediate value used by the surrounding gallery workflow.
     $lastError = null;
+    // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
     $latestStatus = null;
     foreach (application_update_branch_candidates() as $branch) {
         try {
+            // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
             $versionCandidates = application_update_remote_version_candidates($branch);
             if ($versionCandidates === []) {
+                // $lastError stores an intermediate value used by the surrounding gallery workflow.
                 $lastError = 'No version marker was found in app/bootstrap.php on branch ' . $branch . '.';
                 continue;
             }
+            // $latestVersion stores an intermediate value used by the surrounding gallery workflow.
             $latestVersion = application_update_highest_version($versionCandidates);
+            // $status stores an intermediate value used by the surrounding gallery workflow.
             $status = [
                 'current_version' => cms_current_version(),
                 'latest_version' => $latestVersion,
@@ -49,9 +55,11 @@ function check_application_update(): array
                 'error' => null,
             ];
             if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
+                // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
                 $latestStatus = $status;
             }
         } catch (Throwable $exception) {
+            // $lastError stores an intermediate value used by the surrounding gallery workflow.
             $lastError = $exception->getMessage();
         }
     }
@@ -93,6 +101,7 @@ function cache_application_update_check(array $status): void
  */
 function application_update_pending(): bool
 {
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = check_application_update();
     return empty($status['error']) && !empty($status['update_available']);
 }
@@ -129,27 +138,36 @@ function install_application_beta(string $commitId): array
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
     }
+    // $commitId stores an intermediate value used by the surrounding gallery workflow.
     $commitId = strtolower(trim($commitId));
     if (!preg_match('/^[0-9a-f]{7,40}$/', $commitId)) {
         throw new RuntimeException('Enter a valid beta code.');
     }
 
+    // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = dirname(__DIR__);
+    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
     $updateDir = $root . '/cache/updates';
+    // $backupDir stores an intermediate value used by the surrounding gallery workflow.
     $backupDir = $updateDir . '/backups';
     application_update_ensure_dir($updateDir);
     application_update_ensure_dir($backupDir);
 
+    // $stamp stores an intermediate value used by the surrounding gallery workflow.
     $stamp = date('Ymd-His');
+    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
     $zipPath = $updateDir . '/beta-' . $stamp . '.zip';
+    // $extractDir stores an intermediate value used by the surrounding gallery workflow.
     $extractDir = $updateDir . '/beta-extract-' . $stamp;
     application_update_ensure_dir($extractDir);
 
+    // $archive stores an intermediate value used by the surrounding gallery workflow.
     $archive = http_fetch(application_update_commit_zip_url($commitId), 60);
     if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
         throw new RuntimeException('Could not write beta archive into cache/updates.');
     }
 
+    // $zip stores an intermediate value used by the surrounding gallery workflow.
     $zip = new ZipArchive();
     if ($zip->open($zipPath) !== true) {
         throw new RuntimeException('Downloaded beta archive could not be opened.');
@@ -160,9 +178,13 @@ function install_application_beta(string $commitId): array
     }
     $zip->close();
 
+    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($extractDir);
+    // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
+    // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
     cache_application_update_check(check_application_update());
     set_app_setting('application_update_channel', 'beta');
@@ -184,23 +206,31 @@ function install_application_beta(string $commitId): array
  */
 function restore_application_stable_release(): array
 {
+    // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = dirname(__DIR__);
+    // $branch stores an intermediate value used by the surrounding gallery workflow.
     $branch = application_update_branch_candidates()[0] ?? '';
     if ($branch === '') {
         throw new RuntimeException('No stable release branch is configured.');
     }
+    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
     $updateDir = $root . '/cache/updates';
+    // $stamp stores an intermediate value used by the surrounding gallery workflow.
     $stamp = date('Ymd-His');
+    // $restoreDir stores an intermediate value used by the surrounding gallery workflow.
     $restoreDir = $updateDir . '/stable-restore-' . $stamp;
     application_update_ensure_dir($updateDir);
     application_update_ensure_dir($restoreDir);
 
+    // $archive stores an intermediate value used by the surrounding gallery workflow.
     $archive = http_fetch(application_update_zip_url($branch), 60);
+    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
     $zipPath = $updateDir . '/stable-restore-' . $stamp . '.zip';
     if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
         throw new RuntimeException('Could not write stable restore archive into cache/updates.');
     }
 
+    // $zip stores an intermediate value used by the surrounding gallery workflow.
     $zip = new ZipArchive();
     if ($zip->open($zipPath) !== true) {
         throw new RuntimeException('Downloaded stable restore archive could not be opened.');
@@ -211,7 +241,9 @@ function restore_application_stable_release(): array
     }
     $zip->close();
 
+    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($restoreDir);
+    // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = application_update_copy_files($sourceRoot, $root, $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip');
     application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings([
@@ -221,6 +253,7 @@ function restore_application_stable_release(): array
         'application_update_check_cache',
     ]);
 
+    // $restoredVersion stores an intermediate value used by the surrounding gallery workflow.
     $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
 
     return [
@@ -257,6 +290,7 @@ function install_application_update(): array
         throw new RuntimeException('The PHP ZipArchive extension is required for one-button updates.');
     }
 
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = check_application_update();
     if (!empty($status['error'])) {
         throw new RuntimeException((string) $status['error']);
@@ -265,22 +299,30 @@ function install_application_update(): array
         throw new RuntimeException('No newer version is available.');
     }
 
+    // $root stores an intermediate value used by the surrounding gallery workflow.
     $root = dirname(__DIR__);
+    // $updateDir stores an intermediate value used by the surrounding gallery workflow.
     $updateDir = $root . '/cache/updates';
+    // $backupDir stores an intermediate value used by the surrounding gallery workflow.
     $backupDir = $updateDir . '/backups';
     application_update_ensure_dir($updateDir);
     application_update_ensure_dir($backupDir);
 
+    // $stamp stores an intermediate value used by the surrounding gallery workflow.
     $stamp = date('Ymd-His');
+    // $zipPath stores an intermediate value used by the surrounding gallery workflow.
     $zipPath = $updateDir . '/update-' . $stamp . '.zip';
+    // $extractDir stores an intermediate value used by the surrounding gallery workflow.
     $extractDir = $updateDir . '/extract-' . $stamp;
     application_update_ensure_dir($extractDir);
 
+    // $archive stores an intermediate value used by the surrounding gallery workflow.
     $archive = http_fetch(application_update_zip_url((string) $status['branch']), 60);
     if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
         throw new RuntimeException('Could not write update archive into cache/updates.');
     }
 
+    // $zip stores an intermediate value used by the surrounding gallery workflow.
     $zip = new ZipArchive();
     if ($zip->open($zipPath) !== true) {
         throw new RuntimeException('Downloaded update archive could not be opened.');
@@ -291,9 +333,13 @@ function install_application_update(): array
     }
     $zip->close();
 
+    // $sourceRoot stores an intermediate value used by the surrounding gallery workflow.
     $sourceRoot = application_update_extracted_root($extractDir);
+    // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
+    // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
     delete_app_settings(['application_update_check_cache']);
 
@@ -360,9 +406,12 @@ function application_update_assert_allowed_branch(string $branch): void
  */
 function application_update_remote_version_candidates(string $branch): array
 {
+    // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
     $versionCandidates = [];
     try {
+        // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
         $bootstrap = http_fetch(application_update_raw_url($branch, 'app/bootstrap.php'), 12);
+        // $bootstrapVersion stores an intermediate value used by the surrounding gallery workflow.
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
         if ($bootstrapVersion !== null) {
             $versionCandidates['app/bootstrap.php'] = $bootstrapVersion;
@@ -379,13 +428,16 @@ function application_update_remote_version_candidates(string $branch): array
  */
 function application_update_highest_version(array $versionCandidates): string
 {
+    // $highestVersion stores an intermediate value used by the surrounding gallery workflow.
     $highestVersion = null;
     foreach ($versionCandidates as $version) {
+        // $normalizedVersion stores an intermediate value used by the surrounding gallery workflow.
         $normalizedVersion = application_update_normalize_version((string) $version);
         if ($normalizedVersion === null) {
             continue;
         }
         if ($highestVersion === null || version_compare($normalizedVersion, $highestVersion, '>')) {
+            // $highestVersion stores an intermediate value used by the surrounding gallery workflow.
             $highestVersion = $normalizedVersion;
         }
     }
@@ -402,8 +454,10 @@ function application_update_highest_version(array $versionCandidates): string
  */
 function application_update_version_source_label(array $versionCandidates, string $latestVersion): string
 {
+    // $labels stores an intermediate value used by the surrounding gallery workflow.
     $labels = [];
     foreach ($versionCandidates as $source => $version) {
+        // $normalizedVersion stores an intermediate value used by the surrounding gallery workflow.
         $normalizedVersion = application_update_normalize_version((string) $version);
         if ($normalizedVersion === $latestVersion) {
             $labels[] = (string) $source;
@@ -428,7 +482,9 @@ function application_update_version_from_bootstrap(string $bootstrap): ?string
  */
 function application_update_normalize_version(string $version): ?string
 {
+    // $version stores an intermediate value used by the surrounding gallery workflow.
     $version = trim($version);
+    // $version stores an intermediate value used by the surrounding gallery workflow.
     $version = preg_replace('/^v[_-]?/i', '', $version) ?? $version;
     if (preg_match('/^[0-9]+(?:\.[0-9]+){1,2}$/', $version)) {
         return $version;
@@ -442,6 +498,7 @@ function application_update_normalize_version(string $version): ?string
 function http_fetch(string $url, int $timeoutSeconds): string
 {
     if (function_exists('curl_init')) {
+        // $handle stores an intermediate value used by the surrounding gallery workflow.
         $handle = curl_init($url);
         if ($handle === false) {
             throw new RuntimeException('Could not initialize HTTP client.');
@@ -460,8 +517,11 @@ function http_fetch(string $url, int $timeoutSeconds): string
                 'Pragma: no-cache',
             ],
         ]);
+        // $body stores an intermediate value used by the surrounding gallery workflow.
         $body = curl_exec($handle);
+        // $status stores an intermediate value used by the surrounding gallery workflow.
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+        // $error stores an intermediate value used by the surrounding gallery workflow.
         $error = curl_error($handle);
         curl_close($handle);
         if ($body === false || $status >= 400) {
@@ -470,6 +530,7 @@ function http_fetch(string $url, int $timeoutSeconds): string
         return (string) $body;
     }
 
+    // $context stores an intermediate value used by the surrounding gallery workflow.
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
@@ -479,6 +540,7 @@ function http_fetch(string $url, int $timeoutSeconds): string
                 . "Pragma: no-cache\r\n",
         ],
     ]);
+    // $body stores an intermediate value used by the surrounding gallery workflow.
     $body = @file_get_contents($url, false, $context);
     if ($body === false) {
         throw new RuntimeException('HTTP request failed. Enable curl or allow_url_fopen for update checks.');
@@ -504,8 +566,10 @@ function application_update_ensure_dir(string $path): void
  */
 function application_update_extracted_root(string $extractDir): string
 {
+    // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = array_values(array_filter(scandir($extractDir) ?: [], static fn (string $entry): bool => $entry !== '.' && $entry !== '..'));
     foreach ($entries as $entry) {
+        // $path stores an intermediate value used by the surrounding gallery workflow.
         $path = $extractDir . '/' . $entry;
         if (is_dir($path)) {
             return $path;
@@ -519,12 +583,15 @@ function application_update_extracted_root(string $extractDir): string
  */
 function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath): int
 {
+    // $backup stores an intermediate value used by the surrounding gallery workflow.
     $backup = new ZipArchive();
     if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException('Could not create update backup archive.');
     }
 
+    // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = 0;
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
@@ -534,11 +601,13 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
         if ($item->isLink()) {
             continue;
         }
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
         $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
         if (application_update_path_is_protected($relativePath)) {
             continue;
         }
 
+        // $destination stores an intermediate value used by the surrounding gallery workflow.
         $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         if ($item->isDir()) {
             application_update_ensure_dir($destination);
@@ -547,6 +616,7 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
         if (is_dir($destination)) {
             throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
         }
+        // $parent stores an intermediate value used by the surrounding gallery workflow.
         $parent = dirname($destination);
         application_update_ensure_dir($parent);
         if (is_file($destination)) {
@@ -584,6 +654,7 @@ function application_update_invalidate_opcache(string $destinationRoot, string $
     if (!function_exists('opcache_invalidate')) {
         return;
     }
+    // $iterator stores an intermediate value used by the surrounding gallery workflow.
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
@@ -592,7 +663,9 @@ function application_update_invalidate_opcache(string $destinationRoot, string $
         if ($item->isDir() || $item->isLink()) {
             continue;
         }
+        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
         $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
+        // $destination stores an intermediate value used by the surrounding gallery workflow.
         $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
         application_update_invalidate_opcache_for_path($destination);
     }
@@ -606,6 +679,7 @@ function application_update_version_from_local_bootstrap(string $bootstrapPath):
     if (!is_file($bootstrapPath)) {
         return null;
     }
+    // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
     $bootstrap = (string) file_get_contents($bootstrapPath);
     return application_update_version_from_bootstrap($bootstrap);
 }
@@ -615,7 +689,9 @@ function application_update_version_from_local_bootstrap(string $bootstrapPath):
  */
 function application_update_path_is_protected(string $relativePath): bool
 {
+    // $relativePath stores an intermediate value used by the surrounding gallery workflow.
     $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    // $protectedFiles stores an intermediate value used by the surrounding gallery workflow.
     $protectedFiles = [
         'config.php',
         'public/assets/custom.css',

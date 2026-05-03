@@ -79,11 +79,13 @@ function apply_migration_statement(PDO $pdo, string $statement): void
  */
 function migration_duplicate_ddl_error(PDOException $exception): bool
 {
+    // $driverCode stores an intermediate value used by the surrounding gallery workflow.
     $driverCode = (int) ($exception->errorInfo[1] ?? $exception->getCode());
     if (in_array($driverCode, [1050, 1060, 1061, 1826], true)) {
         return true;
     }
 
+    // $message stores an intermediate value used by the surrounding gallery workflow.
     $message = $exception->getMessage();
     return str_contains($message, 'already exists')
         || str_contains($message, 'Duplicate column name')
@@ -98,16 +100,21 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
 function pending_migrations_exist(): bool
 {
     try {
+        // $pdo stores an intermediate value used by the surrounding gallery workflow.
         $pdo = db();
         $pdo->exec("CREATE TABLE IF NOT EXISTS schema_migrations (
             version VARCHAR(64) NOT NULL PRIMARY KEY,
             applied_at DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        // $applied stores an intermediate value used by the surrounding gallery workflow.
         $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        // $applied stores an intermediate value used by the surrounding gallery workflow.
         $applied = array_flip($applied);
+        // $files stores an intermediate value used by the surrounding gallery workflow.
         $files = glob(dirname(__DIR__) . '/database/migrations/*.php') ?: [];
         sort($files);
         foreach ($files as $file) {
+            // $version stores an intermediate value used by the surrounding gallery workflow.
             $version = basename($file, '.php');
             if (!isset($applied[$version])) {
                 return true;

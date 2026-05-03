@@ -65,6 +65,7 @@ function gallery_allows_gps_maps(array $gallery): bool
 function exif_rational_to_float(mixed $value): ?float
 {
     if (is_array($value)) {
+        // $value stores an intermediate value used by the surrounding gallery workflow.
         $value = reset($value);
     }
     // Variable $text stores this steps working value.

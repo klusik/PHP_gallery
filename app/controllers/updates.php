@@ -16,21 +16,26 @@ declare(strict_types=1);
 function cms_admin_update(): void
 {
     require_admin();
+    // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = null;
 
     if (request_method() === 'POST') {
         verify_csrf();
         try {
+            // $action stores an intermediate value used by the surrounding gallery workflow.
             $action = (string) ($_POST['update_action'] ?? 'stable_update');
             if ($action === 'beta_install') {
+                // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
                 admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result);
                 $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
             } elseif ($action === 'beta_revert') {
+                // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = restore_application_stable_release();
                 admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result);
                 $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head.';
             } else {
+                // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_update();
                 admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
                 $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
@@ -38,13 +43,17 @@ function cms_admin_update(): void
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
             admin_log_event('warning', 'update.failed', 'Application update failed.', ['error' => $exception->getMessage()]);
+            // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
         }
     }
 
+    // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
+    // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = check_application_update();
+    // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
     render_header('Application updates');
     echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';

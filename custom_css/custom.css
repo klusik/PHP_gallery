@@ -13,6 +13,7 @@ body {
 .container,
 .wrapper,
 .main,
+/* Styles the .content area of the gallery interface. */
 .content {
     max-width: 1600px !important;
     width: 95% !important;
@@ -23,6 +24,7 @@ body {
 section,
 .panel,
 .card,
+/* Styles the .box area of the gallery interface. */
 .box {
     margin-bottom: 12px !important;
     padding: 10px !important;
@@ -38,6 +40,7 @@ button,
 .btn,
 input,
 select,
+/* Styles the textarea area of the gallery interface. */
 textarea {
     border-radius: 2px !important;
 }
@@ -45,6 +48,7 @@ textarea {
 /* Compact inputs */
 input,
 select,
+/* Styles the textarea area of the gallery interface. */
 textarea {
     padding: 6px 8px !important;
     font-size: 13px;
@@ -52,6 +56,7 @@ textarea {
 
 /* Buttons - more professional */
 button,
+/* Styles the .btn area of the gallery interface. */
 .btn {
     background-color: #2c3e50;
     color: #fff;
@@ -61,6 +66,7 @@ button,
 }
 
 button:hover,
+/* Styles the .btn:hover area of the gallery interface. */
 .btn:hover {
     background-color: #1f2a35;
 }
@@ -68,6 +74,7 @@ button:hover,
 /* Header refinement */
 header,
 .topbar,
+/* Styles the .navbar area of the gallery interface. */
 .navbar {
     background-color: #1f2a35 !important;
     color: #fff;
@@ -76,11 +83,13 @@ header,
 
 /* Navigation links */
 .navbar a,
+/* Styles the header a area of the gallery interface. */
 header a {
     color: #d0d6dc !important;
     padding: 6px 10px;
 }
 
+/* Styles the .navbar a:hover area of the gallery interface. */
 .navbar a:hover {
     background-color: #2c3e50;
     color: #fff !important;
@@ -88,6 +97,7 @@ header a {
 
 /* Gallery grid tighter */
 .gallery,
+/* Styles the .gallery-grid area of the gallery interface. */
 .gallery-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -96,6 +106,7 @@ header a {
 
 /* Image cards */
 .gallery-item,
+/* Styles the .card area of the gallery interface. */
 .card {
     background: #fff;
     border: 1px solid #dcdfe3;
@@ -105,6 +116,7 @@ header a {
 
 /* Images */
 .gallery-item img,
+/* Styles the .card img area of the gallery interface. */
 .card img {
     width: 100%;
     height: auto;
@@ -113,6 +125,7 @@ header a {
 
 /* Card content */
 .card-body,
+/* Styles the .gallery-caption area of the gallery interface. */
 .gallery-caption {
     padding: 6px 8px !important;
     font-size: 13px;
@@ -121,6 +134,7 @@ header a {
 /* Admin panels */
 .admin-panel,
 .sidebar,
+/* Styles the .settings area of the gallery interface. */
 .settings {
     background: #ffffff;
     border: 1px solid #dcdfe3;
@@ -134,12 +148,14 @@ table {
 }
 
 table th,
+/* Styles the table td area of the gallery interface. */
 table td {
     padding: 6px 8px;
     border: 1px solid #dcdfe3;
     text-align: left;
 }
 
+/* Styles the table th area of the gallery interface. */
 table th {
     background-color: #eef1f4;
     font-weight: 600;
@@ -148,6 +164,7 @@ table th {
 /* Reduce visual noise */
 .shadow,
 .box-shadow,
+/* Styles the .card-shadow area of the gallery interface. */
 .card-shadow {
     box-shadow: none !important;
 }
@@ -166,6 +183,7 @@ a {
     text-decoration: none;
 }
 
+/* Styles the a:hover area of the gallery interface. */
 a:hover {
     text-decoration: underline;
 }
@@ -176,10 +194,12 @@ a:hover {
     width: 8px;
 }
 
+/* Styles the ::-webkit-scrollbar-thumb area of the gallery interface. */
 ::-webkit-scrollbar-thumb {
     background: #bbb;
 }
 
+/* Styles the ::-webkit-scrollbar-thumb:hover area of the gallery interface. */
 ::-webkit-scrollbar-thumb:hover {
     background: #999;
 }

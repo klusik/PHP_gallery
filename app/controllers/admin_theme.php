@@ -138,8 +138,10 @@ function cms_admin_theme(): void
         } elseif (!empty($_POST['reset_favicon'])) {
             remove_stored_favicon();
         } elseif (!empty($_POST['reset_theme_background'])) {
+            // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = theme_background_path();
             if ($path !== null) {
+                // $absolute stores an intermediate value used by the surrounding gallery workflow.
                 $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
                 if (is_file($absolute)) {
                     @unlink($absolute);
@@ -156,15 +158,18 @@ function cms_admin_theme(): void
             // Variable $siteName stores this steps working value.
             $siteName = trim((string) ($_POST['site_name'] ?? ''));
             set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
+            // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
             $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
             // Variable $preset stores this steps working value.
             $preset = (string) ($_POST['custom_css_preset'] ?? '');
             // Variable $presetPath stores this steps working value.
             $presetPath = custom_css_preset_path($preset);
+            // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
             $customCssChanged = false;
             if ($presetPath !== null) {
                 copy($presetPath, custom_css_path());
                 set_app_setting('custom_css_preset', $preset);
+                // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
                 $customCssChanged = true;
             }
             if (!empty($_FILES['custom_css']['tmp_name']) && is_uploaded_file($_FILES['custom_css']['tmp_name'])) {
@@ -173,12 +178,15 @@ function cms_admin_theme(): void
                 if (str_ends_with($name, '.css')) {
                     move_uploaded_file($_FILES['custom_css']['tmp_name'], custom_css_path());
                     set_app_setting('custom_css_preset', 'uploaded');
+                    // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
                     $customCssChanged = true;
                 }
             }
             if (!empty($_FILES['favicon_source']['tmp_name']) && is_uploaded_file($_FILES['favicon_source']['tmp_name'])) {
+                // $name stores an intermediate value used by the surrounding gallery workflow.
                 $name = strtolower((string) ($_FILES['favicon_source']['name'] ?? ''));
                 if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    // $info stores an intermediate value used by the surrounding gallery workflow.
                     $info = @getimagesize((string) $_FILES['favicon_source']['tmp_name']);
                     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
                         throw new RuntimeException('The uploaded favicon source is not a valid image.');
@@ -190,6 +198,7 @@ function cms_admin_theme(): void
                 // Variable $name stores this steps working value.
                 $name = strtolower((string) ($_FILES['theme_background']['name'] ?? ''));
                 if (preg_match('/\.(jpe?g|png|gif|webp)$/i', $name)) {
+                    // $info stores an intermediate value used by the surrounding gallery workflow.
                     $info = @getimagesize((string) $_FILES['theme_background']['tmp_name']);
                     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
                         throw new RuntimeException('The uploaded theme background is not a valid image.');
@@ -198,6 +207,7 @@ function cms_admin_theme(): void
                 }
             }
             set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
             if ($themeControlsChanged) {
@@ -230,8 +240,10 @@ function cms_admin_theme(): void
     echo '<label>Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control></label>';
     echo '<label>Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control></label>';
     echo '<fieldset class="form-grid"><legend>Favicon</legend>';
+    // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
     if ($faviconUrl !== '') {
+        // $faviconVersion stores an intermediate value used by the surrounding gallery workflow.
         $faviconVersion = (string) app_setting('favicon_version', '1');
         echo '<div class="favicon-current"><img src="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '" alt="Current favicon"><p class="muted">Current favicon is generated as 32px, 48px, and 180px PNG variants.</p></div>';
     } else {
@@ -243,6 +255,7 @@ function cms_admin_theme(): void
     echo '</fieldset>';
     echo '<fieldset class="form-grid"><legend>Background</legend>';
     echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
+    // $themeBackgroundUrl stores an intermediate value used by the surrounding gallery workflow.
     $themeBackgroundUrl = theme_background_asset_url();
     if ($themeBackgroundUrl !== '') {
         echo '<p class="muted">Current theme background: <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">view stored image</a></p>';

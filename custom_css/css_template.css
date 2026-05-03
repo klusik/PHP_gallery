@@ -74,6 +74,7 @@ body {
     line-height: 1.5;
 }
 
+/* Styles the a area of the gallery interface. */
 a {
     /* Links inherit the theme accent by default, but you can refine them here. */
     text-underline-offset: 0.15em;
@@ -89,6 +90,7 @@ Avoid changing layout too aggressively unless you want to rework every page.
     /* Example: increase padding for a roomier header. */
 }
 
+/* Styles the .site-header .nav a area of the gallery interface. */
 .site-header .nav a {
     /* Example: make navigation links feel more like tabs or pills. */
 }
@@ -102,6 +104,7 @@ Cards appear in gallery listings and image grids.
 .panel,
 .hero,
 .gallery-card,
+/* Styles the .image-card area of the gallery interface. */
 .image-card {
     /* Example: slightly stronger shadow for more depth. */
     /* box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08); */
@@ -117,15 +120,18 @@ These selectors only affect pages whose body class includes `admin-page`.
     /* Example: set a more neutral or more technical admin look. */
 }
 
+/* Styles the .admin-page .panel area of the gallery interface. */
 .admin-page .panel {
     /* Example: tighten spacing for large management tables. */
 }
 
+/* Styles the .admin-page table th area of the gallery interface. */
 .admin-page table th {
     /* Example: make table headers more compact or more distinct. */
 }
 
 .admin-page .button,
+/* Styles the .admin-page button area of the gallery interface. */
 .admin-page button {
     /*
     Example: keep admin actions visually consistent.
@@ -144,6 +150,7 @@ Use the browser to test changes with both small and large thumbnails.
 }
 
 .image-card img,
+/* Styles the .gallery-card img area of the gallery interface. */
 .gallery-card img {
     /* Example: rounded corners or different cropping behavior. */
 }

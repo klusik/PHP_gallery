@@ -115,6 +115,7 @@ function sync_entity_tags(string $type, int $id, string $tagText): void
 function tags_for_entity(string $type, int $id): array
 {
     static $cache = [];
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $type . ':' . $id;
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
@@ -139,18 +140,24 @@ function tags_for_entity(string $type, int $id): array
 function tags_for_entities(string $type, array $ids): array
 {
     static $cache = [];
+    // $ids stores an intermediate value used by the surrounding gallery workflow.
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
     if (!$ids) {
         return [];
     }
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
     $cacheKey = $type . ':' . implode(',', $ids);
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
     }
+    // $mapTable stores an intermediate value used by the surrounding gallery workflow.
     $mapTable = $type === 'gallery' ? 'gallery_tags' : 'image_tags';
+    // $idColumn stores an intermediate value used by the surrounding gallery workflow.
     $idColumn = $type === 'gallery' ? 'gallery_id' : 'image_id';
+    // $placeholders stores an intermediate value used by the surrounding gallery workflow.
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare(
             'SELECT mt.' . $idColumn . ' AS entity_id, t.*
              FROM tags t
@@ -159,6 +166,7 @@ function tags_for_entities(string $type, array $ids): array
              ORDER BY mt.' . $idColumn . ', t.name'
         );
         $stmt->execute($ids);
+        // $grouped stores an intermediate value used by the surrounding gallery workflow.
         $grouped = [];
         foreach ($stmt->fetchAll() as $row) {
             $grouped[(int) $row['entity_id']][] = $row;
@@ -174,20 +182,26 @@ function tags_for_entities(string $type, array $ids): array
  */
 function current_votes_for_images(array $imageIds): array
 {
+    // $imageIds stores an intermediate value used by the surrounding gallery workflow.
     $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
     if (!$imageIds) {
         return [];
     }
+    // $user stores an intermediate value used by the surrounding gallery workflow.
     $user = current_user();
+    // $placeholders stores an intermediate value used by the surrounding gallery workflow.
     $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
     try {
         if ($user) {
+            // $stmt stores an intermediate value used by the surrounding gallery workflow.
             $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE user_id = ? AND image_id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([(int) $user['id']], $imageIds));
         } else {
+            // $stmt stores an intermediate value used by the surrounding gallery workflow.
             $stmt = db()->prepare('SELECT image_id, vote FROM image_votes WHERE visitor_hash = ? AND image_id IN (' . $placeholders . ')');
             $stmt->execute(array_merge([visitor_hash()], $imageIds));
         }
+        // $votes stores an intermediate value used by the surrounding gallery workflow.
         $votes = [];
         foreach ($stmt->fetchAll() as $row) {
             $votes[(int) $row['image_id']] = (int) $row['vote'];
@@ -238,6 +252,7 @@ function public_galleries_for_tag(int $tagId): array
 {
     // Variable $stmt stores this steps working value.
     $listingCondition = public_gallery_listing_condition('g');
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'

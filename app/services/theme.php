@@ -17,6 +17,7 @@ declare(strict_types=1);
  */
 function theme_settings(): array
 {
+    // $defaults stores an intermediate value used by the surrounding gallery workflow.
     $defaults = theme_css_defaults();
     return [
         'accent' => app_setting('theme_accent', $defaults['accent']),
@@ -38,6 +39,7 @@ function theme_settings(): array
  */
 function theme_override_settings(): array
 {
+    // $settings stores an intermediate value used by the surrounding gallery workflow.
     $settings = [
         'accent' => app_setting('theme_accent'),
         'accent_dark' => app_setting('theme_accent_dark'),
@@ -79,6 +81,7 @@ function clear_theme_overrides(): void
  */
 function theme_css_defaults(): array
 {
+    // $variables stores an intermediate value used by the surrounding gallery workflow.
     $variables = [
         '--accent' => '#a5481c',
         '--accent-dark' => '#713414',
@@ -91,6 +94,7 @@ function theme_css_defaults(): array
         if (!is_file($path)) {
             continue;
         }
+        // $variables stores an intermediate value used by the surrounding gallery workflow.
         $variables = array_merge($variables, css_custom_properties_from_file($path, array_keys($variables)));
     }
 
@@ -110,6 +114,7 @@ function theme_css_defaults(): array
  */
 function css_custom_properties_from_file(string $path, array $names): array
 {
+    // $css stores an intermediate value used by the surrounding gallery workflow.
     $css = file_get_contents($path);
     if ($css === false) {
         return [];
@@ -117,9 +122,12 @@ function css_custom_properties_from_file(string $path, array $names): array
     if (!preg_match_all('/:root\s*\{([^}]*)\}/is', $css, $blocks) || empty($blocks[1])) {
         return [];
     }
+    // $rootCss stores an intermediate value used by the surrounding gallery workflow.
     $rootCss = implode("\n", $blocks[1]);
+    // $found stores an intermediate value used by the surrounding gallery workflow.
     $found = [];
     foreach ($names as $name) {
+        // $pattern stores an intermediate value used by the surrounding gallery workflow.
         $pattern = '/' . preg_quote($name, '/') . '\s*:\s*([^;}{]+)\s*;/i';
         if (preg_match_all($pattern, $rootCss, $matches) && !empty($matches[1])) {
             $found[$name] = trim((string) end($matches[1]));
@@ -133,6 +141,7 @@ function css_custom_properties_from_file(string $path, array $names): array
  */
 function theme_font_mode_from_css(string $fontFamily): string
 {
+    // $fontFamily stores an intermediate value used by the surrounding gallery workflow.
     $fontFamily = strtolower($fontFamily);
     return str_contains($fontFamily, 'sans') || str_contains($fontFamily, 'system-ui') || str_contains($fontFamily, 'arial') ? 'sans' : 'serif';
 }
@@ -142,6 +151,7 @@ function theme_font_mode_from_css(string $fontFamily): string
  */
 function sanitize_hex_color(string $value, string $fallback): string
 {
+    // $value stores an intermediate value used by the surrounding gallery workflow.
     $value = trim($value);
     return preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : $fallback;
 }

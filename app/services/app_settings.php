@@ -435,11 +435,14 @@ function set_app_setting(string $key, string $value): void
  */
 function delete_app_settings(array $keys): void
 {
+    // $keys stores an intermediate value used by the surrounding gallery workflow.
     $keys = array_values(array_unique(array_filter($keys, static fn (string $key): bool => $key !== '')));
     if ($keys === []) {
         return;
     }
+    // $placeholders stores an intermediate value used by the surrounding gallery workflow.
     $placeholders = implode(', ', array_fill(0, count($keys), '?'));
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('DELETE FROM app_settings WHERE setting_key IN (' . $placeholders . ')');
     $stmt->execute($keys);
 }
