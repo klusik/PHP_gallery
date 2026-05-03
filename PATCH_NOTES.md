@@ -1,5 +1,123 @@
 # Patch Notes
 
+## Version 0.48
+
+Version 0.48 is a major internal architecture release. It restructures the PHP Gallery codebase by splitting the large service and controller files into focused modules, while preserving the existing public function names, route handlers, include contracts, gallery data model, filesystem-first behavior, theme settings, favicon storage, custom CSS handling, and public rendering behavior.
+
+The goal of this release is maintainability, safer future development, and easier debugging. The public application should behave the same as before, but the implementation is now divided into clearer domains instead of concentrating most backend behavior in `app/services.php` and `app/controllers.php`.
+
+### Architecture refactor
+
+- Split the previous monolithic `app/services.php` into focused service modules under `app/services/`.
+- Split the previous monolithic `app/controllers.php` into focused controller modules under `app/controllers/`.
+- Kept `app/services.php` and `app/controllers.php` as compatibility loaders, so existing bootstrap logic and route dispatch can continue requiring the same files.
+- Preserved original global function names and signatures to avoid breaking templates, controllers, migrations, public endpoints, admin forms, and existing internal calls.
+- Regenerated `app/core-manifest.json` for the new file layout.
+- Verified the refactor with PHP syntax checks and duplicate-function checks during packaging.
+
+### Service modules introduced or expanded
+
+The service layer is now organized into smaller files by responsibility:
+
+- `app/services/logs.php` for admin log persistence, log status handling, and log maintenance helpers.
+- `app/services/downloads.php` for gallery ZIP creation, ZIP cache helpers, archive entry collection, and download streaming helpers.
+- `app/services/updates.php` for GitHub version checks, release ZIP downloads, beta install and restore helpers, protected-path handling, update copy logic, backup logic, and OPcache invalidation.
+- `app/services/picture_game.php` for picture-game availability checks, vote pair selection, pair history, vote recording, and ranking helpers.
+- `app/services/tags.php` for tag parsing, tag slugging, tag lookup, entity-tag synchronization, vote totals, current-viewer vote lookups, and tag-based public gallery listings.
+- `app/services/exif.php` for EXIF extraction, GPS metadata handling, map eligibility checks, and gallery map data helpers.
+- `app/services/gallery_paths.php` for gallery and image filesystem path resolution, root-boundary checks, and safe path handling.
+- `app/services/gallery_sidecars.php` for `gallery.json` sidecar metadata, gallery discovery helpers, and empty gallery creation helpers.
+- `app/services/gallery_lookup.php` for read-oriented gallery and image database lookup helpers.
+- `app/services/public_paths.php` for clean public gallery paths, image slugs, sitemap entries, and public path regeneration helpers.
+- `app/services/gallery_mutations.php` for gallery creation, gallery moves, imports, subtree deletion, ancestor creation, and parent synchronization.
+- `app/services/image_scanning.php` for filesystem image reconciliation and database indexing.
+- `app/services/uploads.php` for upload validation, safe filename handling, gallery image storage, cover uploads, and uploaded-image ID tracking.
+- `app/services/thumbnails.php` for thumbnail paths, thumbnail URLs, `srcset` generation, thumbnail maintenance status, GD resizing, Imagick resizing, and thumbnail regeneration helpers.
+- `app/services/gallery_covers.php` for gallery cover resolution, collage candidates, cover choices, and sidecar cover application.
+- `app/services/gallery_access.php` for password gates, share tokens, visitor access checks, and public gallery listing rules.
+- `app/services/favicon.php` for favicon storage paths, favicon asset URLs, uploaded favicon processing, square cropping, PNG resizing, and favicon removal.
+- `app/services/custom_css.php` for active custom CSS paths, preset discovery, preset validation, and public custom CSS URL generation.
+- `app/services/gallery_backgrounds.php` for global theme background paths, uploaded theme background storage, gallery background source resolution, and public background asset URLs.
+- `app/services/theme.php` for theme settings, theme override settings, theme CSS defaults, CSS custom property parsing, font mode detection, and hex color sanitization.
+- `app/services/app_settings.php` for DB-backed application settings such as site name, dev mode, and collapsed gallery state.
+- `app/services/database_helpers.php` for reusable schema helper logic such as checking whether a database column exists.
+- `app/services/download_signatures.php` for gallery ZIP signature calculation.
+
+### Controller modules introduced or expanded
+
+The controller layer is now organized into route and screen modules:
+
+- `app/controllers/admin_logs.php` for admin log pages and log status actions.
+- `app/controllers/downloads.php` for public gallery ZIP download routes.
+- `app/controllers/updates.php` for the admin update workflow.
+- `app/controllers/picture_game.php` for public picture-game rendering and vote submission.
+- `app/controllers/tags.php` for tag pages, tag list rendering, direct image voting, and vote form rendering.
+- `app/controllers/exif.php` for gallery map JSON output.
+- `app/controllers/http_helpers.php` for shared controller response helpers.
+- `app/controllers/public_gallery.php` for public gallery rendering routes.
+- `app/controllers/public_media.php` for public media and image streaming routes.
+- `app/controllers/admin_auth.php` for admin authentication flow.
+- `app/controllers/admin_integrity.php` for admin integrity check screens and actions.
+- `app/controllers/admin_galleries.php` for admin gallery management actions.
+- `app/controllers/admin_uploads.php` for admin upload actions.
+- `app/controllers/admin_thumbnails.php` for thumbnail maintenance actions.
+- `app/controllers/admin_dashboard.php` for dashboard-related admin rendering.
+- `app/controllers/setup.php` for setup and installation-related controller flow.
+- `app/controllers/admin_theme.php` for the admin theme screen.
+- `app/controllers/theme_assets.php` for generated theme CSS, favicon asset serving, and theme background asset serving.
+
+### Theme, favicon, custom CSS, and background preservation
+
+Version 0.48 includes the final theme-sensitive split, with special care taken to preserve existing runtime behavior:
+
+- Preserved stored theme colors, radius settings, font mode settings, and theme overrides.
+- Preserved the active custom CSS file and custom CSS preset discovery.
+- Preserved uploaded favicon storage and favicon asset URLs.
+- Preserved global theme background storage and gallery background fallback behavior.
+- Preserved runtime paths for project-root assets such as `public/assets/styles.css`, `public/assets/custom.css`, `custom_css/`, `cache/favicon/`, and `cache/theme-background/`.
+- Fixed module-relative filesystem path resolution during extraction so moved helpers continue resolving files from the project root, not from inside `app/`.
+- Kept the loader order explicit so settings helpers, custom CSS helpers, theme helpers, favicon helpers, and background helpers are available before dependent code executes.
+
+### Uploads, thumbnails, media, and gallery core
+
+The larger non-theme split keeps the active gallery behavior intact while separating the implementation into clearer subsystems:
+
+- Upload validation and storage logic now lives in a dedicated upload service.
+- Thumbnail generation, thumbnail URL construction, and thumbnail maintenance logic now live in a dedicated thumbnail service.
+- Gallery cover logic is separated from general gallery lookup and mutation logic.
+- Gallery access control is separated from gallery discovery and rendering logic.
+- Filesystem scanning and database reconciliation are separated from upload handling.
+- Public media streaming routes are separated from public gallery rendering routes.
+- Gallery path calculation, sidecar metadata loading, database lookup helpers, and clean public paths are now separate concerns.
+
+### Admin and maintenance improvements from the refactor
+
+- Admin log handling is now isolated from unrelated controller code.
+- Integrity actions are now isolated into their own admin controller.
+- Update workflow logic is now split between update services and update controllers.
+- Dashboard, upload, gallery-management, thumbnail-maintenance, authentication, setup, and theme admin code now have clearer ownership.
+- Future changes to one admin area are less likely to accidentally affect unrelated admin screens.
+
+### Compatibility and behavior notes
+
+- The gallery remains filesystem-first. Gallery folders and image files continue to be the source of truth.
+- The database remains the index, metadata, permissions, tags, votes, share links, and settings layer.
+- Existing clean public URLs are preserved.
+- Existing gallery folders, uploaded images, cached thumbnails, custom CSS files, favicon files, theme background files, and configuration files are not replaced by this refactor.
+- Existing admin forms and public routes continue using the same function names and route handlers.
+- The refactor is intentionally structural. It does not introduce a new theme model, a new gallery model, or a new upload model.
+
+### Developer impact
+
+This release makes the codebase easier to work on:
+
+- Smaller service files are easier to read and review.
+- Controller code is grouped by route family instead of being concentrated in one large file.
+- Theme-related behavior is isolated from upload, thumbnail, update, and public rendering code.
+- Filesystem path helpers are easier to audit.
+- Future features can be added into a relevant module instead of expanding the old monolithic files.
+- Regression risk is reduced because each subsystem now has a clearer boundary.
+
 Detailed release notes for PHP Gallery CMS. Versions are listed newest first.
 
 ## Version 0.47

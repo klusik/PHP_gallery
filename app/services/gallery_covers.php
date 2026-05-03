@@ -1,0 +1,190 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Gallery cover model.
+ * 
+ * This module resolves gallery cover images, cover asset URLs, collage candidates, and sidecar cover choices. It avoids the separate theme background and favicon storage paths.
+ */
+
+function ensure_gallery_cover(int $galleryId): void
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery || !empty($gallery['cover_image_id'])) {
+        return;
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1");
+    $stmt->execute([$galleryId]);
+    // Variable $coverId stores this steps working value.
+    $coverId = $stmt->fetchColumn();
+    if (!$coverId) {
+        return;
+    }
+    // Variable $update stores this steps working value.
+    $update = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $update->execute([(int) $coverId, now_sql(), $galleryId]);
+}
+
+function gallery_cover_path(array $gallery): ?string
+{
+    $path = trim((string) ($gallery['cover_image_path'] ?? ''));
+    return $path !== '' ? $path : null;
+}
+
+function gallery_cover_asset_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'cover_image_path'");
+        $ready = (bool) $stmt->fetch();
+    } catch (Throwable) {
+        $ready = false;
+    }
+    return $ready;
+}
+
+function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
+{
+    if (!gallery_cover_asset_schema_ready()) {
+        return;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_path = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$relativePath !== null && $relativePath !== '' ? $relativePath : null, now_sql(), $galleryId]);
+}
+
+function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
+{
+    return gallery_direct_cover_image($galleryId, $publicOnly);
+}
+
+function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
+{
+    static $cache = [];
+    $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    // Variable $gallery stores this steps working value.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        return $cache[$cacheKey] = null;
+    }
+    if (!empty($gallery['cover_image_id'])) {
+        // Variable $cover stores this steps working value.
+        $cover = find_image((int) $gallery['cover_image_id']);
+        if ($cover && !str_contains((string) $cover['relative_path'], '/') && (!$publicOnly || $cover['visibility'] === 'public')) {
+            return $cache[$cacheKey] = $cover;
+        }
+    }
+    // Variable $sql stores this steps working value.
+    $sql = "SELECT * FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    if ($publicOnly) {
+        $sql .= " AND visibility = 'public'";
+    }
+    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename LIMIT 1";
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$galleryId]);
+    // Variable $image stores this steps working value.
+    $image = $stmt->fetch();
+    return $cache[$cacheKey] = ($image ?: null);
+}
+
+function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
+{
+    if ($publicOnly && gallery_access_requirement($gallery) !== null) {
+        return '';
+    }
+    $coverPath = gallery_cover_path($gallery);
+    if ($coverPath === null) {
+        return '';
+    }
+    return url_for('gallery_cover_asset', ['id' => (int) $gallery['id']]);
+}
+
+function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $limit = 4): array
+{
+    static $cache = [];
+    $cacheKey = $galleryId . ':' . ($publicOnly ? '1' : '0') . ':' . $limit;
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    // Variable $images stores this steps working value.
+    $images = [];
+    // Parent galleries without direct images borrow covers from child galleries.
+    foreach (child_galleries($galleryId, $publicOnly) as $child) {
+        if ($publicOnly && gallery_access_requirement($child) !== null) {
+            continue;
+        }
+        // Variable $cover stores this steps working value.
+        $cover = gallery_direct_cover_image((int) $child['id'], $publicOnly);
+        if ($cover) {
+            $images[(int) $cover['id']] = $cover;
+        }
+        if (count($images) >= $limit) {
+            break;
+        }
+        foreach (gallery_cover_collage_images((int) $child['id'], $publicOnly, $limit - count($images)) as $descendantCover) {
+            $images[(int) $descendantCover['id']] = $descendantCover;
+            if (count($images) >= $limit) {
+                break 2;
+            }
+        }
+    }
+    return $cache[$cacheKey] = array_values($images);
+}
+
+function gallery_cover_choices(int $galleryId, bool $publicOnly): array
+{
+    $choices = [];
+    $root = find_gallery($galleryId);
+    if (!$root) {
+        return [];
+    }
+    $stack = [$root];
+    while ($stack) {
+        $gallery = array_shift($stack);
+        $cover = gallery_direct_cover_image((int) $gallery['id'], $publicOnly);
+        if ($cover) {
+            $choices[] = [
+                'gallery_id' => (int) $gallery['id'],
+                'gallery_title' => (string) $gallery['title'],
+                'image' => $cover,
+            ];
+        }
+        foreach (child_galleries((int) $gallery['id'], $publicOnly) as $child) {
+            $stack[] = $child;
+        }
+    }
+    return $choices;
+}
+
+function apply_gallery_cover_from_sidecar(array $gallery): void
+{
+    // Variable $metadata stores this steps working value.
+    $metadata = read_gallery_sidecar(gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'gallery.json');
+    if (empty($metadata['cover']) || !is_string($metadata['cover'])) {
+        return;
+    }
+    try {
+        // Variable $coverPath stores this steps working value.
+        $coverPath = normalize_relative_path($metadata['cover']);
+    } catch (RuntimeException) {
+        return;
+    }
+    // Variable $image stores this steps working value.
+    $image = find_image_by_path((int) $gallery['id'], $coverPath);
+    if (!$image) {
+        return;
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([(int) $image['id'], now_sql(), (int) $gallery['id']]);
+}
+

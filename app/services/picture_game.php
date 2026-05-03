@@ -1,0 +1,283 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Picture game and gallery-voting service layer.
+ *
+ * This module contains only persistence and selection logic for the public
+ * A/B picture game. It intentionally keeps rendering and routing outside of
+ * the service layer so the legacy controller functions can continue to call
+ * the same global function names through app/services.php.
+ */
+
+/**
+ * Return whether the current database has the picture-game migration applied.
+ */
+function picture_game_schema_ready(): bool
+{
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'picture_game_enabled'");
+        if (!$stmt || !$stmt->fetch()) {
+            return false;
+        }
+        $stmt = db()->query("SHOW TABLES LIKE 'picture_game_votes'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (PDOException) {
+        return false;
+    }
+}
+
+/**
+ * Return whether gallery voting columns are available.
+ */
+function gallery_voting_schema_ready(): bool
+{
+    try {
+        $stmt = db()->query("SHOW COLUMNS FROM galleries LIKE 'voting_enabled'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (PDOException) {
+        return false;
+    }
+}
+
+/**
+ * Return true when a gallery allows public voting controls.
+ */
+function gallery_voting_allowed(array $gallery): bool
+{
+    return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
+}
+
+/**
+ * Repair gallery voting/game inconsistencies when the admin dashboard is loaded.
+ */
+function sync_gallery_voting_game_state(): int
+{
+    if (!gallery_voting_schema_ready() || !picture_game_schema_ready()) {
+        return 0;
+    }
+    $stmt = db()->prepare('UPDATE galleries SET voting_enabled = 1, updated_at = ? WHERE picture_game_enabled = 1 AND voting_enabled = 0');
+    $stmt->execute([now_sql()]);
+    return $stmt->rowCount();
+}
+
+/**
+ * Return gallery IDs in one gallery subtree that are enabled for picture game.
+ *
+ * Enabling a parent gallery makes its public descendants available for that
+ * gallery's game, so meta-galleries can opt in their whole visible branch.
+ */
+function picture_game_gallery_ids(array $gallery): array
+{
+    // Variable $folderPath stores this steps working value.
+    $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+    try {
+        // Variable $stmt stores this steps working value.
+        $listingCondition = public_gallery_listing_condition('g');
+        $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
+        $stmt->execute([$folderPath, $folderPath . '/%']);
+    } catch (PDOException) {
+        return [];
+    }
+    // Variable $enabledPaths stores this steps working value.
+    $enabledPaths = [];
+    // Variable $ids stores this steps working value.
+    $ids = [];
+    foreach ($stmt->fetchAll() as $candidate) {
+        if (!visitor_can_access_gallery($candidate)) {
+            continue;
+        }
+        // Variable $candidatePath stores this steps working value.
+        $candidatePath = normalize_relative_path((string) $candidate['folder_path']);
+        if ((int) ($candidate['picture_game_enabled'] ?? 0) === 1) {
+            $enabledPaths[] = $candidatePath;
+        }
+        foreach ($enabledPaths as $enabledPath) {
+            if ($candidatePath === $enabledPath || str_starts_with($candidatePath, $enabledPath . '/')) {
+                $ids[] = (int) $candidate['id'];
+                break;
+            }
+        }
+    }
+    return array_values(array_unique($ids));
+}
+
+/**
+ * Return public direct images that may participate in one gallery's game.
+ */
+function picture_game_images(array $gallery): array
+{
+    static $cache = [];
+    $cacheKey = (int) $gallery['id'];
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
+    }
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = picture_game_gallery_ids($gallery);
+    if (!$galleryIds) {
+        return $cache[$cacheKey] = [];
+    }
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
+    $stmt->execute($galleryIds);
+    return $cache[$cacheKey] = $stmt->fetchAll();
+}
+
+/**
+ * Return whether one gallery has enough opted-in public images for a game.
+ */
+function picture_game_available(array $gallery, ?array $images = null): bool
+{
+    $images ??= picture_game_images($gallery);
+    return count($images) >= 2;
+}
+
+/**
+ * Stable voter key for picture-game pair history.
+ */
+function picture_game_voter_hash(): string
+{
+    // Variable $user stores this steps working value.
+    $user = current_user();
+    if ($user) {
+        return hash('sha256', 'user|' . (int) $user['id'] . '|' . (string) cms_config()['visitor_vote_secret']);
+    }
+    return visitor_hash();
+}
+
+/**
+ * Normalize a pair of image IDs so A/B order cannot create duplicate pairs.
+ */
+function picture_game_pair_key(int $firstImageId, int $secondImageId): array
+{
+    return [min($firstImageId, $secondImageId), max($firstImageId, $secondImageId)];
+}
+
+/**
+ * Return the next unplayed image pair for this voter in one gallery context.
+ */
+function next_picture_game_pair(array $gallery, ?array $images = null): ?array
+{
+    // Variable $images stores this steps working value.
+    $images ??= picture_game_images($gallery);
+    if (count($images) < 2) {
+        return null;
+    }
+    // Variable $imageById stores this steps working value.
+    $imageById = [];
+    foreach ($images as $image) {
+        $imageById[(int) $image['id']] = $image;
+    }
+    // Variable $ids stores this steps working value.
+    $ids = array_keys($imageById);
+    // Variable $voterHash stores this steps working value.
+    $voterHash = picture_game_voter_hash();
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('SELECT image_a_id, image_b_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ?');
+    $stmt->execute([(int) $gallery['id'], $voterHash]);
+    // Variable $seen stores this steps working value.
+    $seen = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $seen[(int) $row['image_a_id'] . ':' . (int) $row['image_b_id']] = true;
+    }
+    // Variable $pairs stores this steps working value.
+    $pairs = [];
+    for ($i = 0, $count = count($ids); $i < $count; $i++) {
+        for ($j = $i + 1; $j < $count; $j++) {
+            [$imageAId, $imageBId] = picture_game_pair_key((int) $ids[$i], (int) $ids[$j]);
+            $key = $imageAId . ':' . $imageBId;
+            if (!isset($seen[$key])) {
+                $pairs[] = [$imageAId, $imageBId];
+            }
+        }
+    }
+    if (!$pairs) {
+        return null;
+    }
+    // Variable $pair stores this steps working value.
+    $pair = $pairs[random_int(0, count($pairs) - 1)];
+    // Record display immediately so a voter does not keep seeing the same pair.
+    db()->prepare('INSERT IGNORE INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, NULL, ?, ?)')->execute([
+        (int) $gallery['id'],
+        (int) $pair[0],
+        (int) $pair[1],
+        $voterHash,
+        now_sql(),
+    ]);
+    return [
+        'left' => $imageById[$pair[0]],
+        'right' => $imageById[$pair[1]],
+        'remaining_pairs' => count($pairs),
+        'total_pairs' => (int) (count($ids) * (count($ids) - 1) / 2),
+    ];
+}
+
+/**
+ * Record one picture-game selection and upvote only the chosen image.
+ */
+function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
+{
+    [$imageAId, $imageBId] = picture_game_pair_key($leftImageId, $rightImageId);
+    if (!in_array($winnerImageId, [$imageAId, $imageBId], true)) {
+        throw new RuntimeException('Selected image is not part of this pair.');
+    }
+    // Variable $allowedIds stores this steps working value.
+    $images ??= picture_game_images($gallery);
+    $allowedIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    if (!in_array($imageAId, $allowedIds, true) || !in_array($imageBId, $allowedIds, true)) {
+        throw new RuntimeException('Image pair is not available in this game.');
+    }
+    // Variable $voterHash stores this steps working value.
+    $voterHash = picture_game_voter_hash();
+    // Variable $existing stores this steps working value.
+    $existing = db()->prepare('SELECT winner_image_id FROM picture_game_votes WHERE gallery_id = ? AND voter_hash = ? AND image_a_id = ? AND image_b_id = ?');
+    $existing->execute([(int) $gallery['id'], $voterHash, $imageAId, $imageBId]);
+    // Variable $winner stores this steps working value.
+    $winner = $existing->fetchColumn();
+    if ($winner !== false && $winner !== null) {
+        return;
+    }
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('INSERT INTO picture_game_votes (gallery_id, image_a_id, image_b_id, winner_image_id, voter_hash, created_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE winner_image_id = VALUES(winner_image_id)');
+    $stmt->execute([(int) $gallery['id'], $imageAId, $imageBId, $winnerImageId, $voterHash, now_sql()]);
+    // Variable $user stores this steps working value.
+    $user = current_user();
+    if ($user) {
+        $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
+        $vote->execute([$winnerImageId, (int) $user['id'], now_sql(), now_sql()]);
+        return;
+    }
+    $vote = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, NULL, ?, 1, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
+    $vote->execute([$winnerImageId, visitor_hash(), now_sql(), now_sql()]);
+}
+
+/**
+ * Return top global picture-game winners for one gallery context.
+ */
+function picture_game_top_images(array $gallery, int $limit = 3, ?array $images = null): array
+{
+    // Variable $images stores this steps working value.
+    $images ??= picture_game_images($gallery);
+    if (!$images) {
+        return [];
+    }
+    // Variable $ids stores this steps working value.
+    $ids = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title,
+            (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) AS game_wins,
+            (SELECT COALESCE(SUM(iv.vote), 0) FROM image_votes iv WHERE iv.image_id = i.id) AS score
+        FROM images i
+        JOIN galleries g ON g.id = i.gallery_id
+        WHERE i.id IN ($placeholders)
+            AND (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) > 0
+        ORDER BY game_wins DESC, score DESC, i.sort_order, i.filename
+        LIMIT " . max(1, $limit));
+    $stmt->execute($ids);
+    return $stmt->fetchAll();
+}
