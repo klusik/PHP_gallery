@@ -27,6 +27,11 @@ function scan_gallery_images(int $galleryId): int
     $count = 0;
     // Variable $exifSchemaReady stores this steps working value.
     $exifSchemaReady = exif_gps_schema_ready();
+    // Variable $nextSortOrder stores the append position for newly discovered images.
+    // Existing images keep their current order; new files are placed after the
+    // current gallery tail so rescans do not unexpectedly move them above a
+    // manually arranged drag-and-drop order.
+    $nextSortOrder = next_gallery_image_sort_order($galleryId);
     foreach (new DirectoryIterator($root) as $file) {
         if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
             continue;
@@ -47,7 +52,7 @@ function scan_gallery_images(int $galleryId): int
         if (!$existing) {
             if ($exifSchemaReady) {
                 // Variable $stmt stores this steps working value.
-                $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, exif_taken_at, exif_camera_make, exif_camera_model, exif_lens_model, exif_focal_length, exif_aperture, exif_exposure_time, exif_iso, gps_lat, gps_lng, gps_altitude, gps_extracted_at, checksum_sha256, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, exif_taken_at, exif_camera_make, exif_camera_model, exif_lens_model, exif_focal_length, exif_aperture, exif_exposure_time, exif_iso, gps_lat, gps_lng, gps_altitude, gps_extracted_at, checksum_sha256, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $stmt->execute([
                     $galleryId,
                     $relative,
@@ -72,12 +77,15 @@ function scan_gallery_images(int $galleryId): int
                     $exifMetadata['gps_altitude'] ?? null,
                     $exifMetadata['gps_extracted_at'] ?? null,
                     hash_file('sha256', $file->getPathname()) ?: null,
+                    $nextSortOrder,
                     now_sql(),
                     now_sql(),
                 ]);
+                // $nextSortOrder advances in visible ordering increments for any later new image in this scan.
+                $nextSortOrder += 10;
             } else {
                 // Variable $stmt stores this steps working value.
-                $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, checksum_sha256, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt = $pdo->prepare('INSERT INTO images (gallery_id, relative_path, relative_path_hash, filename, title, width, height, mime_type, file_size, modified_at, checksum_sha256, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $stmt->execute([
                     $galleryId,
                     $relative,
@@ -90,9 +98,12 @@ function scan_gallery_images(int $galleryId): int
                     $file->getSize(),
                     $modifiedAt,
                     hash_file('sha256', $file->getPathname()) ?: null,
+                    $nextSortOrder,
                     now_sql(),
                     now_sql(),
                 ]);
+                // $nextSortOrder advances in visible ordering increments for any later new image in this scan.
+                $nextSortOrder += 10;
             }
             $count++;
             continue;
@@ -154,6 +165,28 @@ function scan_gallery_images(int $galleryId): int
  * Handles scan all imported gallery images logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
+
+/**
+ * Calculates the next image sort_order value for a gallery.
+ *
+ * The admin reorder UI stores direct gallery images at 10-point intervals. This
+ * helper uses the same spacing when the scanner imports newly discovered files,
+ * which keeps new images appended after the current manual order instead of
+ * falling back to the schema default of zero.
+ *
+ * @param int $galleryId Gallery id whose image tail should be inspected.
+ * @return int Next sort_order value suitable for a newly inserted image row.
+ */
+function next_gallery_image_sort_order(int $galleryId): int
+{
+    // Variable $stmt stores the query used to inspect the current largest sort_order value.
+    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
+    $stmt->execute([$galleryId]);
+    // Variable $maxSortOrder stores the current tail of the gallery image order.
+    $maxSortOrder = (int) $stmt->fetchColumn();
+    return $maxSortOrder + 10;
+}
+
 function scan_all_imported_gallery_images(): array
 {
     // $scanned stores an intermediate value used by the surrounding gallery workflow.

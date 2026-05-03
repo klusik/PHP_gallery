@@ -822,6 +822,7 @@ td {
     border-radius: 999px;
     font-size: 1.35rem;
     line-height: 1;
+    vertical-align: middle;
 }
 
 /* Styles the .lightbox.is-mobile-device .lightbox-fullscreen-button area of the gallery interface. */
@@ -2962,4 +2963,134 @@ body.has-map-overlay {
     .admin-action-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Styles the Admin edit-gallery image order toolbar above the draggable photo table. */
+.admin-image-order-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.65rem 0 0.5rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--admin-border, #c3c4c7);
+    border-radius: 4px;
+    background: #f8fafc;
+}
+
+/* Keeps the reorder instruction compact so it does not dominate the edit-gallery workflow. */
+.admin-image-order-toolbar .muted {
+    margin: 0;
+}
+
+/* Styles the live save-state text used by the drag-and-drop image ordering feature. */
+.admin-image-order-status {
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: #646970;
+}
+
+/* Marks that the reordered table state is currently being persisted. */
+.admin-image-order-status[data-state="saving"] {
+    color: #8a5a00;
+}
+
+/* Marks a successfully persisted image order. */
+.admin-image-order-status[data-state="saved"] {
+    color: #1f8a3b;
+}
+
+/* Marks a failed image-order save so the admin knows to reload before trusting the visible order. */
+.admin-image-order-status[data-state="error"] {
+    color: #b42318;
+}
+
+/* Keeps the drag-handle column narrow and visually separated from bulk selection. */
+.admin-image-order-cell {
+    width: 2.4rem;
+    text-align: center;
+}
+
+/* Styles the dedicated pointer handle used to move image rows without interfering with checkboxes or links. */
+.admin-image-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    min-height: 1.75rem;
+    padding: 0;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    background: #fff;
+    color: #1d2327;
+    cursor: grab;
+    font-size: 14px;
+    touch-action: none;
+    user-select: none;
+    line-height: 1;
+}
+
+/* Provides immediate pointer feedback while the row is being moved. */
+.admin-image-drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Makes the moved row obvious and slightly translucent while pointer-based ordering is active. */
+.admin-image-order-table tr.is-dragging td {
+    background: #e8f2ff;
+    opacity: 0.72;
+}
+
+/* Prevents text selection during pointer-based image ordering, especially when moving across filenames. */
+body.admin-image-order-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
+@media (max-width: 720px) {
+    /* Stacks the reorder toolbar on narrow screens while preserving the live save status. */
+    .admin-image-order-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    /* Allows the save-state label to wrap rather than forcing horizontal scrolling on mobile admin screens. */
+    .admin-image-order-status {
+        white-space: normal;
+    }
+}
+
+/* Shows the exact insertion point while an Admin image row is being reordered. */
+.admin-image-order-placeholder td {
+    padding: 0;
+    border: 2px dashed #2271b1;
+    background: rgba(34, 113, 177, 0.08);
+}
+
+/* Keeps the real row in the table model while the visible ghost follows the pointer. */
+.admin-image-order-table tr.is-reorder-hidden {
+    visibility: hidden;
+}
+
+/* Displays a fixed visual copy of the image row during pointer-based Admin ordering. */
+.admin-image-order-ghost {
+    position: fixed;
+    z-index: 100000;
+    pointer-events: none;
+    border-collapse: collapse;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    opacity: 0.94;
+    background: #fff;
+}
+
+/* Keeps the ghost row readable while clearly marking it as a temporary drag preview. */
+.admin-image-order-ghost td {
+    background: #fff;
+    border-bottom: 1px solid #dcdcde;
+}
+
+/* Makes the cloned drag handle visually consistent inside the ghost row. */
+.admin-image-order-ghost .admin-image-drag-handle {
+    cursor: grabbing;
 }

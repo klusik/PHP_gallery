@@ -104,7 +104,7 @@ function cms_admin_new_gallery(): void
     }
     echo '<section class="panel"><form method="post" class="form-grid">' . csrf_field();
     echo '<label>Gallery name<input name="title" required></label>';
-    echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
+    echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
@@ -577,12 +577,12 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
-    echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" required></label>';
+    echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
-    echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" required></label>';
-    echo '<label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" required><span class="muted">Changing this renames the folder on disk.</span></label>';
+    echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required></label>';
+    echo '<label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">Changing this renames the folder on disk.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
     if ($accessReady) {
@@ -651,26 +651,469 @@ function cms_admin_edit_gallery(): void
     echo '<section class="panel"><h2>Scan</h2><form method="post" action="' . e(url_for('admin_scan_images')) . '" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<button type="submit">Scan/import images in this gallery</button></form></section>';
-    echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '">' . csrf_field();
+    echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Preview</th><th>Image</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order. The new order is saved immediately after each drop.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
+    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th>Image</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
-        echo '<tr><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
+        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
         echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
+    render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Renders the Admin edit-gallery image reorder controller directly next to the
+ * table it controls.
+ *
+ * The project-wide gallery.js file still contains public gallery behavior and
+ * other Admin helpers, but row sorting is deliberately initialized inline here.
+ * This avoids the failure mode seen in Chrome where a table-row drag handle is
+ * styled correctly yet the external delegated handler is not the active handler
+ * receiving the first mouse movement. The script uses a custom mouse/pointer
+ * fallback instead of HTML5 drag-and-drop, so it does not depend on browser
+ * drag images, table-row draggable support, or dragover/drop acceptance rules.
+ */
+function render_admin_image_reorder_script(): void
+{
+    echo <<<'HTML'
+<script>
+(function () {
+    'use strict';
+
+    /**
+     * Finds the single Admin image ordering table on the edit-gallery page.
+     *
+     * @returns {HTMLTableElement|null} Reorder table, or null on other pages.
+     */
+    function findImageOrderTable() {
+        return document.querySelector('[data-admin-image-order-table]');
+    }
+
+    /**
+     * Updates the visible reorder status text without throwing on older markup.
+     *
+     * @param {string} message Message displayed to the gallery administrator.
+     * @param {string} state Small state token used by CSS for color feedback.
+     * @returns {void}
+     */
+    function setImageOrderStatus(message, state) {
+        var status = document.querySelector('[data-admin-image-order-status]');
+        if (!status) {
+            return;
+        }
+        status.textContent = message;
+        status.dataset.state = state;
+    }
+
+    /**
+     * Returns the current visual image id order from the table body.
+     *
+     * @param {HTMLTableSectionElement} tableBody Body containing image rows.
+     * @returns {string[]} Ordered image ids as strings for JSON submission.
+     */
+    function readImageOrder(tableBody) {
+        return Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]'))
+            .map(function (row) {
+                return row.dataset.imageId || '';
+            })
+            .filter(function (imageId) {
+                return imageId !== '';
+            });
+    }
+
+    /**
+     * Builds a floating copy of the row so movement is visible immediately.
+     *
+     * @param {HTMLTableRowElement} sourceRow Row being moved.
+     * @returns {HTMLTableElement} Fixed-position table containing cloned row.
+     */
+    function buildImageOrderGhost(sourceRow) {
+        var sourceBox = sourceRow.getBoundingClientRect();
+        var ghostTable = document.createElement('table');
+        var ghostBody = document.createElement('tbody');
+        var ghostRow = sourceRow.cloneNode(true);
+        var sourceCells = Array.prototype.slice.call(sourceRow.children);
+        var ghostCells = Array.prototype.slice.call(ghostRow.children);
+
+        sourceCells.forEach(function (cell, index) {
+            if (ghostCells[index]) {
+                ghostCells[index].style.width = cell.getBoundingClientRect().width + 'px';
+            }
+        });
+
+        ghostRow.removeAttribute('data-admin-image-order-row');
+        ghostRow.querySelectorAll('[name]').forEach(function (field) {
+            field.removeAttribute('name');
+        });
+
+        ghostTable.className = 'admin-image-order-ghost';
+        ghostTable.style.left = sourceBox.left + 'px';
+        ghostTable.style.width = sourceBox.width + 'px';
+        ghostTable.appendChild(ghostBody);
+        ghostBody.appendChild(ghostRow);
+        document.body.appendChild(ghostTable);
+        return ghostTable;
+    }
+
+    /**
+     * Creates the placeholder row that marks where the real row will be dropped.
+     *
+     * @param {HTMLTableRowElement} sourceRow Row being moved.
+     * @returns {HTMLTableRowElement} Placeholder row with matching height.
+     */
+    function buildImageOrderPlaceholder(sourceRow) {
+        var placeholderRow = document.createElement('tr');
+        var placeholderCell = document.createElement('td');
+        placeholderRow.className = 'admin-image-order-placeholder';
+        placeholderRow.setAttribute('aria-hidden', 'true');
+        placeholderCell.colSpan = Math.max(1, sourceRow.children.length);
+        placeholderCell.style.height = sourceRow.getBoundingClientRect().height + 'px';
+        placeholderRow.appendChild(placeholderCell);
+        return placeholderRow;
+    }
+
+    /**
+     * Locates the table row whose midpoint is below the current pointer.
+     *
+     * @param {HTMLTableSectionElement} tableBody Body containing sortable rows.
+     * @param {number} pointerY Current pointer Y coordinate in viewport space.
+     * @returns {HTMLTableRowElement|null} Row to insert before, or null to append.
+     */
+    function findImageOrderInsertionRow(tableBody, pointerY) {
+        var rows = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]:not(.is-reorder-hidden)'));
+        var closestOffset = Number.NEGATIVE_INFINITY;
+        var closestRow = null;
+
+        rows.forEach(function (row) {
+            var rowBox = row.getBoundingClientRect();
+            var offset = pointerY - rowBox.top - (rowBox.height / 2);
+            if (offset < 0 && offset > closestOffset) {
+                closestOffset = offset;
+                closestRow = row;
+            }
+        });
+
+        return closestRow;
+    }
+
+    /**
+     * Persists the current table order through the dedicated PHP endpoint.
+     *
+     * @param {HTMLTableSectionElement} tableBody Body containing ordered image rows.
+     * @param {HTMLFormElement} form Existing bulk form containing CSRF and gallery id.
+     * @param {string} reorderUrl Endpoint generated by PHP for image sorting.
+     * @returns {Promise<void>} Completes after the request succeeds or fails.
+     */
+    function saveImageOrder(tableBody, form, reorderUrl) {
+        var csrfInput = form.querySelector('input[name="csrf_token"]');
+        var galleryInput = form.querySelector('input[name="gallery_id"]');
+        var bodyData = new FormData();
+
+        if (!csrfInput || !galleryInput || !reorderUrl) {
+            setImageOrderStatus('Image order could not be saved because the form metadata is missing.', 'error');
+            return Promise.resolve();
+        }
+
+        bodyData.set('csrf_token', csrfInput.value);
+        bodyData.set('gallery_id', galleryInput.value);
+        bodyData.set('image_order', JSON.stringify(readImageOrder(tableBody)));
+        bodyData.set('ajax', '1');
+        setImageOrderStatus('Saving new image order...', 'saving');
+
+        return fetch(reorderUrl, {
+            method: 'POST',
+            body: bodyData,
+            headers: {'Accept': 'application/json'}
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error('The server rejected the reorder request.');
+            }
+            return response.json();
+        }).then(function (result) {
+            if (!result.ok) {
+                throw new Error(result.message || 'Image order could not be saved.');
+            }
+            setImageOrderStatus(result.message || 'Image order saved.', 'saved');
+        }).catch(function (error) {
+            setImageOrderStatus(error.message || 'Image order could not be saved.', 'error');
+        });
+    }
+
+    /**
+     * Starts the fallback sorter from the first captured mouse or pointer press.
+     *
+     * @param {MouseEvent|PointerEvent} startEvent Original press event on the handle.
+     * @returns {void}
+     */
+    function startImageOrderDrag(startEvent) {
+        var handle = startEvent.target.closest('[data-admin-image-drag-handle]');
+        var table = findImageOrderTable();
+        var toolbar = document.querySelector('[data-admin-image-order-toolbar]');
+        var form = document.querySelector('[data-admin-image-bulk-form]');
+        var row = handle ? handle.closest('[data-admin-image-order-row]') : null;
+        var tableBody = table ? table.querySelector('tbody') : null;
+        var originalIndex;
+        var pointerOffsetY;
+        var ghostTable;
+        var placeholderRow;
+        var active = true;
+
+        if (!handle || !table || !toolbar || !form || !row || !tableBody || startEvent.button !== 0 || window.__adminImageOrderDragActive) {
+            return;
+        }
+
+        window.__adminImageOrderDragActive = true;
+        startEvent.preventDefault();
+        startEvent.stopPropagation();
+        if (typeof startEvent.stopImmediatePropagation === 'function') {
+            startEvent.stopImmediatePropagation();
+        }
+
+        originalIndex = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]')).indexOf(row);
+        pointerOffsetY = startEvent.clientY - row.getBoundingClientRect().top;
+        ghostTable = buildImageOrderGhost(row);
+        placeholderRow = buildImageOrderPlaceholder(row);
+
+        tableBody.insertBefore(placeholderRow, row.nextSibling);
+        row.classList.add('is-reorder-hidden');
+        handle.classList.add('is-dragging');
+        document.body.classList.add('admin-image-order-active');
+        setImageOrderStatus('Dragging. Release the mouse to save the new position.', 'dragging');
+
+        /**
+         * Moves the ghost and placeholder to the pointer position.
+         *
+         * @param {MouseEvent|PointerEvent} moveEvent Movement event captured on document.
+         * @returns {void}
+         */
+        function moveDrag(moveEvent) {
+            var beforeRow;
+            if (!active) {
+                return;
+            }
+            moveEvent.preventDefault();
+            ghostTable.style.top = (moveEvent.clientY - pointerOffsetY) + 'px';
+            beforeRow = findImageOrderInsertionRow(tableBody, moveEvent.clientY);
+            if (beforeRow) {
+                tableBody.insertBefore(placeholderRow, beforeRow);
+            } else {
+                tableBody.appendChild(placeholderRow);
+            }
+        }
+
+        /**
+         * Removes all temporary drag state and optionally commits the row move.
+         *
+         * @param {boolean} commit Whether the row should be inserted at placeholder.
+         * @returns {HTMLTableRowElement} The moved row.
+         */
+        function cleanupDrag(commit) {
+            active = false;
+            window.__adminImageOrderDragActive = false;
+            document.removeEventListener('mousemove', moveDrag, true);
+            document.removeEventListener('mouseup', finishDrag, true);
+            document.removeEventListener('pointermove', moveDrag, true);
+            document.removeEventListener('pointerup', finishDrag, true);
+            document.removeEventListener('pointercancel', cancelDrag, true);
+            document.removeEventListener('keydown', handleKeydown, true);
+
+            if (commit && placeholderRow.parentNode === tableBody) {
+                tableBody.insertBefore(row, placeholderRow);
+            }
+            row.classList.remove('is-reorder-hidden');
+            handle.classList.remove('is-dragging');
+            placeholderRow.remove();
+            ghostTable.remove();
+            document.body.classList.remove('admin-image-order-active');
+            return row;
+        }
+
+        /**
+         * Commits the new position and saves it when the row actually moved.
+         *
+         * @param {MouseEvent|PointerEvent} finishEvent Release event captured on document.
+         * @returns {void}
+         */
+        function finishDrag(finishEvent) {
+            var finalRow;
+            var finalIndex;
+            if (!active) {
+                return;
+            }
+            finishEvent.preventDefault();
+            finishEvent.stopPropagation();
+            finalRow = cleanupDrag(true);
+            finalIndex = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]')).indexOf(finalRow);
+            if (finalIndex !== originalIndex) {
+                saveImageOrder(tableBody, form, toolbar.dataset.reorderUrl || '');
+            } else {
+                setImageOrderStatus('Order unchanged.', 'idle');
+            }
+        }
+
+        /**
+         * Cancels the active drag, used by pointer cancellation and Escape.
+         *
+         * @param {Event} cancelEvent Cancellation event.
+         * @returns {void}
+         */
+        function cancelDrag(cancelEvent) {
+            if (!active) {
+                return;
+            }
+            cancelEvent.preventDefault();
+            cleanupDrag(false);
+            setImageOrderStatus('Order unchanged.', 'idle');
+        }
+
+        /**
+         * Lets the administrator cancel a drag with Escape.
+         *
+         * @param {KeyboardEvent} keyEvent Keyboard event captured during drag.
+         * @returns {void}
+         */
+        function handleKeydown(keyEvent) {
+            if (keyEvent.key === 'Escape') {
+                cancelDrag(keyEvent);
+            }
+        }
+
+        moveDrag(startEvent);
+        document.addEventListener('mousemove', moveDrag, true);
+        document.addEventListener('mouseup', finishDrag, true);
+        document.addEventListener('pointermove', moveDrag, true);
+        document.addEventListener('pointerup', finishDrag, true);
+        document.addEventListener('pointercancel', cancelDrag, true);
+        document.addEventListener('keydown', handleKeydown, true);
+    }
+
+    document.addEventListener('mousedown', startImageOrderDrag, true);
+    document.addEventListener('pointerdown', startImageOrderDrag, true);
+    setImageOrderStatus('Drag handles ready.', 'idle');
+}());
+</script>
+HTML;
+}
+
+/**
+ * Handles cms admin image reorder logic for the gallery application.
+ *
+ * The edit-gallery image table sends the complete ordered image-id list after a
+ * drag-and-drop operation. This endpoint validates that every submitted image
+ * belongs to the selected gallery before it touches sort_order values, so a
+ * forged request cannot reorder images in another gallery.
+ *
+ * @return mixed Result produced by this operation.
+ */
+function cms_admin_reorder_images(): void
+{
+    require_admin();
+    verify_csrf();
+    // Variable $galleryId stores the gallery whose direct image order is being changed.
+    $galleryId = (int) ($_POST['gallery_id'] ?? 0);
+    // Variable $gallery stores the database row for the submitted gallery id.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        cms_not_found();
+        return;
+    }
+    // Variable $rawOrder stores the JSON payload submitted by the JavaScript drag-and-drop handler.
+    $rawOrder = (string) ($_POST['image_order'] ?? '[]');
+    // Variable $decodedOrder stores the decoded image-id list before it is normalized to integers.
+    $decodedOrder = json_decode($rawOrder, true);
+    if (!is_array($decodedOrder)) {
+        admin_reorder_images_response(false, 'The submitted image order was not valid JSON.', $galleryId);
+        return;
+    }
+    // Variable $submittedIds stores the ordered ids exactly as integers, with invalid zero values removed.
+    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $imageId): bool => $imageId > 0));
+    if (!$submittedIds) {
+        admin_reorder_images_response(false, 'No images were submitted for reordering.', $galleryId);
+        return;
+    }
+    if (count($submittedIds) !== count(array_unique($submittedIds))) {
+        admin_reorder_images_response(false, 'The submitted image order contained duplicate images.', $galleryId);
+        return;
+    }
+    // Variable $currentIds stores the complete direct-image set currently visible in the edit-gallery table.
+    $currentIds = array_map(static fn (array $image): int => (int) $image['id'], gallery_images($galleryId, false));
+    sort($currentIds);
+    // Variable $sortedSubmittedIds stores the submitted id set for exact set comparison with the database state.
+    $sortedSubmittedIds = $submittedIds;
+    sort($sortedSubmittedIds);
+    if ($sortedSubmittedIds !== $currentIds) {
+        admin_reorder_images_response(false, 'The image list changed while you were reordering. Reload the page and try again.', $galleryId);
+        return;
+    }
+    // Variable $pdo stores the active database connection used for the atomic sort_order update.
+    $pdo = db();
+    // Variable $now stores one timestamp shared by all rows touched by this reorder operation.
+    $now = now_sql();
+    try {
+        $pdo->beginTransaction();
+        // Variable $stmt stores the prepared update reused for each reordered image row.
+        $stmt = $pdo->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+        foreach ($submittedIds as $index => $imageId) {
+            // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
+            $sortOrder = ($index + 1) * 10;
+            $stmt->execute([$sortOrder, $now, $imageId, $galleryId]);
+        }
+        $pdo->commit();
+        admin_log_event('info', 'image.reordered', 'Admin reordered gallery images.', [
+            'gallery_id' => $galleryId,
+            'images' => count($submittedIds),
+        ]);
+        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'image.reorder_failed', 'Admin image reorder failed.', [
+            'gallery_id' => $galleryId,
+            'error' => $exception->getMessage(),
+        ]);
+        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+    }
+}
+
+/**
+ * Returns the image-reorder result as JSON for drag-and-drop requests or as a
+ * normal admin redirect for non-JavaScript fallback submissions.
+ *
+ * @param bool $ok Whether the reorder operation completed successfully.
+ * @param string $message Human-readable status message for the admin UI.
+ * @param int $galleryId Gallery id used to build the redirect fallback.
+ * @return mixed Result produced by this operation.
+ */
+function admin_reorder_images_response(bool $ok, string $message, int $galleryId): void
+{
+    // Variable $acceptHeader stores the browser Accept header used to detect the JavaScript request path.
+    $acceptHeader = (string) ($_SERVER['HTTP_ACCEPT'] ?? '');
+    // Variable $isJsonRequest stores whether the client explicitly expects a JSON response.
+    $isJsonRequest = str_contains($acceptHeader, 'application/json') || (string) ($_POST['ajax'] ?? '') === '1';
+    if ($isJsonRequest) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+        return;
+    }
+    flash_message('admin_notice', $message);
+    redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
 }
 
 /**
  * Handles cms admin bulk images logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
+
 function cms_admin_bulk_images(): void
 {
     require_admin();
