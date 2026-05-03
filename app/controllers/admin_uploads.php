@@ -142,7 +142,7 @@ function cms_admin_upload(): void
     echo '<section class="panel"><h2>Create gallery from upload</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="new">';
     echo '<label>Gallery name<input name="title" required></label>';
-    echo '<label>Folder name<input name="folder_name"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
+    echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';

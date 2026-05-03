@@ -156,6 +156,7 @@ function cms_run(): void
         'admin_log_update' => 'cms_admin_log_update',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
+        'admin_reorder_images' => 'cms_admin_reorder_images',
         'admin_edit_image' => 'cms_admin_edit_image',
         'admin_public_update_gallery' => 'cms_admin_public_update_gallery',
         'admin_public_update_image' => 'cms_admin_public_update_image',
