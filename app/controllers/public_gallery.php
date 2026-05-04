@@ -22,14 +22,24 @@ function cms_home(): void
     $stmt->execute();
     // Variable $galleries stores this steps working value.
     $galleries = $stmt->fetchAll();
+    // Variable $paginationSettings stores this steps working value.
+    $paginationSettings = pagination_global_settings(['listing' => 'galleries']);
+    // Variable $galleryPagination stores this steps working value.
+    $galleryPagination = pagination_model(count($galleries), pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
+    if (!empty($paginationSettings['enabled'])) {
+        // $galleries stores the public home gallery list after optional pagination slicing.
+        $galleries = pagination_slice_items($galleries, $galleryPagination);
+    }
     render_header(site_name());
     if ($galleries) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
-        echo '<section class="grid gallery-list-content" data-back-to-top-list>';
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
+        echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
         foreach ($galleries as $gallery) {
             render_gallery_card($gallery, true);
         }
         echo '</section>';
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
         render_back_to_top_button();
         echo '</div>';
     }
@@ -105,6 +115,8 @@ function cms_gallery(): void
     $stmt->execute([(int) $gallery['id']]);
     // Variable $images stores this steps working value.
     $images = $stmt->fetchAll();
+    // Variable $allImages stores the complete sorted image list before optional pagination slicing.
+    $allImages = $images;
     // Variable $imageIds stores this steps working value.
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     // Variable $imageTagsById stores this steps working value.
@@ -121,13 +133,48 @@ function cms_gallery(): void
     $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $pictureGameImages stores this steps working value.
     $pictureGameImages = picture_game_images($gallery);
+    // Variable $paginationSettings stores this steps working value.
+    $paginationSettings = pagination_global_settings(['listing' => 'gallery', 'gallery' => $gallery]);
+    // Variable $galleryPaginationPath stores the gallery-level URL path used for clean pagination links.
+    $galleryPaginationPath = trim((string) ($gallery['url_path'] ?? ''), '/');
+    if ($galleryPaginationPath === '') {
+        // $galleryPaginationPath stores a legacy folder-path fallback for installs without regenerated public paths.
+        $galleryPaginationPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+    }
+    if ($galleryPaginationPath === '') {
+        // $galleryPaginationPath stores the final slug fallback for unusual root-level gallery records.
+        $galleryPaginationPath = (string) ($gallery['slug'] ?? '');
+    }
+    // Variable $galleryPaginationQuery stores this steps working value.
+    $galleryPaginationQuery = ['page' => 'gallery', 'public_path' => $galleryPaginationPath];
+    // Variable $childPagination stores this steps working value.
+    $childPagination = pagination_model(count($children), pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'subgalleries'));
+    // Variable $photoCurrentPage stores this steps working value.
+    $photoCurrentPage = pagination_current_page('photo_page');
+    if (!empty($paginationSettings['enabled']) && $requestedImage) {
+        foreach ($images as $imageIndex => $imageCandidate) {
+            if ((int) $imageCandidate['id'] === (int) $requestedImage['id']) {
+                // $photoCurrentPage stores the page that contains the explicitly requested image.
+                $photoCurrentPage = (int) floor($imageIndex / (int) $paginationSettings['items_per_page']) + 1;
+                break;
+            }
+        }
+    }
+    // Variable $photoPagination stores this steps working value.
+    $photoPagination = pagination_model(count($images), $photoCurrentPage, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'photo_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos'));
+    if (!empty($paginationSettings['enabled'])) {
+        // $children stores the subgallery list after sorting has already been applied by child_galleries().
+        $children = pagination_slice_items($children, $childPagination);
+        // $images stores the photo list after database sorting and metadata preparation have preserved order.
+        $images = pagination_slice_items($images, $photoPagination);
+    }
     // Variable $backgroundAssetUrl stores this steps working value.
     $backgroundAssetUrl = gallery_background_asset_url($gallery, $publicOnly);
     // Variable $seo stores this steps working value.
     $seo = public_gallery_metadata($gallery);
     ob_start();
-    render_public_seo_tags($gallery, $images);
-    render_gallery_json_ld($gallery, $images);
+    render_public_seo_tags($gallery, $allImages);
+    render_gallery_json_ld($gallery, $allImages);
     append_cms_head_extras((string) ob_get_clean());
     if ($backgroundAssetUrl !== '') {
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
@@ -156,14 +203,19 @@ function cms_gallery(): void
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     if ($children) {
-        echo '<section class="panel"><h2>Subgalleries</h2><div class="grid">';
+        echo '<section class="panel"><h2>Subgalleries</h2>';
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
+        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
         foreach ($children as $child) {
             render_gallery_card($child, true);
         }
-        echo '</div></section>';
+        echo '</div>';
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
+        echo '</section>';
     }
     if ($images) {
-        echo '<section class="grid gallery-image-grid" data-gallery-image-list>';
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], 'Photo pages');
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-gallery-image-list>';
     }
     foreach ($images as $index => $image) {
         // Variable $mediaUrl stores this steps working value.
@@ -178,14 +230,18 @@ function cms_gallery(): void
         $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
+        // Variable $displayIndex stores this steps working value.
+        $displayIndex = $index + 1 + (!empty($paginationSettings['enabled']) ? (int) $photoPagination['offset'] : 0);
         // Variable $altText stores this steps working value.
-        $altText = image_alt_text($image, $gallery, $index + 1);
+        $altText = image_alt_text($image, $gallery, $displayIndex);
         // Variable $vote stores this steps working value.
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($displayTitle) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '" data-image-width="' . (int) ($image['width'] ?? 0) . '" data-image-height="' . (int) ($image['height'] ?? 0) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
-        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], '(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw', $altText, 'loading="lazy"') . '</a>';
+        echo '<article class="image-card" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
+        $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
+        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, 'loading="lazy" data-responsive-thumbnail') . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
@@ -209,6 +265,10 @@ function cms_gallery(): void
     }
     if ($images) {
         echo '</section>';
+        if (!empty($paginationSettings['enabled']) && count($allImages) > count($images)) {
+            render_lightbox_source_nodes($allImages, $gallery, $mapsAllowed, $votesById);
+        }
+        render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], 'Photo pages');
     }
     if ($children || $images) {
         echo '</div>';
@@ -217,7 +277,7 @@ function cms_gallery(): void
     }
     render_lightbox($votingAllowed);
     if ($requestedImage) {
-        append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var card=document.querySelector("[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"]");if(card){card.click();}});');
+        append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
     render_footer();
 }
@@ -443,6 +503,61 @@ function render_public_image_admin_form(array $image): void
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Admin edit</a></div>';
     echo '</form></details>';
+}
+
+/**
+ * Build the shared data attributes consumed by the public lightbox.
+ *
+ * Keeping visible cards and hidden pagination sources on the same attribute
+ * contract prevents the lightbox from having a separate pagination-specific path.
+ */
+function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute): string
+{
+    // $mapPointAttribute stores the optional GPS payload used by map-enabled photos.
+    $mapPointAttribute = $imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '';
+    return $sourceAttribute
+        . ' data-image-id="' . (int) $image['id'] . '"'
+        . ' data-full-src="' . e($mediaUrl) . '"'
+        . ' data-preview-src="' . e($previewUrl) . '"'
+        . ' data-page-url="' . e($imagePageUrl) . '"'
+        . ' data-gallery-url="' . e(gallery_public_url($gallery)) . '"'
+        . ' data-title="' . e($displayTitle) . '"'
+        . ' data-description="' . e($image['description']) . '"'
+        . ' data-score="' . $score . '"'
+        . ' data-user-vote="' . $vote . '"'
+        . ' data-image-width="' . (int) ($image['width'] ?? 0) . '"'
+        . ' data-image-height="' . (int) ($image['height'] ?? 0) . '"'
+        . $mapPointAttribute;
+}
+
+/**
+ * Render hidden ordered lightbox data for paginated galleries.
+ *
+ * Pagination limits visible photo cards, but fullscreen navigation should still
+ * move through the complete sorted gallery. These hidden nodes are metadata only
+ * and do not affect the public grid layout.
+ */
+function render_lightbox_source_nodes(array $allImages, array $gallery, bool $mapsAllowed, array $votesById): void
+{
+    echo '<div class="lightbox-source-list" hidden aria-hidden="true">';
+    foreach ($allImages as $image) {
+        // Variable $mediaUrl stores this steps working value.
+        $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        // Variable $imagePageUrl stores this steps working value.
+        $imagePageUrl = image_public_url($image, $gallery);
+        // Variable $previewUrl stores this steps working value.
+        $previewUrl = thumbnail_url($image, 1600);
+        // Variable $displayTitle stores this steps working value.
+        $displayTitle = public_image_display_title($image, $gallery);
+        // Variable $vote stores this steps working value.
+        $vote = $votesById[(int) $image['id']] ?? 0;
+        // Variable $imageMapPoint stores this steps working value.
+        $imageMapPoint = $mapsAllowed && image_has_gps($image) ? image_map_point($image, $gallery) : null;
+        // $sourceAttribute stores a separate marker from visible cards so JavaScript can preserve the full image order.
+        $sourceAttribute = 'data-lightbox-source';
+        echo '<div ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute) . '></div>';
+    }
+    echo '</div>';
 }
 
 /**

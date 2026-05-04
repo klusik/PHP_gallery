@@ -15,6 +15,8 @@ require_once __DIR__ . '/services/theme.php';
 require_once __DIR__ . '/services/favicon.php';
 // Load gallery and theme background helpers after their module-relative paths were corrected.
 require_once __DIR__ . '/services/gallery_backgrounds.php';
+// Load reusable pagination helpers before controllers render public lists.
+require_once __DIR__ . '/services/pagination.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
 require_once __DIR__ . '/services/image_scanning.php';

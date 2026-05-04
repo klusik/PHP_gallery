@@ -210,6 +210,10 @@ function cms_admin_theme(): void
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+            // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
+            set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
+            set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+            set_app_setting('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
             if ($themeControlsChanged) {
                 set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
                 set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
@@ -228,6 +232,8 @@ function cms_admin_theme(): void
     }
     // Variable $theme stores this steps working value.
     $theme = theme_settings();
+    // Variable $paginationSettings stores this steps working value.
+    $paginationSettings = pagination_global_settings();
     render_header('Theme');
     echo '<section class="panel" id="admin-theme"><h1>Appearance</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
@@ -265,6 +271,12 @@ function cms_admin_theme(): void
     echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
     echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button></div>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid" id="admin-pagination"><legend>Pagination</legend>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> Enable pagination</label>';
+    echo '<label>Columns per page <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
+    echo '<label>Rows per page <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
+    echo '<p class="muted">Items per page preview: <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
     echo '</fieldset>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
