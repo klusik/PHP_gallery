@@ -83,6 +83,7 @@ function cms_admin_new_gallery(): void
                 'visibility' => $_POST['visibility'] ?? 'draft',
                 'parent_id' => $_POST['parent_id'] ?? 0,
                 'voting_enabled' => $_POST['voting_enabled'] ?? 0,
+                'show_filenames' => $_POST['show_filenames'] ?? 0,
             ]);
             admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
                 'gallery_id' => (int) $gallery['id'],
@@ -108,6 +109,7 @@ function cms_admin_new_gallery(): void
     echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
+    echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
     echo '<button type="submit">Create gallery folder</button></form></section>';
     render_footer();
@@ -234,6 +236,40 @@ function cms_admin_bulk_galleries(): void
             }
         }
         flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
+        redirect_to(url_for('admin'));
+    }
+    if (in_array($action, ['filenames_on', 'filenames_off'], true) && $galleryIds) {
+        if (!gallery_filename_display_schema_ready()) {
+            admin_log_event('warning', 'gallery_filenames.schema_missing', 'Attempted to change file name display before migration was applied.', [
+                'gallery_ids' => $galleryIds,
+                'action' => $action,
+            ]);
+            flash_message('admin_notice', 'Filename display requires the latest database migration.');
+            redirect_to(url_for('admin'));
+        }
+        // Variable $expandedIds stores this steps working value.
+        $expandedIds = [];
+        foreach ($galleryIds as $galleryId) {
+            // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
+            $expandedIds = array_merge($expandedIds, gallery_subtree_ids($galleryId));
+        }
+        // $expandedIds stores an intermediate value used by the surrounding gallery workflow.
+        $expandedIds = array_values(array_unique(array_filter($expandedIds)));
+        if ($expandedIds) {
+            // Variable $placeholders stores this steps working value.
+            $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare('UPDATE galleries SET show_filenames = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+            $stmt->execute(array_merge([$action === 'filenames_on' ? 1 : 0, now_sql()], $expandedIds));
+            foreach ($expandedIds as $expandedId) {
+                // Variable $gallery stores this steps working value.
+                $gallery = find_gallery((int) $expandedId);
+                if ($gallery) {
+                    write_gallery_sidecar($gallery);
+                }
+            }
+        }
+        flash_message('admin_notice', 'Updated filename display for ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
@@ -366,6 +402,8 @@ function cms_admin_edit_gallery(): void
         $gpsMapEnabled = $gpsMapReady && !empty($_POST['gps_map_enabled']) ? 1 : 0;
         // Variable $votingEnabled stores this steps working value.
         $votingEnabled = gallery_voting_schema_ready() && !empty($_POST['voting_enabled']) ? 1 : 0;
+        // Variable $showFilenames stores this steps working value.
+        $showFilenames = gallery_filename_display_schema_ready() && !empty($_POST['show_filenames']) ? 1 : 0;
         if ($pictureGameEnabled) {
             // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
             $votingEnabled = 1;
@@ -493,6 +531,9 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_voting_schema_ready()) {
             $fields['voting_enabled = ?'] = $votingEnabled;
+        }
+        if (gallery_filename_display_schema_ready()) {
+            $fields['show_filenames = ?'] = $showFilenames;
         }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
@@ -627,6 +668,12 @@ function cms_admin_edit_gallery(): void
         echo '<label><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable image voting for this gallery</label>';
         echo '<p class="muted">When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.</p>';
     }
+    if (gallery_filename_display_schema_ready()) {
+        echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
+        echo '<p class="muted">Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.</p>';
+    } else {
+        echo '<p class="muted">File name display control will be available after the database migration is applied.</p>';
+    }
     if ($gpsMapReady) {
         echo '<label><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label>';
         echo '<p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p>';
@@ -655,13 +702,13 @@ function cms_admin_edit_gallery(): void
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order. The new order is saved immediately after each drop.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
-    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th>Image</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
+    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th>Image</th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td>' . e($image['relative_path']) . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
+        echo '<td>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
     render_admin_image_reorder_script();
@@ -1233,9 +1280,19 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
+    // Variable $fields stores this steps working value.
+    $fields = [
+        'title = ?' => $title,
+        'description = ?' => (string) ($_POST['description'] ?? ''),
+        'visibility = ?' => $visibility,
+    ];
+    if (gallery_filename_display_schema_ready()) {
+        $fields['show_filenames = ?'] = !empty($_POST['show_filenames']) ? 1 : 0;
+    }
+    $fields['updated_at = ?'] = now_sql();
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('UPDATE galleries SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$title, (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $gallery['id']]);
+    $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
+    $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
     if (public_path_schema_ready()) {
         regenerate_public_paths();
     }

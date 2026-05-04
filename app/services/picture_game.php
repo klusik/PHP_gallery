@@ -126,8 +126,10 @@ function picture_game_images(array $gallery): array
     }
     // Variable $placeholders stores this steps working value.
     $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $filenameSelect stores this steps working value.
+    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
     $stmt->execute($galleryIds);
     return $cache[$cacheKey] = $stmt->fetchAll();
 }
@@ -278,8 +280,10 @@ function picture_game_top_images(array $gallery, int $limit = 3, ?array $images 
     $ids = array_map(static fn (array $image): int => (int) $image['id'], $images);
     // Variable $placeholders stores this steps working value.
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    // Variable $filenameSelect stores this steps working value.
+    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title,
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, $filenameSelect,
             (SELECT COUNT(*) FROM picture_game_votes pgv WHERE pgv.winner_image_id = i.id) AS game_wins,
             (SELECT COALESCE(SUM(iv.vote), 0) FROM image_votes iv WHERE iv.image_id = i.id) AS score
         FROM images i

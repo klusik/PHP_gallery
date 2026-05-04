@@ -73,9 +73,19 @@ function render_picture_game_choice(array $image, string $side): void
 {
     // Variable $label stores this steps working value.
     $label = $side === 'left' ? 'Choose left picture' : 'Choose right picture';
+    // Variable $imageGallery stores this steps working value.
+    $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
+    // Variable $displayTitle stores this steps working value.
+    $displayTitle = public_image_display_title($image, $imageGallery);
+    // Variable $altText stores this steps working value.
+    $altText = $displayTitle !== '' ? $displayTitle : 'Picture';
     echo '<button class="picture-game-choice" type="submit" name="winner_image_id" value="' . (int) $image['id'] . '" data-picture-game-choice="' . e($side) . '" aria-label="' . e($label) . '">';
-    echo '<img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
-    echo '<span><strong>' . e($image['title'] ?: $image['filename']) . '</strong><small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
+    echo '<img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($altText) . '">';
+    echo '<span>';
+    if ($displayTitle !== '') {
+        echo '<strong>' . e($displayTitle) . '</strong>';
+    }
+    echo '<small>' . e((string) ($image['gallery_title'] ?? '')) . '</small></span>';
     echo '</button>';
 }
 
@@ -89,8 +99,18 @@ function render_picture_game_stats(array $topImages): void
     }
     echo '<section class="panel"><h2>Top pictures</h2><div class="grid">';
     foreach ($topImages as $image) {
-        echo '<article class="image-card"><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($image['title'] ?: $image['filename']) . '">';
-        echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
+        // Variable $imageGallery stores this steps working value.
+        $imageGallery = ['show_filenames' => (int) ($image['gallery_show_filenames'] ?? 0)];
+        // Variable $displayTitle stores this steps working value.
+        $displayTitle = public_image_display_title($image, $imageGallery);
+        // Variable $altText stores this steps working value.
+        $altText = $displayTitle !== '' ? $displayTitle : 'Picture';
+        echo '<article class="image-card"><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" srcset="' . e(thumbnail_srcset($image, [300, 600, 800])) . '" sizes="(min-width: 60rem) 30vw, 80vw" alt="' . e($altText) . '">';
+        echo '<div class="image-meta">';
+        if ($displayTitle !== '') {
+            echo '<h2>' . e($displayTitle) . '</h2>';
+        }
+        echo '<p class="muted">' . (int) $image['game_wins'] . ' game wins, score ' . (int) $image['score'] . '</p></div></article>';
     }
     echo '</div></section>';
 }

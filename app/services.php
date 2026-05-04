@@ -26,6 +26,7 @@ require_once __DIR__ . '/services/public_paths.php';
 require_once __DIR__ . '/services/gallery_lookup.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
+require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
 require_once __DIR__ . '/services/logs.php';
