@@ -43,6 +43,10 @@ function cms_home(): void
         render_back_to_top_button();
         echo '</div>';
     }
+    telemetry_append_public_script([
+        'route_name' => 'home',
+        'page_kind' => 'home',
+    ]);
     render_footer();
 }
 

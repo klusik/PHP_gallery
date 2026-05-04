@@ -1,0 +1,270 @@
+(function () {
+    'use strict';
+
+    const config = window.PHPGalleryTelemetry || {};
+    if (!config.enabled || !config.endpoint) {
+        return;
+    }
+    if (navigator.doNotTrack === '1') {
+        return;
+    }
+
+    const sessionKey = 'php_gallery_telemetry_session_id';
+    let sessionId = sessionStorage.getItem(sessionKey);
+    if (!sessionId && window.crypto && typeof window.crypto.randomUUID === 'function') {
+        sessionId = window.crypto.randomUUID();
+        sessionStorage.setItem(sessionKey, sessionId);
+    }
+    if (!sessionId) {
+        sessionId = String(Date.now()) + ':' + String(Math.random()).slice(2);
+        sessionStorage.setItem(sessionKey, sessionId);
+    }
+
+    const queue = [];
+    const maxBatchSize = 20;
+    let currentPhotoId = null;
+    let currentPhotoGalleryId = null;
+    let currentPhotoStartedAt = 0;
+    let sessionStarted = sessionStorage.getItem(sessionKey + '_started') === '1';
+
+    function browserFamily() {
+        const agentData = navigator.userAgentData;
+        if (agentData && Array.isArray(agentData.brands)) {
+            const brands = agentData.brands.map((brand) => String(brand.brand).toLowerCase());
+            if (brands.some((brand) => brand.includes('edge'))) {
+                return 'edge';
+            }
+            if (brands.some((brand) => brand.includes('chrome') || brand.includes('chromium'))) {
+                return 'chrome';
+            }
+        }
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (userAgent.includes('edg/')) {
+            return 'edge';
+        }
+        if (userAgent.includes('firefox/')) {
+            return 'firefox';
+        }
+        if (userAgent.includes('opr/') || userAgent.includes('opera')) {
+            return 'opera';
+        }
+        if (userAgent.includes('safari/') && !userAgent.includes('chrome/')) {
+            return 'safari';
+        }
+        if (userAgent.includes('chrome/')) {
+            return 'chrome';
+        }
+        return 'unknown';
+    }
+
+    function browserMajorBucket() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        const match = userAgent.match(/(?:chrome|firefox|version|edg|opr)\/(\d+)/);
+        return match ? Number(match[1]) : null;
+    }
+
+    function osFamily() {
+        const platform = String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (platform.includes('win') || userAgent.includes('windows')) {
+            return 'windows';
+        }
+        if (platform.includes('mac') || userAgent.includes('mac os')) {
+            return 'macos';
+        }
+        if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+            return 'ios';
+        }
+        if (userAgent.includes('android')) {
+            return 'android';
+        }
+        if (platform.includes('linux') || userAgent.includes('linux')) {
+            return 'linux';
+        }
+        return 'unknown';
+    }
+
+    function deviceType() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (userAgent.includes('bot') || userAgent.includes('crawler') || userAgent.includes('spider')) {
+            return 'bot';
+        }
+        if (userAgent.includes('ipad') || userAgent.includes('tablet')) {
+            return 'tablet';
+        }
+        if (userAgent.includes('mobile') || userAgent.includes('iphone') || userAgent.includes('android')) {
+            return 'phone';
+        }
+        return 'desktop';
+    }
+
+    function baseEvent(eventName) {
+        return {
+            event_name: eventName,
+            source: 'client',
+            session_id: sessionId,
+            occurred_at: new Date().toISOString(),
+            route_name: config.routeName || 'unknown',
+            page_kind: config.pageKind || 'unknown',
+            gallery_id: config.galleryId || null,
+            image_id: config.imageId || null,
+            referrer_category: config.referrerCategory || 'unknown',
+            browser_family: browserFamily(),
+            browser_major_bucket: browserMajorBucket(),
+            os_family: osFamily(),
+            device_type: deviceType(),
+            viewport_width: window.innerWidth || null,
+            locale: navigator.language || null
+        };
+    }
+
+    function enqueue(event) {
+        const sampleRate = Number(config.sampleRate || 1);
+        if (sampleRate < 1 && Math.random() > sampleRate) {
+            return;
+        }
+        queue.push(event);
+        if (queue.length >= maxBatchSize) {
+            flush();
+        }
+    }
+
+    function flush() {
+        if (!queue.length) {
+            return;
+        }
+        const payload = JSON.stringify({events: queue.splice(0, queue.length)});
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon(config.endpoint, new Blob([payload], {type: 'application/json'}));
+            return;
+        }
+        fetch(config.endpoint, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+            keepalive: true,
+            credentials: 'same-origin'
+        }).catch(() => undefined);
+    }
+
+    function visibleWidthBucket(width) {
+        if (!width || width <= 0) {
+            return 'unknown';
+        }
+        if (width <= 300) {
+            return '0_300';
+        }
+        if (width <= 600) {
+            return '301_600';
+        }
+        if (width <= 800) {
+            return '601_800';
+        }
+        if (width <= 1200) {
+            return '801_1200';
+        }
+        return '1201_plus';
+    }
+
+    function startPageEvents() {
+        if (!sessionStarted) {
+            sessionStarted = true;
+            sessionStorage.setItem(sessionKey + '_started', '1');
+            enqueue(baseEvent('public.session.started'));
+        }
+        enqueue(baseEvent(config.pageKind === 'gallery' ? 'public.gallery.viewed' : 'public.page.viewed'));
+    }
+
+    window.PHPGalleryTelemetryPhotoOpened = function (imageId, galleryId, mode) {
+        window.PHPGalleryTelemetryPhotoClosed();
+        currentPhotoId = imageId;
+        currentPhotoGalleryId = galleryId || config.galleryId || null;
+        currentPhotoStartedAt = performance.now();
+        const event = baseEvent('public.photo.opened');
+        event.image_id = imageId;
+        event.gallery_id = currentPhotoGalleryId;
+        event.page_kind = 'photo';
+        event.context = {lightbox_mode: mode || 'normal'};
+        enqueue(event);
+    };
+
+    window.PHPGalleryTelemetryPhotoClosed = function () {
+        if (!currentPhotoId || !currentPhotoStartedAt) {
+            return;
+        }
+        const durationMs = Math.min(
+            Math.round(performance.now() - currentPhotoStartedAt),
+            Number(config.maxPhotoViewSeconds || 900) * 1000
+        );
+        const event = baseEvent('public.photo.visible_time');
+        event.image_id = currentPhotoId;
+        event.gallery_id = currentPhotoGalleryId;
+        event.page_kind = 'photo';
+        event.duration_ms = durationMs;
+        event.context = {lightbox_mode: document.fullscreenElement ? 'fullscreen' : 'normal'};
+        enqueue(event);
+        currentPhotoId = null;
+        currentPhotoGalleryId = null;
+        currentPhotoStartedAt = 0;
+    };
+
+    window.PHPGalleryTelemetryImageDecoded = function (imageId, galleryId, elapsedMs, mediaVariant, cacheResult, displayWidth) {
+        const event = baseEvent('client.performance.image_decode');
+        event.image_id = imageId || null;
+        event.gallery_id = galleryId || config.galleryId || null;
+        event.page_kind = 'photo';
+        event.value_ms = Math.max(0, Math.round(elapsedMs || 0));
+        event.media_variant = mediaVariant || 'unknown';
+        event.cache_result = cacheResult || 'unknown';
+        event.context = {display_width_bucket: visibleWidthBucket(displayWidth)};
+        enqueue(event);
+    };
+
+    window.PHPGalleryTelemetryCacheEvent = function (eventName, imageId, galleryId, sourceKind) {
+        const event = baseEvent(eventName);
+        event.image_id = imageId || null;
+        event.gallery_id = galleryId || config.galleryId || null;
+        event.context = {source_kind: sourceKind || 'unknown'};
+        enqueue(event);
+    };
+
+    function collectPerformanceNavigation() {
+        const navigation = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+        if (!navigation) {
+            return;
+        }
+        const sampleRate = Number(config.performanceSampleRate || 0.25);
+        if (sampleRate < 1 && Math.random() > sampleRate) {
+            return;
+        }
+        const event = baseEvent('client.performance.page_load');
+        event.value_ms = Math.max(0, Math.round(navigation.loadEventEnd || navigation.duration || 0));
+        event.sampled_rate = sampleRate;
+        enqueue(event);
+    }
+
+    window.addEventListener('error', function () {
+        const event = baseEvent('client.error.javascript');
+        event.error_kind = 'javascript_error';
+        event.sampled_rate = Number(config.errorSampleRate || 1);
+        enqueue(event);
+    });
+
+    window.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            window.PHPGalleryTelemetryPhotoClosed();
+            flush();
+        }
+    });
+
+    window.addEventListener('pagehide', function () {
+        window.PHPGalleryTelemetryPhotoClosed();
+        flush();
+    });
+
+    startPageEvents();
+    window.addEventListener('load', function () {
+        collectPerformanceNavigation();
+        window.setTimeout(flush, 500);
+    });
+})();

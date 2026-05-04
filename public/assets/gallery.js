@@ -1433,6 +1433,32 @@
         });
     }
 
+    /**
+     * Notify the optional anonymous telemetry module about a lightbox photo view.
+     * @param {*} card Value supplied by the caller or event context.
+     * @returns {*} Result of the UI operation, when a value is produced.
+     */
+    function telemetryPhotoOpened(card) {
+        if (!window.PHPGalleryTelemetryPhotoOpened || !card) {
+            return;
+        }
+        window.PHPGalleryTelemetryPhotoOpened(
+            Number(card.dataset.imageId || 0),
+            Number(document.body.dataset.galleryId || 0),
+            document.fullscreenElement ? 'fullscreen' : 'normal'
+        );
+    }
+
+    /**
+     * Notify the optional anonymous telemetry module that the active photo view ended.
+     * @returns {*} Result of the UI operation, when a value is produced.
+     */
+    function telemetryPhotoClosed() {
+        if (window.PHPGalleryTelemetryPhotoClosed) {
+            window.PHPGalleryTelemetryPhotoClosed();
+        }
+    }
+
     // Function `openAt` executes this focused behavior.
     function openAt(index) {
         // Variable `card` stores this steps working value.
@@ -1503,6 +1529,7 @@
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
         showLightboxHud();
+        telemetryPhotoOpened(card);
     }
 
     /**
@@ -1521,6 +1548,7 @@
 
     // Function `close` executes this focused behavior.
     function close() {
+        telemetryPhotoClosed();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
         overlay.classList.remove('is-ui-visible');

@@ -563,6 +563,7 @@ function admin_menu_structure(): array
             'items' => [
                 ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
+                ['label' => 'Telemetry', 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
                 ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
@@ -737,6 +738,16 @@ function append_cms_footer_script(string $script): void
     $GLOBALS['cms_footer_scripts'][] = $script;
 }
 
+
+/**
+ * Append raw footer HTML for the next rendered page.
+ */
+function append_cms_footer_html(string $html): void
+{
+    $GLOBALS['cms_footer_html'] = (array) ($GLOBALS['cms_footer_html'] ?? []);
+    $GLOBALS['cms_footer_html'][] = $html;
+}
+
 /**
  * Return buffered footer scripts and clear them after rendering.
  */
@@ -749,6 +760,12 @@ function cms_footer_scripts_html(): string
     $html = '';
     foreach ($scripts as $script) {
         $html .= '<script>' . $script . '</script>';
+    }
+    // $footerHtml stores raw footer HTML snippets prepared by trusted server-side code.
+    $footerHtml = (array) ($GLOBALS['cms_footer_html'] ?? []);
+    $GLOBALS['cms_footer_html'] = [];
+    foreach ($footerHtml as $snippet) {
+        $html .= (string) $snippet;
     }
     return $html;
 }
