@@ -1,4 +1,37 @@
 <?php
+
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: scripts/telemetry_maintenance.php
+ * Module Type: CLI Utility
+ *
+ * Purpose:
+ *   Provides a command-line maintenance utility for installation, migration, deployment, or administration.
+ *
+ * Responsibilities:
+ *   - Run from command line or deployment workflow
+ *   - Reuse project bootstrap code when needed
+ *   - Report failures clearly to the operator
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 /**
  * Command-line telemetry maintenance runner.
  *

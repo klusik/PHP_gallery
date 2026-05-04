@@ -1,4 +1,36 @@
-﻿param(
+﻿<#
+  Project: PHP Gallery
+  Repository: https://github.com/klusik/PHP_gallery
+
+  File: scripts/deploy.ps1
+  Module Type: Deployment Script
+
+  Purpose:
+    Automates deployment packaging or upload workflows for PHP Gallery.
+
+  Responsibilities:
+    - Collect deployment inputs safely
+    - Prepare files for local or remote deployment
+    - Report deployment failures clearly
+
+  Author:
+    Rudolf Klusal
+
+  Contact:
+    https://github.com/klusik
+
+  License:
+    MIT License (see LICENSE file in repository)
+
+  Notes:
+    - Keep comments and docstrings intact when modifying this file.
+    - Prefer small, readable changes over broad rewrites.
+
+  Last Updated:
+    2026-05-04
+#>
+
+param(
     [ValidateSet('ftp', 'local')]
     [string]$Mode,
     [string]$HostName,

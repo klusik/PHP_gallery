@@ -1,4 +1,36 @@
 /**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/gallery.js
+ * Module Type: Browser Module
+ *
+ * Purpose:
+ *   Provides client-side behavior for the PHP Gallery user interface.
+ *
+ * Responsibilities:
+ *   - Attach behavior to existing server-rendered markup
+ *   - Keep DOM interaction predictable and readable
+ *   - Avoid unnecessary layout work in performance-sensitive paths
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
+/**
  * PHP Gallery browser entrypoint.
  *
  * This file deliberately contains orchestration only. Feature code lives in

@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: database/migrations/202604280003_exif_gps_maps.php
+ * Module Type: Database Migration
+ *
+ * Purpose:
+ *   Applies an incremental database schema or data update for PHP Gallery.
+ *
+ * Responsibilities:
+ *   - Describe and execute one database change
+ *   - Remain safe to run through the migration system
+ *   - Avoid changing unrelated schema objects
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 return [
     "ALTER TABLE galleries ADD COLUMN gps_map_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER picture_game_enabled",
     "ALTER TABLE images ADD COLUMN exif_taken_at DATETIME NULL AFTER modified_at",

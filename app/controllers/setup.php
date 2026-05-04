@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/controllers/setup.php
+ * Module Type: Controller
+ *
+ * Purpose:
+ *   Handles request-level application logic for the related gallery feature.
+ *
+ * Responsibilities:
+ *   - Validate and route incoming request data
+ *   - Call service-layer functions where possible
+ *   - Return redirects, rendered views, or HTTP responses
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
 /**
