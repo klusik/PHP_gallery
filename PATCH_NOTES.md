@@ -1,5 +1,14 @@
 # Patch Notes
 
+## Version 0.51
+
+Version 0.51 makes update installs safer on long-running PHP processes by clearing cached opcode state after copied files are in place. This helps newly deployed code take effect immediately during beta and normal update installs.
+
+### Update reliability
+
+- Invalidated OPcache after application files are copied during beta installs.
+- Invalidated OPcache after application files are copied during standard update installs.
+
 ## Version 0.50
 
 Version 0.50 adds drag-based picture sorting inside gallery management. It lets admins reorder photos directly from the gallery view, and updates the related admin upload, image scanning, and front-end assets so the new ordering workflow stays consistent.
