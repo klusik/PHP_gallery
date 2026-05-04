@@ -30,6 +30,8 @@ function cms_admin(): void
     $gpsMapReady = exif_gps_schema_ready();
     // Variable $votingReady stores this steps working value.
     $votingReady = gallery_voting_schema_ready();
+    // Variable $filenameDisplayReady stores this steps working value.
+    $filenameDisplayReady = gallery_filename_display_schema_ready();
     // Variable $migrationPending stores this steps working value.
     $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
@@ -115,6 +117,9 @@ function cms_admin(): void
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
     echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
+    if ($filenameDisplayReady) {
+        echo '<option value="filenames_on">Show file names</option><option value="filenames_off">Hide file names</option>';
+    }
     if ($votingReady) {
         echo '<option value="vote_on">Enable voting</option><option value="vote_off">Disable voting</option>';
     }
@@ -128,6 +133,9 @@ function cms_admin(): void
     }
     echo '<th title="Maps">M</th>';
     echo '<th>B</th>';
+    if ($filenameDisplayReady) {
+        echo '<th title="File names shown">N</th>';
+    }
     if ($votingReady) {
         echo '<th title="Voting">V</th>';
     }
@@ -154,6 +162,9 @@ function cms_admin(): void
         }
         echo '<td>' . render_admin_feature_flag(exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
         echo '<td>' . render_admin_feature_flag(gallery_background_source_schema_ready() && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</td>';
+        if ($filenameDisplayReady) {
+            echo '<td>' . render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '✓', 'File names are shown') . '</td>';
+        }
         if ($votingReady) {
             echo '<td>' . render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '✓', 'Voting enabled') . '</td>';
         }

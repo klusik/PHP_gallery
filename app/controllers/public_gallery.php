@@ -182,15 +182,28 @@ function cms_gallery(): void
         $altText = image_alt_text($image, $gallery, $index + 1);
         // Variable $vote stores this steps working value.
         $vote = $votesById[(int) $image['id']] ?? 0;
-        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($image['title'] ?: $image['filename']) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '" data-image-width="' . (int) ($image['width'] ?? 0) . '" data-image-height="' . (int) ($image['height'] ?? 0) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
+        // Variable $displayTitle stores this steps working value.
+        $displayTitle = public_image_display_title($image, $gallery);
+        echo '<article class="image-card" data-lightbox-image data-image-id="' . (int) $image['id'] . '" data-full-src="' . e($mediaUrl) . '" data-preview-src="' . e($previewUrl) . '" data-page-url="' . e($imagePageUrl) . '" data-gallery-url="' . e(gallery_public_url($gallery)) . '" data-title="' . e($displayTitle) . '" data-description="' . e($image['description']) . '" data-score="' . (int) $image['score'] . '" data-user-vote="' . $vote . '" data-image-width="' . (int) ($image['width'] ?? 0) . '" data-image-height="' . (int) ($image['height'] ?? 0) . '"' . ($imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '') . '>';
         echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], '(min-width: 70rem) 28vw, (min-width: 50rem) 34vw, 90vw', $altText, 'loading="lazy"') . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
-        echo '<div class="image-meta"><h2>' . e($image['title'] ?: $image['filename']) . '</h2><p>' . e($image['description']) . '</p>';
-        render_tag_list($imageTags);
-        render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
-        echo '</div>';
+        // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata area has visible content.
+        // Empty metadata is not rendered, because hidden file names should not leave a blank bar under the photo.
+        $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags || $votingAllowed;
+        if ($hasPublicImageMeta) {
+            echo '<div class="image-meta">';
+            if ($displayTitle !== '') {
+                echo '<h2>' . e($displayTitle) . '</h2>';
+            }
+            if (trim((string) $image['description']) !== '') {
+                echo '<p>' . e($image['description']) . '</p>';
+            }
+            render_tag_list($imageTags);
+            render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
+            echo '</div>';
+        }
         render_public_image_admin_form($image);
         echo '</article>';
     }
@@ -398,6 +411,9 @@ function render_public_gallery_admin_form(array $gallery): void
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
+    if (gallery_filename_display_schema_ready()) {
+        echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
+    }
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
@@ -419,7 +435,7 @@ function render_public_image_admin_form(array $image): void
     echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';
     echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?: pathinfo((string) $image['filename'], PATHINFO_FILENAME))) . '"></label>';
+    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
     echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';

@@ -198,6 +198,7 @@ function write_gallery_sidecar(array $gallery): void
         'visibility' => $gallery['visibility'],
         'sort_order' => (int) $gallery['sort_order'],
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
+        'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
@@ -239,6 +240,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'description' => $metadata['description'] ?? '',
         'visibility' => $metadata['visibility'] ?? 'draft',
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
+        'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -275,6 +277,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
+    // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
+    $showFilenames = gallery_filename_display_schema_ready() && (int) ($candidate['show_filenames'] ?? 0) === 1 ? 1 : 0;
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $accessListing stores an intermediate value used by the surrounding gallery workflow.
@@ -297,6 +301,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $visibility,
         $votingEnabled,
     ];
+    if (gallery_filename_display_schema_ready()) {
+        $columns[] = 'show_filenames';
+        $values[] = $showFilenames;
+    }
     if (gallery_access_schema_ready()) {
         $columns[] = 'access_mode';
         $columns[] = 'access_listing';
@@ -335,6 +343,8 @@ function create_empty_gallery(array $input): array
     $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
+    // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
+    $showFilenames = !empty($input['show_filenames']) ? 1 : 0;
     // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
@@ -363,6 +373,7 @@ function create_empty_gallery(array $input): array
         'visibility' => $visibility,
         'sort_order' => (int) ($input['sort_order'] ?? 0),
         'voting_enabled' => $votingEnabled,
+        'show_filenames' => $showFilenames,
     ]);
     if (!$sidecarWritten) {
         throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
