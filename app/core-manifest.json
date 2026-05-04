@@ -29,7 +29,7 @@
         "app/controllers/theme_assets.php": "sha256:d62ee429a446f57780d2b3504636c7bc69cb7c5a28a06fe5a77794854cfcf739",
         "app/controllers/updates.php": "sha256:bf3f0e173054f601c325dc9113cbee06f806edc224d5db1f630312ccda75db3c",
         "app/database.php": "sha256:6cea4b37bb48aa59dc88d822900ad9938029cb266adbc9ad7b38c26c25356e00",
-        "app/helpers.php": "sha256:020e979d5a078bf08435a3faf960855e81dc236467091aeee6eb386d873a10a5",
+        "app/helpers.php": "sha256:2f11fd73b390c9bae43ff219ca0936074d2af42a4ef71c4affa610129b7a5685",
         "app/integrity.php": "sha256:1056c404f9627c54a66a6f04dc56924f5ed083ea553ba900b28cf93eb4679baa",
         "app/migrations.php": "sha256:26c42194c793f4e31c10fda22e2265d80543b8392a5e974eff428f22a8fb7a49",
         "app/security.php": "sha256:1156da083e132ec6f619da8ef104bdd203f3b2f408f73479d18c04c8607ae656",
@@ -76,13 +76,21 @@
         "index.php": "sha256:06517e86dfe03f91d0f71d12f52332eaec353b762bf31735a2c11c9c33eff457",
         "install.php": "sha256:a8114f43c5a99e944b8a537961417ad6feb69b1f4e9d7284a4a191f4cebe53a1",
         "public/.htaccess": "sha256:934ac0c2dc81aa01124cfe13217b4cb8e6ab3a471f520838a2d006df2d6e3293",
-        "public/assets/gallery.js": "sha256:618647e9e9b8546ad3fe9bfa10de46ef55ddf6421d255dfc8a26e966d986eee3",
+        "public/assets/gallery.js": "sha256:e9e1280276055ad93658448a5ce58c7aa112ae4d398ee22869efa334c99256a7",
         "public/assets/styles.css": "sha256:894b8e4c54fbc89484575607b538efd047786b5ac6fa580c2cec2d5ff2e0a9bd",
         "public/index.php": "sha256:6dc300692f167f5f04b1963b58c347f9274d67969cf9c499549ca90a429d7f4a",
         "reset.php": "sha256:7ce488ba8cc93ac4952f98b89e550fb1d7fd9748334b0e6ef5b9f70105d4f151",
         "scripts/create_admin.php": "sha256:e53cad5ca4dfde516ed84bdd086410d07157120ae31bba32c780b2f19747cee0",
         "scripts/deploy.ps1": "sha256:e82d2140c39817e555006e393b82ba002db69614079ad50b69ae5d76c097dd1c",
         "scripts/generate_manifest.php": "sha256:ad0369afdc70a0a14f3f63cf2587b279bb62fe195930bbc5f8e9e205cadf7516",
-        "scripts/migrate.php": "sha256:ecc4c81e541aa4217baee38c222446a1166f45dc6e104b31b3aa78c6f6b7d397"
+        "scripts/migrate.php": "sha256:ecc4c81e541aa4217baee38c222446a1166f45dc6e104b31b3aa78c6f6b7d397",
+        "public/assets/gallery-modules/admin-bulk-actions.js": "sha256:28dfa91d76eaa29e66f42389ca7a249850f53272b3203949d64910f4908e0e27",
+        "public/assets/gallery-modules/admin-operations.js": "sha256:ae3c7df56ac10805d3518fcb8e8e958889defded6bca581d9a13801dcf220da4",
+        "public/assets/gallery-modules/back-to-top.js": "sha256:caa06917b7bf8036e73ee0b3d00e5d24a958924880adb0fb04ba815e2467d8cc",
+        "public/assets/gallery-modules/favicon-cropper.js": "sha256:db48fc1f724c939657db6e9696dce1fadbb51685396f360a841a3c3dc06f2925",
+        "public/assets/gallery-modules/lightbox.js": "sha256:87583dc505461f397d9d4702a2a47d86e7507491bb2639df88cdb09d1b9223d1",
+        "public/assets/gallery-modules/responsive-thumbnails.js": "sha256:06d8210c1e739bea2d2d719c22370307a1f20cb07412ca8a118e8d73ffd633fd",
+        "public/assets/gallery-modules/theme-form.js": "sha256:42fcc5272b2dd82387b75ec360fb7b51fc8391d3bfe830bd90c80e9901c58b89",
+        "public/assets/gallery-modules/votes.js": "sha256:723b64d8a23bc280488f3e063d06c37fd7ed386d0856c225164d9c6a15f9c700"
     }
 }

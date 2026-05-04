@@ -807,7 +807,7 @@ function render_footer(): void
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
-    echo '<script src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '" defer></script>';
+    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }
