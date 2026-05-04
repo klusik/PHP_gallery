@@ -1,5 +1,29 @@
 # Patch Notes
 
+## Version 0.54
+
+- Added a new anonymous telemetry system with admin reporting, privacy controls, retention settings, and maintenance/
+    rollup tooling.
+  - Expanded the admin log view with richer filtering by status, category, severity, and search, plus contextual log
+    details and request IDs.
+  - Introduced a separate “Main page gallery grid” configuration so the home page can use its own layout independent of
+    gallery pages.
+  - Added support for resetting all per-gallery grid overrides, including cleanup of stale gallery.json sidecar data.
+  - Updated the public home page and gallery rendering to use the new effective grid settings logic.
+  - Added telemetry hooks to the public site so anonymous usage and performance data can be collected when enabled.
+  - Improved the theme admin screen with a live visual preview, better organization, and additional controls for the
+    homepage grid.
+  - Split the front-end into modular assets under public/assets/gallery-modules/, replacing the previous monolithic
+    public/assets/gallery.js.
+  - Added new UI assets and behavior for lightbox, admin bulk actions, responsive thumbnails, favicon cropping, back-to-
+    top, votes, and theme form interactions.
+  - Added new maintenance and deployment helpers, including migration and telemetry maintenance scripts.
+  - Introduced a number of new database migrations covering telemetry, gallery grid overrides, log observability, public
+    URL slugs, background handling, voting, and related schema changes.
+  - Updated the core manifest and application bootstrap/controller/service wiring to reflect the new modules and routes.
+  - Added or refreshed security and server config files such as .htaccess, cache/public/gallery access rules, and
+    install/reset entry points.
+
 ## Version 0.53
 
 - Added public pagination for the home gallery list, gallery subgalleries, and photo grids.
