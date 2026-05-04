@@ -186,6 +186,15 @@ function cms_admin_theme(): void
             }
         } elseif (!empty($_POST['reset_theme_overrides'])) {
             clear_theme_overrides();
+        } elseif (!empty($_POST['reset_all_gallery_grid_overrides'])) {
+            // $resetResult stores how many custom gallery-grid settings were cleared from each persistence layer.
+            $resetResult = reset_all_gallery_grid_overrides();
+            // The redirect flag keeps the operation idempotent and avoids resubmitting the destructive reset on refresh.
+            redirect_to(url_for('admin_theme', [
+                'grid_reset' => 1,
+                'db_rows' => (int) $resetResult['database_rows'],
+                'sidecars' => (int) $resetResult['sidecars'],
+            ]));
         } else {
             // Variable $siteName stores this steps working value.
             $siteName = trim((string) ($_POST['site_name'] ?? ''));
@@ -246,6 +255,8 @@ function cms_admin_theme(): void
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
             set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
             set_app_setting('pagination_rows', (string) pagination_dimension_value($_POST['pagination_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
+            set_app_setting('home_gallery_grid_columns', (string) pagination_dimension_value($_POST['home_gallery_grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
+            set_app_setting('home_gallery_grid_rows', (string) pagination_dimension_value($_POST['home_gallery_grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS));
             if ($themeControlsChanged) {
                 set_app_setting('theme_accent', sanitize_hex_color((string) $_POST['theme_accent'], '#a5481c'));
                 set_app_setting('theme_accent_dark', sanitize_hex_color((string) $_POST['theme_accent_dark'], '#713414'));
@@ -266,7 +277,16 @@ function cms_admin_theme(): void
     $theme = theme_settings();
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = pagination_global_settings();
+    // Variable $homeGridSettings stores the separate public home-page gallery grid.
+    $homeGridSettings = main_page_gallery_grid_settings();
     render_header('Theme');
+    if (!empty($_GET['grid_reset'])) {
+        // $databaseRows stores how many database gallery rows reported a custom-grid reset.
+        $databaseRows = max(0, (int) ($_GET['db_rows'] ?? 0));
+        // $sidecars stores how many gallery.json files had stale custom-grid metadata removed.
+        $sidecars = max(0, (int) ($_GET['sidecars'] ?? 0));
+        echo '<section class="panel notice"><p>Custom gallery grid settings were reset. Database rows changed: ' . $databaseRows . '. Sidecar files cleaned: ' . $sidecars . '.</p></section>';
+    }
     echo '<section class="panel" id="admin-theme"><h1>Appearance</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
     echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required></label>';
@@ -309,6 +329,14 @@ function cms_admin_theme(): void
     echo '<label>Columns per page <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
     echo '<label>Rows per page <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
     echo '<p class="muted">Items per page preview: <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
+    echo '<p class="muted">These values remain the fallback for galleries that do not define or inherit a custom grid.</p>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid" id="admin-home-grid"><legend>Main page gallery grid</legend>';
+    echo '<label>Main page columns <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
+    echo '<label>Main page rows <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';
+    echo '<p class="muted">This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.</p>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.&quot;);">Reset all custom gallery grids</button></div>';
+    echo '<p class="muted">This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.</p>';
     echo '</fieldset>';
     echo '<label>Rounded corners<input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';

@@ -545,6 +545,14 @@ function cms_admin_edit_gallery(): void
         }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
+        // $gridUsesCustomSettings stores whether this gallery should stop inheriting the display grid.
+        $gridUsesCustomSettings = !empty($_POST['grid_override_enabled']);
+        // $gridColumns stores the optional custom column count for public cards/photos in this gallery.
+        $gridColumns = $gridUsesCustomSettings ? pagination_dimension_value($_POST['grid_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
+        // $gridRows stores the optional custom row count used when pagination slices this gallery.
+        $gridRows = $gridUsesCustomSettings ? pagination_dimension_value($_POST['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
+        // $gridUseForSubgalleries stores whether descendants may inherit this gallery grid.
+        $gridUseForSubgalleries = !empty($_POST['grid_use_for_subgalleries']) ? 1 : 0;
         // $fields stores an intermediate value used by the surrounding gallery workflow.
         $fields = [
             'parent_id = ?' => $parentId,
@@ -566,6 +574,11 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_filename_display_schema_ready()) {
             $fields['show_filenames = ?'] = $showFilenames;
+        }
+        if (gallery_grid_schema_ready()) {
+            $fields['grid_columns = ?'] = $gridColumns;
+            $fields['grid_rows = ?'] = $gridRows;
+            $fields['grid_use_for_subgalleries = ?'] = $gridUseForSubgalleries;
         }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
@@ -705,6 +718,25 @@ function cms_admin_edit_gallery(): void
         echo '<p class="muted">Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.</p>';
     } else {
         echo '<p class="muted">File name display control will be available after the database migration is applied.</p>';
+    }
+    if (gallery_grid_schema_ready()) {
+        // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
+        $galleryUsesCustomGrid = gallery_grid_has_explicit_override($gallery);
+        // $effectiveGridSettings stores the grid currently affecting this gallery before any form edits.
+        $effectiveGridSettings = gallery_effective_grid_settings($gallery);
+        // $gridColumns stores the form value. In inherit mode it previews the currently effective inherited/default value.
+        $gridColumns = gallery_grid_form_columns($gallery);
+        // $gridRows stores the form value. In inherit mode it previews the currently effective inherited/default value.
+        $gridRows = gallery_grid_form_rows($gallery);
+        echo '<fieldset class="form-grid"><legend>Display grid</legend>';
+        echo '<label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> Use a custom grid for this gallery</label>';
+        echo '<label>Columns <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label>';
+        echo '<label>Rows <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label>';
+        echo '<label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> Use for subgalleries</label>';
+        echo '<p class="muted">Current source: ' . e((string) ($effectiveGridSettings['grid_source'] ?? 'global')) . '. If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.</p>';
+        echo '</fieldset>';
+    } else {
+        echo '<p class="muted">Gallery display-grid overrides will be available after the database migration is applied.</p>';
     }
     if ($gpsMapReady) {
         echo '<label><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label>';

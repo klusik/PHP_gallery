@@ -55,7 +55,7 @@ function cms_home(): void
     // Variable $galleries stores this steps working value.
     $galleries = $stmt->fetchAll();
     // Variable $paginationSettings stores this steps working value.
-    $paginationSettings = pagination_global_settings(['listing' => 'galleries']);
+    $paginationSettings = main_page_gallery_grid_settings();
     // Variable $galleryPagination stores this steps working value.
     $galleryPagination = pagination_model(count($galleries), pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
     if (!empty($paginationSettings['enabled'])) {
@@ -170,7 +170,7 @@ function cms_gallery(): void
     // Variable $pictureGameImages stores this steps working value.
     $pictureGameImages = picture_game_images($gallery);
     // Variable $paginationSettings stores this steps working value.
-    $paginationSettings = pagination_global_settings(['listing' => 'gallery', 'gallery' => $gallery]);
+    $paginationSettings = gallery_effective_grid_settings($gallery);
     // Variable $galleryPaginationPath stores the gallery-level URL path used for clean pagination links.
     $galleryPaginationPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($galleryPaginationPath === '') {

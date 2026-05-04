@@ -193,7 +193,7 @@ function pagination_page_urls(string $parameterName, int $currentPage, int $tota
  */
 function pagination_grid_columns_class(array $settings): string
 {
-    if (empty($settings['enabled'])) {
+    if (empty($settings['enabled']) && empty($settings['grid_columns_enabled'])) {
         return '';
     }
 

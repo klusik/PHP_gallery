@@ -41,7 +41,85 @@
  * setupExample();
  */
 
+
+/**
+ * Keeps one range slider display span synchronized with its current value.
+ *
+ * This helper is intentionally independent from the Theme form because gallery
+ * edit pages also expose display-grid sliders while using a different form.
+ *
+ * @param {string} controlSelector CSS selector for the range input.
+ * @param {string} displaySelector CSS selector for the text value.
+ * @returns {void}
+ */
+function syncGridRangeDisplay(controlSelector, displaySelector) {
+    // controls stores every slider matching the requested control selector.
+    const controls = Array.from(document.querySelectorAll(controlSelector));
+    // displays stores every numeric readout matching the requested display selector.
+    const displays = Array.from(document.querySelectorAll(displaySelector));
+    if (controls.length === 0 || displays.length === 0) {
+        return;
+    }
+
+    controls.forEach((control, index) => {
+        // display stores the paired value readout. When only one display exists,
+        // it is reused for the single slider on the current admin page.
+        const display = displays[index] || displays[0];
+        if (!display) {
+            return;
+        }
+
+        /**
+         * Copies the sanitized slider value to the visible display element.
+         *
+         * @returns {void}
+         */
+        const syncValue = () => {
+            display.textContent = String(Math.max(1, parseInt(control.value, 10) || 1));
+        };
+
+        control.addEventListener('input', syncValue);
+        control.addEventListener('change', syncValue);
+        syncValue();
+    });
+}
+
+
+/**
+ * Automatically enables a per-gallery grid override when the admin edits its sliders.
+ *
+ * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
+ * form will persist those numbers as a custom gallery grid, instead of silently
+ * treating the gallery as inherited because the override checkbox was forgotten.
+ *
+ * @returns {void}
+ */
+function setupGalleryGridOverrideAutoEnable() {
+    // overrideControl stores the checkbox deciding whether this gallery owns a grid.
+    const overrideControl = document.querySelector('[data-gallery-grid-override-enabled]');
+    if (!overrideControl) {
+        return;
+    }
+
+    // gridControls stores the per-gallery sliders that imply an explicit override.
+    const gridControls = document.querySelectorAll('[data-gallery-grid-columns], [data-gallery-grid-rows]');
+    gridControls.forEach((control) => {
+        control.addEventListener('input', () => {
+            overrideControl.checked = true;
+        });
+        control.addEventListener('change', () => {
+            overrideControl.checked = true;
+        });
+    });
+}
+
 export function setupThemeOverrideForm() {
+    syncGridRangeDisplay('[data-home-grid-columns]', '[data-home-grid-columns-display]');
+    syncGridRangeDisplay('[data-home-grid-rows]', '[data-home-grid-rows-display]');
+    syncGridRangeDisplay('[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]');
+    syncGridRangeDisplay('[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]');
+    setupGalleryGridOverrideAutoEnable();
+
     // form stores state or configuration for the gallery front-end flow.
     const form = document.querySelector('[data-theme-form]');
     if (!form) {
