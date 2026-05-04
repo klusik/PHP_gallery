@@ -113,6 +113,124 @@ function setupGalleryGridOverrideAutoEnable() {
     });
 }
 
+
+/**
+ * Reads the first matching form control value from the Theme form.
+ *
+ * @param {HTMLFormElement} form Theme form containing the appearance controls.
+ * @param {string} selector CSS selector for the desired control.
+ * @param {string} fallback Value used when the control is missing.
+ * @returns {string} Current control value or fallback.
+ */
+function themeControlValue(form, selector, fallback) {
+    // control stores the matching input, select, or range element used by the preview.
+    const control = form.querySelector(selector);
+    if (!control || typeof control.value !== 'string') {
+        return fallback;
+    }
+    return control.value || fallback;
+}
+
+
+/**
+ * Converts the two stored font modes into the real preview CSS font stack.
+ *
+ * @param {string} fontMode Theme font mode from the Admin select control.
+ * @returns {string} CSS font-family value for the live preview.
+ */
+function themePreviewFontFamily(fontMode) {
+    if (fontMode === 'sans') {
+        return 'Arial, Helvetica, sans-serif';
+    }
+    return 'Georgia, Times New Roman, serif';
+}
+
+
+/**
+ * Keeps the compact Appearance preview synchronized with unsaved form values.
+ *
+ * The preview uses local CSS variables so it can mirror public styling without
+ * changing the real Admin page while the user is still editing.
+ *
+ * @param {HTMLFormElement} form Theme form containing the appearance controls.
+ * @returns {void}
+ */
+function setupThemeLivePreview(form) {
+    // previewRoot stores the split Appearance editor that owns all preview state.
+    const previewRoot = form.querySelector('[data-theme-preview-root]');
+    // previewPage stores the miniature public page shown on the right side.
+    const previewPage = form.querySelector('[data-theme-preview-page]');
+    if (!previewRoot || !previewPage) {
+        return;
+    }
+
+    // brandText stores the visible site title inside the preview header.
+    const brandText = form.querySelector('[data-theme-preview-brand]');
+    // siteNameControl stores the real site-name field, which is not a color override but should still update visually.
+    const siteNameControl = form.querySelector('[data-theme-preview-site-name]');
+    // radiusDisplay stores the small px readout beside the Rounded corners slider.
+    const radiusDisplay = form.querySelector('[data-theme-radius-display]');
+    // backgroundImage stores the inner preview element that simulates the public background image layer.
+    const backgroundImage = form.querySelector('[data-theme-preview-background-image]');
+    // backgroundUrl stores the already-saved theme background URL supplied by the PHP controller.
+    const backgroundUrl = previewRoot.getAttribute('data-theme-preview-background-url') || '';
+
+    /**
+     * Copies all unsaved visual settings into the preview CSS variables.
+     *
+     * @returns {void}
+     */
+    const syncPreview = () => {
+        // colorMap stores form field names and their corresponding preview CSS variables.
+        const colorMap = {
+            accent: '--preview-accent',
+            accent_dark: '--preview-accent-dark',
+            paper: '--preview-paper',
+            panel: '--preview-panel',
+            gallery_panel: '--preview-gallery-panel',
+            header_text: '--preview-header-text',
+            hero_text: '--preview-hero-text',
+        };
+
+        Object.entries(colorMap).forEach(([colorName, cssVariable]) => {
+            // control stores the color picker bound to the current visual property.
+            const control = form.querySelector(`[data-theme-preview-color="${colorName}"]`);
+            if (control && typeof control.value === 'string') {
+                previewPage.style.setProperty(cssVariable, control.value);
+            }
+        });
+
+        // radiusValue stores the sanitized border-radius value used by preview cards and controls.
+        const radiusValue = Math.max(0, Math.min(32, parseInt(themeControlValue(form, '[data-theme-preview-radius]', '16'), 10) || 0));
+        previewPage.style.setProperty('--preview-radius', `${radiusValue}px`);
+        if (radiusDisplay) {
+            radiusDisplay.textContent = `${radiusValue}px`;
+        }
+
+        // fontMode stores the selected serif/sans display mode.
+        const fontMode = themeControlValue(form, '[data-theme-preview-font]', 'serif');
+        previewPage.style.setProperty('--preview-font-family', themePreviewFontFamily(fontMode));
+
+        // backgroundOpacity stores the same 0-100 percentage used by the public theme background layer.
+        const backgroundOpacity = Math.max(0, Math.min(100, parseInt(themeControlValue(form, '[data-theme-background-opacity]', '65'), 10) || 0));
+        previewPage.style.setProperty('--preview-background-opacity', String(backgroundOpacity / 100));
+
+        if (backgroundImage) {
+            backgroundImage.style.backgroundImage = backgroundUrl !== '' ? `url("${backgroundUrl}")` : 'none';
+        }
+
+        if (siteNameControl && brandText) {
+            brandText.textContent = siteNameControl.value.trim() || 'Gallery CMS';
+        }
+    };
+
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-background-opacity], [data-theme-preview-site-name]').forEach((control) => {
+        control.addEventListener('input', syncPreview);
+        control.addEventListener('change', syncPreview);
+    });
+    syncPreview();
+}
+
 export function setupThemeOverrideForm() {
     syncGridRangeDisplay('[data-home-grid-columns]', '[data-home-grid-columns-display]');
     syncGridRangeDisplay('[data-home-grid-rows]', '[data-home-grid-rows-display]');
@@ -125,6 +243,7 @@ export function setupThemeOverrideForm() {
     if (!form) {
         return;
     }
+    setupThemeLivePreview(form);
     // changed stores state or configuration for the gallery front-end flow.
     const changed = form.querySelector('[data-theme-controls-changed]');
     if (!changed) {
