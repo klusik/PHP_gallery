@@ -1,5 +1,19 @@
 # Patch Notes
 
+## Version 0.53
+
+- Added public pagination for the home gallery list, gallery subgalleries, and photo grids.
+  - Added new admin controls for pagination settings: enable/disable, columns per page, and rows per page.
+  - Added clean pagination URLs for gallery pages, including route handling for /galleries/{page} and gallery photo/
+    subgallery pagination paths.
+  - Updated public gallery rendering to slice visible items by page while keeping lightbox navigation aware of the full
+    ordered image set.
+  - Added hidden lightbox source nodes so fullscreen navigation still works across paginated galleries.
+  - Improved responsive thumbnail sizing so the browser selects better image candidates based on the actual rendered
+    grid width.
+  - Added new pagination styles and grid column classes to support configurable public layouts.
+  - Minor bootstrap and service wiring updates to load the new pagination helpers.
+
 ## Version 0.52
 
 Version 0.52 changes public photo captions so raw uploaded file names are hidden by default. Galleries now have an explicit file-name display setting, with matching controls in admin editing, inline logged-in editing, and bulk gallery operations.
