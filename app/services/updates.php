@@ -188,6 +188,7 @@ function install_application_beta(string $commitId): array
     $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
     // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
+    application_update_invalidate_opcache($root, $sourceRoot);
     cache_application_update_check(check_application_update());
     set_app_setting('application_update_channel', 'beta');
     set_app_setting('application_update_beta_commit', $commitId);
@@ -347,6 +348,7 @@ function install_application_update(): array
     $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
     // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
+    application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings(['application_update_check_cache']);
 
     return [
