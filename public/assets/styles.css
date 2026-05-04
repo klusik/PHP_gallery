@@ -3587,3 +3587,58 @@ body.admin-image-order-active {
         grid-template-columns: 1fr;
     }
 }
+
+/* Adds compact guidance and status styling for Admin gallery tree ordering. */
+.admin-gallery-order-toolbar {
+    margin-top: 0;
+}
+
+/* Keeps the gallery move handle visually aligned with the existing photo move handle. */
+.admin-gallery-drag-handle {
+    font-size: 14px;
+}
+
+/* Makes the nested gallery table advertise pointer-based ordering without changing table layout. */
+.admin-gallery-order-table tr.is-dragging td {
+    background: #e8f2ff;
+    opacity: 0.72;
+}
+
+/* Keeps moved gallery rows in the table model while the ghost follows the pointer. */
+.admin-gallery-order-table tr.is-reorder-hidden {
+    visibility: hidden;
+}
+
+/* Prevents accidental text selection while galleries are being reordered or nested. */
+body.admin-gallery-order-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* Shows the exact drop position and uses indentation to preview the target tree depth. */
+.admin-gallery-order-placeholder td {
+    padding: 0;
+    border: 2px dashed #2271b1;
+    background: linear-gradient(90deg, transparent 0, transparent calc(var(--gallery-drag-depth, 0) * 28px), rgba(34, 113, 177, 0.10) calc(var(--gallery-drag-depth, 0) * 28px));
+}
+
+/* Adds a clear vertical marker at the candidate tree depth while dragging horizontally. */
+.admin-gallery-order-placeholder td::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 100%;
+    margin-left: calc(var(--gallery-drag-depth, 0) * 28px);
+    background: #2271b1;
+}
+
+/* Keeps the gallery ghost readable when several nested rows move together. */
+.admin-gallery-order-ghost {
+    max-height: 420px;
+    overflow: hidden;
+}
+
+/* Makes the cloned gallery drag handle consistent inside the ghost row. */
+.admin-gallery-order-ghost .admin-gallery-drag-handle {
+    cursor: grabbing;
+}

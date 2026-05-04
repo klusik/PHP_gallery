@@ -52,7 +52,9 @@ function cms_admin(): void
     }
     sync_gallery_parent_ids();
     // Variable $galleries stores this steps working value.
-    $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY g.folder_path")->fetchAll();
+    $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY COALESCE(g.parent_id, 0), g.sort_order, g.title")->fetchAll();
+    // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
+    $galleries = admin_ordered_gallery_rows($galleries);
     // Variable $collapsedIds stores this steps working value.
     $collapsedIds = array_flip(collapsed_gallery_ids());
     // Variable $pictureGameReady stores this steps working value.
@@ -144,7 +146,8 @@ function cms_admin(): void
         render_admin_migration_notice('Some admin features still need database migrations.');
     }
     render_admin_thumbnail_maintenance_notice($thumbnailSummary);
-    echo '<section class="panel admin-data-panel" id="admin-galleries"><div class="admin-panel-heading"><div><p class="admin-kicker">Galleries</p><h2>All galleries</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></div><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form>' . csrf_field();
+    echo '<section class="panel admin-data-panel" id="admin-galleries"><div class="admin-panel-heading"><div><p class="admin-kicker">Galleries</p><h2>All galleries</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></div><form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-admin-gallery-order-form>' . csrf_field();
+    echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><p class="muted">Drag galleries by the handle. Move vertically to change order. Move slightly right to make a gallery a subgallery. Move left to take it out of its parent.</p><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">Gallery ordering ready.</span></div>';
     echo '<div class="bulk-row">';
     echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted" data-gallery-filter-summary></span>';
@@ -159,7 +162,7 @@ function cms_admin(): void
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
     echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table><thead><tr><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
+    echo '<table class="admin-gallery-order-table" data-admin-gallery-order-table><thead><tr><th>Move</th><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
     if ($accessReady) {
         echo '<th>Access</th>';
     }
@@ -182,7 +185,7 @@ function cms_admin(): void
         $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle admin-gallery-drag-handle" data-admin-gallery-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $gallery['title']) . '" title="Drag to reorder or nest">↕</span></td><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
@@ -209,13 +212,73 @@ function cms_admin(): void
         echo '</td></tr>';
     }
     echo '</tbody></table></form></section>';
-    echo '<section class="panel admin-info-panel" id="admin-ordering"><p class="admin-kicker">Galleries</p><h2>Ordering</h2><p class="muted">Ordering is handled by the existing gallery and image edit screens. This section is linked from the unified menu so the admin structure has a stable place for the ordering workflow.</p></section>';
+    echo '<section class="panel admin-info-panel" id="admin-ordering"><p class="admin-kicker">Galleries</p><h2>Ordering</h2><p class="muted">Gallery ordering is handled directly in the All galleries table. Use the move handles to reorder siblings or change gallery nesting.</p></section>';
     echo '<section class="panel admin-info-panel" id="admin-thumbnails"><p class="admin-kicker">Media</p><h2>Thumbnails</h2><p class="muted">The existing thumbnail maintenance workflow is unchanged. Use the quick action above, gallery row Thumbs buttons, or image bulk tools inside each gallery.</p></section>';
     echo '<section class="panel admin-info-panel" id="admin-cache"><p class="admin-kicker">Media</p><h2>Cache and ZIP downloads</h2><p class="muted">ZIP archives use the existing generated ZIP cache lifecycle. Existing download routes and cache cleanup behaviour remain unchanged.</p><p><a class="button secondary" href="' . e(url_for('download_all')) . '">Download all galleries</a></p></section>';
     echo '<section class="panel admin-info-panel" id="admin-appearance"><p class="admin-kicker">Appearance</p><h2>Theme, custom CSS, favicon, and backgrounds</h2><p class="muted">Appearance settings are consolidated under the admin menu instead of the old header shortcut.</p><p><a class="button secondary" href="' . e(url_for('admin_theme')) . '">Open appearance settings</a></p></section>';
     echo '<section class="panel admin-info-panel" id="admin-migrations"><p class="admin-kicker">Maintenance</p><h2>Health, logs, integrity, migrations, and updates</h2><p class="muted">Maintenance tools keep their original controllers and actions. The new layout only reorganizes access to them.</p><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">Logs</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Integrity</a><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></div></section>';
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Return gallery rows in the same tree order used by the Admin table.
+ *
+ * SQL can sort direct siblings by sort_order, but it cannot cheaply emit the
+ * full nested tree in display order on both MySQL and MariaDB without recursive
+ * CTE differences. This helper keeps ordering deterministic in PHP: root rows
+ * are sorted by sort_order and title, then each direct child list is sorted the
+ * same way before being appended below its parent.
+ *
+ * @param array $rows Raw gallery rows from the Admin dashboard query.
+ * @return array Gallery rows flattened in visible tree order.
+ */
+function admin_ordered_gallery_rows(array $rows): array
+{
+    // Variable $childrenByParent stores direct children indexed by their parent id.
+    $childrenByParent = [];
+    foreach ($rows as $row) {
+        // Variable $parentKey stores zero for root galleries and the parent id for subgalleries.
+        $parentKey = (int) ($row['parent_id'] ?? 0);
+        $childrenByParent[$parentKey][] = $row;
+    }
+
+    foreach ($childrenByParent as $parentKey => $children) {
+        usort($children, static function (array $left, array $right): int {
+            // Variable $sortCompare stores the numeric sibling order comparison.
+            $sortCompare = (int) ($left['sort_order'] ?? 0) <=> (int) ($right['sort_order'] ?? 0);
+            if ($sortCompare !== 0) {
+                return $sortCompare;
+            }
+            // Variable $titleCompare stores the stable human fallback when sort_order values match.
+            $titleCompare = strnatcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+            if ($titleCompare !== 0) {
+                return $titleCompare;
+            }
+            return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
+        });
+        $childrenByParent[$parentKey] = $children;
+    }
+
+    // Variable $orderedRows stores the final flattened admin tree.
+    $orderedRows = [];
+
+    /**
+     * Appends descendants for one parent id.
+     *
+     * @param int $parentId Parent id whose children should be appended.
+     * @return void
+     */
+    $appendChildren = static function (int $parentId) use (&$appendChildren, &$orderedRows, $childrenByParent): void {
+        foreach ($childrenByParent[$parentId] ?? [] as $row) {
+            $orderedRows[] = $row;
+            $appendChildren((int) $row['id']);
+        }
+    };
+
+    $appendChildren(0);
+    return $orderedRows;
 }
 
 /**

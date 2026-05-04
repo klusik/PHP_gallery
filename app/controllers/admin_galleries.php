@@ -378,6 +378,181 @@ function cms_admin_save_gallery_collapse(): void
 }
 
 /**
+ * Handles cms admin gallery reorder logic for the gallery application.
+ *
+ * The Admin dashboard sends the complete flattened gallery tree after a drag
+ * operation. The submitted list is validated as an exact set match against the
+ * database before any filesystem move or sort_order update is attempted. Parent
+ * changes are delegated to move_gallery_folder_to_parent(), so the gallery
+ * folder tree remains the source of truth and database paths follow disk state.
+ *
+ * @return mixed Result produced by this operation.
+ */
+function cms_admin_reorder_galleries(): void
+{
+    require_admin();
+    verify_csrf();
+    // Variable $rawTree stores the JSON payload submitted by the JavaScript nested ordering handler.
+    $rawTree = (string) ($_POST['gallery_tree'] ?? '[]');
+    // Variable $decodedTree stores the decoded row list before it is normalized.
+    $decodedTree = json_decode($rawTree, true);
+    if (!is_array($decodedTree)) {
+        admin_reorder_galleries_response(false, 'The submitted gallery tree was not valid JSON.');
+        return;
+    }
+
+    // Variable $submittedEntries stores normalized id and parent-id pairs in the exact submitted order.
+    $submittedEntries = [];
+    foreach ($decodedTree as $entry) {
+        if (!is_array($entry)) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid row.');
+            return;
+        }
+        // Variable $galleryId stores the gallery id from one submitted tree row.
+        $galleryId = (int) ($entry['id'] ?? 0);
+        // Variable $parentId stores the requested parent id for one submitted tree row.
+        $parentId = (int) ($entry['parent_id'] ?? 0);
+        if ($galleryId <= 0 || $parentId < 0) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid gallery id.');
+            return;
+        }
+        $submittedEntries[] = ['id' => $galleryId, 'parent_id' => $parentId];
+    }
+    if (!$submittedEntries) {
+        admin_reorder_galleries_response(false, 'No galleries were submitted for reordering.');
+        return;
+    }
+
+    // Variable $submittedIds stores the submitted gallery id list for set validation.
+    $submittedIds = array_map(static fn (array $entry): int => (int) $entry['id'], $submittedEntries);
+    if (count($submittedIds) !== count(array_unique($submittedIds))) {
+        admin_reorder_galleries_response(false, 'The submitted gallery tree contained duplicate galleries.');
+        return;
+    }
+
+    sync_gallery_parent_ids();
+    // Variable $currentRows stores current database ids and parent ids for validation and change detection.
+    $currentRows = db()->query('SELECT id, parent_id FROM galleries ORDER BY id')->fetchAll();
+    // Variable $currentIds stores all gallery ids currently known by the database.
+    $currentIds = array_map(static fn (array $row): int => (int) $row['id'], $currentRows);
+    // Variable $sortedSubmittedIds stores the submitted id set in sorted order.
+    $sortedSubmittedIds = $submittedIds;
+    sort($sortedSubmittedIds);
+    sort($currentIds);
+    if ($sortedSubmittedIds !== $currentIds) {
+        admin_reorder_galleries_response(false, 'The gallery list changed while you were reordering. Reload the page and try again.');
+        return;
+    }
+
+    // Variable $validIds stores gallery ids as a lookup table for parent validation.
+    $validIds = array_fill_keys($currentIds, true);
+    // Variable $seenIds stores ids already encountered in submitted tree order.
+    $seenIds = [];
+    foreach ($submittedEntries as $entry) {
+        // Variable $galleryId stores the current gallery id being validated.
+        $galleryId = (int) $entry['id'];
+        // Variable $parentId stores the requested parent id being validated.
+        $parentId = (int) $entry['parent_id'];
+        if ($parentId === $galleryId) {
+            admin_reorder_galleries_response(false, 'A gallery cannot be moved under itself.');
+            return;
+        }
+        if ($parentId > 0 && !isset($validIds[$parentId])) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree referenced a missing parent gallery.');
+            return;
+        }
+        if ($parentId > 0 && !isset($seenIds[$parentId])) {
+            admin_reorder_galleries_response(false, 'A subgallery must appear below its parent in the submitted tree.');
+            return;
+        }
+        $seenIds[$galleryId] = true;
+    }
+
+    // Variable $currentParentById stores current parent ids keyed by gallery id.
+    $currentParentById = [];
+    foreach ($currentRows as $row) {
+        $currentParentById[(int) $row['id']] = (int) ($row['parent_id'] ?? 0);
+    }
+
+    // Variable $pdo stores the active database connection used for sibling order updates.
+    $pdo = db();
+    // Variable $now stores one timestamp shared by all sort_order updates.
+    $now = now_sql();
+    // Variable $movedCount stores how many gallery folders changed parent.
+    $movedCount = 0;
+    try {
+        foreach ($submittedEntries as $entry) {
+            // Variable $galleryId stores the gallery being checked for a parent move.
+            $galleryId = (int) $entry['id'];
+            // Variable $parentId stores the requested parent id, with zero meaning root.
+            $parentId = (int) $entry['parent_id'];
+            if (($currentParentById[$galleryId] ?? 0) === $parentId) {
+                continue;
+            }
+            move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null);
+            $movedCount++;
+            sync_gallery_parent_ids();
+        }
+
+        // Variable $siblingPositionByParent stores the next sort index for each parent id.
+        $siblingPositionByParent = [];
+        $pdo->beginTransaction();
+        // Variable $stmt stores the prepared update reused for each reordered gallery row.
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ?');
+        foreach ($submittedEntries as $entry) {
+            // Variable $parentId stores the submitted parent group whose sibling order is being assigned.
+            $parentId = (int) $entry['parent_id'];
+            // Variable $position stores the next sibling position in this parent group.
+            $position = ($siblingPositionByParent[$parentId] ?? 0) + 1;
+            $siblingPositionByParent[$parentId] = $position;
+            // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
+            $sortOrder = $position * 10;
+            $stmt->execute([$sortOrder, $now, (int) $entry['id']]);
+        }
+        $pdo->commit();
+
+        sync_gallery_parent_ids();
+        foreach ($submittedEntries as $entry) {
+            // Variable $gallery stores the refreshed row written to its gallery.json sidecar.
+            $gallery = find_gallery((int) $entry['id']);
+            if ($gallery) {
+                write_gallery_sidecar($gallery);
+            }
+        }
+        if (public_path_schema_ready()) {
+            regenerate_public_paths();
+        }
+        admin_log_event('info', 'gallery.reordered', 'Admin reordered gallery tree.', [
+            'galleries' => count($submittedEntries),
+            'moved_folders' => $movedCount,
+        ]);
+        admin_reorder_galleries_response(true, $movedCount > 0 ? 'Gallery order saved. Folder paths were updated for moved subgalleries.' : 'Gallery order saved.');
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'gallery.reorder_failed', 'Admin gallery reorder failed.', [
+            'error' => $exception->getMessage(),
+        ]);
+        admin_reorder_galleries_response(false, 'Gallery order could not be saved: ' . $exception->getMessage());
+    }
+}
+
+/**
+ * Sends a JSON response for Admin gallery reorder requests.
+ *
+ * @param bool $ok Whether the operation completed successfully.
+ * @param string $message Human-readable result message.
+ * @return void
+ */
+function admin_reorder_galleries_response(bool $ok, string $message): void
+{
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+}
+
+
+/**
  * Handles cms admin scan images logic for the gallery application.
  * @return mixed Result produced by this operation.
  */

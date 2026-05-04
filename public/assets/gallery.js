@@ -62,13 +62,14 @@ import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lig
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
+    setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupAdminLogStatusForms,
     setupGalleryRefreshProgress,
     setupGalleryUploadProgress,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js';
+} from './gallery-modules/admin-operations.js?v=20260504-gallery-tree-order';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -102,6 +103,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryBulkDeleteConfirmation();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
+    setupAdminGalleryReordering();
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
     setupGalleryUploadProgress();
