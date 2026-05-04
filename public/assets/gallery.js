@@ -38,8 +38,116 @@
             opacityControl.addEventListener('change', syncOpacity);
             syncOpacity();
         }
+        // columnsControl stores state or configuration for the gallery front-end flow.
+        const columnsControl = form.querySelector('[data-pagination-columns]');
+        // rowsControl stores state or configuration for the gallery front-end flow.
+        const rowsControl = form.querySelector('[data-pagination-rows]');
+        // columnsDisplay stores state or configuration for the gallery front-end flow.
+        const columnsDisplay = form.querySelector('[data-pagination-columns-display]');
+        // rowsDisplay stores state or configuration for the gallery front-end flow.
+        const rowsDisplay = form.querySelector('[data-pagination-rows-display]');
+        // itemsPreview stores state or configuration for the gallery front-end flow.
+        const itemsPreview = form.querySelector('[data-pagination-items-preview]');
+        if (columnsControl && rowsControl && columnsDisplay && rowsDisplay && itemsPreview) {
+            /**
+             * Handles sync pagination preview behavior for the gallery UI.
+             * @returns {*} Result of the UI operation, when a value is produced.
+             */
+            const syncPaginationPreview = () => {
+                // columns stores state or configuration for the gallery front-end flow.
+                const columns = Math.max(1, parseInt(columnsControl.value, 10) || 1);
+                // rows stores state or configuration for the gallery front-end flow.
+                const rows = Math.max(1, parseInt(rowsControl.value, 10) || 1);
+                columnsDisplay.textContent = String(columns);
+                rowsDisplay.textContent = String(rows);
+                itemsPreview.textContent = String(columns * rows);
+            };
+            columnsControl.addEventListener('input', syncPaginationPreview);
+            columnsControl.addEventListener('change', syncPaginationPreview);
+            rowsControl.addEventListener('input', syncPaginationPreview);
+            rowsControl.addEventListener('change', syncPaginationPreview);
+            syncPaginationPreview();
+        }
     }
 
+
+
+    /**
+     * Measures visible photo cards and updates responsive image sizes.
+     *
+     * The PHP markup provides a safe initial sizes hint for first parse. This
+     * client-side pass tightens the hint to the real rendered card width, so a
+     * dense grid can use 300 px or 600 px thumbnails instead of always asking
+     * the browser for 800 px candidates.
+     * @returns {*} Result of the UI operation, when a value is produced.
+     */
+    function setupResponsiveThumbnailSizes() {
+        // thumbnails stores visible gallery images that can benefit from measured sizes.
+        const thumbnails = Array.from(document.querySelectorAll('img[data-responsive-thumbnail]'));
+        if (!thumbnails.length) {
+            return;
+        }
+
+        /**
+         * Applies one measured CSS pixel width to an image and its source nodes.
+         * @param {HTMLImageElement} image Image element inside a public photo card.
+         * @returns {void}
+         */
+        function updateImageSizes(image) {
+            // card stores the nearest card, because it best represents the real grid cell width.
+            const card = image.closest('.image-card') || image.parentElement;
+            if (!card) {
+                return;
+            }
+            // measuredWidth stores the actual rendered width in CSS pixels.
+            const measuredWidth = Math.ceil(card.getBoundingClientRect().width || image.getBoundingClientRect().width || 0);
+            if (measuredWidth <= 0) {
+                return;
+            }
+            // sizesValue stores a concrete sizes hint understood by the browser srcset selector.
+            const sizesValue = `${measuredWidth}px`;
+            if (image.getAttribute('sizes') !== sizesValue) {
+                image.setAttribute('sizes', sizesValue);
+            }
+            // picture stores the optional wrapper that may contain WebP and JPEG sources.
+            const picture = image.closest('picture');
+            if (picture) {
+                picture.querySelectorAll('source[sizes]').forEach((source) => {
+                    source.setAttribute('sizes', sizesValue);
+                });
+            }
+        }
+
+        /**
+         * Updates all public thumbnail sizes after layout changes.
+         * @returns {void}
+         */
+        function updateAllImageSizes() {
+            thumbnails.forEach(updateImageSizes);
+        }
+
+        updateAllImageSizes();
+
+        if ('ResizeObserver' in window) {
+            // observer stores resize notifications for gallery cards and the surrounding image grid.
+            const observer = new ResizeObserver(updateAllImageSizes);
+            // observedElements stores unique layout elements that can alter thumbnail widths.
+            const observedElements = new Set();
+            thumbnails.forEach((image) => {
+                const card = image.closest('.image-card');
+                if (card) {
+                    observedElements.add(card);
+                }
+                const grid = image.closest('[data-gallery-image-list]');
+                if (grid) {
+                    observedElements.add(grid);
+                }
+            });
+            observedElements.forEach((element) => observer.observe(element));
+        } else {
+            window.addEventListener('resize', updateAllImageSizes);
+        }
+    }
 
     /**
      * Handles setup favicon cropper behavior for the gallery UI.
@@ -394,9 +502,13 @@
         });
     });
 
-    // Lightbox state is derived from rendered image cards. Normal image links
-    // remain valid when JavaScript is unavailable.
-    const cards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
+    // Lightbox state is derived from a dedicated ordered source list when pagination is active.
+    // Normal visible image links remain valid when JavaScript is unavailable.
+    const visibleLightboxCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
+    // lightboxSourceCards stores the complete gallery order used by fullscreen navigation.
+    const lightboxSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
+    // cards stores the authoritative image order for the viewer.
+    const cards = lightboxSourceCards.length > 0 ? lightboxSourceCards : visibleLightboxCards;
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
     setupAdminGalleryTree();
@@ -1492,9 +1604,16 @@
         return ['slow-2g', '2g'].includes(connection.effectiveType);
     }
 
-    cards.forEach((card, index) => {
+    // clickableLightboxCards stores visible cards plus hidden ordered sources used by direct image URLs.
+    const clickableLightboxCards = lightboxSourceCards.length > 0 ? visibleLightboxCards.concat(lightboxSourceCards) : cards;
+    clickableLightboxCards.forEach((card) => {
         card.addEventListener('click', (event) => {
             if (event.target.closest('form, [data-admin-inline-editor], [data-photo-map], [data-gallery-map-url]')) {
+                return;
+            }
+            // index stores the card position in the complete viewer order.
+            const index = cards.findIndex((candidate) => candidate.dataset.imageId === card.dataset.imageId);
+            if (index < 0) {
                 return;
             }
             event.preventDefault();
@@ -3827,8 +3946,10 @@
     }
 
     if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupResponsiveThumbnailSizes, {once: true});
         document.addEventListener('DOMContentLoaded', setupAdminImageReordering, {once: true});
     } else {
+        setupResponsiveThumbnailSizes();
         setupAdminImageReordering();
     }
 

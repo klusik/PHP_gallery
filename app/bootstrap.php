@@ -213,6 +213,9 @@ function cms_route_from_request(): array
     if ($segments === ['favicon.ico'] || $segments === ['favicon.png']) {
         return ['page' => 'favicon_asset', 'params' => ['s' => '32']];
     }
+    if ($segments[0] === 'galleries' && isset($segments[1]) && preg_match('/^[0-9]+$/', $segments[1]) === 1) {
+        return ['page' => 'home', 'params' => ['gallery_page' => max(1, (int) $segments[1])]];
+    }
     if ($segments[0] === 'gallery' && isset($segments[1])) {
         // $gallerySegments stores an intermediate value used by the surrounding gallery workflow.
         $gallerySegments = array_slice($segments, 1);
@@ -235,6 +238,34 @@ function cms_route_from_request(): array
                 'page' => 'public_media',
                 'params' => ['public_path' => rawurldecode(implode('/', $gallerySegments))],
             ];
+        }
+        if (count($gallerySegments) >= 3) {
+            // $typedPageSegment stores an optional clean pagination kind, such as galleries/2.
+            $typedPageSegment = $gallerySegments[count($gallerySegments) - 2] ?? '';
+            // $typedPageNumber stores an optional clean pagination page number.
+            $typedPageNumber = (string) ($gallerySegments[count($gallerySegments) - 1] ?? '');
+            if ($typedPageSegment === 'galleries' && preg_match('/^[0-9]+$/', $typedPageNumber) === 1) {
+                // $fullPath stores the complete path so real child galleries keep priority over pagination suffixes.
+                $fullPath = rawurldecode(implode('/', $gallerySegments));
+                // $galleryPath stores the gallery path before the typed pagination suffix.
+                $galleryPath = rawurldecode(implode('/', array_slice($gallerySegments, 0, -2)));
+                if ($galleryPath !== '' && !find_gallery_by_public_path($fullPath) && find_gallery_by_public_path($galleryPath)) {
+                    return ['page' => 'gallery', 'params' => ['public_path' => $galleryPath, 'gallery_page' => max(1, (int) $typedPageNumber)]];
+                }
+            }
+        }
+        if (is_string($lastSegment) && preg_match('/^[0-9]+$/', $lastSegment) === 1) {
+            // $fullPath stores the complete path so numeric image slugs or child galleries keep working.
+            $fullPath = rawurldecode(implode('/', $gallerySegments));
+            // $fullResolved stores any real image match so numeric image slugs keep working.
+            $fullResolved = resolve_public_gallery_path($fullPath, false);
+            if (!find_gallery_by_public_path($fullPath) && empty($fullResolved['image'])) {
+                // $galleryPath stores the gallery path before the clean photo pagination suffix.
+                $galleryPath = rawurldecode(implode('/', array_slice($gallerySegments, 0, -1)));
+                if ($galleryPath !== '' && find_gallery_by_public_path($galleryPath)) {
+                    return ['page' => 'gallery', 'params' => ['public_path' => $galleryPath, 'photo_page' => max(1, (int) $lastSegment)]];
+                }
+            }
         }
         return ['page' => 'gallery', 'params' => ['public_path' => rawurldecode(implode('/', $gallerySegments))]];
     }
