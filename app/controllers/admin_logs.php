@@ -1,4 +1,37 @@
 <?php
+
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/controllers/admin_logs.php
+ * Module Type: Controller
+ *
+ * Purpose:
+ *   Handles request-level application logic for the related gallery feature.
+ *
+ * Responsibilities:
+ *   - Validate and route incoming request data
+ *   - Call service-layer functions where possible
+ *   - Return redirects, rendered views, or HTTP responses
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 /**
  * Administrative log controller model.
  *
@@ -69,34 +102,80 @@ function render_admin_feature_flag(bool $enabled, string $symbol, string $label)
 function cms_admin_logs(): void
 {
     require_admin();
-    // Variable $status stores this steps working value.
+    // $status stores the workflow status filter.
     $status = isset($_GET['status']) ? (string) $_GET['status'] : null;
-    // Variable $logs stores this steps working value.
-    $logs = admin_log_list($status, 100);
+    // $category stores the operational category filter.
+    $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
+    // $severity stores the severity filter.
+    $severity = isset($_GET['severity']) ? (string) $_GET['severity'] : '';
+    // $query stores the text search filter.
+    $query = trim((string) ($_GET['q'] ?? ''));
+    // $logs stores the filtered admin log entries.
+    $logs = admin_log_list($status, 150, [
+        'category' => $category,
+        'severity' => $severity,
+        'q' => $query,
+    ]);
     render_header('Admin log');
-    echo '<section class="hero"><h1>Admin log</h1><nav class="nav">';
+    echo '<section class="hero"><h1>Admin log</h1><p>Operational events, failures, maintenance actions, and workflow states.</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">Anonymous telemetry</a>';
     echo '</nav></section>';
-    echo '<section class="panel"><h2>Filter</h2><div class="nav">';
-    echo '<a class="button' . ($status === null ? '' : ' secondary') . '" href="' . e(url_for('admin_logs')) . '">All</a>';
+
+    echo '<section class="panel"><h2>Filters</h2><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid">';
+    echo '<input type="hidden" name="page" value="admin_logs">';
+    echo '<label>Status<select name="status"><option value="">All states</option>';
     foreach (admin_log_status_options() as $value => $label) {
-        echo '<a class="button' . ($status === $value ? '' : ' secondary') . '" href="' . e(url_for('admin_logs', ['status' => $value])) . '">' . e($label) . '</a>';
+        echo '<option value="' . e($value) . '"' . ($status === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
-    echo '</div></section>';
+    echo '</select></label>';
+    echo '<label>Category<select name="category"><option value="">All categories</option>';
+    foreach (admin_log_category_options() as $value => $label) {
+        echo '<option value="' . e($value) . '"' . ($category === $value ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<label>Severity<select name="severity"><option value="">All severities</option>';
+    foreach (admin_log_severity_options() as $value => $label) {
+        echo '<option value="' . e($value) . '"' . ($severity === $value ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<label>Search<input name="q" value="' . e($query) . '" placeholder="Event key or message"></label>';
+    echo '<div class="bulk-row"><button type="submit">Apply filters</button><a class="button secondary" href="' . e(url_for('admin_logs')) . '">Clear</a></div>';
+    echo '</form></section>';
+
     if (!$logs) {
-        echo '<section class="panel"><p>No log entries yet.</p></section>';
+        echo '<section class="panel"><p>No log entries match the current filters.</p></section>';
         render_footer();
         return;
     }
     echo '<section class="panel"><h2>Entries</h2>';
-    echo '<table><thead><tr><th>Select</th><th>When</th><th>State</th><th>Event</th><th>Message</th><th>By</th><th>Set state</th></tr></thead><tbody>';
+    echo '<table class="admin-log-table"><thead><tr><th>Select</th><th>When</th><th>State</th><th>Severity</th><th>Category</th><th>Event</th><th>Message</th><th>By</th><th>Set state</th></tr></thead><tbody>';
     foreach ($logs as $entry) {
+        // $context stores decoded structured context shown under the message.
+        $context = [];
+        if (!empty($entry['context_json'])) {
+            $decoded = json_decode((string) $entry['context_json'], true);
+            $context = is_array($decoded) ? $decoded : [];
+        }
         echo '<tr data-admin-log-row>';
         echo '<td><input type="checkbox" name="log_ids[]" value="' . (int) $entry['id'] . '" form="admin-log-bulk-form"></td>';
         echo '<td>' . e((string) $entry['created_at']) . '</td>';
         echo '<td data-admin-log-state>' . e(admin_log_status_label((string) ($entry['status'] ?? 'todo'))) . '</td>';
-        echo '<td>' . e((string) $entry['event_key']) . '</td>';
-        echo '<td>' . e((string) $entry['message']) . '</td>';
+        echo '<td><span class="log-severity log-severity-' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '">' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</span></td>';
+        echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
+        echo '<td><code>' . e((string) $entry['event_key']) . '</code>';
+        if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
+            echo '<div class="muted">' . e((string) ($entry['subject_type'] ?? '')) . ' #' . e((string) ($entry['subject_id'] ?? '')) . '</div>';
+        }
+        echo '</td>';
+        echo '<td>' . e((string) $entry['message']);
+        if ($context) {
+            echo '<details class="log-context"><summary>Details</summary><pre>' . e(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre></details>';
+        }
+        if (!empty($entry['request_id'])) {
+            echo '<div class="muted">Request ' . e((string) $entry['request_id']) . '</div>';
+        }
+        echo '</td>';
         echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
         echo '<td><select name="status" data-admin-log-status-select data-log-id="' . (int) $entry['id'] . '" data-update-url="' . e(url_for('admin_log_update')) . '" data-csrf-token="' . e(csrf_token()) . '">';
         foreach (admin_log_status_options() as $value => $label) {

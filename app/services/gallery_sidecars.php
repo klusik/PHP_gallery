@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/services/gallery_sidecars.php
+ * Module Type: Service
+ *
+ * Purpose:
+ *   Provides reusable application logic for gallery data, media, settings, or maintenance workflows.
+ *
+ * Responsibilities:
+ *   - Keep domain logic reusable outside controllers
+ *   - Protect existing behavior with small focused functions
+ *   - Return predictable values for callers
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
 /**
@@ -200,6 +232,11 @@ function write_gallery_sidecar(array $gallery): void
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
+    if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
+        $data['grid_columns'] = (int) $gallery['grid_columns'];
+        $data['grid_rows'] = (int) $gallery['grid_rows'];
+        $data['grid_use_for_subgalleries'] = (int) ($gallery['grid_use_for_subgalleries'] ?? 1);
+    }
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
         $data['access_listing'] = $gallery['access_listing'] ?? 'listed';
@@ -241,6 +278,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'visibility' => $metadata['visibility'] ?? 'draft',
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
+        'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
+        'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
+        'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -281,6 +321,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $showFilenames = gallery_filename_display_schema_ready() && (int) ($candidate['show_filenames'] ?? 0) === 1 ? 1 : 0;
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
+    // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
+    $candidateHasGrid = gallery_grid_schema_ready() && isset($candidate['grid_columns'], $candidate['grid_rows']) && $candidate['grid_columns'] !== null && $candidate['grid_rows'] !== null;
     // $accessListing stores an intermediate value used by the surrounding gallery workflow.
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
@@ -304,6 +346,14 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_filename_display_schema_ready()) {
         $columns[] = 'show_filenames';
         $values[] = $showFilenames;
+    }
+    if (gallery_grid_schema_ready()) {
+        $columns[] = 'grid_columns';
+        $columns[] = 'grid_rows';
+        $columns[] = 'grid_use_for_subgalleries';
+        $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
+        $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
+        $values[] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
     }
     if (gallery_access_schema_ready()) {
         $columns[] = 'access_mode';

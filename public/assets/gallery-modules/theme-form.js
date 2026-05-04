@@ -1,0 +1,306 @@
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/gallery-modules/theme-form.js
+ * Module Type: Browser Module
+ *
+ * Purpose:
+ *   Provides client-side behavior for the PHP Gallery user interface.
+ *
+ * Responsibilities:
+ *   - Attach behavior to existing server-rendered markup
+ *   - Keep DOM interaction predictable and readable
+ *   - Avoid unnecessary layout work in performance-sensitive paths
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
+/**
+ * Theme and pagination form helpers
+ *
+ * Keeps admin theme controls interactive without requiring a page reload before submit.
+ *
+ * Example usage from the gallery entrypoint:
+ *
+ * import { setupExample } from './gallery-modules/example.js';
+ * setupExample();
+ */
+
+
+/**
+ * Keeps one range slider display span synchronized with its current value.
+ *
+ * This helper is intentionally independent from the Theme form because gallery
+ * edit pages also expose display-grid sliders while using a different form.
+ *
+ * @param {string} controlSelector CSS selector for the range input.
+ * @param {string} displaySelector CSS selector for the text value.
+ * @returns {void}
+ */
+function syncGridRangeDisplay(controlSelector, displaySelector) {
+    // controls stores every slider matching the requested control selector.
+    const controls = Array.from(document.querySelectorAll(controlSelector));
+    // displays stores every numeric readout matching the requested display selector.
+    const displays = Array.from(document.querySelectorAll(displaySelector));
+    if (controls.length === 0 || displays.length === 0) {
+        return;
+    }
+
+    controls.forEach((control, index) => {
+        // display stores the paired value readout. When only one display exists,
+        // it is reused for the single slider on the current admin page.
+        const display = displays[index] || displays[0];
+        if (!display) {
+            return;
+        }
+
+        /**
+         * Copies the sanitized slider value to the visible display element.
+         *
+         * @returns {void}
+         */
+        const syncValue = () => {
+            display.textContent = String(Math.max(1, parseInt(control.value, 10) || 1));
+        };
+
+        control.addEventListener('input', syncValue);
+        control.addEventListener('change', syncValue);
+        syncValue();
+    });
+}
+
+
+/**
+ * Automatically enables a per-gallery grid override when the admin edits its sliders.
+ *
+ * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
+ * form will persist those numbers as a custom gallery grid, instead of silently
+ * treating the gallery as inherited because the override checkbox was forgotten.
+ *
+ * @returns {void}
+ */
+function setupGalleryGridOverrideAutoEnable() {
+    // overrideControl stores the checkbox deciding whether this gallery owns a grid.
+    const overrideControl = document.querySelector('[data-gallery-grid-override-enabled]');
+    if (!overrideControl) {
+        return;
+    }
+
+    // gridControls stores the per-gallery sliders that imply an explicit override.
+    const gridControls = document.querySelectorAll('[data-gallery-grid-columns], [data-gallery-grid-rows]');
+    gridControls.forEach((control) => {
+        control.addEventListener('input', () => {
+            overrideControl.checked = true;
+        });
+        control.addEventListener('change', () => {
+            overrideControl.checked = true;
+        });
+    });
+}
+
+
+/**
+ * Reads the first matching form control value from the Theme form.
+ *
+ * @param {HTMLFormElement} form Theme form containing the appearance controls.
+ * @param {string} selector CSS selector for the desired control.
+ * @param {string} fallback Value used when the control is missing.
+ * @returns {string} Current control value or fallback.
+ */
+function themeControlValue(form, selector, fallback) {
+    // control stores the matching input, select, or range element used by the preview.
+    const control = form.querySelector(selector);
+    if (!control || typeof control.value !== 'string') {
+        return fallback;
+    }
+    return control.value || fallback;
+}
+
+
+/**
+ * Converts the two stored font modes into the real preview CSS font stack.
+ *
+ * @param {string} fontMode Theme font mode from the Admin select control.
+ * @returns {string} CSS font-family value for the live preview.
+ */
+function themePreviewFontFamily(fontMode) {
+    if (fontMode === 'sans') {
+        return 'Arial, Helvetica, sans-serif';
+    }
+    return 'Georgia, Times New Roman, serif';
+}
+
+
+/**
+ * Keeps the compact Appearance preview synchronized with unsaved form values.
+ *
+ * The preview uses local CSS variables so it can mirror public styling without
+ * changing the real Admin page while the user is still editing.
+ *
+ * @param {HTMLFormElement} form Theme form containing the appearance controls.
+ * @returns {void}
+ */
+function setupThemeLivePreview(form) {
+    // previewRoot stores the split Appearance editor that owns all preview state.
+    const previewRoot = form.querySelector('[data-theme-preview-root]');
+    // previewPage stores the miniature public page shown on the right side.
+    const previewPage = form.querySelector('[data-theme-preview-page]');
+    if (!previewRoot || !previewPage) {
+        return;
+    }
+
+    // brandText stores the visible site title inside the preview header.
+    const brandText = form.querySelector('[data-theme-preview-brand]');
+    // siteNameControl stores the real site-name field, which is not a color override but should still update visually.
+    const siteNameControl = form.querySelector('[data-theme-preview-site-name]');
+    // radiusDisplay stores the small px readout beside the Rounded corners slider.
+    const radiusDisplay = form.querySelector('[data-theme-radius-display]');
+    // backgroundImage stores the inner preview element that simulates the public background image layer.
+    const backgroundImage = form.querySelector('[data-theme-preview-background-image]');
+    // backgroundUrl stores the already-saved theme background URL supplied by the PHP controller.
+    const backgroundUrl = previewRoot.getAttribute('data-theme-preview-background-url') || '';
+
+    /**
+     * Copies all unsaved visual settings into the preview CSS variables.
+     *
+     * @returns {void}
+     */
+    const syncPreview = () => {
+        // colorMap stores form field names and their corresponding preview CSS variables.
+        const colorMap = {
+            accent: '--preview-accent',
+            accent_dark: '--preview-accent-dark',
+            paper: '--preview-paper',
+            panel: '--preview-panel',
+            gallery_panel: '--preview-gallery-panel',
+            header_text: '--preview-header-text',
+            hero_text: '--preview-hero-text',
+        };
+
+        Object.entries(colorMap).forEach(([colorName, cssVariable]) => {
+            // control stores the color picker bound to the current visual property.
+            const control = form.querySelector(`[data-theme-preview-color="${colorName}"]`);
+            if (control && typeof control.value === 'string') {
+                previewPage.style.setProperty(cssVariable, control.value);
+            }
+        });
+
+        // radiusValue stores the sanitized border-radius value used by preview cards and controls.
+        const radiusValue = Math.max(0, Math.min(32, parseInt(themeControlValue(form, '[data-theme-preview-radius]', '16'), 10) || 0));
+        previewPage.style.setProperty('--preview-radius', `${radiusValue}px`);
+        if (radiusDisplay) {
+            radiusDisplay.textContent = `${radiusValue}px`;
+        }
+
+        // fontMode stores the selected serif/sans display mode.
+        const fontMode = themeControlValue(form, '[data-theme-preview-font]', 'serif');
+        previewPage.style.setProperty('--preview-font-family', themePreviewFontFamily(fontMode));
+
+        // backgroundOpacity stores the same 0-100 percentage used by the public theme background layer.
+        const backgroundOpacity = Math.max(0, Math.min(100, parseInt(themeControlValue(form, '[data-theme-background-opacity]', '65'), 10) || 0));
+        previewPage.style.setProperty('--preview-background-opacity', String(backgroundOpacity / 100));
+
+        if (backgroundImage) {
+            backgroundImage.style.backgroundImage = backgroundUrl !== '' ? `url("${backgroundUrl}")` : 'none';
+        }
+
+        if (siteNameControl && brandText) {
+            brandText.textContent = siteNameControl.value.trim() || 'Gallery CMS';
+        }
+    };
+
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-background-opacity], [data-theme-preview-site-name]').forEach((control) => {
+        control.addEventListener('input', syncPreview);
+        control.addEventListener('change', syncPreview);
+    });
+    syncPreview();
+}
+
+export function setupThemeOverrideForm() {
+    syncGridRangeDisplay('[data-home-grid-columns]', '[data-home-grid-columns-display]');
+    syncGridRangeDisplay('[data-home-grid-rows]', '[data-home-grid-rows-display]');
+    syncGridRangeDisplay('[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]');
+    syncGridRangeDisplay('[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]');
+    setupGalleryGridOverrideAutoEnable();
+
+    // form stores state or configuration for the gallery front-end flow.
+    const form = document.querySelector('[data-theme-form]');
+    if (!form) {
+        return;
+    }
+    setupThemeLivePreview(form);
+    // changed stores state or configuration for the gallery front-end flow.
+    const changed = form.querySelector('[data-theme-controls-changed]');
+    if (!changed) {
+        return;
+    }
+    form.querySelectorAll('[data-theme-override-control]').forEach((control) => {
+        control.addEventListener('input', () => {
+            changed.value = '1';
+        });
+        control.addEventListener('change', () => {
+            changed.value = '1';
+        });
+    });
+    // opacityControl stores state or configuration for the gallery front-end flow.
+    const opacityControl = form.querySelector('[data-theme-background-opacity]');
+    // opacityDisplay stores state or configuration for the gallery front-end flow.
+    const opacityDisplay = form.querySelector('[data-theme-background-opacity-display]');
+    if (opacityControl && opacityDisplay) {
+        /**
+         * Handles sync opacity behavior for the gallery UI.
+         * @returns {*} Result of the UI operation, when a value is produced.
+         */
+        const syncOpacity = () => {
+            opacityDisplay.textContent = `${opacityControl.value}%`;
+        };
+        opacityControl.addEventListener('input', syncOpacity);
+        opacityControl.addEventListener('change', syncOpacity);
+        syncOpacity();
+    }
+    // columnsControl stores state or configuration for the gallery front-end flow.
+    const columnsControl = form.querySelector('[data-pagination-columns]');
+    // rowsControl stores state or configuration for the gallery front-end flow.
+    const rowsControl = form.querySelector('[data-pagination-rows]');
+    // columnsDisplay stores state or configuration for the gallery front-end flow.
+    const columnsDisplay = form.querySelector('[data-pagination-columns-display]');
+    // rowsDisplay stores state or configuration for the gallery front-end flow.
+    const rowsDisplay = form.querySelector('[data-pagination-rows-display]');
+    // itemsPreview stores state or configuration for the gallery front-end flow.
+    const itemsPreview = form.querySelector('[data-pagination-items-preview]');
+    if (columnsControl && rowsControl && columnsDisplay && rowsDisplay && itemsPreview) {
+        /**
+         * Handles sync pagination preview behavior for the gallery UI.
+         * @returns {*} Result of the UI operation, when a value is produced.
+         */
+        const syncPaginationPreview = () => {
+            // columns stores state or configuration for the gallery front-end flow.
+            const columns = Math.max(1, parseInt(columnsControl.value, 10) || 1);
+            // rows stores state or configuration for the gallery front-end flow.
+            const rows = Math.max(1, parseInt(rowsControl.value, 10) || 1);
+            columnsDisplay.textContent = String(columns);
+            rowsDisplay.textContent = String(rows);
+            itemsPreview.textContent = String(columns * rows);
+        };
+        columnsControl.addEventListener('input', syncPaginationPreview);
+        columnsControl.addEventListener('change', syncPaginationPreview);
+        rowsControl.addEventListener('input', syncPaginationPreview);
+        rowsControl.addEventListener('change', syncPaginationPreview);
+        syncPaginationPreview();
+    }
+}

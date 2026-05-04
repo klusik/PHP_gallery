@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/helpers.php
+ * Module Type: Core Module
+ *
+ * Purpose:
+ *   Provides core bootstrap, configuration, helper, security, database, or routing functionality.
+ *
+ * Responsibilities:
+ *   - Support shared project infrastructure
+ *   - Keep behavior compatible with existing controllers and services
+ *   - Avoid unnecessary coupling to presentation code
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
 /**
@@ -563,6 +595,7 @@ function admin_menu_structure(): array
             'items' => [
                 ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
+                ['label' => 'Telemetry', 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
                 ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
@@ -737,6 +770,16 @@ function append_cms_footer_script(string $script): void
     $GLOBALS['cms_footer_scripts'][] = $script;
 }
 
+
+/**
+ * Append raw footer HTML for the next rendered page.
+ */
+function append_cms_footer_html(string $html): void
+{
+    $GLOBALS['cms_footer_html'] = (array) ($GLOBALS['cms_footer_html'] ?? []);
+    $GLOBALS['cms_footer_html'][] = $html;
+}
+
 /**
  * Return buffered footer scripts and clear them after rendering.
  */
@@ -749,6 +792,12 @@ function cms_footer_scripts_html(): string
     $html = '';
     foreach ($scripts as $script) {
         $html .= '<script>' . $script . '</script>';
+    }
+    // $footerHtml stores raw footer HTML snippets prepared by trusted server-side code.
+    $footerHtml = (array) ($GLOBALS['cms_footer_html'] ?? []);
+    $GLOBALS['cms_footer_html'] = [];
+    foreach ($footerHtml as $snippet) {
+        $html .= (string) $snippet;
     }
     return $html;
 }
@@ -790,7 +839,7 @@ function render_footer(): void
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
-    echo '<script src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '" defer></script>';
+    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }

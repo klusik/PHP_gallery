@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/services.php
+ * Module Type: Core Module
+ *
+ * Purpose:
+ *   Provides core bootstrap, configuration, helper, security, database, or routing functionality.
+ *
+ * Responsibilities:
+ *   - Support shared project infrastructure
+ *   - Keep behavior compatible with existing controllers and services
+ *   - Avoid unnecessary coupling to presentation code
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
 
@@ -17,6 +49,8 @@ require_once __DIR__ . '/services/favicon.php';
 require_once __DIR__ . '/services/gallery_backgrounds.php';
 // Load reusable pagination helpers before controllers render public lists.
 require_once __DIR__ . '/services/pagination.php';
+// Load gallery-grid inheritance helpers after pagination dimension helpers are available.
+require_once __DIR__ . '/services/gallery_grid.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
 require_once __DIR__ . '/services/image_scanning.php';
@@ -32,6 +66,11 @@ require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
 require_once __DIR__ . '/services/logs.php';
+require_once __DIR__ . '/services/telemetry_settings.php';
+require_once __DIR__ . '/services/telemetry_privacy.php';
+require_once __DIR__ . '/services/telemetry.php';
+require_once __DIR__ . '/services/telemetry_rollup.php';
+require_once __DIR__ . '/services/database_observer.php';
 require_once __DIR__ . '/services/updates.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';

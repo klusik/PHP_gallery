@@ -1,8 +1,40 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/bootstrap.php
+ * Module Type: Core Module
+ *
+ * Purpose:
+ *   Provides core bootstrap, configuration, helper, security, database, or routing functionality.
+ *
+ * Responsibilities:
+ *   - Support shared project infrastructure
+ *   - Keep behavior compatible with existing controllers and services
+ *   - Avoid unnecessary coupling to presentation code
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
-const CMS_VERSION = '0.53';
+const CMS_VERSION = '0.54';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -154,6 +186,10 @@ function cms_run(): void
         'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
+        'admin_telemetry' => 'cms_admin_telemetry',
+        'admin_telemetry_settings' => 'cms_admin_telemetry_settings',
+        'admin_telemetry_maintenance' => 'cms_admin_telemetry_maintenance',
+        'telemetry_ingest' => 'cms_telemetry_ingest',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
         'admin_reorder_images' => 'cms_admin_reorder_images',

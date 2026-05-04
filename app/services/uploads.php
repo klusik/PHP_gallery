@@ -1,5 +1,37 @@
 <?php
 
+/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: app/services/uploads.php
+ * Module Type: Service
+ *
+ * Purpose:
+ *   Provides reusable application logic for gallery data, media, settings, or maintenance workflows.
+ *
+ * Responsibilities:
+ *   - Keep domain logic reusable outside controllers
+ *   - Protect existing behavior with small focused functions
+ *   - Return predictable values for callers
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
 declare(strict_types=1);
 
 /**
