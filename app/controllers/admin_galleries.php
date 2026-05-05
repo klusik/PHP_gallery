@@ -102,6 +102,10 @@ function cms_admin_import(): void
 function cms_admin_new_gallery(): void
 {
     require_admin();
+    // $prefillParentId stores the gallery that should be pre-selected when this form is opened from a public gallery page.
+    $prefillParentId = selected_gallery_id_from_query('parent_id');
+    // $prefillParentGallery stores the validated parent gallery record used for contextual helper text.
+    $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = '';
     if (request_method() === 'POST') {
@@ -132,13 +136,16 @@ function cms_admin_new_gallery(): void
 
     render_header('Create empty gallery');
     echo '<section class="hero"><h1>Create empty gallery</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></nav></section>';
+    if ($prefillParentGallery) {
+        echo '<div class="notice">New gallery will be created inside: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+    }
     if ($error !== '') {
         echo '<div class="notice">Create failed: ' . e($error) . '</div>';
     }
     echo '<section class="panel"><form method="post" class="form-grid">' . csrf_field();
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
-    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
+    echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
@@ -1791,14 +1798,16 @@ function gallery_parent_options(array $currentGallery): string
  * Handles gallery parent options for new logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
-function gallery_parent_options_for_new(): string
+function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
 {
     // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
     // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
-        $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+        // $selected stores the HTML selected marker for contextual admin links opened from a gallery page.
+        $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
+        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
     }
     return $html;
 }
@@ -1807,16 +1816,35 @@ function gallery_parent_options_for_new(): string
  * Handles gallery options for select logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
-function gallery_options_for_select(): string
+function gallery_options_for_select(int $selectedGalleryId = 0): string
 {
     // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
     // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
-        $html .= '<option value="' . (int) $gallery['id'] . '">' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+        // $selected stores the HTML selected marker for contextual upload links opened from a gallery page.
+        $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
+        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
     }
     return $html;
+}
+
+/**
+ * Read a gallery ID from the query string and only return it when the gallery exists.
+ *
+ * Contextual admin shortcuts pass gallery IDs through GET parameters. Validating the
+ * identifier here keeps form pre-selection defensive and prevents stale or manually
+ * edited URLs from selecting a non-existent gallery row.
+ */
+function selected_gallery_id_from_query(string $parameterName): int
+{
+    // $galleryId stores the normalized numeric query parameter.
+    $galleryId = (int) ($_GET[$parameterName] ?? 0);
+    if ($galleryId <= 0) {
+        return 0;
+    }
+    return find_gallery($galleryId) ? $galleryId : 0;
 }
 
 /**
