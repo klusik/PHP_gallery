@@ -147,6 +147,23 @@ function themePreviewFontFamily(fontMode) {
 
 
 /**
+ * Clamps the custom page-width value shared by the slider, number input, preview, and PHP validator.
+ *
+ * @param {string|number} value Raw value coming from either width control.
+ * @returns {number} Safe pixel width between 1024 and 2048.
+ */
+function customPageWidthValue(value) {
+    // width stores the parsed pixel width before clamping to the supported public layout range.
+    const width = parseInt(String(value), 10);
+    if (!Number.isFinite(width)) {
+        return 1440;
+    }
+    return Math.max(1024, Math.min(2048, width));
+}
+
+
+
+/**
  * Keeps the compact Appearance preview synchronized with unsaved form values.
  *
  * The preview uses local CSS variables so it can mirror public styling without
@@ -174,6 +191,40 @@ function setupThemeLivePreview(form) {
     const backgroundImage = form.querySelector('[data-theme-preview-background-image]');
     // backgroundUrl stores the already-saved theme background URL supplied by the PHP controller.
     const backgroundUrl = previewRoot.getAttribute('data-theme-preview-background-url') || '';
+    // pageWidthSelect stores the preset selector that decides whether the custom-width controls are visible.
+    const pageWidthSelect = form.querySelector('[data-theme-page-width-select]');
+    // customWidthShell stores the conditional slider/number UI for the Custom page-width preset.
+    const customWidthShell = form.querySelector('[data-theme-custom-width-control]');
+    // customWidthSlider stores the range control used for quick custom-width tuning.
+    const customWidthSlider = form.querySelector('[data-theme-custom-width-slider]');
+    // customWidthNumber stores the direct pixel input saved by the PHP controller.
+    const customWidthNumber = form.querySelector('[data-theme-custom-width-number]');
+    // customWidthDisplay stores the visible px readout beside the slider.
+    const customWidthDisplay = form.querySelector('[data-theme-custom-width-display]');
+
+    /**
+     * Synchronizes the custom-width slider, number input, readout, and preview scale.
+     *
+     * @param {HTMLInputElement|null} sourceControl Control that initiated the update, if any.
+     * @returns {number} Safe custom width in pixels.
+     */
+    const syncCustomWidthControls = (sourceControl = null) => {
+        // sourceValue stores the value from the changed control, preferring the number input when called during initial setup.
+        const sourceValue = sourceControl ? sourceControl.value : (customWidthNumber ? customWidthNumber.value : '1440');
+        // customWidth stores the clamped pixel value shared by all custom-width UI elements.
+        const customWidth = customPageWidthValue(sourceValue);
+        if (customWidthSlider && sourceControl !== customWidthSlider) {
+            customWidthSlider.value = String(customWidth);
+        }
+        if (customWidthNumber && sourceControl !== customWidthNumber) {
+            customWidthNumber.value = String(customWidth);
+        }
+        if (customWidthDisplay) {
+            customWidthDisplay.textContent = `${customWidth}px`;
+        }
+        previewPage.style.setProperty('--preview-custom-width-scale', String((customWidth - 1024) / 1024));
+        return customWidth;
+    };
 
     /**
      * Copies all unsaved visual settings into the preview CSS variables.
@@ -211,6 +262,17 @@ function setupThemeLivePreview(form) {
         const fontMode = themeControlValue(form, '[data-theme-preview-font]', 'serif');
         previewPage.style.setProperty('--preview-font-family', themePreviewFontFamily(fontMode));
 
+        // pageWidthMode stores the public container preset chosen in the Appearance form.
+        // The compact preview cannot use real viewport pixels, so it represents the
+        // choice by changing how much of the preview column the simulated page occupies.
+        const pageWidthMode = themeControlValue(form, '[data-theme-preview-width]', 'default');
+        const normalizedPageWidthMode = ['default', 'wide', 'custom', 'full'].includes(pageWidthMode) ? pageWidthMode : 'default';
+        previewPage.setAttribute('data-preview-width', normalizedPageWidthMode);
+        if (customWidthShell) {
+            customWidthShell.hidden = normalizedPageWidthMode !== 'custom';
+        }
+        syncCustomWidthControls();
+
         // backgroundOpacity stores the same 0-100 percentage used by the public theme background layer.
         const backgroundOpacity = Math.max(0, Math.min(100, parseInt(themeControlValue(form, '[data-theme-background-opacity]', '65'), 10) || 0));
         previewPage.style.setProperty('--preview-background-opacity', String(backgroundOpacity / 100));
@@ -224,9 +286,22 @@ function setupThemeLivePreview(form) {
         }
     };
 
-    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-background-opacity], [data-theme-preview-site-name]').forEach((control) => {
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name]').forEach((control) => {
         control.addEventListener('input', syncPreview);
         control.addEventListener('change', syncPreview);
+    });
+    [customWidthSlider, customWidthNumber].forEach((control) => {
+        if (!control) {
+            return;
+        }
+        control.addEventListener('input', () => {
+            syncCustomWidthControls(control);
+            syncPreview();
+        });
+        control.addEventListener('change', () => {
+            syncCustomWidthControls(control);
+            syncPreview();
+        });
     });
     syncPreview();
 }

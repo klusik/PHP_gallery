@@ -671,6 +671,9 @@ function render_header(string $title): void
     $page = (string) ($_GET['page'] ?? 'home');
     // Variable $bodyClass stores this steps working value.
     $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
+    // $pageWidthClass stores a public layout class selected in Theme settings.
+    // Admin pages intentionally keep their own workspace width so dense tables remain practical.
+    $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
     echo '<!doctype html><html lang="cs" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
@@ -699,7 +702,7 @@ function render_header(string $title): void
     echo cms_head_extras_html();
     // $devModeActive stores an intermediate value used by the surrounding gallery workflow.
     $devModeActive = $user && dev_mode_enabled();
-    echo '</head><body class="' . e($bodyClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
+    echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
         echo '<div class="theme-background-shell" aria-hidden="true">';
         echo '<div class="theme-background-base"></div>';

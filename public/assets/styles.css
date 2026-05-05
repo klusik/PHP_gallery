@@ -89,8 +89,27 @@ img {
 .site-main,
 /* Styles the .site-footer area of the gallery interface. */
 .site-footer {
-    width: min(1120px, calc(100% - 2rem));
+    width: min(var(--page-width-default, 1120px), calc(100% - 2rem));
     margin: 0 auto;
+}
+
+/* Public layout width presets are selected by Theme settings on the body class. */
+.public-page.page-width-wide .site-header,
+.public-page.page-width-wide .site-main,
+.public-page.page-width-wide .site-footer {
+    width: min(var(--page-width-wide, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-custom .site-header,
+.public-page.page-width-custom .site-main,
+.public-page.page-width-custom .site-footer {
+    width: min(var(--page-width-custom, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-full .site-header,
+.public-page.page-width-full .site-main,
+.public-page.page-width-full .site-footer {
+    width: calc(100% - clamp(1rem, 3vw, 3rem));
 }
 
 /* Styles the .site-header area of the gallery interface. */
@@ -3438,10 +3457,12 @@ body.admin-image-order-active {
     --preview-radius: var(--radius, 16px);
     --preview-font-family: var(--font-family, Georgia, Times New Roman, serif);
     --preview-background-opacity: 0.65;
-    position: sticky;
-    top: 1rem;
+    position: relative;
+    z-index: 1;
     isolation: isolate;
     overflow: hidden;
+    box-sizing: border-box;
+    max-width: 100%;
     border: 1px solid rgba(93, 104, 116, 0.26);
     border-radius: var(--preview-radius);
     padding: 0.85rem;
@@ -3449,6 +3470,51 @@ body.admin-image-order-active {
     color: #17212b;
     font-family: var(--preview-font-family);
     box-shadow: 0 16px 45px rgba(15, 23, 42, 0.10);
+}
+
+
+/* Shows the selected public page width in the compact admin preview. */
+.theme-preview-page[data-preview-width="default"] {
+    width: 82%;
+    margin-right: auto;
+}
+
+/* Represents the wider public container without depending on the real browser viewport. */
+.theme-preview-page[data-preview-width="wide"] {
+    width: 92%;
+    margin-right: auto;
+}
+
+/* Represents a custom public container width in the fixed-size preview column. */
+.theme-preview-page[data-preview-width="custom"] {
+    width: calc(82% + (18% * var(--preview-custom-width-scale, 0.4063)));
+    margin-right: auto;
+}
+
+/* Represents the full-width public container inside the fixed-size preview column. */
+.theme-preview-page[data-preview-width="full"] {
+    width: 100%;
+}
+
+/* Keeps the conditional custom-width controls visually grouped without introducing extra layout logic. */
+.theme-custom-width-control {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.theme-custom-width-control[hidden] {
+    display: none;
+}
+
+/* Keeps the explanatory text below the preview in normal document flow. */
+.theme-live-preview > .muted {
+    position: relative;
+    z-index: 2;
+    margin: 0;
 }
 
 /* Simulates the same layered public background model used by the real theme CSS. */
