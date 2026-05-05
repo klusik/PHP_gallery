@@ -303,3 +303,206 @@ The `app/`, `database/`, `scripts/`, `cache/`, and `galleries/` directories are
 not intended to be browsed directly. Apache `.htaccess` files are included for
 common hosting setups, but server-level configuration should enforce the same
 rule where `.htaccess` is unavailable.
+
+
+---
+
+## Architectural Notes (Updated)
+
+### Filesystem-first consistency
+
+The application strictly enforces that filesystem structure is the primary
+source of truth. Any DB inconsistency must be resolved in favor of filesystem
+state. This affects:
+
+- gallery discovery
+- parent/child relationships
+- folder rename/move operations
+- import and rescan workflows
+
+All structural mutations must:
+
+1. Perform filesystem operation first
+2. Reflect change in database
+3. Rollback filesystem change if DB update fails
+4. Log failure into admin_logs
+
+This ensures no “phantom galleries” exist in DB without real folders.
+
+---
+
+### Thumbnail Strategy
+
+Thumbnails are intentionally:
+
+- lazy-generated or batch-generated
+- stored inside gallery folders (not global cache)
+- resolution-tiered (300 / 600 / 800)
+
+Dynamic frontend behavior:
+
+- grid density determines effective image size
+- browser selects appropriate srcset variant
+- original image is never used in grid unless fallback
+
+Lightbox always uses original media endpoint to preserve quality.
+
+---
+
+### Grid and Pagination System
+
+Grid system is unified and driven by:
+
+- global theme settings
+- optional per-gallery overrides
+- future extensibility for subgallery inheritance
+
+Pagination:
+
+- disabled by default
+- when enabled, respects grid dimensions (cols × rows)
+- must remain consistent across:
+  - galleries
+  - subgalleries
+  - image listings
+
+Important constraint:
+Frontend must not break layout consistency when pagination is active.
+
+---
+
+### Admin UX Direction
+
+Admin is evolving toward:
+
+- left-side navigation (WordPress-like)
+- separation of concerns between:
+  - gallery management
+  - media operations
+  - appearance
+  - maintenance
+
+Key design goals:
+
+- reduce cognitive load
+- avoid “single page overload”
+- preserve direct access workflows
+
+---
+
+### Update System Constraints
+
+Updater must:
+
+- never duplicate folder structures (e.g. app/app)
+- strictly control overwrite scope
+- preserve:
+  - config.php
+  - galleries/
+  - cache/
+  - custom_css/
+
+Clean reinstall mode:
+
+- removes unknown files
+- restores repository state
+- keeps user data intact
+
+---
+
+### Logging and Observability
+
+Current:
+
+- admin_logs table
+- workflow states (todo, doing, waiting, done)
+
+Planned:
+
+- structured log payloads (JSON)
+- filtering and search improvements
+- export capability
+
+Future telemetry:
+
+- anonymous usage tracking
+- no PII
+- opt-out capable
+- local-first where possible
+
+---
+
+### Performance Model
+
+Avoid:
+
+- blocking operations during page render
+- synchronous large batch processing
+
+Prefer:
+
+- incremental processing
+- AJAX batch endpoints
+- caching at multiple levels
+
+Heavy operations:
+
+- thumbnail generation
+- ZIP creation
+- gallery scanning
+
+must always be async-capable from admin UI.
+
+---
+
+### Security Model Refinements
+
+Key principles:
+
+- all access validated at controller level
+- no direct file exposure
+- consistent access checks across:
+  - media
+  - thumbnails
+  - map data
+  - tags
+  - votes
+
+Protected gallery model:
+
+- session-based unlock
+- token-based sharing
+- inheritance from parent galleries
+
+---
+
+### Known Architectural Tradeoffs
+
+- No framework → higher manual maintenance cost
+- Filesystem-first → complex sync logic
+- Shared hosting compatibility → limits async/background processing
+- PHP-only → no queue system or workers
+
+These are intentional design constraints.
+
+---
+
+### Future Refactoring Targets
+
+- split large controllers into smaller domain services
+- isolate filesystem operations into dedicated service layer
+- formalize DTOs for gallery/image transport
+- improve testability (currently low)
+
+---
+
+### Version 1.0 Readiness Criteria
+
+To consider architecture stable:
+
+- gallery ordering fully implemented (drag-drop tree)
+- admin UI modularized
+- update system hardened
+- grid + pagination fully consistent
+- logging system extended
+
