@@ -1350,6 +1350,79 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * PHP stores the canonical relative path in data-image-name so sorting does
+     * not depend on presentation markup. The visible cell is still used as a
+     * fallback for older cached markup during rolling updates.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * Automatic name sorting intentionally reuses the same save endpoint as
+     * manual dragging. Server-side validation, CSRF checks, exact image-list
+     * comparison, transactional sort_order updates, and admin logging therefore
+     * stay identical for both ordering methods.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
+    }
+
+    /**
      * Removes document-level movement listeners for any active input path.
      *
      * @returns {void}
@@ -2037,6 +2110,8 @@ export function setupAdminImageReordering() {
         // The native draggable attribute is explicitly disabled because custom pointer movement handles ordering.
         row.setAttribute('draggable', 'false');
     });
+
+    table.querySelector('[data-admin-image-name-sort]')?.addEventListener('click', handleNameSortClick);
 
     body.querySelectorAll('[data-admin-image-drag-handle]').forEach((handle) => {
         // Prevents the browser from selecting the arrow text or trying to create a native button drag image.

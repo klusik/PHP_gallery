@@ -940,14 +940,14 @@ function cms_admin_edit_gallery(): void
     echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
-    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order. The new order is saved immediately after each drop.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
-    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th>Image</th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
+    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
-        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
+        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
     render_admin_image_reorder_script();
@@ -1135,6 +1135,98 @@ function render_admin_image_reorder_script(): void
     }
 
     /**
+     * Returns a human-comparable image name for a sortable table row.
+     *
+     * The PHP renderer stores the raw relative path in data-image-name so the
+     * sorting logic is not forced to parse visible text. The cell text fallback
+     * keeps the feature usable if older cached markup is present during an
+     * update or while a browser has a stale admin page open.
+     *
+     * @param {HTMLTableRowElement} row Image row rendered by the edit-gallery table.
+     * @returns {string} Name used for locale-aware filename sorting.
+     */
+    function readSortableImageName(row) {
+        var fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || (fallbackCell ? fallbackCell.textContent : '') || '').trim();
+    }
+
+    /**
+     * Updates the Name header to describe the next click direction accurately.
+     *
+     * @param {HTMLButtonElement} sortButton Header button that starts name sorting.
+     * @param {string} nextDirection Direction that the next click will apply.
+     * @param {string} currentDirection Direction currently represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(sortButton, nextDirection, currentDirection) {
+        var sortHeader = sortButton.closest('th');
+        var arrow = sortButton.querySelector('[aria-hidden="true"]');
+        sortButton.dataset.sortDirection = nextDirection;
+        sortButton.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        if (sortHeader) {
+            sortHeader.setAttribute('aria-sort', currentDirection === 'asc' ? 'ascending' : 'descending');
+        }
+        if (arrow) {
+            arrow.textContent = currentDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts the current image rows by filename and persists the resulting order.
+     *
+     * The same reorder endpoint is used as the drag-and-drop path. That keeps
+     * all validation in one server-side place: gallery id validation, CSRF
+     * verification, exact image-set comparison, transactional sort_order writes,
+     * and admin logging are identical for manual and automatic ordering.
+     *
+     * @param {MouseEvent} clickEvent Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(clickEvent) {
+        var sortButton = clickEvent.target.closest('[data-admin-image-name-sort]');
+        var table = findImageOrderTable();
+        var toolbar = document.querySelector('[data-admin-image-order-toolbar]');
+        var form = document.querySelector('[data-admin-image-bulk-form]');
+        var tableBody = table ? table.querySelector('tbody') : null;
+        var rows;
+        var direction;
+        var multiplier;
+        var collator;
+
+        if (!sortButton || !table || !toolbar || !form || !tableBody || window.__adminImageOrderDragActive) {
+            return;
+        }
+
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
+
+        rows = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setImageOrderStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        direction = sortButton.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        multiplier = direction === 'asc' ? 1 : -1;
+        collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+
+        rows.map(function (row, index) {
+            return {row: row, index: index, name: readSortableImageName(row)};
+        }).sort(function (left, right) {
+            var compared = collator.compare(left.name, right.name);
+            if (compared !== 0) {
+                return compared * multiplier;
+            }
+            return left.index - right.index;
+        }).forEach(function (entry) {
+            tableBody.appendChild(entry.row);
+        });
+
+        updateNameSortHeader(sortButton, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveImageOrder(tableBody, form, toolbar.dataset.reorderUrl || '');
+    }
+
+    /**
      * Starts the fallback sorter from the first captured mouse or pointer press.
      *
      * @param {MouseEvent|PointerEvent} startEvent Original press event on the handle.
@@ -1284,7 +1376,8 @@ function render_admin_image_reorder_script(): void
 
     document.addEventListener('mousedown', startImageOrderDrag, true);
     document.addEventListener('pointerdown', startImageOrderDrag, true);
-    setImageOrderStatus('Drag handles ready.', 'idle');
+    document.addEventListener('click', handleNameSortClick, true);
+    setImageOrderStatus('Drag handles ready. Click Name to sort by filename.', 'idle');
 }());
 </script>
 HTML;

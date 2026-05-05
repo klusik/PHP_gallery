@@ -3076,6 +3076,31 @@ body.has-map-overlay {
     text-align: center;
 }
 
+/* Makes the image-name header look like a sortable table title rather than a form submit control. */
+.admin-image-name-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Keeps keyboard focus visible when sorting the image table from the Name header. */
+.admin-image-name-sort:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 3px;
+}
+
+/* Gives pointer users clear feedback that the Name header can apply an immediate saved sort. */
+.admin-image-name-sort:hover {
+    text-decoration: underline;
+}
+
 /* Styles the dedicated pointer handle used to move image rows without interfering with checkboxes or links. */
 .admin-image-drag-handle {
     display: inline-flex;
