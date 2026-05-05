@@ -65,11 +65,12 @@ import {
     setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupAdminLogStatusForms,
+    setupAdminLogLiveFilters,
     setupGalleryRefreshProgress,
     setupGalleryUploadProgress,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260504-gallery-tree-order';
+} from './gallery-modules/admin-operations.js?v=20260505-admin-log-live-search';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -110,6 +111,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryUploadProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
+    setupAdminLogLiveFilters();
     setupVoteForms();
     setupBackToTopButton();
     setupThemeOverrideForm();

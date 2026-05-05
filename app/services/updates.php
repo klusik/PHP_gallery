@@ -216,8 +216,10 @@ function install_application_beta(string $commitId): array
     application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-beta-' . $stamp . '.zip';
-    // $copied stores an intermediate value used by the surrounding gallery workflow.
-    $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $copyResult stores copy and cleanup diagnostics for this updater run.
+    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $copied stores the number of files copied from the downloaded snapshot.
+    $copied = (int) $copyResult['files_copied'];
     // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
@@ -231,6 +233,8 @@ function install_application_beta(string $commitId): array
         'version' => $commitId,
         'branch' => 'beta',
         'files_copied' => $copied,
+        'removed_paths' => $copyResult['removed_paths'],
+        'removed_count' => $copyResult['removed_count'],
         'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
         'migrations' => $migrations,
     ];
@@ -280,8 +284,12 @@ function restore_application_stable_release(): array
     $sourceRoot = application_update_extracted_root($restoreDir);
     application_update_assert_source_root($sourceRoot);
     application_update_cleanup_transient_extracts($updateDir, $restoreDir);
-    // $copied stores an intermediate value used by the surrounding gallery workflow.
-    $copied = application_update_copy_files($sourceRoot, $root, $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip');
+    // $backupPath stores the rollback archive created before stable files are restored.
+    $backupPath = $root . '/cache/updates/rollback-' . date('Ymd-His') . '.zip';
+    // $copyResult stores copy and cleanup diagnostics for this updater run.
+    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $copied stores the number of files copied from the downloaded snapshot.
+    $copied = (int) $copyResult['files_copied'];
     application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings([
         'application_update_channel',
@@ -297,6 +305,9 @@ function restore_application_stable_release(): array
         'version' => $restoredVersion,
         'branch' => 'stable',
         'files_copied' => $copied,
+        'removed_paths' => $copyResult['removed_paths'],
+        'removed_count' => $copyResult['removed_count'],
+        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
         'archive' => str_replace('\\', '/', substr($zipPath, strlen($root) + 1)),
         'migrations' => [],
     ];
@@ -309,6 +320,90 @@ function restore_application_stable_backup(): array
 {
     return restore_application_stable_release();
 }
+
+
+/**
+ * Reinstall the stable branch head over the current site and remove unmanaged application files.
+ */
+function clean_reinstall_current_application_version(): array
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('The PHP ZipArchive extension is required for clean reinstall.');
+    }
+    // $root stores the verified project root that will be repaired.
+    $root = application_update_project_root();
+    // $branch stores the stable branch used as the clean source of truth.
+    $branch = application_update_branch_candidates()[0] ?? '';
+    if ($branch === '') {
+        throw new RuntimeException('No stable release branch is configured.');
+    }
+    // $updateDir stores the local updater workspace.
+    $updateDir = $root . '/cache/updates';
+    // $backupDir stores rollback archives for files removed or replaced by this reinstall.
+    $backupDir = $updateDir . '/backups';
+    application_update_ensure_dir($updateDir);
+    application_update_ensure_dir($backupDir);
+
+    // $stamp stores a deterministic timestamp used by all artifacts from this run.
+    $stamp = date('Ymd-His');
+    // $zipPath stores the downloaded GitHub archive.
+    $zipPath = $updateDir . '/clean-reinstall-' . $stamp . '.zip';
+    // $extractDir stores the temporary extraction directory.
+    $extractDir = $updateDir . '/stable-restore-' . $stamp;
+    application_update_ensure_dir($extractDir);
+
+    // $archive stores the downloaded repository snapshot bytes.
+    $archive = http_fetch(application_update_zip_url($branch), 60);
+    if (file_put_contents($zipPath, $archive, LOCK_EX) === false) {
+        throw new RuntimeException('Could not write clean reinstall archive into cache/updates.');
+    }
+
+    // $zip stores the extracted repository archive.
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath) !== true) {
+        throw new RuntimeException('Downloaded clean reinstall archive could not be opened.');
+    }
+    if (!$zip->extractTo($extractDir)) {
+        $zip->close();
+        throw new RuntimeException('Downloaded clean reinstall archive could not be extracted.');
+    }
+    $zip->close();
+
+    // $sourceRoot stores the clean repository root from the extracted GitHub archive.
+    $sourceRoot = application_update_extracted_root($extractDir);
+    application_update_assert_source_root($sourceRoot);
+    application_update_cleanup_transient_extracts($updateDir, $extractDir);
+    // $backupPath stores the rollback archive for replaced and removed application files.
+    $backupPath = $backupDir . '/before-clean-reinstall-' . $stamp . '.zip';
+    // $copyResult stores copy and full cleanup diagnostics for this reinstall.
+    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath, true);
+    // $migrations stores database migrations applied after the clean file reinstall.
+    $migrations = run_migrations();
+    application_update_invalidate_opcache($root, $sourceRoot);
+    delete_app_settings([
+        'application_update_channel',
+        'application_update_beta_commit',
+        'application_update_beta_backup_path',
+        'application_update_check_cache',
+    ]);
+    // $cacheCleanup stores generated ZIP and temporary cache cleanup diagnostics.
+    $cacheCleanup = application_update_clean_cache_artifacts($root, $backupPath);
+
+    // $installedVersion stores the version now visible from the reinstalled bootstrap.
+    $installedVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
+    return [
+        'version' => $installedVersion,
+        'branch' => $branch,
+        'files_copied' => (int) $copyResult['files_copied'],
+        'removed_paths' => $copyResult['removed_paths'],
+        'removed_count' => $copyResult['removed_count'],
+        'cache_cleanup' => $cacheCleanup,
+        'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
+        'archive' => str_replace('\\', '/', substr($zipPath, strlen($root) + 1)),
+        'migrations' => $migrations,
+    ];
+}
+
 
 /**
  * Return the admin label for links that point to the update screen.
@@ -376,8 +471,10 @@ function install_application_update(): array
     application_update_cleanup_transient_extracts($updateDir, $extractDir);
     // $backupPath stores an intermediate value used by the surrounding gallery workflow.
     $backupPath = $backupDir . '/before-update-' . $stamp . '.zip';
-    // $copied stores an intermediate value used by the surrounding gallery workflow.
-    $copied = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $copyResult stores copy and cleanup diagnostics for this updater run.
+    $copyResult = application_update_copy_files($sourceRoot, $root, $backupPath);
+    // $copied stores the number of files copied from the downloaded snapshot.
+    $copied = (int) $copyResult['files_copied'];
     // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
@@ -387,6 +484,8 @@ function install_application_update(): array
         'version' => (string) $status['latest_version'],
         'branch' => (string) $status['branch'],
         'files_copied' => $copied,
+        'removed_paths' => $copyResult['removed_paths'],
+        'removed_count' => $copyResult['removed_count'],
         'backup' => str_replace('\\', '/', substr($backupPath, strlen($root) + 1)),
         'migrations' => $migrations,
     ];
@@ -689,7 +788,7 @@ function application_update_extracted_root(string $extractDir): string
 /**
  * Copy update files, backing up overwritten files and preserving local data.
  */
-function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath): int
+function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath, bool $cleanUnexpectedFiles = false): array
 {
     // $backup stores an intermediate value used by the surrounding gallery workflow.
     $backup = new ZipArchive();
@@ -699,6 +798,8 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
 
     application_update_assert_project_root($destinationRoot);
     application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
+    // $removed stores files and directories that were backed up and deleted because they are not present in the incoming release snapshot.
+    $removed = application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles);
 
     // $copied stores an intermediate value used by the surrounding gallery workflow.
     $copied = 0;
@@ -741,7 +842,120 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
     }
 
     $backup->close();
-    return $copied;
+    return [
+        'files_copied' => $copied,
+        'removed_paths' => $removed,
+        'removed_count' => count($removed),
+    ];
+}
+
+
+/**
+ * Return true when a path is within a directory that the updater owns.
+ */
+function application_update_path_is_managed_by_updater(string $relativePath, bool $cleanUnexpectedFiles): bool
+{
+    // $relativePath stores the normalized project-relative path tested against managed areas.
+    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    if ($relativePath === '' || application_update_path_is_protected($relativePath)) {
+        return false;
+    }
+    if ($cleanUnexpectedFiles) {
+        return true;
+    }
+    foreach (['app', 'public', 'database/migrations', 'scripts'] as $managedDirectory) {
+        if ($relativePath === $managedDirectory || str_starts_with($relativePath, $managedDirectory . '/')) {
+            return true;
+        }
+    }
+    foreach (['index.php', 'install.php', 'reset.php', 'setup-gallery.php', 'deploy.bat', 'README.md', 'PATCH_NOTES.md', 'ARCHITECTURE.md', 'config.example.php'] as $managedFile) {
+        if ($relativePath === $managedFile) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Remove local application files that are not present in the incoming release snapshot.
+ */
+function application_update_remove_obsolete_managed_paths(string $sourceRoot, string $destinationRoot, ZipArchive $backup, bool $cleanUnexpectedFiles): array
+{
+    // $removed stores normalized relative paths removed from the installation.
+    $removed = [];
+    // $iterator stores destination entries checked from deepest to shallowest so directories can be removed safely.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($destinationRoot, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        // $relativePath stores the candidate path relative to the project root.
+        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($destinationRoot) + 1));
+        if ($relativePath === '' || $item->isLink() || application_update_path_is_protected($relativePath)) {
+            continue;
+        }
+        if (!application_update_path_is_managed_by_updater($relativePath, $cleanUnexpectedFiles)) {
+            continue;
+        }
+        // $sourcePath stores the corresponding path in the downloaded release snapshot.
+        $sourcePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        if (file_exists($sourcePath)) {
+            continue;
+        }
+        application_update_add_path_to_backup($backup, $item->getPathname(), 'removed-before-update/' . $relativePath);
+        application_update_remove_path($item->getPathname());
+        $removed[] = $relativePath;
+    }
+    sort($removed);
+    return $removed;
+}
+
+/**
+ * Remove stale ZIP files and temporary update extraction folders from cache.
+ */
+function application_update_clean_cache_artifacts(string $root, string $activeBackupPath = ''): array
+{
+    // $cacheRoot stores the cache directory whose generated archives can be safely cleaned.
+    $cacheRoot = $root . '/cache';
+    if (!is_dir($cacheRoot)) {
+        return ['zip_files_removed' => 0, 'temporary_paths_removed' => []];
+    }
+    // $activeBackupRealPath stores the current rollback backup, which must survive the reinstall.
+    $activeBackupRealPath = $activeBackupPath !== '' ? realpath($activeBackupPath) : false;
+    // $zipFilesRemoved stores how many generated ZIP files were deleted.
+    $zipFilesRemoved = 0;
+    // $temporaryPathsRemoved stores cache/update working directories removed after extraction.
+    $temporaryPathsRemoved = [];
+    // $iterator stores all cache entries, deepest first for safe directory cleanup.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($cacheRoot, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($iterator as $item) {
+        // $path stores the absolute cache item path.
+        $path = $item->getPathname();
+        // $pathRealPath stores a canonical path used to avoid deleting the active backup.
+        $pathRealPath = realpath($path);
+        if ($activeBackupRealPath !== false && $pathRealPath !== false && $activeBackupRealPath === $pathRealPath) {
+            continue;
+        }
+        if ($item->isFile() && preg_match('/\.zip$/i', $item->getFilename())) {
+            if (!unlink($path)) {
+                throw new RuntimeException('Could not remove cached ZIP file: ' . $path);
+            }
+            $zipFilesRemoved++;
+            continue;
+        }
+        if ($item->isDir() && preg_match('/^(extract|beta-extract|stable-restore)-[0-9]{8}-[0-9]{6}$/', $item->getFilename())) {
+            application_update_remove_path($path);
+            $temporaryPathsRemoved[] = str_replace('\\', '/', substr($path, strlen($root) + 1));
+        }
+    }
+    sort($temporaryPathsRemoved);
+    return [
+        'zip_files_removed' => $zipFilesRemoved,
+        'temporary_paths_removed' => $temporaryPathsRemoved,
+    ];
 }
 
 
@@ -1007,11 +1221,14 @@ function application_update_path_is_protected(string $relativePath): bool
     $protectedFiles = [
         'config.php',
         'public/assets/custom.css',
+        '.user.ini',
+        'php.ini',
+        'robots.txt',
     ];
     if (in_array($relativePath, $protectedFiles, true)) {
         return true;
     }
-    foreach (['.git', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {
+    foreach (['.git', '.well-known', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {
         if ($relativePath === $directory || str_starts_with($relativePath, $directory . '/')) {
             return true;
         }

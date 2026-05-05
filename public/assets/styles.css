@@ -3699,3 +3699,61 @@ body.admin-gallery-order-active {
 .admin-gallery-order-ghost .admin-gallery-drag-handle {
     cursor: grabbing;
 }
+
+/* Keeps expanded admin log diagnostics readable without changing the table data model. */
+.log-entry-details summary {
+    cursor: pointer;
+}
+
+/* Gives the diagnostic export action breathing room inside a compact table cell. */
+.log-detail-actions {
+    margin: 0.75rem 0;
+}
+
+/* Renders admin log metadata as a compact two-column diagnostic list. */
+.log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) 1fr;
+    gap: 0.35rem 0.75rem;
+    margin: 0.75rem 0;
+}
+
+/* Keeps admin log detail labels visually distinct from values. */
+.log-detail-list dt {
+    font-weight: 700;
+}
+
+/* Prevents long request identifiers or routes from stretching the log table. */
+.log-detail-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Marks update recovery actions as potentially destructive maintenance operations. */
+.danger-zone {
+    border-color: rgba(190, 40, 40, 0.35);
+}
+
+/* Makes the clean reinstall button visually separate from normal update actions. */
+.button.danger,
+button.danger {
+    border-color: rgba(190, 40, 40, 0.65);
+}
+
+.admin-log-table-wrap {
+    overflow-x: auto;
+}
+
+.admin-log-table th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.admin-log-table th a:hover,
+.admin-log-table th a:focus-visible {
+    text-decoration: underline;
+}
+
+[data-admin-log-live-state] {
+    min-width: 7rem;
+}

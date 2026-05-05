@@ -189,6 +189,7 @@ function cms_run(): void
         'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
+        'admin_log_export' => 'cms_admin_log_export',
         'admin_telemetry' => 'cms_admin_telemetry',
         'admin_telemetry_settings' => 'cms_admin_telemetry_settings',
         'admin_telemetry_maintenance' => 'cms_admin_telemetry_maintenance',
