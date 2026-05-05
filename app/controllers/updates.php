@@ -59,22 +59,36 @@ function cms_admin_update(): void
             if ($action === 'beta_install') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
-                admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result);
-                $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
             } elseif ($action === 'beta_revert') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = restore_application_stable_release();
-                admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result);
-                $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head.';
+                admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head. Copied ' . (int) $result['files_copied'] . ' files and removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s).';
+            } elseif ($action === 'clean_reinstall') {
+                if (strtoupper(trim((string) ($_POST['clean_reinstall_confirm'] ?? ''))) !== 'REINSTALL') {
+                    throw new RuntimeException('Type REINSTALL to confirm the clean reinstall.');
+                }
+                // $result stores clean reinstall diagnostics for the admin log and user-facing notice.
+                $result = clean_reinstall_current_application_version();
+                admin_log_event('info', 'update.clean_reinstalled', 'Admin performed a clean reinstall of the stable branch head.', $result, ['category' => 'update', 'severity' => 'warning']);
+                $_SESSION['admin_update_notice'] = 'Clean reinstall finished. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' unexpected path(s), removed ' . (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0) . ' cached ZIP file(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
             } else {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_update();
-                admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result);
-                $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
             }
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'update.failed', 'Application update failed.', ['error' => $exception->getMessage()]);
+            admin_log_event('warning', 'update.failed', 'Application update failed.', [
+                'action' => (string) ($_POST['update_action'] ?? 'stable_update'),
+                'error' => $exception->getMessage(),
+                'current_version' => cms_current_version(),
+                'beta_active' => application_update_beta_active(),
+                'php_version' => PHP_VERSION,
+            ], ['category' => 'update', 'severity' => 'error']);
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
         }
@@ -138,6 +152,14 @@ function cms_admin_update(): void
         echo '<button type="submit" class="button secondary">Restore stable release</button>';
         echo '</form>';
     }
+    echo '<hr><h3>Clean reinstall current version</h3>';
+    echo '<form method="post" class="form-grid form-grid-spaced danger-zone">' . csrf_field();
+    echo '<input type="hidden" name="update_action" value="clean_reinstall">';
+    echo '<p>This downloads a clean copy of the stable branch, backs up replaced files, removes application files that do not belong to the release, clears generated ZIP files from cache, runs migrations, and invalidates PHP OPcache.</p>';
+    echo '<p class="muted">Protected data is kept: <code>config.php</code>, <code>galleries/</code>, <code>custom_css/</code>, <code>cache/</code> metadata, and <code>public/assets/custom.css</code>. This is intended for broken design or partial update recovery.</p>';
+    echo '<label>Type REINSTALL to confirm<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
+    echo '<button type="submit" class="button danger">Clean reinstall current version</button>';
+    echo '</form>';
     echo '</section>';
     render_footer();
 }

@@ -57,18 +57,20 @@ import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thum
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js';
 import { setupVoteForms } from './gallery-modules/votes.js';
-import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js';
+import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260505-thumbnail-cache-delete';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox.js';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
+    setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupAdminLogStatusForms,
+    setupAdminLogLiveFilters,
     setupGalleryRefreshProgress,
     setupGalleryUploadProgress,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js';
+} from './gallery-modules/admin-operations.js?v=20260505-admin-log-live-search';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -100,13 +102,16 @@ function runWhenDomReady(callback) {
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupGalleryBulkDeleteConfirmation();
+    setupThumbnailCacheDeleteConfirmation();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
+    setupAdminGalleryReordering();
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
     setupGalleryUploadProgress();
     setupPictureGame();
     setupAdminLogStatusForms();
+    setupAdminLogLiveFilters();
     setupVoteForms();
     setupBackToTopButton();
     setupThemeOverrideForm();

@@ -378,6 +378,181 @@ function cms_admin_save_gallery_collapse(): void
 }
 
 /**
+ * Handles cms admin gallery reorder logic for the gallery application.
+ *
+ * The Admin dashboard sends the complete flattened gallery tree after a drag
+ * operation. The submitted list is validated as an exact set match against the
+ * database before any filesystem move or sort_order update is attempted. Parent
+ * changes are delegated to move_gallery_folder_to_parent(), so the gallery
+ * folder tree remains the source of truth and database paths follow disk state.
+ *
+ * @return mixed Result produced by this operation.
+ */
+function cms_admin_reorder_galleries(): void
+{
+    require_admin();
+    verify_csrf();
+    // Variable $rawTree stores the JSON payload submitted by the JavaScript nested ordering handler.
+    $rawTree = (string) ($_POST['gallery_tree'] ?? '[]');
+    // Variable $decodedTree stores the decoded row list before it is normalized.
+    $decodedTree = json_decode($rawTree, true);
+    if (!is_array($decodedTree)) {
+        admin_reorder_galleries_response(false, 'The submitted gallery tree was not valid JSON.');
+        return;
+    }
+
+    // Variable $submittedEntries stores normalized id and parent-id pairs in the exact submitted order.
+    $submittedEntries = [];
+    foreach ($decodedTree as $entry) {
+        if (!is_array($entry)) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid row.');
+            return;
+        }
+        // Variable $galleryId stores the gallery id from one submitted tree row.
+        $galleryId = (int) ($entry['id'] ?? 0);
+        // Variable $parentId stores the requested parent id for one submitted tree row.
+        $parentId = (int) ($entry['parent_id'] ?? 0);
+        if ($galleryId <= 0 || $parentId < 0) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid gallery id.');
+            return;
+        }
+        $submittedEntries[] = ['id' => $galleryId, 'parent_id' => $parentId];
+    }
+    if (!$submittedEntries) {
+        admin_reorder_galleries_response(false, 'No galleries were submitted for reordering.');
+        return;
+    }
+
+    // Variable $submittedIds stores the submitted gallery id list for set validation.
+    $submittedIds = array_map(static fn (array $entry): int => (int) $entry['id'], $submittedEntries);
+    if (count($submittedIds) !== count(array_unique($submittedIds))) {
+        admin_reorder_galleries_response(false, 'The submitted gallery tree contained duplicate galleries.');
+        return;
+    }
+
+    sync_gallery_parent_ids();
+    // Variable $currentRows stores current database ids and parent ids for validation and change detection.
+    $currentRows = db()->query('SELECT id, parent_id FROM galleries ORDER BY id')->fetchAll();
+    // Variable $currentIds stores all gallery ids currently known by the database.
+    $currentIds = array_map(static fn (array $row): int => (int) $row['id'], $currentRows);
+    // Variable $sortedSubmittedIds stores the submitted id set in sorted order.
+    $sortedSubmittedIds = $submittedIds;
+    sort($sortedSubmittedIds);
+    sort($currentIds);
+    if ($sortedSubmittedIds !== $currentIds) {
+        admin_reorder_galleries_response(false, 'The gallery list changed while you were reordering. Reload the page and try again.');
+        return;
+    }
+
+    // Variable $validIds stores gallery ids as a lookup table for parent validation.
+    $validIds = array_fill_keys($currentIds, true);
+    // Variable $seenIds stores ids already encountered in submitted tree order.
+    $seenIds = [];
+    foreach ($submittedEntries as $entry) {
+        // Variable $galleryId stores the current gallery id being validated.
+        $galleryId = (int) $entry['id'];
+        // Variable $parentId stores the requested parent id being validated.
+        $parentId = (int) $entry['parent_id'];
+        if ($parentId === $galleryId) {
+            admin_reorder_galleries_response(false, 'A gallery cannot be moved under itself.');
+            return;
+        }
+        if ($parentId > 0 && !isset($validIds[$parentId])) {
+            admin_reorder_galleries_response(false, 'The submitted gallery tree referenced a missing parent gallery.');
+            return;
+        }
+        if ($parentId > 0 && !isset($seenIds[$parentId])) {
+            admin_reorder_galleries_response(false, 'A subgallery must appear below its parent in the submitted tree.');
+            return;
+        }
+        $seenIds[$galleryId] = true;
+    }
+
+    // Variable $currentParentById stores current parent ids keyed by gallery id.
+    $currentParentById = [];
+    foreach ($currentRows as $row) {
+        $currentParentById[(int) $row['id']] = (int) ($row['parent_id'] ?? 0);
+    }
+
+    // Variable $pdo stores the active database connection used for sibling order updates.
+    $pdo = db();
+    // Variable $now stores one timestamp shared by all sort_order updates.
+    $now = now_sql();
+    // Variable $movedCount stores how many gallery folders changed parent.
+    $movedCount = 0;
+    try {
+        foreach ($submittedEntries as $entry) {
+            // Variable $galleryId stores the gallery being checked for a parent move.
+            $galleryId = (int) $entry['id'];
+            // Variable $parentId stores the requested parent id, with zero meaning root.
+            $parentId = (int) $entry['parent_id'];
+            if (($currentParentById[$galleryId] ?? 0) === $parentId) {
+                continue;
+            }
+            move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null);
+            $movedCount++;
+            sync_gallery_parent_ids();
+        }
+
+        // Variable $siblingPositionByParent stores the next sort index for each parent id.
+        $siblingPositionByParent = [];
+        $pdo->beginTransaction();
+        // Variable $stmt stores the prepared update reused for each reordered gallery row.
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ?');
+        foreach ($submittedEntries as $entry) {
+            // Variable $parentId stores the submitted parent group whose sibling order is being assigned.
+            $parentId = (int) $entry['parent_id'];
+            // Variable $position stores the next sibling position in this parent group.
+            $position = ($siblingPositionByParent[$parentId] ?? 0) + 1;
+            $siblingPositionByParent[$parentId] = $position;
+            // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
+            $sortOrder = $position * 10;
+            $stmt->execute([$sortOrder, $now, (int) $entry['id']]);
+        }
+        $pdo->commit();
+
+        sync_gallery_parent_ids();
+        foreach ($submittedEntries as $entry) {
+            // Variable $gallery stores the refreshed row written to its gallery.json sidecar.
+            $gallery = find_gallery((int) $entry['id']);
+            if ($gallery) {
+                write_gallery_sidecar($gallery);
+            }
+        }
+        if (public_path_schema_ready()) {
+            regenerate_public_paths();
+        }
+        admin_log_event('info', 'gallery.reordered', 'Admin reordered gallery tree.', [
+            'galleries' => count($submittedEntries),
+            'moved_folders' => $movedCount,
+        ]);
+        admin_reorder_galleries_response(true, $movedCount > 0 ? 'Gallery order saved. Folder paths were updated for moved subgalleries.' : 'Gallery order saved.');
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'gallery.reorder_failed', 'Admin gallery reorder failed.', [
+            'error' => $exception->getMessage(),
+        ]);
+        admin_reorder_galleries_response(false, 'Gallery order could not be saved: ' . $exception->getMessage());
+    }
+}
+
+/**
+ * Sends a JSON response for Admin gallery reorder requests.
+ *
+ * @param bool $ok Whether the operation completed successfully.
+ * @param string $message Human-readable result message.
+ * @return void
+ */
+function admin_reorder_galleries_response(bool $ok, string $message): void
+{
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+}
+
+
+/**
  * Handles cms admin scan images logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
@@ -663,7 +838,7 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
+    echo '<section class="panel"><h1>Edit gallery</h1><nav class="nav"><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
@@ -765,14 +940,14 @@ function cms_admin_edit_gallery(): void
     echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
-    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order. The new order is saved immediately after each drop.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
-    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th>Image</th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
+    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
-        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
+        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
     echo '</tbody></table></form></section>';
     render_admin_image_reorder_script();
@@ -960,6 +1135,98 @@ function render_admin_image_reorder_script(): void
     }
 
     /**
+     * Returns a human-comparable image name for a sortable table row.
+     *
+     * The PHP renderer stores the raw relative path in data-image-name so the
+     * sorting logic is not forced to parse visible text. The cell text fallback
+     * keeps the feature usable if older cached markup is present during an
+     * update or while a browser has a stale admin page open.
+     *
+     * @param {HTMLTableRowElement} row Image row rendered by the edit-gallery table.
+     * @returns {string} Name used for locale-aware filename sorting.
+     */
+    function readSortableImageName(row) {
+        var fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || (fallbackCell ? fallbackCell.textContent : '') || '').trim();
+    }
+
+    /**
+     * Updates the Name header to describe the next click direction accurately.
+     *
+     * @param {HTMLButtonElement} sortButton Header button that starts name sorting.
+     * @param {string} nextDirection Direction that the next click will apply.
+     * @param {string} currentDirection Direction currently represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(sortButton, nextDirection, currentDirection) {
+        var sortHeader = sortButton.closest('th');
+        var arrow = sortButton.querySelector('[aria-hidden="true"]');
+        sortButton.dataset.sortDirection = nextDirection;
+        sortButton.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        if (sortHeader) {
+            sortHeader.setAttribute('aria-sort', currentDirection === 'asc' ? 'ascending' : 'descending');
+        }
+        if (arrow) {
+            arrow.textContent = currentDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts the current image rows by filename and persists the resulting order.
+     *
+     * The same reorder endpoint is used as the drag-and-drop path. That keeps
+     * all validation in one server-side place: gallery id validation, CSRF
+     * verification, exact image-set comparison, transactional sort_order writes,
+     * and admin logging are identical for manual and automatic ordering.
+     *
+     * @param {MouseEvent} clickEvent Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(clickEvent) {
+        var sortButton = clickEvent.target.closest('[data-admin-image-name-sort]');
+        var table = findImageOrderTable();
+        var toolbar = document.querySelector('[data-admin-image-order-toolbar]');
+        var form = document.querySelector('[data-admin-image-bulk-form]');
+        var tableBody = table ? table.querySelector('tbody') : null;
+        var rows;
+        var direction;
+        var multiplier;
+        var collator;
+
+        if (!sortButton || !table || !toolbar || !form || !tableBody || window.__adminImageOrderDragActive) {
+            return;
+        }
+
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
+
+        rows = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setImageOrderStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        direction = sortButton.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        multiplier = direction === 'asc' ? 1 : -1;
+        collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+
+        rows.map(function (row, index) {
+            return {row: row, index: index, name: readSortableImageName(row)};
+        }).sort(function (left, right) {
+            var compared = collator.compare(left.name, right.name);
+            if (compared !== 0) {
+                return compared * multiplier;
+            }
+            return left.index - right.index;
+        }).forEach(function (entry) {
+            tableBody.appendChild(entry.row);
+        });
+
+        updateNameSortHeader(sortButton, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveImageOrder(tableBody, form, toolbar.dataset.reorderUrl || '');
+    }
+
+    /**
      * Starts the fallback sorter from the first captured mouse or pointer press.
      *
      * @param {MouseEvent|PointerEvent} startEvent Original press event on the handle.
@@ -1109,7 +1376,8 @@ function render_admin_image_reorder_script(): void
 
     document.addEventListener('mousedown', startImageOrderDrag, true);
     document.addEventListener('pointerdown', startImageOrderDrag, true);
-    setImageOrderStatus('Drag handles ready.', 'idle');
+    document.addEventListener('click', handleNameSortClick, true);
+    setImageOrderStatus('Drag handles ready. Click Name to sort by filename.', 'idle');
 }());
 </script>
 HTML;

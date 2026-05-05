@@ -322,18 +322,98 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
         $params[] = (string) $filters['severity'];
     }
     if (!empty($filters['q'])) {
-        $where[] = '(l.event_key LIKE ? OR l.message LIKE ?)';
+        // $searchColumns stores searchable text columns that are always present on the legacy table.
+        $searchColumns = ['l.event_key LIKE ?', 'l.message LIKE ?', 'l.context_json LIKE ?'];
         $params[] = '%' . (string) $filters['q'] . '%';
         $params[] = '%' . (string) $filters['q'] . '%';
+        $params[] = '%' . (string) $filters['q'] . '%';
+        foreach (['request_id', 'route_name', 'subject_type'] as $optionalSearchColumn) {
+            if (!admin_log_column_exists($optionalSearchColumn)) {
+                continue;
+            }
+            $searchColumns[] = 'l.' . $optionalSearchColumn . ' LIKE ?';
+            $params[] = '%' . (string) $filters['q'] . '%';
+        }
+        $where[] = '(' . implode(' OR ', $searchColumns) . ')';
     }
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY l.status <> "done", l.status, l.created_at DESC, l.id DESC LIMIT ' . max(1, min(300, $limit));
+    // $timeSort stores the direction used for chronological sorting.
+    $timeSort = strtolower((string) ($filters['time_sort'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+    $idSort = $timeSort === 'ASC' ? 'ASC' : 'DESC';
+    $sql .= ' ORDER BY l.created_at ' . $timeSort . ', l.id ' . $idSort . ' LIMIT ' . max(1, min(300, $limit));
     // $stmt stores the prepared filtered admin log query.
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+
+
+/**
+ * Return one admin log entry with user information for detail display or export.
+ */
+function admin_log_find(int $logId): ?array
+{
+    if (!admin_log_schema_ready()) {
+        return null;
+    }
+    // $stmt stores the single-entry admin log lookup query.
+    $stmt = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id WHERE l.id = ? LIMIT 1');
+    $stmt->execute([$logId]);
+    // $entry stores the fetched row or false when the identifier no longer exists.
+    $entry = $stmt->fetch();
+    return is_array($entry) ? $entry : null;
+}
+
+/**
+ * Decode the structured context stored on an admin log entry.
+ */
+function admin_log_context_array(array $entry): array
+{
+    if (empty($entry['context_json'])) {
+        return [];
+    }
+    // $decoded stores the parsed diagnostic context for safe display.
+    $decoded = json_decode((string) $entry['context_json'], true);
+    return is_array($decoded) ? $decoded : [
+        'raw_context_json' => (string) $entry['context_json'],
+        'json_error' => json_last_error_msg(),
+    ];
+}
+
+/**
+ * Build a deterministic text export for one admin log entry.
+ */
+function admin_log_export_text(array $entry): string
+{
+    // $context stores structured event data, including updater diagnostics when present.
+    $context = admin_log_context_array($entry);
+    // $lines stores the text report line by line to keep formatting predictable.
+    $lines = [
+        'PHP Gallery admin log event',
+        '',
+        'ID: ' . (string) ($entry['id'] ?? ''),
+        'Created at: ' . (string) ($entry['created_at'] ?? ''),
+        'Status: ' . admin_log_status_label((string) ($entry['status'] ?? 'todo')),
+        'Level: ' . (string) ($entry['level'] ?? ''),
+        'Severity: ' . (string) ($entry['severity'] ?? ($entry['level'] ?? '')),
+        'Category: ' . (string) ($entry['category'] ?? 'other'),
+        'Event key: ' . (string) ($entry['event_key'] ?? ''),
+        'Message: ' . (string) ($entry['message'] ?? ''),
+        'Admin user: ' . (string) ($entry['username'] ?? ''),
+        'Subject: ' . trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? '')),
+        'Request ID: ' . (string) ($entry['request_id'] ?? ''),
+        'Route: ' . (string) ($entry['route_name'] ?? ''),
+        'Resolved at: ' . (string) ($entry['resolved_at'] ?? ''),
+        'Resolution note: ' . (string) ($entry['resolution_note'] ?? ''),
+        '',
+        'Context:',
+        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '(none)',
+        '',
+    ];
+    return implode("\n", $lines);
 }
 
 /**

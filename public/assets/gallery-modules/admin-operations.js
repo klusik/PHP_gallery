@@ -659,6 +659,10 @@ export function setupPictureGame() {
 // Function `setupAdminLogStatusForms` executes this focused behavior.
 export function setupAdminLogStatusForms() {
     document.querySelectorAll('[data-admin-log-status-select]').forEach((select) => {
+        if (select.dataset.adminLogStatusReady === '1') {
+            return;
+        }
+        select.dataset.adminLogStatusReady = '1';
         // Variable `originalValue` stores this steps working value.
         let originalValue = select.value;
         select.addEventListener('change', async () => {
@@ -701,6 +705,150 @@ export function setupAdminLogStatusForms() {
             }
         });
     });
+}
+
+// Function `setupAdminLogLiveFilters` executes this focused behavior.
+export function setupAdminLogLiveFilters() {
+    // Variable `form` stores this steps working value.
+    const form = document.querySelector('[data-admin-log-filter-form]');
+    // Variable `tbody` stores this steps working value.
+    const tbody = document.querySelector('[data-admin-log-tbody]');
+    if (!form || !tbody) {
+        return;
+    }
+    // Variable `countLabel` stores this steps working value.
+    const countLabel = document.querySelector('[data-admin-log-count]');
+    // Variable `stateLabel` stores this steps working value.
+    const stateLabel = document.querySelector('[data-admin-log-live-state]');
+    // Variable `emptyContainer` stores this steps working value.
+    let emptyContainer = document.querySelector('[data-admin-log-empty]');
+    // Variable `timeSortLink` stores this steps working value.
+    const timeSortLink = document.querySelector('[data-admin-log-time-sort-link]');
+    // Variable `searchInput` stores this steps working value.
+    const searchInput = form.querySelector('[data-admin-log-live-search]');
+    // Variable `debounceHandle` stores this steps working value.
+    let debounceHandle = 0;
+    // Variable `activeRequest` stores this steps working value.
+    let activeRequest = null;
+
+    // Function `setLiveState` writes compact search progress text for screen readers and admins.
+    const setLiveState = (message) => {
+        if (stateLabel) {
+            stateLabel.textContent = message;
+        }
+    };
+
+    // Function `buildUrl` creates the filtered request URL used by normal and live requests.
+    const buildUrl = (includeAjax = true) => {
+        // Variable `params` stores serialized filter controls from the visible form.
+        const params = new URLSearchParams(new FormData(form));
+        params.set('page', 'admin_logs');
+        if (includeAjax) {
+            params.set('ajax', '1');
+        } else {
+            params.delete('ajax');
+        }
+        for (const [key, value] of Array.from(params.entries())) {
+            if (value === '') {
+                params.delete(key);
+            }
+        }
+        return `${form.getAttribute('action') || window.location.pathname}?${params.toString()}`;
+    };
+
+    // Function `ensureEmptyContainer` creates the no-results message holder when live filtering needs it.
+    const ensureEmptyContainer = () => {
+        if (emptyContainer) {
+            return emptyContainer;
+        }
+        // Variable `resultsPanel` stores the surrounding admin log results panel.
+        const resultsPanel = document.querySelector('[data-admin-log-results]');
+        emptyContainer = document.createElement('div');
+        emptyContainer.dataset.adminLogEmpty = '';
+        if (resultsPanel) {
+            const tableWrap = resultsPanel.querySelector('.admin-log-table-wrap');
+            resultsPanel.insertBefore(emptyContainer, tableWrap || null);
+        }
+        return emptyContainer;
+    };
+
+    // Function `refreshLogs` fetches matching rows without a full page navigation.
+    const refreshLogs = async () => {
+        if (activeRequest) {
+            activeRequest.abort();
+        }
+        activeRequest = new AbortController();
+        setLiveState('Searching...');
+        try {
+            // Variable `response` stores this steps working value.
+            const response = await fetch(buildUrl(true), {
+                headers: {'Accept': 'application/json'},
+                signal: activeRequest.signal,
+            });
+            if (!response.ok) {
+                setLiveState('Live search failed. Use Apply filters.');
+                return;
+            }
+            // Variable `result` stores this steps working value.
+            const result = await response.json();
+            if (!result.ok) {
+                setLiveState('Live search failed. Use Apply filters.');
+                return;
+            }
+            tbody.innerHTML = result.rows_html || '';
+            setupAdminLogStatusForms();
+            if (countLabel) {
+                countLabel.textContent = `(${Number(result.count || 0)} shown)`;
+            }
+            const noResults = Number(result.count || 0) === 0;
+            const empty = ensureEmptyContainer();
+            empty.innerHTML = noResults ? (result.empty_html || '<p>No log entries match the current filters.</p>') : '';
+            empty.hidden = !noResults;
+            if (timeSortLink) {
+                const currentSort = result.time_sort === 'asc' ? 'asc' : 'desc';
+                const nextSort = currentSort === 'desc' ? 'asc' : 'desc';
+                timeSortLink.dataset.nextSort = nextSort;
+                timeSortLink.textContent = `When ${currentSort === 'desc' ? '↓' : '↑'}`;
+                const linkUrl = new URL(buildUrl(false), window.location.href);
+                linkUrl.searchParams.set('time_sort', nextSort);
+                timeSortLink.href = linkUrl.toString();
+            }
+            window.history.replaceState(null, '', buildUrl(false));
+            setLiveState('Updated.');
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                setLiveState('Live search failed. Use Apply filters.');
+            }
+        }
+    };
+
+    // Function `scheduleRefresh` debounces typing so the server is not queried on every keystroke.
+    const scheduleRefresh = () => {
+        window.clearTimeout(debounceHandle);
+        debounceHandle = window.setTimeout(refreshLogs, 250);
+    };
+
+    form.querySelectorAll('[data-admin-log-live-filter]').forEach((control) => {
+        control.addEventListener('change', refreshLogs);
+    });
+    if (searchInput) {
+        searchInput.addEventListener('input', scheduleRefresh);
+    }
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        window.clearTimeout(debounceHandle);
+        refreshLogs();
+    });
+    if (timeSortLink) {
+        timeSortLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            const sortControl = form.querySelector('select[name="time_sort"]');
+            if (sortControl) {
+                sortControl.value = timeSortLink.dataset.nextSort === 'asc' ? 'asc' : 'desc';
+            }
+            refreshLogs();
+        });
+    }
 }
 
 // Function `ensureThumbnailProgress` executes this focused behavior.
@@ -941,6 +1089,713 @@ export function setupAdminGalleryTree() {
     });
 
     refreshVisibility();
+}
+
+/**
+ * Enables pointer-based nested ordering for the Admin gallery table.
+ *
+ * The gallery table is a flattened tree. During a drag, this controller moves
+ * the selected gallery together with all of its descendants, then uses pointer X
+ * movement to calculate the new depth. The server receives the full flattened
+ * order and derives each parent_id from that order before updating sort_order
+ * and moving folders on disk when the parent changes.
+ *
+ * @returns {void}
+ */
+export function setupAdminGalleryReordering() {
+    // table stores the reorder-enabled gallery table on the Admin dashboard.
+    const table = document.querySelector('[data-admin-gallery-order-table]');
+    // toolbar stores endpoint metadata and status UI for the gallery reorder feature.
+    const toolbar = document.querySelector('[data-admin-gallery-order-toolbar]');
+    // form stores the existing gallery bulk form, reused for CSRF and row scope.
+    const form = document.querySelector('[data-admin-gallery-order-form]');
+    if (!table || !toolbar || !form) {
+        return;
+    }
+
+    // body stores the table body containing the flattened gallery tree rows.
+    const body = table.querySelector('tbody');
+    // status stores the live textual state displayed above the gallery table.
+    const status = toolbar.querySelector('[data-admin-gallery-order-status]');
+    // reorderUrl stores the server endpoint that persists order and nesting.
+    const reorderUrl = toolbar.dataset.reorderUrl || '';
+    // csrfInput stores the CSRF token generated by the PHP form helper.
+    const csrfInput = form.querySelector('input[name="csrf_token"]');
+    if (!body || !reorderUrl || !csrfInput) {
+        return;
+    }
+
+    // indentWidth stores the horizontal distance that represents one tree level.
+    const indentWidth = 28;
+    // draggedRows stores the moved root row and all descendant rows.
+    let draggedRows = [];
+    // draggedHandle stores the handle that started the drag, so its visual state can be restored.
+    let draggedHandle = null;
+    // placeholderRow stores the temporary row marking the insertion point.
+    let placeholderRow = null;
+    // ghostTable stores the fixed-position visual copy that follows the pointer.
+    let ghostTable = null;
+    // originalSignature stores order and parent values before dragging begins.
+    let originalSignature = '';
+    // originalDepth stores the depth of the dragged root row before dragging begins.
+    let originalDepth = 0;
+    // pointerOffsetY stores the pointer distance from the top of the row at drag start.
+    let pointerOffsetY = 0;
+    // startClientX stores the horizontal pointer coordinate at drag start.
+    let startClientX = 0;
+    // proposedDepth stores the candidate depth shown by the placeholder.
+    let proposedDepth = 0;
+    // activePointerId stores the pointer that owns the current drag session.
+    let activePointerId = null;
+    // activeMouseFallback stores whether classic mouse events are currently driving movement.
+    let activeMouseFallback = false;
+    // saveController stores the in-flight request controller so a newer drop can supersede an older save.
+    let saveController = null;
+
+    /**
+     * Updates the small status label above the gallery order table.
+     *
+     * @param {string} message Human-readable state shown to the admin.
+     * @param {string} state Visual state name used by CSS.
+     * @returns {void}
+     */
+    function setStatus(message, state) {
+        if (!status) {
+            return;
+        }
+        status.textContent = message;
+        status.dataset.state = state;
+    }
+
+    /**
+     * Returns all real gallery rows in current DOM order.
+     *
+     * @returns {HTMLTableRowElement[]} Gallery rows in flattened tree order.
+     */
+    function galleryRows() {
+        return Array.from(body.querySelectorAll('[data-gallery-row]'));
+    }
+
+    /**
+     * Reads the integer depth value from one gallery row.
+     *
+     * @param {Element|null} row Gallery row to inspect.
+     * @returns {number} Non-negative row depth.
+     */
+    function rowDepth(row) {
+        return Math.max(0, Number(row?.dataset.depth || 0));
+    }
+
+    /**
+     * Returns a compact signature used to detect whether anything changed.
+     *
+     * @returns {string} Ordered id and parent-id signature.
+     */
+    function currentGallerySignature() {
+        return galleryRows().map((row) => `${row.dataset.galleryId || ''}:${row.dataset.parentId || '0'}`).join('|');
+    }
+
+    /**
+     * Collects the dragged root row and every following descendant row.
+     *
+     * @param {HTMLTableRowElement} rootRow Gallery row whose subtree should move.
+     * @returns {HTMLTableRowElement[]} Root row followed by its descendants.
+     */
+    function collectMovedRows(rootRow) {
+        const rows = galleryRows();
+        const startIndex = rows.indexOf(rootRow);
+        const rootDepth = rowDepth(rootRow);
+        const moved = [];
+        if (startIndex < 0) {
+            return moved;
+        }
+        for (let index = startIndex; index < rows.length; index++) {
+            const row = rows[index];
+            if (index !== startIndex && rowDepth(row) <= rootDepth) {
+                break;
+            }
+            moved.push(row);
+        }
+        return moved;
+    }
+
+    /**
+     * Copies current column widths from a real row into a cloned row.
+     *
+     * @param {HTMLTableRowElement} sourceRow Real row being cloned.
+     * @param {HTMLTableRowElement} cloneRow Cloned row shown inside the ghost table.
+     * @returns {void}
+     */
+    function copyCellWidths(sourceRow, cloneRow) {
+        const sourceCells = Array.from(sourceRow.children);
+        const cloneCells = Array.from(cloneRow.children);
+        sourceCells.forEach((cell, index) => {
+            const cloneCell = cloneCells[index];
+            if (!cloneCell) {
+                return;
+            }
+            cloneCell.style.width = `${cell.getBoundingClientRect().width}px`;
+        });
+    }
+
+    /**
+     * Creates the fixed visual copy used while a gallery subtree is moving.
+     *
+     * @param {HTMLTableRowElement[]} rows Real rows being moved.
+     * @returns {HTMLTableElement} Ghost table appended to the document body.
+     */
+    function createGalleryGhost(rows) {
+        const firstBox = rows[0].getBoundingClientRect();
+        const ghost = document.createElement('table');
+        const ghostBody = document.createElement('tbody');
+        ghost.className = 'admin-image-order-ghost admin-gallery-order-ghost';
+        ghost.style.width = `${firstBox.width}px`;
+        ghost.style.left = `${firstBox.left}px`;
+        rows.slice(0, 6).forEach((row) => {
+            const clonedRow = row.cloneNode(true);
+            copyCellWidths(row, clonedRow);
+            clonedRow.classList.add('is-ghost-row');
+            clonedRow.removeAttribute('data-gallery-row');
+            clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+            ghostBody.appendChild(clonedRow);
+        });
+        if (rows.length > 6) {
+            const summaryRow = document.createElement('tr');
+            const summaryCell = document.createElement('td');
+            summaryCell.colSpan = Math.max(1, rows[0].children.length);
+            summaryCell.textContent = `and ${rows.length - 6} nested galleries`;
+            summaryRow.appendChild(summaryCell);
+            ghostBody.appendChild(summaryRow);
+        }
+        ghost.appendChild(ghostBody);
+        document.body.appendChild(ghost);
+        return ghost;
+    }
+
+    /**
+     * Creates a placeholder row matching the moved subtree height.
+     *
+     * @param {HTMLTableRowElement[]} rows Rows being moved.
+     * @returns {HTMLTableRowElement} Placeholder inserted into the table body.
+     */
+    function createGalleryPlaceholder(rows) {
+        const placeholder = document.createElement('tr');
+        const cell = document.createElement('td');
+        const totalHeight = rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+        placeholder.className = 'admin-image-order-placeholder admin-gallery-order-placeholder';
+        placeholder.setAttribute('aria-hidden', 'true');
+        placeholder.dataset.depth = String(originalDepth);
+        cell.colSpan = Math.max(1, rows[0].children.length);
+        cell.style.height = `${Math.max(32, totalHeight)}px`;
+        placeholder.appendChild(cell);
+        return placeholder;
+    }
+
+    /**
+     * Moves the fixed ghost table to follow the current pointer position.
+     *
+     * @param {number} clientY Current viewport Y coordinate.
+     * @returns {void}
+     */
+    function moveGhost(clientY) {
+        if (!ghostTable) {
+            return;
+        }
+        ghostTable.style.top = `${clientY - pointerOffsetY}px`;
+    }
+
+    /**
+     * Returns rows available as insertion targets while a subtree is moving.
+     *
+     * @returns {HTMLTableRowElement[]} Rows not currently hidden as part of the moved subtree.
+     */
+    function availableRows() {
+        return galleryRows().filter((row) => !row.classList.contains('is-reorder-hidden'));
+    }
+
+    /**
+     * Finds the row before which the placeholder should be inserted.
+     *
+     * @param {number} pointerY Current pointer Y coordinate.
+     * @returns {HTMLTableRowElement|null} Row before the placeholder, or null to append.
+     */
+    function rowBeforePointer(pointerY) {
+        return availableRows().reduce((closest, row) => {
+            const box = row.getBoundingClientRect();
+            const offset = pointerY - box.top - (box.height / 2);
+            if (offset < 0 && offset > closest.offset) {
+                return {offset, row};
+            }
+            return closest;
+        }, {offset: Number.NEGATIVE_INFINITY, row: null}).row;
+    }
+
+    /**
+     * Returns the row that would visually precede the placeholder.
+     *
+     * @returns {HTMLTableRowElement|null} Previous real gallery row, or null at table start.
+     */
+    function rowBeforePlaceholder() {
+        let previous = placeholderRow?.previousElementSibling || null;
+        while (previous && !previous.matches('[data-gallery-row]:not(.is-reorder-hidden)')) {
+            previous = previous.previousElementSibling;
+        }
+        return previous;
+    }
+
+    /**
+     * Calculates a legal tree depth from pointer X and the surrounding rows.
+     *
+     * @param {number} clientX Current pointer X coordinate.
+     * @returns {number} Candidate depth for the moved root gallery.
+     */
+    function depthFromPointer(clientX) {
+        const previousRow = rowBeforePlaceholder();
+        const maxDepth = previousRow ? rowDepth(previousRow) + 1 : 0;
+        const rawDepth = originalDepth + Math.round((clientX - startClientX) / indentWidth);
+        return Math.max(0, Math.min(maxDepth, rawDepth));
+    }
+
+    /**
+     * Updates placeholder indentation and status text for the current target depth.
+     *
+     * @param {number} depth Candidate depth for the moved gallery.
+     * @returns {void}
+     */
+    function applyPlaceholderDepth(depth) {
+        proposedDepth = depth;
+        if (placeholderRow) {
+            placeholderRow.dataset.depth = String(depth);
+            placeholderRow.style.setProperty('--gallery-drag-depth', String(depth));
+        }
+        setStatus(depth > originalDepth ? 'Release to nest the gallery here.' : (depth < originalDepth ? 'Release to move the gallery out here.' : 'Release to save the new gallery position.'), 'dragging');
+    }
+
+    /**
+     * Moves the placeholder to the insertion point under the pointer.
+     *
+     * @param {number} clientY Current viewport Y coordinate.
+     * @param {number} clientX Current viewport X coordinate.
+     * @returns {void}
+     */
+    function movePlaceholder(clientY, clientX) {
+        if (!placeholderRow) {
+            return;
+        }
+        const beforeRow = rowBeforePointer(clientY);
+        if (beforeRow === null) {
+            body.appendChild(placeholderRow);
+        } else if (beforeRow !== placeholderRow.nextElementSibling) {
+            body.insertBefore(placeholderRow, beforeRow);
+        }
+        applyPlaceholderDepth(depthFromPointer(clientX));
+    }
+
+    /**
+     * Applies a new depth to the moved rows while preserving descendant offsets.
+     *
+     * @param {number} newRootDepth New depth for the dragged root gallery.
+     * @returns {void}
+     */
+    function applyMovedDepths(newRootDepth) {
+        const shift = newRootDepth - originalDepth;
+        draggedRows.forEach((row) => {
+            const nextDepth = Math.max(0, rowDepth(row) + shift);
+            setGalleryRowDepth(row, nextDepth);
+        });
+    }
+
+    /**
+     * Updates depth-related row metadata and title indentation classes.
+     *
+     * @param {HTMLTableRowElement} row Row to update.
+     * @param {number} depth New visible tree depth.
+     * @returns {void}
+     */
+    function setGalleryRowDepth(row, depth) {
+        const title = row.querySelector('.tree-title');
+        row.dataset.depth = String(depth);
+        row.classList.toggle('is-subgallery', depth > 0);
+        if (!title) {
+            return;
+        }
+        Array.from(title.classList).forEach((className) => {
+            if (className.startsWith('tree-depth-')) {
+                title.classList.remove(className);
+            }
+        });
+        title.classList.add(`tree-depth-${Math.min(depth, 8)}`);
+        title.querySelector('.tree-branch')?.remove();
+        if (depth > 0 && !title.querySelector('.tree-branch')) {
+            const branch = document.createElement('span');
+            branch.className = 'tree-branch';
+            branch.setAttribute('aria-hidden', 'true');
+            const link = title.querySelector('a');
+            title.insertBefore(branch, link || null);
+        }
+    }
+
+    /**
+     * Derives parent ids for every visible row from the flattened depth values.
+     *
+     * @returns {Array<{id: string, parent_id: string}>} Ordered rows with parent ids.
+     */
+    function serializeGalleryTree() {
+        const stack = [];
+        return galleryRows().map((row) => {
+            const depth = rowDepth(row);
+            stack.length = depth;
+            const parent = depth > 0 ? stack[depth - 1] : '0';
+            const id = row.dataset.galleryId || '';
+            row.dataset.parentId = parent || '0';
+            stack[depth] = id;
+            return {id, parent_id: parent || '0'};
+        }).filter((entry) => entry.id !== '');
+    }
+
+    /**
+     * Sends the complete gallery order to PHP for validation and persistence.
+     *
+     * @returns {Promise<void>} Promise resolved after the save attempt finishes.
+     */
+    async function saveGalleryTree() {
+        if (saveController) {
+            saveController.abort();
+        }
+        const bodyData = new FormData();
+        bodyData.set('csrf_token', csrfInput.value);
+        bodyData.set('gallery_tree', JSON.stringify(serializeGalleryTree()));
+        bodyData.set('ajax', '1');
+
+        const controller = new AbortController();
+        saveController = controller;
+        setStatus('Saving gallery order and nesting...', 'saving');
+        try {
+            const response = await fetch(reorderUrl, {
+                method: 'POST',
+                body: bodyData,
+                headers: {'Accept': 'application/json'},
+                signal: controller.signal,
+            });
+            if (!response.ok) {
+                throw new Error('The server rejected the gallery reorder request.');
+            }
+            const result = await response.json();
+            if (!result.ok) {
+                throw new Error(result.message || 'Gallery order could not be saved.');
+            }
+            setStatus(result.message || 'Gallery order saved.', 'saved');
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
+            setStatus(error.message || 'Gallery order could not be saved.', 'error');
+        } finally {
+            if (saveController === controller) {
+                saveController = null;
+            }
+        }
+    }
+
+    /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * PHP stores the canonical relative path in data-image-name so sorting does
+     * not depend on presentation markup. The visible cell is still used as a
+     * fallback for older cached markup during rolling updates.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * Automatic name sorting intentionally reuses the same save endpoint as
+     * manual dragging. Server-side validation, CSRF checks, exact image-list
+     * comparison, transactional sort_order updates, and admin logging therefore
+     * stay identical for both ordering methods.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
+    }
+
+    /**
+     * Removes document-level movement listeners for any active input path.
+     *
+     * @returns {void}
+     */
+    function removeDocumentListeners() {
+        document.removeEventListener('pointermove', handleDocumentPointerMove, true);
+        document.removeEventListener('pointerup', handleDocumentPointerEnd, true);
+        document.removeEventListener('pointercancel', handleDocumentPointerEnd, true);
+        document.removeEventListener('mousemove', handleDocumentMouseMove, true);
+        document.removeEventListener('mouseup', handleDocumentMouseEnd, true);
+        document.removeEventListener('keydown', handleDocumentKeydown, true);
+    }
+
+    /**
+     * Cleans temporary drag elements and optionally inserts the moved rows at the placeholder.
+     *
+     * @param {boolean} commit Whether the moved rows should move to the placeholder position.
+     * @returns {boolean} Whether cleanup found an active drag session.
+     */
+    function cleanupVisuals(commit) {
+        if (draggedRows.length === 0) {
+            return false;
+        }
+        if (commit && placeholderRow?.parentNode === body) {
+            applyMovedDepths(proposedDepth);
+            draggedRows.forEach((row) => {
+                body.insertBefore(row, placeholderRow);
+            });
+        }
+        draggedRows.forEach((row) => row.classList.remove('is-dragging', 'is-reorder-hidden'));
+        draggedHandle?.classList.remove('is-dragging');
+        ghostTable?.remove();
+        placeholderRow?.remove();
+        document.body.classList.remove('admin-gallery-order-active');
+        removeDocumentListeners();
+        draggedRows = [];
+        draggedHandle = null;
+        placeholderRow = null;
+        ghostTable = null;
+        activePointerId = null;
+        activeMouseFallback = false;
+        return true;
+    }
+
+    /**
+     * Cancels the active gallery reorder operation.
+     *
+     * @returns {void}
+     */
+    function cancelReorder() {
+        if (!cleanupVisuals(false)) {
+            return;
+        }
+        setStatus('Gallery order unchanged.', 'idle');
+    }
+
+    /**
+     * Ends the current reorder operation and persists the new tree when it changed.
+     *
+     * @returns {void}
+     */
+    function finishReorder() {
+        if (draggedRows.length === 0) {
+            return;
+        }
+        cleanupVisuals(true);
+        serializeGalleryTree();
+        document.dispatchEvent(new Event('galleryRowsChanged'));
+        if (currentGallerySignature() !== originalSignature) {
+            saveGalleryTree();
+            return;
+        }
+        setStatus('Gallery order unchanged.', 'idle');
+    }
+
+    /**
+     * Handles pointer movement for the active drag session.
+     *
+     * @param {PointerEvent} event Pointer event emitted anywhere in the document.
+     * @returns {void}
+     */
+    function handleDocumentPointerMove(event) {
+        if (activePointerId !== null && event.pointerId !== activePointerId) {
+            return;
+        }
+        event.preventDefault();
+        moveGhost(event.clientY);
+        movePlaceholder(event.clientY, event.clientX);
+    }
+
+    /**
+     * Handles pointer release or cancellation for the active drag session.
+     *
+     * @param {PointerEvent} event Pointer event emitted anywhere in the document.
+     * @returns {void}
+     */
+    function handleDocumentPointerEnd(event) {
+        if (activePointerId !== null && event.pointerId !== activePointerId) {
+            return;
+        }
+        event.preventDefault();
+        finishReorder();
+    }
+
+    /**
+     * Handles mouse movement for the fallback mouse path.
+     *
+     * @param {MouseEvent} event Mouse event emitted anywhere in the document.
+     * @returns {void}
+     */
+    function handleDocumentMouseMove(event) {
+        if (!activeMouseFallback) {
+            return;
+        }
+        event.preventDefault();
+        moveGhost(event.clientY);
+        movePlaceholder(event.clientY, event.clientX);
+    }
+
+    /**
+     * Handles mouse release for the fallback mouse path.
+     *
+     * @param {MouseEvent} event Mouse event emitted anywhere in the document.
+     * @returns {void}
+     */
+    function handleDocumentMouseEnd(event) {
+        if (!activeMouseFallback) {
+            return;
+        }
+        event.preventDefault();
+        finishReorder();
+    }
+
+    /**
+     * Lets the admin cancel an active gallery reorder operation with Escape.
+     *
+     * @param {KeyboardEvent} event Key event emitted during dragging.
+     * @returns {void}
+     */
+    function handleDocumentKeydown(event) {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        event.preventDefault();
+        cancelReorder();
+    }
+
+    /**
+     * Starts moving the gallery subtree controlled by a drag handle.
+     *
+     * @param {HTMLElement} handle Drag handle pressed by the admin.
+     * @param {number} clientX Starting viewport X coordinate.
+     * @param {number} clientY Starting viewport Y coordinate.
+     * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
+     * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
+     * @returns {void}
+     */
+    function startReorder(handle, clientX, clientY, pointerId, mouseFallback) {
+        const row = handle.closest('[data-gallery-row]');
+        if (!row || draggedRows.length > 0) {
+            return;
+        }
+        draggedRows = collectMovedRows(row);
+        if (draggedRows.length === 0) {
+            return;
+        }
+
+        const rowBox = row.getBoundingClientRect();
+        draggedHandle = handle;
+        originalSignature = currentGallerySignature();
+        originalDepth = rowDepth(row);
+        proposedDepth = originalDepth;
+        pointerOffsetY = clientY - rowBox.top;
+        startClientX = clientX;
+        activePointerId = pointerId;
+        activeMouseFallback = mouseFallback;
+        placeholderRow = createGalleryPlaceholder(draggedRows);
+        ghostTable = createGalleryGhost(draggedRows);
+
+        body.insertBefore(placeholderRow, draggedRows[draggedRows.length - 1].nextSibling);
+        draggedRows.forEach((movedRow) => movedRow.classList.add('is-dragging', 'is-reorder-hidden'));
+        handle.classList.add('is-dragging');
+        document.body.classList.add('admin-gallery-order-active');
+        moveGhost(clientY);
+        applyPlaceholderDepth(originalDepth);
+
+        document.addEventListener('pointermove', handleDocumentPointerMove, true);
+        document.addEventListener('pointerup', handleDocumentPointerEnd, true);
+        document.addEventListener('pointercancel', handleDocumentPointerEnd, true);
+        document.addEventListener('mousemove', handleDocumentMouseMove, true);
+        document.addEventListener('mouseup', handleDocumentMouseEnd, true);
+        document.addEventListener('keydown', handleDocumentKeydown, true);
+    }
+
+    body.querySelectorAll('[data-gallery-row]').forEach((row) => {
+        // The native draggable attribute is disabled because custom pointer movement handles nested ordering.
+        row.setAttribute('draggable', 'false');
+    });
+
+    body.querySelectorAll('[data-admin-gallery-drag-handle]').forEach((handle) => {
+        // Prevents native text selection and browser drag images from interfering with the custom controller.
+        handle.setAttribute('draggable', 'false');
+        handle.addEventListener('dragstart', (event) => event.preventDefault());
+        handle.addEventListener('click', (event) => event.preventDefault());
+
+        handle.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            startReorder(handle, event.clientX, event.clientY, event.pointerId, false);
+        });
+
+        handle.addEventListener('mousedown', (event) => {
+            if (event.button !== 0 || draggedRows.length > 0) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            startReorder(handle, event.clientX, event.clientY, null, true);
+        });
+    });
+
+    setStatus('Gallery ordering ready.', 'idle');
 }
 
 /**
@@ -1403,6 +2258,8 @@ export function setupAdminImageReordering() {
         // The native draggable attribute is explicitly disabled because custom pointer movement handles ordering.
         row.setAttribute('draggable', 'false');
     });
+
+    table.querySelector('[data-admin-image-name-sort]')?.addEventListener('click', handleNameSortClick);
 
     body.querySelectorAll('[data-admin-image-drag-handle]').forEach((handle) => {
         // Prevents the browser from selecting the arrow text or trying to create a native button drag image.

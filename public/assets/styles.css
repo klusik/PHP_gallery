@@ -583,6 +583,38 @@ td {
     color: #fffdf8;
 }
 
+
+
+/* Keeps the thumbnail maintenance warning readable while giving the admin a small temporary-dismiss action. */
+.admin-thumbnail-maintenance-notice {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+/* Allows the warning text to wrap naturally beside the dismiss form. */
+.admin-thumbnail-maintenance-copy {
+    flex: 1 1 auto;
+}
+
+/* Prevents the dismiss form from stretching the notice vertically more than needed. */
+.admin-thumbnail-maintenance-dismiss {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* Keeps the dismiss button usable on narrow admin screens. */
+@media (max-width: 44rem) {
+    .admin-thumbnail-maintenance-notice {
+        display: block;
+    }
+
+    .admin-thumbnail-maintenance-dismiss {
+        margin-top: 0.75rem;
+    }
+}
+
 /* Styles the .compact-support area of the gallery interface. */
 .compact-support {
     padding: 0.75rem 1rem;
@@ -3044,6 +3076,31 @@ body.has-map-overlay {
     text-align: center;
 }
 
+/* Makes the image-name header look like a sortable table title rather than a form submit control. */
+.admin-image-name-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Keeps keyboard focus visible when sorting the image table from the Name header. */
+.admin-image-name-sort:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 3px;
+}
+
+/* Gives pointer users clear feedback that the Name header can apply an immediate saved sort. */
+.admin-image-name-sort:hover {
+    text-decoration: underline;
+}
+
 /* Styles the dedicated pointer handle used to move image rows without interfering with checkboxes or links. */
 .admin-image-drag-handle {
     display: inline-flex;
@@ -3586,4 +3643,117 @@ body.admin-image-order-active {
     .theme-preview-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Adds compact guidance and status styling for Admin gallery tree ordering. */
+.admin-gallery-order-toolbar {
+    margin-top: 0;
+}
+
+/* Keeps the gallery move handle visually aligned with the existing photo move handle. */
+.admin-gallery-drag-handle {
+    font-size: 14px;
+}
+
+/* Makes the nested gallery table advertise pointer-based ordering without changing table layout. */
+.admin-gallery-order-table tr.is-dragging td {
+    background: #e8f2ff;
+    opacity: 0.72;
+}
+
+/* Keeps moved gallery rows in the table model while the ghost follows the pointer. */
+.admin-gallery-order-table tr.is-reorder-hidden {
+    visibility: hidden;
+}
+
+/* Prevents accidental text selection while galleries are being reordered or nested. */
+body.admin-gallery-order-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* Shows the exact drop position and uses indentation to preview the target tree depth. */
+.admin-gallery-order-placeholder td {
+    padding: 0;
+    border: 2px dashed #2271b1;
+    background: linear-gradient(90deg, transparent 0, transparent calc(var(--gallery-drag-depth, 0) * 28px), rgba(34, 113, 177, 0.10) calc(var(--gallery-drag-depth, 0) * 28px));
+}
+
+/* Adds a clear vertical marker at the candidate tree depth while dragging horizontally. */
+.admin-gallery-order-placeholder td::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 100%;
+    margin-left: calc(var(--gallery-drag-depth, 0) * 28px);
+    background: #2271b1;
+}
+
+/* Keeps the gallery ghost readable when several nested rows move together. */
+.admin-gallery-order-ghost {
+    max-height: 420px;
+    overflow: hidden;
+}
+
+/* Makes the cloned gallery drag handle consistent inside the ghost row. */
+.admin-gallery-order-ghost .admin-gallery-drag-handle {
+    cursor: grabbing;
+}
+
+/* Keeps expanded admin log diagnostics readable without changing the table data model. */
+.log-entry-details summary {
+    cursor: pointer;
+}
+
+/* Gives the diagnostic export action breathing room inside a compact table cell. */
+.log-detail-actions {
+    margin: 0.75rem 0;
+}
+
+/* Renders admin log metadata as a compact two-column diagnostic list. */
+.log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) 1fr;
+    gap: 0.35rem 0.75rem;
+    margin: 0.75rem 0;
+}
+
+/* Keeps admin log detail labels visually distinct from values. */
+.log-detail-list dt {
+    font-weight: 700;
+}
+
+/* Prevents long request identifiers or routes from stretching the log table. */
+.log-detail-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Marks update recovery actions as potentially destructive maintenance operations. */
+.danger-zone {
+    border-color: rgba(190, 40, 40, 0.35);
+}
+
+/* Makes the clean reinstall button visually separate from normal update actions. */
+.button.danger,
+button.danger {
+    border-color: rgba(190, 40, 40, 0.65);
+}
+
+.admin-log-table-wrap {
+    overflow-x: auto;
+}
+
+.admin-log-table th a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.admin-log-table th a:hover,
+.admin-log-table th a:focus-visible {
+    text-decoration: underline;
+}
+
+[data-admin-log-live-state] {
+    min-width: 7rem;
 }

@@ -103,3 +103,57 @@ export function setupGalleryBulkDeleteConfirmation() {
         }
     });
 }
+
+export function setupThumbnailCacheDeleteConfirmation() {
+    // Confirm all-thumbnail deletion with a randomly selected simple word. The
+    // server still verifies the posted word so a missed browser prompt cannot
+    // silently delete the thumbnail cache.
+    document.addEventListener('submit', (event) => {
+        // Variable `form` stores this steps working value.
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-delete-all-thumbnails-form]')) {
+            return;
+        }
+        // Variable `submitter` stores this steps working value.
+        const submitter = event.submitter;
+        if (!(submitter instanceof HTMLElement) || !submitter.matches('[data-delete-all-thumbnails]')) {
+            return;
+        }
+        // Variable `words` stores the small confirmation vocabulary configured on the button.
+        const words = (submitter.dataset.confirmWords || '')
+            .split(',')
+            .map((word) => word.trim().toLowerCase())
+            .filter(Boolean);
+        if (!words.length) {
+            event.preventDefault();
+            window.alert('Thumbnail deletion is not configured correctly. No files were deleted.');
+            return;
+        }
+        // Variable `expectedWord` stores the randomly selected challenge word for this click.
+        const expectedWord = words[Math.floor(Math.random() * words.length)];
+        // Variable `typedWord` stores exactly what the admin entered in the browser prompt.
+        const typedWord = window.prompt([
+            'This will delete all generated thumbnail files for every gallery.',
+            'Original photos and gallery records will not be deleted.',
+            'The next public/admin view can regenerate thumbnails when needed.',
+            '',
+            `Type ${expectedWord} to confirm.`
+        ].join('\n'));
+        if ((typedWord || '').trim().toLowerCase() !== expectedWord) {
+            event.preventDefault();
+            window.alert('Thumbnail deletion cancelled. No thumbnail files were deleted.');
+            return;
+        }
+        // Variable `expectedInput` stores the hidden value used by the server-side safety check.
+        const expectedInput = form.querySelector('input[name="confirmation_expected"]');
+        // Variable `typedInput` stores the hidden value used by the server-side safety check.
+        const typedInput = form.querySelector('input[name="confirmation_typed"]');
+        if (expectedInput instanceof HTMLInputElement) {
+            expectedInput.value = expectedWord;
+        }
+        if (typedInput instanceof HTMLInputElement) {
+            typedInput.value = typedWord.trim().toLowerCase();
+        }
+    });
+}
+

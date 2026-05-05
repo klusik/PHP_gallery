@@ -1,5 +1,126 @@
 # Patch Notes
 
+## Version 0.55
+
+This update is a broad admin workflow rebuild focused on three areas: gallery ordering, log tooling, and updater
+  hardening. It also adds safer maintenance actions and a larger set of client-side admin behaviors.
+
+  ### Highlights
+
+  - Gallery ordering is now handled directly from the admin table, including drag-to-reorder and drag-to-nest
+    subgalleries.
+  - Admin logs gained live filtering and better ordering controls.
+  - Thumbnail maintenance now includes a controlled “delete all thumbnails” workflow with extra confirmation safeguards.
+  - The updater was made sturdier, with better cleanup of obsolete managed files and cleaner rollback/reinstall flows.
+  - The admin UI got a noticeable polish pass for ordering, logs, warnings, and destructive actions.
+
+  ### Admin Dashboard
+
+  - Gallery rows are now rendered in a deterministic tree order that respects sibling sort_order plus title fallback.
+  - A new gallery-order toolbar was added to the All Galleries table.
+  - The gallery table now includes a move handle column for drag-based nesting and reordering.
+  - The old “ordering” info panel was updated to reflect the new in-table workflow.
+  - The media tools card now includes:
+      - Create all thumbnails
+      - Delete all thumbnails
+      - Download all galleries
+
+  ### Gallery Reordering
+
+  - Added full gallery-tree reordering support in the admin UI.
+  - Dragging a gallery now moves its descendants as a unit.
+  - Horizontal drag motion changes nesting depth:
+      - Move right to nest under a parent
+      - Move left to pull back out to a higher level
+  - The full flattened tree is submitted to the server for validation and persistence.
+  - Server-side checks now reject:
+      - Invalid JSON
+      - Duplicate gallery IDs
+      - Missing galleries or stale tree state
+      - Self-parenting
+      - Invalid parent references
+      - Subgalleries submitted before their parent
+  - Parent changes are propagated to the folder structure on disk.
+  - Reordering now logs the operation with counts for total galleries and moved folders.
+  - The gallery edit screen now includes quick links back to the gallery list and to the public gallery view.
+
+  ### Image Ordering
+
+  - The image-order toolbar copy now explicitly mentions that filename sorting is available.
+  - The image table now has a clickable Name column that sorts photos alphabetically.
+  - Sorting by name is saved immediately, just like drag-based ordering.
+  - The Name header updates its arrow direction and accessibility label based on the next action.
+  - Image rows now carry explicit sortable name data for more reliable client-side ordering.
+
+  ### Admin Logs
+
+  - Logs now support live filtering without a full page reload.
+  - Filter changes can be applied immediately with debounced search input.
+  - The log results area updates dynamically with:
+      - Row HTML
+      - Result count
+      - Empty-state copy
+      - Current sort direction
+  - The time-sort control can now toggle direction cleanly in the live view.
+  - The UI now prevents duplicate log-status listeners from being attached repeatedly.
+  - Log detail rows now have better structure and readability:
+      - Summaries are clearly interactive
+      - Metadata is shown in a compact definition-list layout
+      - Long request values wrap safely
+  - Log table scrolling and header link styling were improved for usability.
+
+  ### Thumbnail Maintenance
+
+  - Added a new admin action to delete all generated thumbnails.
+  - The delete flow includes a browser prompt with a randomly chosen confirmation word.
+  - The server still verifies the typed confirmation word, so the action is not dependent only on the browser prompt.
+  - Thumbnail deletion is constrained to generated thumbnail cache directories under the gallery root.
+  - Original images, database rows, and unrelated files are not touched.
+  - A thumbnail inventory fingerprint was added so maintenance warning dismissal can be invalidated when the gallery
+    content changes.
+
+  ### Updater Hardening
+
+  - Update install paths now return richer diagnostics, not just a copied-file count.
+  - The updater now tracks removed obsolete managed files during installation.
+  - A new clean reinstall flow was added to reinstall the stable branch over the current site.
+  - The updater now removes stale generated ZIPs and temporary extraction folders from cache.
+  - More file types and directories are now treated as protected from update cleanup, including:
+      - .user.ini
+      - php.ini
+      - robots.txt
+      - .well-known
+  - Update and restore operations now provide better backup metadata and cleanup reporting.
+  - The updater now distinguishes between normal managed paths and a stricter full-clean mode.
+
+  ### Client-Side Admin Boot
+
+  - New admin actions were wired into the app bootstrap:
+      - admin_delete_thumbnails
+      - admin_dismiss_thumbnail_notice
+      - admin_reorder_galleries
+      - admin_log_export
+  - The main gallery JavaScript now loads the new admin behavior modules.
+  - Cache-busting query strings were added to the admin module imports.
+
+  ### UI and Styling
+
+  - Added styling for:
+      - Thumbnail maintenance notices
+      - Gallery drag handles and placeholders
+      - Gallery drag ghost previews
+      - Log detail blocks
+      - Dangerous maintenance buttons
+      - Live log state text
+  - Destructive admin actions are now visually separated with danger styling.
+  - Gallery ordering mode disables text selection and changes the cursor for clearer drag feedback.
+  - Image sorting and gallery reordering now have clearer keyboard focus states.
+
+  ### Technical Notes
+
+  - This change also updates the core manifest, reflecting the new file set and hashes.
+  - The commit title matches the scope: “Update and log redone.”
+
 ## Version 0.54
 
 - Added a new anonymous telemetry system with admin reporting, privacy controls, retention settings, and maintenance/
