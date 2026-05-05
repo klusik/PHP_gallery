@@ -132,6 +132,10 @@ function cms_admin_upload(): void
         }
     }
 
+    // $prefillGalleryId stores the gallery that should be pre-selected when upload is opened from a public gallery page.
+    $prefillGalleryId = selected_gallery_id_from_query('gallery_id');
+    // $prefillGallery stores the validated gallery record used for contextual helper text.
+    $prefillGallery = $prefillGalleryId > 0 ? find_gallery($prefillGalleryId) : null;
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
@@ -141,6 +145,9 @@ function cms_admin_upload(): void
     $rawSupported = raw_conversion_supported();
     render_header('Upload photos');
     echo '<section class="hero"><h1>Upload photos</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">Create empty gallery</a></nav></section>';
+    if ($prefillGallery) {
+        echo '<div class="notice">Upload target pre-selected: ' . e((string) $prefillGallery['title']) . '.</div>';
+    }
     if ($error !== '') {
         echo '<div class="notice">Upload failed: ' . e($error) . '</div>';
     }
@@ -167,7 +174,7 @@ function cms_admin_upload(): void
     $acceptValue = implode(',', $acceptTypes);
     echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="existing">';
-    echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select() . '</select></label>';
+    echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select($prefillGalleryId) . '</select></label>';
     echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';
     echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
     echo '<button type="submit">Upload images</button></form></section>';
@@ -175,7 +182,7 @@ function cms_admin_upload(): void
     echo '<input type="hidden" name="upload_mode" value="new">';
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
-    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options_for_new() . '</select></label>';
+    echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillGalleryId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillGalleryId) . '</select></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';

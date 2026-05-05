@@ -63,6 +63,8 @@ function theme_settings(): array
         'background_path' => app_setting('theme_background_path', ''),
         'radius' => app_setting('theme_radius', $defaults['radius']),
         'font' => app_setting('theme_font', $defaults['font']),
+        'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
+        'page_width_custom' => theme_page_width_custom_value(app_setting('theme_page_width_custom')),
     ];
 }
 
@@ -84,12 +86,20 @@ function theme_override_settings(): array
         'background_path' => app_setting('theme_background_path'),
         'radius' => app_setting('theme_radius'),
         'font' => app_setting('theme_font'),
+        'page_width' => app_setting('theme_page_width'),
+        'page_width_custom' => app_setting('theme_page_width_custom'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }
 
 /**
  * Remove saved slider/font overrides so the active CSS skin becomes the source.
+ *
+ * Page width is intentionally not deleted here. It is a structural layout
+ * preference rather than a color/font skin override, and normal Theme saves can
+ * legitimately combine a CSS skin with a wider or full-width public layout.
+ * The custom-width pixel value is kept for the same reason, and also so users
+ * can switch between presets without losing their tuned custom width.
  */
 function clear_theme_overrides(): void
 {
@@ -106,6 +116,33 @@ function clear_theme_overrides(): void
         'theme_radius',
         'theme_font',
     ]);
+}
+
+/**
+ * Normalize the configured public page-width mode to one of the supported layout presets.
+ */
+function theme_page_width_mode(string $value): string
+{
+    // $mode stores the trimmed user or database value before it is compared with supported presets.
+    $mode = trim($value);
+    return in_array($mode, ['default', 'wide', 'full', 'custom'], true) ? $mode : 'default';
+}
+
+/**
+ * Normalize the custom public page-width value used when the Custom preset is selected.
+ *
+ * The Admin form allows direct number input, so the service clamps everything
+ * server-side before the value reaches generated CSS. This keeps the final CSS
+ * predictable even if a browser bypasses the slider limits.
+ */
+function theme_page_width_custom_value(mixed $value): int
+{
+    // $width stores the requested custom container width in pixels before clamping.
+    $width = (int) $value;
+    if ($width <= 0) {
+        return 1440;
+    }
+    return max(1024, min(2048, $width));
 }
 
 /**

@@ -1,5 +1,101 @@
 # Patch Notes
 
+## Version 0.56
+
+This changeset focuses on two user-facing improvements:
+
+  - A new public page-width system for themes, including default, wide, custom, and full layouts
+  - Faster admin workflow by adding contextual shortcuts from public gallery pages into create/upload screens
+
+  ## Highlights
+
+  ### Theme layout controls
+
+  The Theme editor now supports selecting the public page container width separately from colors, fonts, and background
+  settings.
+
+  Available layout modes:
+
+  - Default for the existing standard-width layout
+  - Wider for a larger container
+  - Custom for a user-defined width between 1024px and 2048px
+  - Full width for a near-viewport layout
+
+  The live preview in the admin panel now reflects the selected layout mode, including custom width changes in real
+  time.
+
+  ### Contextual gallery actions
+
+  Public gallery admin controls now include direct action links:
+
+  - Create a gallery inside the current gallery
+  - Upload photos directly into the current gallery
+
+  This reduces navigation steps when managing nested gallery content.
+
+  ## What Changed
+
+  ### Theme system
+
+  - Added persistent theme settings for:
+      - theme_page_width
+      - theme_page_width_custom
+  - Added normalization and validation helpers for page width values
+  - Prevented unrelated Theme saves from re-copying the same preset CSS and unintentionally resetting visual overrides
+  - Kept page width as a structural preference instead of treating it like a color/font override
+
+  ### Public site rendering
+
+  - Public pages now receive a body class that reflects the active width mode
+  - Theme-generated CSS now defines the final container widths for:
+      - default
+      - wide
+      - custom
+      - full width
+  - The public header, main content, and footer all follow the selected layout mode
+
+  ### Admin Theme UI
+
+  - Added a new Page width selector to the Theme settings screen
+  - Added slider and numeric input controls for custom width
+  - Added live preview support for the width controls
+  - Preview UI now visually shows the selected width mode in the admin panel
+
+  ### Gallery admin workflow
+
+  - Public gallery action panel now links to:
+      - Create gallery here
+      - Upload photos here
+  - New gallery form can preselect a parent gallery from the query string
+  - Upload form can preselect a target gallery from the query string
+  - Helper notices now confirm which gallery was preselected
+  - Gallery select helpers now support a selected option for contextual navigation
+
+  ### Frontend polish
+
+  - Adjusted admin preview layout so the live theme panel behaves more reliably inside the page
+  - Updated styles to support the new width presets and custom-width control block
+  - Manifest hashes were refreshed to reflect the code changes
+
+  ## User Impact
+
+  ### For site visitors
+
+  - Public galleries can now be displayed in narrower, wider, custom, or full-width layouts
+  - Layout choice applies consistently across the main page structure
+
+  ### For administrators
+
+  - Theme customization is more flexible
+  - Live preview better matches the final public layout
+  - Creating nested galleries and uploading into a specific gallery takes fewer clicks
+
+  ## Notes
+
+  - Custom width is clamped server-side and client-side to keep values safe and consistent
+  - Page width changes persist independently from color/font overrides
+  - Existing theme presets remain compatible
+
 ## Version 0.55
 
 This update is a broad admin workflow rebuild focused on three areas: gallery ordering, log tooling, and updater

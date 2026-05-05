@@ -110,6 +110,8 @@ function cms_theme_css(): void
     $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
     // $backgroundOpacity stores an intermediate value used by the surrounding gallery workflow.
     $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
+    // $customPageWidth stores the validated pixel width used by the Custom page-width layout preset.
+    $customPageWidth = theme_page_width_custom_value($theme['page_width_custom'] ?? null);
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';
     echo '--accent-dark:' . css_value((string) $theme['accent_dark']) . ';';
@@ -120,9 +122,19 @@ function cms_theme_css(): void
     echo '--hero-text:' . css_value((string) $theme['hero_text']) . ';';
     echo '--radius:' . (int) $theme['radius'] . 'px;';
     echo '--font-family:' . css_value($fontFamily) . ';';
+    echo '--page-width-default:1120px;';
+    echo '--page-width-wide:1440px;';
+    echo '--page-width-custom:' . $customPageWidth . 'px;';
     echo '}';
     echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
     echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);position:relative;}';
+    // These layout rules are emitted by the generated theme stylesheet because it is loaded after
+    // built-in skins and uploaded custom CSS. Keeping the final page-width decision here makes the
+    // admin select effective even when a preset stylesheet defines its own .site-main width.
+    echo '.public-page .site-header,.public-page .site-main,.public-page .site-footer{width:min(var(--page-width-default,1120px),calc(100% - 2rem));max-width:none;margin-left:auto;margin-right:auto;}';
+    echo '.public-page.page-width-wide .site-header,.public-page.page-width-wide .site-main,.public-page.page-width-wide .site-footer{width:min(var(--page-width-wide,1440px),calc(100% - 2rem));max-width:none;}';
+    echo '.public-page.page-width-custom .site-header,.public-page.page-width-custom .site-main,.public-page.page-width-custom .site-footer{width:min(var(--page-width-custom,1440px),calc(100% - 2rem));max-width:none;}';
+    echo '.public-page.page-width-full .site-header,.public-page.page-width-full .site-main,.public-page.page-width-full .site-footer{width:calc(100% - clamp(1rem,3vw,3rem));max-width:none;}';
     echo '.theme-background-shell{position:fixed;inset:0;pointer-events:none;z-index:0;}';
     echo '.theme-background-base,.theme-background-image{position:absolute;inset:0;}';
     echo '.theme-background-base{background:var(--paper);}';

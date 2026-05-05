@@ -201,13 +201,17 @@ function cms_admin_theme(): void
             set_app_setting('site_name', $siteName !== '' ? substr($siteName, 0, 120) : 'Gallery CMS');
             // $themeControlsChanged stores an intermediate value used by the surrounding gallery workflow.
             $themeControlsChanged = (string) ($_POST['theme_controls_changed'] ?? '') === '1';
-            // Variable $preset stores this steps working value.
+            // Variable $preset stores the posted skin selector value.
             $preset = (string) ($_POST['custom_css_preset'] ?? '');
+            // $currentPreset stores the previously active preset. Saving unrelated
+            // Theme controls must not re-copy the same skin and trigger a reset of
+            // visual overrides on every submit.
+            $currentPreset = (string) app_setting('custom_css_preset', '');
             // Variable $presetPath stores this steps working value.
             $presetPath = custom_css_preset_path($preset);
             // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
             $customCssChanged = false;
-            if ($presetPath !== null) {
+            if ($presetPath !== null && $preset !== $currentPreset) {
                 copy($presetPath, custom_css_path());
                 set_app_setting('custom_css_preset', $preset);
                 // $customCssChanged stores an intermediate value used by the surrounding gallery workflow.
@@ -251,6 +255,8 @@ function cms_admin_theme(): void
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+            set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
+            set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
             set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
@@ -304,9 +310,19 @@ function cms_admin_theme(): void
     echo '<label class="theme-color-control">Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">Open gallery title and hero text.</span></label>';
     echo '<label>Rounded corners <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    // $pageWidthMode stores the normalized layout preset selected for the public page container.
+    $pageWidthMode = theme_page_width_mode((string) ($theme['page_width'] ?? 'default'));
+    // $customPageWidth stores the saved custom container width in pixels. It is always rendered so switching presets does not discard it.
+    $customPageWidth = theme_page_width_custom_value($theme['page_width_custom'] ?? null);
+    echo '<label>Page width<select name="theme_page_width" data-theme-preview-width data-theme-page-width-select><option value="default"' . ($pageWidthMode === 'default' ? ' selected' : '') . '>Default</option><option value="wide"' . ($pageWidthMode === 'wide' ? ' selected' : '') . '>Wider</option><option value="custom"' . ($pageWidthMode === 'custom' ? ' selected' : '') . '>Custom</option><option value="full"' . ($pageWidthMode === 'full' ? ' selected' : '') . '>Full width</option></select><span class="muted">Controls the public page container. Full width follows the available screen width dynamically.</span></label>';
+    echo '<div class="theme-custom-width-control" data-theme-custom-width-control' . ($pageWidthMode === 'custom' ? '' : ' hidden') . '>';
+    echo '<label>Custom page width <span class="muted" data-theme-custom-width-display>' . $customPageWidth . 'px</span><input type="range" name="theme_page_width_custom_slider" min="1024" max="2048" step="1" value="' . $customPageWidth . '" data-theme-custom-width-slider></label>';
+    echo '<label>Custom width in pixels<input type="number" name="theme_page_width_custom" min="1024" max="2048" step="1" value="' . $customPageWidth . '" inputmode="numeric" data-theme-preview-custom-width data-theme-custom-width-number><span class="muted">Allowed range: 1024 to 2048 px.</span></label>';
+    echo '</div>';
     echo '</div>';
     echo '<aside class="theme-live-preview" aria-label="Live theme preview" data-theme-live-preview>';
-    echo '<div class="theme-preview-page" data-theme-preview-page>';
+    // The preview starts from the saved page-width mode and custom pixel value before JavaScript runs.
+    echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
     echo '<div class="theme-preview-background"><span data-theme-preview-background-image></span></div>';
     echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e(site_name()) . '</strong><nav><span class="theme-preview-link">Home</span><span class="theme-preview-link">Galleries</span></nav></header>';
     echo '<section class="theme-preview-hero"><p>Open gallery</p><h2 data-theme-preview-hero-title>Aircraft Weekend</h2><span class="theme-preview-tag">travel</span></section>';
