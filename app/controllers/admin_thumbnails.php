@@ -45,7 +45,13 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
     if (($summary['images_with_missing'] ?? 0) <= 0 && ($summary['webp_skipped'] ?? 0) <= 0) {
         return;
     }
-    echo '<div class="notice">';
+
+    if (thumbnail_maintenance_notice_is_dismissed($summary)) {
+        return;
+    }
+
+    echo '<div class="notice admin-thumbnail-maintenance-notice">';
+    echo '<div class="admin-thumbnail-maintenance-copy">';
     if (($summary['images_with_missing'] ?? 0) > 0) {
         echo '<strong>Thumbnail maintenance required.</strong> ';
         echo e((string) $summary['images_with_missing']) . ' image(s) are missing optimized thumbnails or have stale thumbnail files. ';
@@ -60,6 +66,74 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
         echo 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.';
     }
     echo '</div>';
+    echo '<form method="post" action="' . e(url_for('admin_dismiss_thumbnail_notice')) . '" class="admin-thumbnail-maintenance-dismiss">';
+    echo csrf_field();
+    echo '<input type="hidden" name="thumbnail_inventory_fingerprint" value="' . e((string) ($summary['inventory_fingerprint'] ?? '')) . '">';
+    echo '<button type="submit" class="secondary">Dismiss for 7 days</button>';
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Store a seven-day dismissal for the current thumbnail maintenance warning.
+ *
+ * The dismissal is intentionally bound to a lightweight image inventory
+ * fingerprint. Adding or importing a new image changes that fingerprint, which
+ * makes the old dismissal invalid before its seven-day expiry.
+ *
+ * @return void
+ */
+function cms_admin_dismiss_thumbnail_notice(): void
+{
+    require_admin();
+    verify_csrf();
+
+    // $fingerprint stores the exact image inventory state seen by the admin.
+    $fingerprint = trim((string) ($_POST['thumbnail_inventory_fingerprint'] ?? ''));
+    // $currentFingerprint stores the server-side inventory state at submit time.
+    $currentFingerprint = thumbnail_inventory_fingerprint();
+
+    if ($fingerprint !== '' && hash_equals($currentFingerprint, $fingerprint)) {
+        set_app_setting('thumbnail_notice_dismissed_until', gmdate('Y-m-d H:i:s', time() + 7 * 86400));
+        set_app_setting('thumbnail_notice_dismissed_inventory', $currentFingerprint);
+        flash_message('admin_notice', 'Thumbnail maintenance warning dismissed for 7 days. It will appear again sooner if new images are added.');
+    } else {
+        delete_app_settings(['thumbnail_notice_dismissed_until', 'thumbnail_notice_dismissed_inventory']);
+        flash_message('admin_notice', 'Thumbnail maintenance warning was not dismissed because the image list changed.');
+    }
+
+    redirect_to(url_for('admin') . '#admin-thumbnails');
+}
+
+/**
+ * Return true when the current thumbnail maintenance warning is temporarily hidden.
+ *
+ * Both conditions must match: the dismissal timestamp must still be in the
+ * future, and the image inventory fingerprint must match the current summary.
+ * If either value is stale, the dismissal settings are removed so later checks
+ * start from a clean state.
+ */
+function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
+{
+    // $dismissedUntil stores the UTC SQL timestamp after which the warning must reappear.
+    $dismissedUntil = trim((string) app_setting('thumbnail_notice_dismissed_until', ''));
+    // $dismissedInventory stores the image inventory fingerprint captured when the admin dismissed the warning.
+    $dismissedInventory = trim((string) app_setting('thumbnail_notice_dismissed_inventory', ''));
+    // $currentInventory stores the current fingerprint supplied by thumbnail_maintenance_summary().
+    $currentInventory = (string) ($summary['inventory_fingerprint'] ?? thumbnail_inventory_fingerprint());
+
+    if ($dismissedUntil === '' || $dismissedInventory === '') {
+        return false;
+    }
+
+    // $expiresAt stores the parsed Unix timestamp for the dismissal.
+    $expiresAt = strtotime($dismissedUntil . ' UTC');
+    if ($expiresAt === false || $expiresAt <= time() || !hash_equals($currentInventory, $dismissedInventory)) {
+        delete_app_settings(['thumbnail_notice_dismissed_until', 'thumbnail_notice_dismissed_inventory']);
+        return false;
+    }
+
+    return true;
 }
 
 /**
@@ -162,6 +236,67 @@ function cms_admin_create_thumbnails_batch(): void
         'skipped' => $skipped,
         'done' => $processed >= $total,
     ]);
+}
+
+
+/**
+ * Handles cms admin delete thumbnails logic for the gallery application.
+ *
+ * The operation is intentionally separate from thumbnail generation so the
+ * destructive path can have its own CSRF check, explicit confirmation token,
+ * admin flash message, and operational log entry. The confirmation word is not
+ * a security mechanism. It is a human safety rail against accidental clicks.
+ *
+ * @return void
+ */
+function cms_admin_delete_thumbnails(): void
+{
+    require_admin();
+    verify_csrf();
+
+    // $expectedWord stores the randomly selected challenge word sent by the browser.
+    $expectedWord = strtolower(trim((string) ($_POST['confirmation_expected'] ?? '')));
+    // $typedWord stores the admin-entered response to the destructive action prompt.
+    $typedWord = strtolower(trim((string) ($_POST['confirmation_typed'] ?? '')));
+    // $allowedWords stores the intentionally small challenge vocabulary shared with the admin UI.
+    $allowedWords = thumbnail_delete_confirmation_words();
+
+    if ($expectedWord === '' || $typedWord === '' || $expectedWord !== $typedWord || !in_array($expectedWord, $allowedWords, true)) {
+        flash_message('admin_notice', 'Thumbnail deletion was not confirmed. No thumbnail files were deleted.');
+        redirect_to(url_for('admin') . '#admin-thumbnails');
+    }
+
+    try {
+        // $result stores the count of deleted files and removed thumbnail directories.
+        $result = delete_all_thumbnail_files();
+        admin_log_event('warning', 'thumbnail.cache_deleted', 'Admin deleted all generated thumbnail cache files.', [
+            'files_deleted' => (int) $result['files_deleted'],
+            'directories_removed' => (int) $result['directories_removed'],
+            'directories_scanned' => (int) $result['directories_scanned'],
+        ]);
+        flash_message('admin_notice', 'Deleted ' . (int) $result['files_deleted'] . ' thumbnail file(s) and removed ' . (int) $result['directories_removed'] . ' thumbnail folder(s).');
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'thumbnail.cache_delete_failed', 'Admin thumbnail cache deletion failed.', [
+            'error' => $exception->getMessage(),
+        ]);
+        flash_message('admin_notice', 'Thumbnail deletion failed: ' . $exception->getMessage());
+    }
+
+    redirect_to(url_for('admin') . '#admin-thumbnails');
+}
+
+/**
+ * Return the allowed confirmation words for deleting generated thumbnails.
+ *
+ * Keeping this vocabulary server-side prevents arbitrary submitted words from
+ * confirming the destructive action. The JavaScript button uses the same words
+ * from its data attribute and picks one randomly for the prompt.
+ *
+ * @return array<int, string>
+ */
+function thumbnail_delete_confirmation_words(): array
+{
+    return ['archive', 'remove', 'clean', 'thumbs', 'purge', 'reset', 'delete', 'cache', 'media', 'confirm'];
 }
 
 /**

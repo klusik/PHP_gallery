@@ -57,7 +57,7 @@ import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thum
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js';
 import { setupVoteForms } from './gallery-modules/votes.js';
-import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js';
+import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260505-thumbnail-cache-delete';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox.js';
 import {
     setupAdminGalleryFilters,
@@ -101,6 +101,7 @@ function runWhenDomReady(callback) {
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupGalleryBulkDeleteConfirmation();
+    setupThumbnailCacheDeleteConfirmation();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

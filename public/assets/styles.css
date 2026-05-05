@@ -583,6 +583,38 @@ td {
     color: #fffdf8;
 }
 
+
+
+/* Keeps the thumbnail maintenance warning readable while giving the admin a small temporary-dismiss action. */
+.admin-thumbnail-maintenance-notice {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+/* Allows the warning text to wrap naturally beside the dismiss form. */
+.admin-thumbnail-maintenance-copy {
+    flex: 1 1 auto;
+}
+
+/* Prevents the dismiss form from stretching the notice vertically more than needed. */
+.admin-thumbnail-maintenance-dismiss {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* Keeps the dismiss button usable on narrow admin screens. */
+@media (max-width: 44rem) {
+    .admin-thumbnail-maintenance-notice {
+        display: block;
+    }
+
+    .admin-thumbnail-maintenance-dismiss {
+        margin-top: 0.75rem;
+    }
+}
+
 /* Styles the .compact-support area of the gallery interface. */
 .compact-support {
     padding: 0.75rem 1rem;

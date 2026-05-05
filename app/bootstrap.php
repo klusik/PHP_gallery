@@ -180,6 +180,8 @@ function cms_run(): void
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',
+        'admin_dismiss_thumbnail_notice' => 'cms_admin_dismiss_thumbnail_notice',
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_reorder_galleries' => 'cms_admin_reorder_galleries',

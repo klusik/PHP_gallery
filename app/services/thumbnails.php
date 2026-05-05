@@ -113,15 +113,97 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
  */
 function gallery_thumbs_dir(array $gallery, bool $create = false): string
 {
-    // Variable $path stores this steps working value.
-    $path = gallery_abs_path((string) $gallery['folder_path']) . DIRECTORY_SEPARATOR . 'thumbs';
+    // $galleryRoot stores the absolute gallery directory once so all later checks compare against the same base path.
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    // $path stores the direct thumbnail cache directory used by generated responsive thumbnails.
+    $path = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbs';
+
     if ($create && !is_dir($path)) {
         mkdir($path, 0775, true);
     }
-    if (!path_inside(gallery_abs_path((string) $gallery['folder_path']), $path)) {
+
+    // The old check used path_inside(), which requires the checked path to already exist.
+    // That was correct for existing thumbnail folders, but it broke safe maintenance
+    // workflows that need to inspect a future/non-existing thumbs directory first.
+    if (!thumbnail_path_inside_existing_gallery($galleryRoot, $path)) {
         throw new RuntimeException('Thumbnail path is outside its gallery.');
     }
+
     return $path;
+}
+
+/**
+ * Check whether a thumbnail path is safely contained by an existing gallery path.
+ *
+ * path_inside() intentionally uses realpath() for both arguments, which is very
+ * strict and only works when both paths already exist. Thumbnail maintenance also
+ * needs to reason about a `thumbs` directory that may not exist yet, especially
+ * before deciding there is nothing to delete. This helper keeps the realpath()
+ * protection for the gallery root, then normalizes the candidate path manually
+ * so non-existing thumbnail directories can still be validated safely.
+ */
+function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thumbnailPath): bool
+{
+    // $galleryRootReal is the trusted existing directory boundary.
+    $galleryRootReal = realpath($galleryRoot);
+    if ($galleryRootReal === false || !is_dir($galleryRootReal)) {
+        return false;
+    }
+
+    // $candidatePath is normalized textually because the thumbnail path may not exist.
+    $candidatePath = normalize_filesystem_path($thumbnailPath);
+    // $normalizedRoot is normalized the same way so prefix comparison is platform-consistent.
+    $normalizedRoot = normalize_filesystem_path($galleryRootReal);
+
+    return $candidatePath === $normalizedRoot || str_starts_with($candidatePath, rtrim($normalizedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR);
+}
+
+/**
+ * Normalize a filesystem path string without requiring the target to exist.
+ *
+ * This is deliberately small and local to thumbnail path safety. It resolves
+ * duplicate separators, `.` segments, and `..` segments in the supplied string,
+ * but it does not dereference symlinks. The trusted gallery root is still based
+ * on realpath(), so symlink boundary protection remains anchored at the root.
+ */
+function normalize_filesystem_path(string $path): string
+{
+    // $path uses the current platform separator so later comparisons are consistent.
+    $path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+    // $isAbsolute records whether the normalized result must keep an absolute root prefix.
+    $isAbsolute = str_starts_with($path, DIRECTORY_SEPARATOR) || preg_match('~^[A-Za-z]:\\\\~', $path) === 1;
+    // $prefix stores the leading root portion for Unix paths or Windows drive paths.
+    $prefix = '';
+
+    if (preg_match('~^[A-Za-z]:\\\\~', $path) === 1) {
+        $prefix = substr($path, 0, 2);
+        $path = substr($path, 2);
+    } elseif ($isAbsolute) {
+        $prefix = DIRECTORY_SEPARATOR;
+    }
+
+    // $segments stores the safe path components after resolving dot navigation.
+    $segments = [];
+    foreach (explode(DIRECTORY_SEPARATOR, $path) as $segment) {
+        if ($segment === '' || $segment === '.') {
+            continue;
+        }
+        if ($segment === '..') {
+            array_pop($segments);
+            continue;
+        }
+        $segments[] = $segment;
+    }
+
+    // $normalized stores the path without duplicate separators or dot segments.
+    $normalized = implode(DIRECTORY_SEPARATOR, $segments);
+    if ($prefix === DIRECTORY_SEPARATOR) {
+        return DIRECTORY_SEPARATOR . $normalized;
+    }
+    if ($prefix !== '') {
+        return $prefix . DIRECTORY_SEPARATOR . $normalized;
+    }
+    return $normalized;
 }
 
 /**
@@ -389,7 +471,7 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
         // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
         $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
         if (!$galleryIds) {
-            return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false];
+            return ['images_scanned' => 0, 'images_with_missing' => 0, 'missing_variants' => 0, 'webp_skipped' => 0, 'limited' => false, 'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds)];
         }
         $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
         // $params stores an intermediate value used by the surrounding gallery workflow.
@@ -438,7 +520,141 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
         'missing_variants' => $missingVariants,
         'webp_skipped' => $webpSkipped,
         'limited' => $limited,
+        'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
+}
+
+/**
+ * Build a lightweight fingerprint of the currently indexed image inventory.
+ *
+ * The dismissal feature for thumbnail maintenance warnings uses this value to
+ * distinguish "same warning, temporarily hidden" from "the gallery content
+ * changed, show the warning again". The fingerprint only uses aggregate image
+ * metadata, not filenames, paths, titles, EXIF data, IP addresses, or visitor
+ * information. A newly imported image changes the count, maximum image id, or
+ * newest creation timestamp and therefore invalidates the old dismissal.
+ *
+ * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ */
+function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
+{
+    // $params stores bound gallery ids when the caller wants a scoped inventory check.
+    $params = [];
+    // $where stores the same top-level image condition used by thumbnail_maintenance_summary().
+    $where = "relative_path NOT LIKE '%/%'";
+
+    if ($galleryIds !== null) {
+        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        if ($galleryIds === []) {
+            return hash('sha256', 'empty-gallery-scope');
+        }
+        $where .= ' AND gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        $params = $galleryIds;
+    }
+
+    // $stmt reads only aggregate metadata so the check stays cheap even on large galleries.
+    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(created_at), '') AS newest_created_at FROM images WHERE $where");
+    $stmt->execute($params);
+    // $row stores the aggregate inventory state that controls warning dismissal.
+    $row = $stmt->fetch() ?: [];
+
+    return hash('sha256', implode('|', [
+        (string) ($row['image_count'] ?? '0'),
+        (string) ($row['newest_id'] ?? '0'),
+        (string) ($row['newest_created_at'] ?? ''),
+    ]));
+}
+
+/**
+ * Delete every generated thumbnail cache directory below known gallery folders.
+ *
+ * The function only targets each gallery's own `thumbs` directory. It does not
+ * delete original images, uploaded gallery cover assets, database rows, or any
+ * files outside the configured gallery root. The returned counters are used by
+ * the admin notice and by the operational log.
+ *
+ * @return array{files_deleted:int,directories_removed:int,directories_scanned:int}
+ */
+function delete_all_thumbnail_files(): array
+{
+    // $filesDeleted counts individual thumbnail files removed from disk.
+    $filesDeleted = 0;
+    // $directoriesRemoved counts thumbs directories removed after their files are gone.
+    $directoriesRemoved = 0;
+    // $directoriesScanned counts existing thumbs directories touched by this run.
+    $directoriesScanned = 0;
+    // $galleryRoot stores the configured root boundary for all filesystem checks.
+    $galleryRoot = galleries_root();
+
+    foreach (db()->query('SELECT folder_path FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $folderPath) {
+        // $gallery stores the minimum shape required by gallery_thumbs_dir().
+        $gallery = ['folder_path' => (string) $folderPath];
+        // $thumbsDirectory stores the generated thumbnail cache directory for this gallery.
+        $thumbsDirectory = gallery_thumbs_dir($gallery, false);
+
+        if (!is_dir($thumbsDirectory)) {
+            continue;
+        }
+        if (!path_inside($galleryRoot, $thumbsDirectory)) {
+            throw new RuntimeException('Refusing to delete thumbnails outside the gallery root.');
+        }
+
+        $directoriesScanned++;
+        $filesDeleted += delete_thumbnail_directory_contents($thumbsDirectory, $galleryRoot);
+
+        if (@rmdir($thumbsDirectory)) {
+            $directoriesRemoved++;
+        } elseif (is_dir($thumbsDirectory)) {
+            throw new RuntimeException('Could not remove thumbnail directory: ' . $thumbsDirectory);
+        }
+    }
+
+    return [
+        'files_deleted' => $filesDeleted,
+        'directories_removed' => $directoriesRemoved,
+        'directories_scanned' => $directoriesScanned,
+    ];
+}
+
+/**
+ * Delete all files and nested directories inside one thumbnail directory.
+ *
+ * Generated thumbnail directories should normally contain only flat thumb files,
+ * but the recursive iterator keeps cleanup safe and complete if an older or
+ * experimental version created nested cache folders. The safety boundary remains
+ * the configured gallery root and every path is checked before deletion.
+ *
+ * @return int Number of removed files.
+ */
+function delete_thumbnail_directory_contents(string $thumbsDirectory, string $allowedRoot): int
+{
+    // $filesDeleted counts all non-directory entries removed from this thumbs directory.
+    $filesDeleted = 0;
+    // $iterator walks children before parents so nested directories can be removed cleanly.
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($thumbsDirectory, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($iterator as $entry) {
+        // $path stores the concrete filesystem path currently being removed.
+        $path = $entry->getPathname();
+        if (!path_inside($allowedRoot, $path)) {
+            throw new RuntimeException('Refusing to delete a thumbnail path outside the gallery root.');
+        }
+        if ($entry->isDir() && !$entry->isLink()) {
+            if (!@rmdir($path)) {
+                throw new RuntimeException('Could not remove thumbnail subdirectory: ' . $path);
+            }
+            continue;
+        }
+        if (!@unlink($path)) {
+            throw new RuntimeException('Could not remove thumbnail file: ' . $path);
+        }
+        $filesDeleted++;
+    }
+
+    return $filesDeleted;
 }
 
 /**
