@@ -838,7 +838,7 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
+    echo '<section class="panel"><h1>Edit gallery</h1><nav class="nav"><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
     echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
