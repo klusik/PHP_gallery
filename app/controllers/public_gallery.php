@@ -514,7 +514,9 @@ function render_public_gallery_admin_form(array $gallery): void
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a></div>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '">Create gallery here</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a></div>';
     echo '</form></details>';
 }
 
