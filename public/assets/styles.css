@@ -3384,7 +3384,7 @@ body.admin-image-order-active {
     min-height: 2.35rem;
     padding: 0.45rem 0.75rem;
     border: 1px solid rgba(122, 83, 45, 0.22);
-    border-radius: 999px;
+    border-radius: var(--radius, 16px);
     background: rgba(255, 250, 240, 0.78);
     color: var(--text);
     font-weight: 700;

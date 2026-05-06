@@ -1105,7 +1105,11 @@ function path_inside(string $root, string $path): bool
  */
 function theme_cache_key(array $theme): string
 {
-    return substr(hash('sha256', json_encode($theme, JSON_UNESCAPED_SLASHES)), 0, 12);
+    // $assetRevision changes when the generated-theme controller changes, so immutable browser caches do not keep stale generated CSS.
+    $assetRevision = is_file(__DIR__ . '/controllers/theme_assets.php') ? (string) filemtime(__DIR__ . '/controllers/theme_assets.php') : '0';
+    // $cachePayload combines user settings with the implementation revision that affects the emitted CSS rules.
+    $cachePayload = ['theme' => $theme, 'asset_revision' => $assetRevision];
+    return substr(hash('sha256', json_encode($cachePayload, JSON_UNESCAPED_SLASHES)), 0, 12);
 }
 
 /**

@@ -158,6 +158,7 @@ function cms_theme_css(): void
     echo '.brand{color:var(--header-text, var(--ink));font-family:var(--font-family);}';
     echo '.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
     echo '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
+    echo '.pagination-link{border-radius:var(--radius)!important;}';
     echo '.nav a:hover,.button:hover,button:hover,input[type="submit"]:hover{border-color:var(--accent-dark);background:var(--accent-dark);}';
     echo '.lightbox .lightbox-stage-link,.lightbox .lightbox-stage-link:hover,.lightbox .lightbox-stage-link:focus,.lightbox .lightbox-stage-link:focus-visible,.lightbox .lightbox-stage-link:active{border:0!important;background:transparent!important;color:inherit!important;box-shadow:none!important;text-decoration:none!important;outline:0!important;}';
     echo '.lightbox .lightbox-stage-link::-moz-focus-inner{border:0!important;}';
