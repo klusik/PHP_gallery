@@ -1,5 +1,197 @@
 # Patch Notes
 
+## Version 0.57
+
+This release is the largest public-facing and administrative step forward since 0.56. It adds richer public gallery presentation, NSFW access control, admin recovery email support, and a complete password reset workflow, while also tightening the generated theme asset pipeline and keeping release metadata in sync.
+
+## Highlights
+
+### Public gallery presentation
+
+Public gallery pages now show more of the gallery story directly on the card and image surfaces instead of hiding all context behind the detail page.
+
+The latest branch work adds:
+
+- Public photo metadata overlays on gallery cards
+- Better display of image titles, descriptions, and tags in the card layout
+- Cleaner handling of public-facing metadata for crawlers and social previews
+- Gallery and image JSON-LD output that avoids exposing restricted 18+ content
+
+This makes galleries feel more alive at first glance, while also improving how search engines and social platforms understand the content.
+
+### NSFW Guard
+
+A new NSFW Guard system was added for both galleries and individual photos.
+
+It allows admins to:
+
+- Mark an entire gallery as 18+ content
+- Mark individual photos as 18+ content
+- Inherit the restriction down through child galleries
+
+For visitors, the public site now:
+
+- Shows a dedicated age confirmation gate when restricted content is encountered
+- Remembers the confirmation for the current browser session
+- Hides restricted previews, thumbnails, and embedded metadata until access is granted
+
+This is not just a visual warning. The access rules now affect gallery rendering, image access, thumbnails, lightbox sources, and structured metadata.
+
+### Admin recovery email
+
+Administrator accounts now support a recovery email address.
+
+That email is used for:
+
+- Username-or-email login
+- Recovery workflows
+- Password reset delivery
+- Optional test-email checks from the account settings page
+
+Existing admins are also prompted to add a recovery email in account settings so the new login and recovery flows are fully usable.
+
+### Password reset workflow
+
+The branch now includes a full password reset flow for admin accounts.
+
+Admins can:
+
+- Request a reset link from the login screen
+- Receive the reset email through the configured transport
+- Open a one-time reset link
+- Set a new password without needing the old one
+
+The reset system also includes:
+
+- A dedicated token table for one-time reset links
+- Token expiry handling
+- Automatic invalidation of older unused reset tokens for the same user
+- Mail diagnostics in the admin log without exposing the full token value
+
+### Email delivery settings
+
+Password reset delivery is now configurable from the admin account area.
+
+The new settings cover:
+
+- Enable or disable password reset delivery
+- Sender email address
+- Sender display name
+- Token lifetime
+- Mail transport selection
+- SMTP host, port, encryption, username, and password
+
+This keeps the password reset flow flexible for both shared hosting and self-managed environments.
+
+### Theme asset and preview sync
+
+Generated theme assets are now tied more tightly to the implementation that produces them.
+
+That means:
+
+- Theme cache keys now include the theme asset controller revision
+- The public site is less likely to serve stale generated CSS after a theme-rendering change
+- UI radii and generated theme assets stay in sync more reliably
+
+This is the kind of low-level change that matters most when users customize theme styling heavily.
+
+### Social and SEO preview support
+
+Gallery metadata output was upgraded for modern sharing behavior.
+
+The new behavior includes:
+
+- Stronger Open Graph metadata
+- Better Twitter card metadata
+- Safer image selection for social previews
+- Cache-busted preview URLs so regenerated thumbnails refresh more predictably on crawlers
+
+### Runtime and schema resilience
+
+The branch also hardens several runtime paths so newer code can coexist more safely with older database state during upgrades.
+
+Notable changes include:
+
+- Safer admin session loading when the `users.email` column has not been migrated yet
+- Schema checks for the new NSFW Guard and password reset features
+- Branch-aware routing for the new admin forgot-password and reset-password pages
+- New migrations for gallery NSFW flags, user email login, and password reset tokens
+
+## What Changed
+
+### Public site rendering
+
+- Added public photo metadata overlays on gallery cards
+- Expanded gallery image cards so titles, descriptions, and tags can be shown inline
+- Added age-gate rendering for NSFW galleries and photos
+- Restricted thumbnails and media now respect NSFW access state
+- Public JSON-LD output now skips restricted content
+- Social preview metadata now prefers richer preview images and stronger card metadata
+
+### Admin authentication and recovery
+
+- Added username-or-email login resolution
+- Added admin recovery email storage and editing
+- Added a recovery-email reminder notice inside the admin area
+- Added a forgot-password page for admin accounts
+- Added a reset-password page with one-time token validation
+- Added delivery diagnostics for password reset requests and test emails
+
+### Admin account settings
+
+- Added a dedicated password reset settings panel
+- Added support for PHP mail and SMTP configuration
+- Added validation for sender address, SMTP host, port, encryption, and reset token lifetime
+- Added test-email sending from the account settings screen
+
+### Gallery access control
+
+- Added gallery-level NSFW inheritance
+- Added per-image NSFW flags
+- Added session-based 18+ confirmation for anonymous visitors
+- Tightened gallery access checks so restricted content is blocked before content, thumbnails, and lightbox sources are emitted
+- Kept password-protected gallery behavior working alongside the new NSFW gating
+
+### Database and migrations
+
+- Added a nullable `users.email` column and unique email index
+- Added a `password_reset_tokens` table for selector/token storage
+- Added `nsfw_enabled` columns for `galleries` and `images`
+- Added supporting indexes for NSFW filtering and reset-token expiry cleanup
+
+### Theme and assets
+
+- Adjusted generated theme cache keys to account for the theme asset controller revision
+- Updated public styling to support the new gallery card metadata overlays and age-gate UI
+- Refreshed generated asset references in the manifest
+
+### Technical notes
+
+- `develop` currently contains 26 changed files relative to `main`
+- The branch is centered on feature expansion rather than a small maintenance patch
+- The release is suitable for a `v_0.57` tag once you are satisfied with runtime validation on your environment
+
+## User Impact
+
+### For site visitors
+
+- Gallery cards reveal more useful metadata immediately
+- Restricted 18+ content is handled consistently across the public site
+- Social sharing previews look richer and more accurate
+
+### For administrators
+
+- Account recovery is now practical instead of manual
+- Admin login is more forgiving because username or email can be used
+- Password reset delivery can be configured and tested from the UI
+- New schema-based content controls are available for mature content management
+
+## Notes
+
+- Password reset delivery is disabled by default in the example configuration and should only be enabled after the sender address and transport are verified.
+- The new recovery flow depends on the `users.email` migration and the `password_reset_tokens` table.
+- The NSFW Guard system depends on its new gallery and image columns, so those migrations need to be applied before the new visibility logic is fully active.
+
 ## Version 0.56
 
 This changeset focuses on two user-facing improvements:
