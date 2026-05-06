@@ -440,12 +440,24 @@ declare(strict_types=1);
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
+    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+        // $GLOBALS entry stores DB setting values already read during this request.
+        $GLOBALS['cms_app_settings_cache'] = [];
+    }
+
+    if (array_key_exists($key, $GLOBALS['cms_app_settings_cache'])) {
+        // $cachedValue stores null when the setting was already checked and not found.
+        $cachedValue = $GLOBALS['cms_app_settings_cache'][$key];
+        return $cachedValue === null ? $default : (string) $cachedValue;
+    }
+
     try {
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
         $stmt->execute([$key]);
         // Variable $value stores this steps working value.
         $value = $stmt->fetchColumn();
+        $GLOBALS['cms_app_settings_cache'][$key] = $value === false ? null : (string) $value;
         return $value === false ? $default : (string) $value;
     } catch (PDOException) {
         return $default;
@@ -460,6 +472,11 @@ function set_app_setting(string $key, string $value): void
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)');
     $stmt->execute([$key, $value, now_sql()]);
+
+    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+        $GLOBALS['cms_app_settings_cache'] = [];
+    }
+    $GLOBALS['cms_app_settings_cache'][$key] = $value;
 }
 
 /**
@@ -477,6 +494,13 @@ function delete_app_settings(array $keys): void
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('DELETE FROM app_settings WHERE setting_key IN (' . $placeholders . ')');
     $stmt->execute($keys);
+
+    if (!isset($GLOBALS['cms_app_settings_cache']) || !is_array($GLOBALS['cms_app_settings_cache'])) {
+        $GLOBALS['cms_app_settings_cache'] = [];
+    }
+    foreach ($keys as $key) {
+        $GLOBALS['cms_app_settings_cache'][$key] = null;
+    }
 }
 
 /**

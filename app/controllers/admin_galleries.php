@@ -1580,6 +1580,7 @@ function cms_admin_bulk_images(): void
                 $count += create_image_thumbnails($image, $gallery);
             }
         }
+        thumbnail_maintenance_summary_cache_clear();
         flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }

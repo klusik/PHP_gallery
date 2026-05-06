@@ -501,26 +501,51 @@ function import_galleries_without_thumbnails(array $folderPaths): array
 function sync_gallery_parent_ids(): void
 {
     // Variable $galleries stores this steps working value.
-    $galleries = db()->query('SELECT id, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    $galleries = db()->query('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
         // Missing intermediate gallery rows are repaired before parent lookup.
         // This fixes older imports where a deep folder was imported without its
         // parent and therefore appeared on the public homepage as a root gallery.
         ensure_gallery_ancestors_for_path((string) $gallery['folder_path']);
+    }
 
-        // Variable $parent stores this steps working value.
-        $parent = find_parent_gallery_for_path((string) $gallery['folder_path']);
-        // Variable $parentId stores this steps working value.
-        $parentId = $parent ? (int) $parent['id'] : null;
-        if ($parentId === null) {
-            // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
-            $stmt->execute([now_sql(), (int) $gallery['id']]);
+    // New ancestor rows may have been inserted above, so read the final hierarchy once.
+    $galleries = db()->query('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path')->fetchAll();
+    // $galleryIdsByPath stores gallery ids by normalized folder path for O(1) parent lookup.
+    $galleryIdsByPath = [];
+    foreach ($galleries as $gallery) {
+        $galleryIdsByPath[normalize_relative_path((string) $gallery['folder_path'])] = (int) $gallery['id'];
+    }
+
+    // $clearParent stores the reusable statement for root rows that have stale parent ids.
+    $clearParent = db()->prepare('UPDATE galleries SET parent_id = NULL, updated_at = ? WHERE id = ? AND parent_id IS NOT NULL');
+    // $setParent stores the reusable statement for rows whose filesystem parent changed.
+    $setParent = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
+    foreach ($galleries as $gallery) {
+        // Variable $folderPath stores this steps working value.
+        $folderPath = normalize_relative_path((string) $gallery['folder_path']);
+        // Variable $parentPath stores this steps working value.
+        $parentPath = trim(str_replace('\\', '/', dirname($folderPath)), '.');
+        // Variable $currentParentId stores this steps working value.
+        $currentParentId = $gallery['parent_id'] === null ? null : (int) $gallery['parent_id'];
+        if ($parentPath === '' || $parentPath === '/') {
+            if ($currentParentId !== null) {
+                $clearParent->execute([now_sql(), (int) $gallery['id']]);
+            }
             continue;
         }
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET parent_id = ?, updated_at = ? WHERE id = ? AND (parent_id IS NULL OR parent_id <> ?)');
-        $stmt->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
+
+        // Variable $parentId stores this steps working value.
+        $parentId = $galleryIdsByPath[$parentPath] ?? null;
+        if ($parentId === null) {
+            if ($currentParentId !== null) {
+                $clearParent->execute([now_sql(), (int) $gallery['id']]);
+            }
+            continue;
+        }
+        if ($currentParentId !== $parentId) {
+            $setParent->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
+        }
     }
 }
 

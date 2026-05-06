@@ -153,6 +153,7 @@ function cms_admin_create_thumbnails(): void
     if (($_POST['scope'] ?? '') === 'all') {
         // Variable $count stores this steps working value.
         $count = create_all_thumbnails();
+        thumbnail_maintenance_summary_cache_clear();
         flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
         redirect_to(url_for('admin'));
     }
@@ -168,12 +169,14 @@ function cms_admin_create_thumbnails(): void
                 $count += create_image_thumbnails($image, $gallery);
             }
         }
+        thumbnail_maintenance_summary_cache_clear();
         flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
     if ($gallery) {
         // Variable $count stores this steps working value.
         $count = create_gallery_thumbnails($galleryId);
+        thumbnail_maintenance_summary_cache_clear();
         flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
         redirect_to(url_for('admin'));
     }
@@ -224,6 +227,9 @@ function cms_admin_create_thumbnails_batch(): void
         $skipped += (int) $result['skipped'];
         $webpSkipped += (int) ($result['webp_skipped'] ?? 0);
     }
+    if ($created > 0) {
+        thumbnail_maintenance_summary_cache_clear();
+    }
     // Variable $processed stores this steps working value.
     $processed = min($total, $offset + count($batch));
     header('Content-Type: application/json');
@@ -269,6 +275,7 @@ function cms_admin_delete_thumbnails(): void
     try {
         // $result stores the count of deleted files and removed thumbnail directories.
         $result = delete_all_thumbnail_files();
+        thumbnail_maintenance_summary_cache_clear();
         admin_log_event('warning', 'thumbnail.cache_deleted', 'Admin deleted all generated thumbnail cache files.', [
             'files_deleted' => (int) $result['files_deleted'],
             'directories_removed' => (int) $result['directories_removed'],

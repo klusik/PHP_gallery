@@ -43,22 +43,7 @@ declare(strict_types=1);
 function cms_admin(): void
 {
     require_admin();
-    // Self-heal voting/game state only when the admin dashboard is opened.
-    $repairedVotingGame = sync_gallery_voting_game_state();
-    if ($repairedVotingGame > 0) {
-        admin_log_event('info', 'gallery.voting_game_synced', 'Admin dashboard repaired gallery voting/game settings.', [
-            'gallery_count' => $repairedVotingGame,
-        ]);
-    }
-    sync_gallery_parent_ids();
-    // Variable $galleries stores this steps working value.
-    $galleries = db()->query("SELECT g.*, parent.title AS parent_title, COUNT(i.id) AS image_count FROM galleries g LEFT JOIN galleries parent ON parent.id = g.parent_id LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%' GROUP BY g.id, parent.title ORDER BY COALESCE(g.parent_id, 0), g.sort_order, g.title")->fetchAll();
-    // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
-    $galleries = admin_ordered_gallery_rows($galleries);
-    // Variable $collapsedIds stores this steps working value.
-    $collapsedIds = array_flip(collapsed_gallery_ids());
     // Variable $pictureGameReady stores this steps working value.
-
     $pictureGameReady = picture_game_schema_ready();
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready();
@@ -70,6 +55,36 @@ function cms_admin(): void
     $migrationPending = pending_migrations_exist();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
+    // $backgroundSourceReady stores whether gallery background source data can be read without optional-column errors.
+    $backgroundSourceReady = gallery_background_source_schema_ready();
+    // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
+    $publicPathReady = public_path_schema_ready();
+
+    if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
+        // Self-heal voting/game state periodically instead of on every admin navigation.
+        $repairedVotingGame = sync_gallery_voting_game_state();
+        admin_dashboard_mark_self_heal('admin_dashboard_voting_game_sync_last');
+        if ($repairedVotingGame > 0) {
+            admin_log_event('info', 'gallery.voting_game_synced', 'Admin dashboard repaired gallery voting/game settings.', [
+                'gallery_count' => $repairedVotingGame,
+            ]);
+        }
+    }
+
+    if (admin_dashboard_parent_sync_needed()) {
+        sync_gallery_parent_ids();
+        admin_dashboard_store_parent_sync_fingerprint();
+    }
+
+    // Variable $galleries stores this steps working value.
+    $galleries = admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady);
+    // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
+    $galleries = admin_ordered_gallery_rows($galleries);
+    // Variable $collapsedIds stores this steps working value.
+    $collapsedIds = array_flip(collapsed_gallery_ids());
+    // $childrenByParent stores direct child ids once so row rendering does not rescan the full gallery list.
+    $childrenByParent = admin_gallery_children_by_parent($galleries);
+
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
     $updatePending = application_update_pending();
     // $updateButtonClass stores an intermediate value used by the surrounding gallery workflow.
@@ -77,15 +92,23 @@ function cms_admin(): void
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
-    $thumbnailSummary = thumbnail_maintenance_summary(null, 1000);
+    $thumbnailSummary = cached_thumbnail_maintenance_summary(null, 1000);
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
-    $totalImages = array_sum(array_map(static fn (array $gallery): int => (int) ($gallery['image_count'] ?? 0), $galleries));
+    $totalImages = 0;
     // $draftGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $draftGalleries = count(array_filter($galleries, static fn (array $gallery): bool => (string) ($gallery['visibility'] ?? '') === 'draft'));
+    $draftGalleries = 0;
     // $privateGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $privateGalleries = count(array_filter($galleries, static fn (array $gallery): bool => (string) ($gallery['visibility'] ?? '') === 'private'));
+    $privateGalleries = 0;
+    foreach ($galleries as $gallery) {
+        $totalImages += (int) ($gallery['image_count'] ?? 0);
+        if ((string) ($gallery['visibility'] ?? '') === 'draft') {
+            $draftGalleries++;
+        } elseif ((string) ($gallery['visibility'] ?? '') === 'private') {
+            $privateGalleries++;
+        }
+    }
     // $missingThumbnailVariants stores an intermediate value used by the surrounding gallery workflow.
     $missingThumbnailVariants = (int) ($thumbnailSummary['missing_variants'] ?? 0);
     // $adminTabs stores the reusable tab model rendered by the shared helper.
@@ -203,7 +226,7 @@ function cms_admin(): void
         // Variable $depth stores this steps working value.
         $depth = substr_count((string) $gallery['folder_path'], '/');
         // Variable $hasChildren stores this steps working value.
-        $hasChildren = array_filter($galleries, static fn (array $candidate): bool => (int) ($candidate['parent_id'] ?? 0) === (int) $gallery['id']);
+        $hasChildren = !empty($childrenByParent[(int) $gallery['id']]);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
         echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle admin-gallery-drag-handle" data-admin-gallery-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $gallery['title']) . '" title="Drag to reorder or nest">↕</span></td><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
@@ -216,8 +239,8 @@ function cms_admin(): void
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
             echo '<td>' . e($accessLabel) . '</td>';
         }
-        echo '<td>' . render_admin_feature_flag(exif_gps_schema_ready() && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
-        echo '<td>' . render_admin_feature_flag(gallery_background_source_schema_ready() && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</td>';
+        echo '<td>' . render_admin_feature_flag($gpsMapReady && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
+        echo '<td>' . render_admin_feature_flag($backgroundSourceReady && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</td>';
         if ($filenameDisplayReady) {
             echo '<td>' . render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '✓', 'File names are shown') . '</td>';
         }
@@ -262,6 +285,133 @@ function cms_admin(): void
     render_footer();
 }
 
+
+/**
+ * Return admin dashboard gallery rows with only columns used by the table.
+ *
+ * Optional columns are selected only when their migrations are present. This
+ * keeps partially upgraded installations safe while avoiding SELECT * in the
+ * dashboard hot path.
+ */
+function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady): array
+{
+    // $selects stores the explicit gallery columns required by dashboard rendering.
+    $selects = [
+        'g.id',
+        'g.parent_id',
+        'g.folder_path',
+        'g.slug',
+        'g.title',
+        'g.sort_order',
+        'g.visibility',
+        'parent.title AS parent_title',
+        'COALESCE(image_counts.image_count, 0) AS image_count',
+    ];
+
+    $selects[] = $publicPathReady ? 'g.url_path' : "'' AS url_path";
+    $selects[] = $accessReady ? 'g.access_mode' : "'normal' AS access_mode";
+    $selects[] = $accessReady ? 'g.access_listing' : "'listed' AS access_listing";
+    $selects[] = $gpsMapReady ? 'g.gps_map_enabled' : '0 AS gps_map_enabled';
+    $selects[] = $backgroundSourceReady ? 'g.background_source' : 'NULL AS background_source';
+    $selects[] = $filenameDisplayReady ? 'g.show_filenames' : '0 AS show_filenames';
+    $selects[] = $votingReady ? 'g.voting_enabled' : '0 AS voting_enabled';
+    $selects[] = $pictureGameReady ? 'g.picture_game_enabled' : '0 AS picture_game_enabled';
+
+    // $sql stores a one-pass gallery query with image counts pre-aggregated by gallery.
+    $sql = 'SELECT ' . implode(', ', $selects) . "
+        FROM galleries g
+        LEFT JOIN galleries parent ON parent.id = g.parent_id
+        LEFT JOIN (
+            SELECT gallery_id, COUNT(id) AS image_count
+            FROM images
+            WHERE relative_path NOT LIKE '%/%'
+            GROUP BY gallery_id
+        ) image_counts ON image_counts.gallery_id = g.id
+        ORDER BY COALESCE(g.parent_id, 0), g.sort_order, g.title";
+
+    return db()->query($sql)->fetchAll();
+}
+
+/**
+ * Return direct child gallery ids indexed by parent id for dashboard rendering.
+ *
+ * @param array<int, array<string, mixed>> $rows Gallery rows already loaded for the Admin table.
+ * @return array<int, array<int, int>>
+ */
+function admin_gallery_children_by_parent(array $rows): array
+{
+    // $childrenByParent stores direct child ids by normalized parent id.
+    $childrenByParent = [];
+    foreach ($rows as $row) {
+        // $parentId stores zero for root galleries and the parent id for subgalleries.
+        $parentId = (int) ($row['parent_id'] ?? 0);
+        $childrenByParent[$parentId][] = (int) ($row['id'] ?? 0);
+    }
+    return $childrenByParent;
+}
+
+/**
+ * Return true when a periodic dashboard repair task may run again.
+ */
+function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): bool
+{
+    // $lastRun stores the Unix timestamp for the last successful repair attempt.
+    $lastRun = (int) app_setting($settingKey, '0');
+    return $lastRun <= 0 || time() - $lastRun >= max(60, $ttlSeconds);
+}
+
+/**
+ * Remember that a periodic dashboard repair task was attempted.
+ */
+function admin_dashboard_mark_self_heal(string $settingKey): void
+{
+    set_app_setting($settingKey, (string) time());
+}
+
+/**
+ * Build a cheap fingerprint for gallery hierarchy state used by parent-id repair.
+ */
+function admin_dashboard_parent_sync_fingerprint(): string
+{
+    try {
+        // $row stores aggregate gallery data that changes when indexed gallery rows change.
+        $row = db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries")->fetch() ?: [];
+    } catch (Throwable) {
+        return '';
+    }
+
+    return hash('sha256', implode('|', [
+        (string) ($row['gallery_count'] ?? '0'),
+        (string) ($row['newest_id'] ?? '0'),
+        (string) ($row['newest_updated_at'] ?? ''),
+        (string) ($row['path_length_sum'] ?? '0'),
+    ]));
+}
+
+/**
+ * Return true when dashboard parent-id repair should run for current gallery rows.
+ */
+function admin_dashboard_parent_sync_needed(): bool
+{
+    // $fingerprint stores the current gallery hierarchy fingerprint.
+    $fingerprint = admin_dashboard_parent_sync_fingerprint();
+    if ($fingerprint === '') {
+        return true;
+    }
+    return !hash_equals((string) app_setting('admin_dashboard_parent_sync_fingerprint', ''), $fingerprint);
+}
+
+/**
+ * Store the current parent-id repair fingerprint after synchronization.
+ */
+function admin_dashboard_store_parent_sync_fingerprint(): void
+{
+    // $fingerprint stores the post-repair gallery hierarchy fingerprint.
+    $fingerprint = admin_dashboard_parent_sync_fingerprint();
+    if ($fingerprint !== '') {
+        set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint);
+    }
+}
 
 /**
  * Return gallery rows in the same tree order used by the Admin table.
