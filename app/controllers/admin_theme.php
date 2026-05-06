@@ -255,6 +255,19 @@ function cms_admin_theme(): void
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
+            set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
+            set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
+            set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
+            set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
+            if (!empty($_POST['reset_gps_pin_size'])) {
+                set_app_setting('theme_gps_pin_enabled', '1');
+                set_app_setting('theme_gps_pin_background_enabled', '1');
+                set_app_setting('theme_gps_pin_size', '26');
+                set_app_setting('theme_gps_pin_background_size', '22');
+            }
+            // The GPS pin controls are part of the theme editor even when no color/font override changed.
+            // Mark the form as changed so the save flow consistently persists the full appearance state.
+            $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
@@ -310,6 +323,22 @@ function cms_admin_theme(): void
     echo '<label class="theme-color-control">Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">Open gallery title and hero text.</span></label>';
     echo '<label>Rounded corners <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
     echo '<label>Font style<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
+    $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
+    // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
+    $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1';
+    // $gpsPinSize stores the configured pin diameter in pixels.
+    $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
+    // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
+    $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
+    echo '<fieldset class="theme-gps-pin-settings"><legend>GPS pin</legend>';
+    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> Show GPS pin on photo cards</label>';
+    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> Show pin background underlay</label>';
+    echo '<label>Pin size <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
+    echo '<label>Background size <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
+    echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="GPS pin preview"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">Live preview of the photo pin.</span></div>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>Reset pin size</button></div>';
+    echo '</fieldset>';
     // $pageWidthMode stores the normalized layout preset selected for the public page container.
     $pageWidthMode = theme_page_width_mode((string) ($theme['page_width'] ?? 'default'));
     // $customPageWidth stores the saved custom container width in pixels. It is always rendered so switching presets does not discard it.

@@ -110,6 +110,14 @@ function cms_theme_css(): void
     $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
     // $backgroundOpacity stores an intermediate value used by the surrounding gallery workflow.
     $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
+    // $gpsPinEnabled stores whether the EXIF GPS pin is visible on public cards.
+    $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1' ? 1 : 0;
+    // $gpsPinBackgroundEnabled stores whether the badge underlay is visible.
+    $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1' ? 1 : 0;
+    // $gpsPinSize stores the visual size of the pin glyph.
+    $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
+    // $gpsPinBackgroundSize stores the visual size of the badge underlay.
+    $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
     // $customPageWidth stores the validated pixel width used by the Custom page-width layout preset.
     $customPageWidth = theme_page_width_custom_value($theme['page_width_custom'] ?? null);
     echo ':root{';
@@ -125,6 +133,10 @@ function cms_theme_css(): void
     echo '--page-width-default:1120px;';
     echo '--page-width-wide:1440px;';
     echo '--page-width-custom:' . $customPageWidth . 'px;';
+    echo '--gps-pin-enabled:' . $gpsPinEnabled . ';';
+    echo '--gps-pin-background-enabled:' . $gpsPinBackgroundEnabled . ';';
+    echo '--gps-pin-size:' . $gpsPinSize . ';';
+    echo '--gps-pin-background-size:' . $gpsPinBackgroundSize . ';';
     echo '}';
     echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
     echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);position:relative;}';
@@ -162,6 +174,15 @@ function cms_theme_css(): void
     echo 'input:focus,textarea:focus,select:focus{border-color:var(--accent);outline-color:color-mix(in srgb,var(--accent) 22%,transparent);}';
     echo '.tag{border-color:var(--accent);background:var(--field);color:var(--accent-dark);}';
     echo '.tag:hover,.tag:focus{border-color:var(--accent-dark);background:var(--panel);color:var(--accent-dark);}';
+    if ($gpsPinEnabled === 0) {
+        echo '.photo-map-pin{display:none!important;}';
+    } else {
+        echo '.photo-map-pin{--gps-pin-size:' . $gpsPinSize . ';--gps-pin-background-size:' . $gpsPinBackgroundSize . ';}';
+        echo '.photo-map-pin{--gps-pin-background-color:rgba(15,23,42,' . ($gpsPinBackgroundEnabled ? '0.55' : '0') . ');--gps-pin-border-color:rgba(255,255,255,' . ($gpsPinBackgroundEnabled ? '0.25' : '0') . ');--gps-pin-shadow:' . ($gpsPinBackgroundEnabled ? '0 1px 3px rgba(0, 0, 0, 0.16)' : 'none') . ';--gps-pin-backdrop:' . ($gpsPinBackgroundEnabled ? 'blur(4px)' : 'none') . ';}';
+        if ($gpsPinBackgroundEnabled === 0) {
+            echo '.photo-map-pin{background:transparent;border-color:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;}';
+        }
+    }
     echo 'table{border-color:var(--line);border-radius:var(--radius);}';
     echo 'th{background:var(--field);color:var(--ink);}';
     echo $updatePendingCss;

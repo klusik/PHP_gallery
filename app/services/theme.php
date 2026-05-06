@@ -61,6 +61,10 @@ function theme_settings(): array
         'hero_text' => app_setting('theme_hero_text', '#0f172a'),
         'background_opacity' => app_setting('theme_background_opacity', '65'),
         'background_path' => app_setting('theme_background_path', ''),
+        'gps_pin_enabled' => app_setting('theme_gps_pin_enabled', '1'),
+        'gps_pin_background_enabled' => app_setting('theme_gps_pin_background_enabled', '1'),
+        'gps_pin_size' => app_setting('theme_gps_pin_size', '26'),
+        'gps_pin_background_size' => app_setting('theme_gps_pin_background_size', '22'),
         'radius' => app_setting('theme_radius', $defaults['radius']),
         'font' => app_setting('theme_font', $defaults['font']),
         'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
@@ -84,6 +88,10 @@ function theme_override_settings(): array
         'hero_text' => app_setting('theme_hero_text'),
         'background_opacity' => app_setting('theme_background_opacity'),
         'background_path' => app_setting('theme_background_path'),
+        'gps_pin_enabled' => app_setting('theme_gps_pin_enabled'),
+        'gps_pin_background_enabled' => app_setting('theme_gps_pin_background_enabled'),
+        'gps_pin_size' => app_setting('theme_gps_pin_size'),
+        'gps_pin_background_size' => app_setting('theme_gps_pin_background_size'),
         'radius' => app_setting('theme_radius'),
         'font' => app_setting('theme_font'),
         'page_width' => app_setting('theme_page_width'),
@@ -113,9 +121,37 @@ function clear_theme_overrides(): void
         'theme_hero_text',
         'theme_background_opacity',
         'theme_background_source',
+        'theme_gps_pin_enabled',
+        'theme_gps_pin_background_enabled',
+        'theme_gps_pin_size',
+        'theme_gps_pin_background_size',
         'theme_radius',
         'theme_font',
     ]);
+}
+
+/**
+ * Normalize the GPS pin size used in the public image overlay.
+ */
+function theme_gps_pin_size_value(mixed $value): int
+{
+    $size = (int) $value;
+    if ($size <= 0) {
+        return 26;
+    }
+    return max(14, min(48, $size));
+}
+
+/**
+ * Normalize the GPS pin background size used in the public image overlay.
+ */
+function theme_gps_pin_background_size_value(mixed $value): int
+{
+    $size = (int) $value;
+    if ($size <= 0) {
+        return 22;
+    }
+    return max(0, min(48, $size));
 }
 
 /**
