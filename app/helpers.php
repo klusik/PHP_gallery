@@ -828,6 +828,25 @@ function render_admin_sidebar(string $currentPage): void
     echo '</aside>';
 }
 
+
+/**
+ * Render the admin notice that asks existing admins to add a recovery email.
+ */
+function render_missing_admin_email_notice(?array $user, string $currentPage): void
+{
+    if (!$user || $currentPage === 'admin_login' || $currentPage === 'admin_logout' || $currentPage === 'setup') {
+        return;
+    }
+    if (trim((string) ($user['email'] ?? '')) !== '') {
+        return;
+    }
+
+    echo '<div class="notice admin-account-notice">';
+    echo '<strong>Recovery email missing.</strong> Add an email address to your account so username-or-email login works and the app is ready for future account recovery.';
+    echo ' <a href="' . e(url_for('admin_account')) . '">Open account settings</a>';
+    echo '</div>';
+}
+
 /**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
@@ -904,6 +923,7 @@ function render_header(string $title): void
         echo '<div class="admin-shell">';
         render_admin_sidebar($page);
         echo '<main class="site-main admin-content">';
+        render_missing_admin_email_notice($user, $page);
     } else {
         echo '<main class="site-main">';
     }

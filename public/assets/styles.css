@@ -4013,3 +4013,210 @@ button.danger {
     color: var(--muted-text, #666);
     max-width: 18rem;
 }
+
+/* Refines the admin account screen into readable profile and recovery panels. */
+.account-settings-page {
+    display: grid;
+    gap: 1rem;
+}
+
+/* Keeps the page title, help text, and recovery state visible before the forms. */
+.account-settings-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+    gap: 1rem;
+    align-items: stretch;
+    padding: 1rem;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #ffffff, #f6f7f7);
+}
+
+.account-settings-kicker {
+    margin: 0 0 0.35rem;
+    color: #646970;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.account-settings-hero h1 {
+    margin-bottom: 0.35rem !important;
+}
+
+/* Shows whether password reset is usable without forcing the admin to inspect every field. */
+.account-settings-status {
+    display: grid;
+    gap: 0.2rem;
+    align-content: center;
+    padding: 0.9rem;
+    border: 1px solid #dcdcde;
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.account-settings-status.is-ready {
+    border-left-color: #008a20;
+}
+
+.account-settings-status.is-incomplete {
+    border-left-color: #d63638;
+}
+
+.account-settings-status-label {
+    color: #646970;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.account-settings-status strong {
+    font-size: 1.05rem;
+}
+
+.account-settings-status small {
+    color: #646970;
+    line-height: 1.35;
+}
+
+/* Places profile and recovery configuration next to each other on wider admin screens. */
+.account-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.account-settings-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.account-settings-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.account-settings-card-header h2 {
+    margin-bottom: 0.35rem !important;
+}
+
+.account-settings-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.account-settings-form input,
+.account-settings-form select {
+    width: 100%;
+}
+
+.account-settings-two-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.account-settings-help {
+    margin: 0;
+    color: #646970;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.account-settings-callout,
+.account-settings-readiness {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    border-radius: 6px;
+    background: #f6f7f7;
+    line-height: 1.45;
+}
+
+.account-settings-toggle {
+    display: flex !important;
+    gap: 0.65rem !important;
+    align-items: flex-start !important;
+    padding: 0.8rem;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.account-settings-toggle input {
+    flex: 0 0 auto;
+    margin-top: 0.2rem !important;
+}
+
+.account-settings-toggle span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.account-settings-toggle small {
+    color: #646970;
+    font-weight: 400;
+    line-height: 1.35;
+}
+
+.account-settings-details {
+    padding: 0.85rem;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #fbfbfc;
+}
+
+.account-settings-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.account-settings-details > * + * {
+    margin-top: 0.8rem;
+}
+
+.account-settings-actions {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 0.25rem;
+}
+
+.account-settings-test-form {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.85rem;
+    border: 1px dashed #c3c4c7;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.account-settings-test-form p {
+    margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+    .account-settings-hero,
+    .account-settings-grid,
+    .account-settings-two-column {
+        grid-template-columns: 1fr;
+    }
+
+    .account-settings-test-form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

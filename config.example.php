@@ -47,5 +47,19 @@ return [
     'admin_session_name' => 'gallery_admin_session',
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
     'setup_key' => 'replace-with-a-temporary-setup-key',
+
+    // Password reset email is disabled by default because many shared hosts
+    // require explicit mail setup. Enable it only after the From address works.
+    // mail_transport currently supports php_mail. SMTP can be added later without
+    // changing the controller flow. log_reset_links is for temporary local testing
+    // only because it writes live reset URLs into admin logs.
+    'password_reset' => [
+        'enabled' => false,
+        'from_email' => 'no-reply@example.com',
+        'from_name' => 'PHP Gallery',
+        'token_lifetime_minutes' => 60,
+        'mail_transport' => 'php_mail',
+        'log_reset_links' => false,
+    ],
 ];
 

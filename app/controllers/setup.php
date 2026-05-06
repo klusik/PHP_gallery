@@ -69,21 +69,31 @@ function cms_setup(): void
         verify_csrf();
         // Variable $username stores this steps working value.
         $username = trim((string) $_POST['username']);
+        // Variable $email stores this steps working value.
+        $email = cms_normalize_account_email((string) ($_POST['email'] ?? ''));
         // Variable $password stores this steps working value.
         $password = (string) $_POST['password'];
-        if ($username !== '' && $password !== '') {
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            // Variable $error stores this steps working value.
+            $error = 'Enter a valid recovery email address, or leave it empty for now.';
+        } elseif ($username !== '' && $password !== '') {
             // Variable $stmt stores this steps working value.
-            $stmt = db()->prepare('INSERT INTO users (username, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)');
-            $stmt->execute([$username, password_hash($password, PASSWORD_DEFAULT), 'admin', now_sql(), now_sql()]);
+            $stmt = db()->prepare('INSERT INTO users (username, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE email = VALUES(email), password_hash = VALUES(password_hash), updated_at = VALUES(updated_at)');
+            $stmt->execute([$username, $email === '' ? null : $email, password_hash($password, PASSWORD_DEFAULT), 'admin', now_sql(), now_sql()]);
             cms_write_setup_lock();
             redirect_to(url_for('admin_login'));
         }
     }
     render_header('Setup');
+    if (isset($error)) {
+        echo '<div class="notice">' . e($error) . '</div>';
+    }
     echo '<section class="panel"><h1>Setup</h1><p>Applied migrations: ' . e($ran ? implode(', ', $ran) : 'none') . '</p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<label>Admin username<input name="username" required></label>';
-    echo '<label>Admin password<input name="password" type="password" required></label>';
+    echo '<label>Admin username<input name="username" required autocomplete="username"></label>';
+    echo '<label>Admin recovery email<input name="email" type="email" autocomplete="email"></label>';
+    echo '<p class="muted">The email is optional for now, but recommended for future account recovery and username-or-email login.</p>';
+    echo '<label>Admin password<input name="password" type="password" required autocomplete="new-password"></label>';
     echo '<button type="submit">Create or update admin</button></form></section>';
     render_footer();
 }
