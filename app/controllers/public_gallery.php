@@ -275,15 +275,19 @@ function cms_gallery(): void
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
         echo '<article class="image-card" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
         $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
         echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, 'loading="lazy" data-responsive-thumbnail') . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
+        render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
+        echo '</div>';
         // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata area has visible content.
         // Empty metadata is not rendered, because hidden file names should not leave a blank bar under the photo.
-        $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags || $votingAllowed;
+        // Voting controls are excluded here because they are rendered as an overlay inside .image-stage.
+        $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags;
         if ($hasPublicImageMeta) {
             echo '<div class="image-meta">';
             if ($displayTitle !== '') {
@@ -293,7 +297,6 @@ function cms_gallery(): void
                 echo '<p>' . e($image['description']) . '</p>';
             }
             render_tag_list($imageTags);
-            render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
             echo '</div>';
         }
         render_public_image_admin_form($image);

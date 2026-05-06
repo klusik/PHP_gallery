@@ -99,12 +99,14 @@ function render_vote_form(int $imageId, int $score, int $currentVote, bool $voti
     if (!$votingAllowed) {
         return;
     }
-    echo '<form class="vote-row" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
+    echo '<form class="vote-row image-vote-overlay" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
     echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo csrf_field();
-    echo '<span>Score: <strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
+    echo '<span class="vote-score-badge" aria-label="Likes"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
+    echo '<span class="vote-action-group">';
     echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="Vote up">&#9650;</button>';
     echo '<button type="submit" name="vote" value="-1" class="' . ($currentVote === -1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === -1 ? 'true' : 'false') . '" aria-label="Vote down">&#9660;</button>';
+    echo '</span>';
     echo '</form>';
 }
 

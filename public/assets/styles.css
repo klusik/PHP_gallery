@@ -1801,6 +1801,123 @@ body.has-mobile-lightbox {
     margin-top: 0.6rem;
 }
 
+/* Styles the .image-card area of the gallery interface. */
+.image-card {
+    position: relative;
+}
+
+/* Styles the .image-stage area of the gallery interface. */
+.image-stage {
+    position: relative;
+    overflow: hidden;
+    line-height: 0;
+}
+
+/* Keeps the generated <picture> wrapper from adding inline text spacing below thumbnails. */
+.image-stage > .image-preview-link,
+.image-stage > .image-preview-link picture {
+    display: block;
+    line-height: 0;
+}
+
+/* Styles the .image-vote-overlay area of the gallery interface. */
+.image-vote-overlay {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    z-index: 6;
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
+    padding: 0.15rem 0.2rem;
+    border: 0;
+    border-radius: 0 8px 0 0;
+    background: transparent;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: none;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+/* Keeps the vote overlay anchored to the actual picture instead of the surrounding card chrome. */
+.image-stage > .image-vote-overlay {
+    bottom: 0.25rem;
+    left: 0.25rem;
+}
+
+/* Styles the .vote-score-badge area of the gallery interface. */
+.vote-score-badge {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.08rem;
+    min-width: 0;
+    padding: 0.08rem 0.2rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.0);
+    color: var(--accent-dark);
+    font-weight: 800;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+/* Overrides the generic vote-row span width inside image overlays so the arrow, score, and hover buttons stay compact. */
+.image-vote-overlay .vote-score-badge,
+.image-vote-overlay .vote-score-badge span,
+.image-vote-overlay .vote-action-group {
+    min-width: 0;
+}
+
+/* Keeps the arrow and count visually close together in the collapsed badge. */
+.vote-score-badge strong {
+    display: inline-block;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+
+/* Styles the .vote-action-group area of the gallery interface. */
+.vote-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Keeps the vote buttons hidden until the user hovers the image card or focuses inside it. */
+.image-vote-overlay .vote-action-group {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-0.25rem);
+    transition: max-width 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+/* Reveals the vote buttons on hover and keyboard focus. */
+.image-card:hover .image-vote-overlay .vote-action-group,
+.image-card:focus-within .image-vote-overlay .vote-action-group {
+    max-width: 6rem;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* Adjusts the hover vote overlay once the buttons are visible. */
+.image-card:hover .image-vote-overlay,
+.image-card:focus-within .image-vote-overlay {
+    background: rgba(15, 23, 42, 0.35);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+
+.image-card:hover .vote-score-badge,
+.image-card:focus-within .vote-score-badge {
+    background: rgba(255, 253, 248, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 /* Styles the .vote-row span area of the gallery interface. */
 .vote-row span {
     min-width: 5.25rem;
@@ -1811,6 +1928,12 @@ body.has-mobile-lightbox {
     min-width: 2.1rem;
     font-weight: 800;
     line-height: 1;
+}
+
+/* Keeps the overlay buttons compact inside the image corner badge. */
+.image-vote-overlay button {
+    min-width: 1.9rem;
+    padding: 0.15rem 0.35rem;
 }
 
 /* Styles the .lightbox figure area of the gallery interface. */
