@@ -191,6 +191,13 @@ function setupThemeLivePreview(form) {
     const backgroundImage = form.querySelector('[data-theme-preview-background-image]');
     // backgroundUrl stores the already-saved theme background URL supplied by the PHP controller.
     const backgroundUrl = previewRoot.getAttribute('data-theme-preview-background-url') || '';
+    const gpsPinSample = form.querySelector('[data-theme-gps-pin-sample]');
+    const gpsPinEnabled = form.querySelector('[data-theme-gps-pin-enabled]');
+    const gpsPinBackgroundEnabled = form.querySelector('[data-theme-gps-pin-background-enabled]');
+    const gpsPinSize = form.querySelector('[data-theme-gps-pin-size]');
+    const gpsPinBackgroundSize = form.querySelector('[data-theme-gps-pin-background-size]');
+    const gpsPinSizeDisplay = form.querySelector('[data-theme-gps-pin-size-display]');
+    const gpsPinBackgroundSizeDisplay = form.querySelector('[data-theme-gps-pin-background-size-display]');
     // pageWidthSelect stores the preset selector that decides whether the custom-width controls are visible.
     const pageWidthSelect = form.querySelector('[data-theme-page-width-select]');
     // customWidthShell stores the conditional slider/number UI for the Custom page-width preset.
@@ -284,9 +291,30 @@ function setupThemeLivePreview(form) {
         if (siteNameControl && brandText) {
             brandText.textContent = siteNameControl.value.trim() || 'Gallery CMS';
         }
+
+        if (gpsPinSample) {
+            const enabled = !gpsPinEnabled || gpsPinEnabled.checked;
+            const backgroundEnabled = !gpsPinBackgroundEnabled || gpsPinBackgroundEnabled.checked;
+            const pinSize = Math.max(14, Math.min(48, parseInt(gpsPinSize?.value || '26', 10) || 26));
+            const backgroundSize = Math.max(0, Math.min(48, parseInt(gpsPinBackgroundSize?.value || '22', 10) || 22));
+            gpsPinSample.style.display = enabled ? 'inline-flex' : 'none';
+            gpsPinSample.style.setProperty('--gps-pin-size', String(pinSize));
+            gpsPinSample.style.setProperty('--gps-pin-background-size', String(backgroundSize));
+            gpsPinSample.style.background = backgroundEnabled ? 'rgba(15, 23, 42, 0.55)' : 'transparent';
+            gpsPinSample.style.borderColor = backgroundEnabled ? 'rgba(255, 255, 255, 0.25)' : 'transparent';
+            gpsPinSample.style.boxShadow = backgroundEnabled ? '0 1px 3px rgba(0, 0, 0, 0.16)' : 'none';
+            gpsPinSample.style.backdropFilter = backgroundEnabled ? 'blur(4px)' : 'none';
+            gpsPinSample.style.webkitBackdropFilter = backgroundEnabled ? 'blur(4px)' : 'none';
+            if (gpsPinSizeDisplay) {
+                gpsPinSizeDisplay.textContent = `${pinSize}px`;
+            }
+            if (gpsPinBackgroundSizeDisplay) {
+                gpsPinBackgroundSizeDisplay.textContent = `${backgroundSize}px`;
+            }
+        }
     };
 
-    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name]').forEach((control) => {
+    form.querySelectorAll('[data-theme-preview-color], [data-theme-preview-radius], [data-theme-preview-font], [data-theme-preview-width], [data-theme-background-opacity], [data-theme-preview-site-name], [data-theme-gps-pin-enabled], [data-theme-gps-pin-background-enabled], [data-theme-gps-pin-size], [data-theme-gps-pin-background-size]').forEach((control) => {
         control.addEventListener('input', syncPreview);
         control.addEventListener('change', syncPreview);
     });

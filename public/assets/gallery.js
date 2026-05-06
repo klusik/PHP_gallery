@@ -52,7 +52,7 @@
  *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
-import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260504-grid-form-fix';
+import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260506-gps-pin-preview';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js';

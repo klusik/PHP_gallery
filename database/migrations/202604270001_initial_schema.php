@@ -36,10 +36,12 @@ return [
     "CREATE TABLE IF NOT EXISTS users (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(190) NOT NULL UNIQUE,
+        email VARCHAR(190) NULL,
         password_hash VARCHAR(255) NOT NULL,
         role ENUM('admin') NOT NULL DEFAULT 'admin',
         created_at DATETIME NOT NULL,
-        updated_at DATETIME NOT NULL
+        updated_at DATETIME NOT NULL,
+        UNIQUE KEY users_email_unique (email)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     "CREATE TABLE IF NOT EXISTS galleries (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

@@ -59,3 +59,23 @@ function db_column_exists(string $table, string $column): bool
     $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
     return (bool) $stmt->fetch();
 }
+
+/**
+ * Check whether a database table exists.
+ */
+function db_table_exists(string $table): bool
+{
+    // $safeTable stores an intermediate value used by the surrounding gallery workflow.
+    $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    if ($safeTable === '') {
+        return false;
+    }
+
+    try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
+        $stmt = db()->query("SHOW TABLES LIKE " . db()->quote($safeTable));
+        return (bool) $stmt->fetchColumn();
+    } catch (Throwable) {
+        return false;
+    }
+}

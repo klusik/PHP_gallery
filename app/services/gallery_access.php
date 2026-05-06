@@ -42,7 +42,7 @@ declare(strict_types=1);
 
 function admin_feature_schema_ready(): bool
 {
-    return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready();
+    return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready() && nsfw_guard_schema_ready();
 }
 
 /**
@@ -63,6 +63,137 @@ function gallery_access_schema_ready(): bool
     } catch (PDOException) {
         return false;
     }
+}
+
+
+/**
+ * Return true when the NSFW Guard database columns are available.
+ */
+function nsfw_guard_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        // $galleryColumn stores the galleries schema probe result.
+        $galleryColumn = db()->query("SHOW COLUMNS FROM galleries LIKE 'nsfw_enabled'");
+        if (!$galleryColumn || !$galleryColumn->fetch()) {
+            return $ready = false;
+        }
+        // $imageColumn stores the images schema probe result.
+        $imageColumn = db()->query("SHOW COLUMNS FROM images LIKE 'nsfw_enabled'");
+        return $ready = $imageColumn && (bool) $imageColumn->fetch();
+    } catch (PDOException) {
+        return $ready = false;
+    }
+}
+
+/**
+ * Return the nearest gallery that applies an inherited NSFW restriction.
+ */
+function gallery_nsfw_requirement(array $gallery): ?array
+{
+    if (!nsfw_guard_schema_ready()) {
+        return null;
+    }
+    // $current stores the gallery currently being inspected while walking upward.
+    $current = $gallery;
+    while ($current) {
+        if ((int) ($current['nsfw_enabled'] ?? 0) === 1) {
+            return $current;
+        }
+        if (empty($current['parent_id'])) {
+            return null;
+        }
+        // $current stores the parent gallery used for inherited NSFW policy.
+        $current = find_gallery((int) $current['parent_id']);
+    }
+    return null;
+}
+
+/**
+ * Return true when one image is restricted by its own flag or by gallery ancestry.
+ */
+function image_nsfw_restricted(array $image, array $gallery): bool
+{
+    if (!nsfw_guard_schema_ready()) {
+        return false;
+    }
+    return (int) ($image['nsfw_enabled'] ?? 0) === 1 || gallery_nsfw_requirement($gallery) !== null;
+}
+
+/**
+ * Build the single session key used for NSFW age acknowledgment.
+ */
+function nsfw_guard_session_key(): string
+{
+    return 'nsfw_guard_adult_acknowledged';
+}
+
+/**
+ * Store the current session-level 18+ acknowledgment.
+ */
+function grant_nsfw_guard_access(): void
+{
+    $_SESSION[nsfw_guard_session_key()] = time();
+}
+
+/**
+ * Return true when this visitor already confirmed the NSFW warning in session.
+ */
+function nsfw_guard_session_is_valid(): bool
+{
+    return (int) ($_SESSION[nsfw_guard_session_key()] ?? 0) > 0;
+}
+
+/**
+ * Return true when a logged-in account is explicitly known to be under 18.
+ *
+ * The current CMS user schema does not define age or birth-date columns. This
+ * helper still supports future installs that add one of the common fields, and
+ * otherwise treats age as unknown so the normal session confirmation is used.
+ */
+function current_user_is_known_under_18(): bool
+{
+    // $user stores the authenticated user record, usually the admin account.
+    $user = current_user();
+    if (!$user) {
+        return false;
+    }
+    if (isset($user['is_adult'])) {
+        return (int) $user['is_adult'] !== 1;
+    }
+    if (isset($user['age'])) {
+        return (int) $user['age'] < 18;
+    }
+    // $birthDate stores the first supported date-of-birth field found on the user record.
+    $birthDate = (string) ($user['date_of_birth'] ?? $user['birthdate'] ?? $user['birthday'] ?? '');
+    if ($birthDate === '') {
+        return false;
+    }
+    // $birthTimestamp stores the parsed birth date used for the age calculation.
+    $birthTimestamp = strtotime($birthDate);
+    if ($birthTimestamp === false) {
+        return false;
+    }
+    // $adultThreshold stores the latest birth date that is at least eighteen years old today.
+    $adultThreshold = strtotime('-18 years');
+    return $birthTimestamp > $adultThreshold;
+}
+
+/**
+ * Return true when the current visitor may pass NSFW Guard.
+ */
+function visitor_can_access_nsfw_content(): bool
+{
+    if (current_user() && !current_user_is_known_under_18()) {
+        return true;
+    }
+    if (current_user_is_known_under_18()) {
+        return false;
+    }
+    return nsfw_guard_session_is_valid();
 }
 
 /**
@@ -184,10 +315,13 @@ function request_share_token_allows_gallery(array $gallery): bool
  */
 function visitor_can_access_gallery(array $gallery): bool
 {
-    if (current_user()) {
+    if (current_user() && !current_user_is_known_under_18()) {
         return true;
     }
     if ((string) $gallery['visibility'] !== 'public') {
+        return false;
+    }
+    if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
         return false;
     }
     // $requirement stores an intermediate value used by the surrounding gallery workflow.

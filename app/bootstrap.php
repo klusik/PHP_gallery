@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.56';
+const CMS_VERSION = '0.57';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -167,6 +167,8 @@ function cms_run(): void
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',
         'admin_login' => 'cms_admin_login',
+        'admin_forgot_password' => 'cms_admin_forgot_password',
+        'admin_reset_password' => 'cms_admin_reset_password',
         'admin_logout' => 'cms_admin_logout',
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',

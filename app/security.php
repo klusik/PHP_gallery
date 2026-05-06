@@ -81,11 +81,25 @@ function current_user(): ?array
         $cache = true;
         return $cachedUser = null;
     }
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
-    $stmt->execute([(int) $_SESSION['user_id']]);
-    // Variable $user stores this steps working value.
-    $user = $stmt->fetch();
+    try {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('SELECT id, username, email, role FROM users WHERE id = ?');
+        $stmt->execute([(int) $_SESSION['user_id']]);
+        // Variable $user stores this steps working value.
+        $user = $stmt->fetch();
+    } catch (PDOException $exception) {
+        // Existing installations can briefly run the updated PHP code before
+        // the email migration has been applied. Keep the admin session alive so
+        // the migration page remains reachable instead of failing during header rendering.
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('SELECT id, username, role FROM users WHERE id = ?');
+        $stmt->execute([(int) $_SESSION['user_id']]);
+        // Variable $user stores this steps working value.
+        $user = $stmt->fetch();
+        if ($user) {
+            $user['email'] = null;
+        }
+    }
     // $cache stores an intermediate value used by the surrounding gallery workflow.
     $cache = true;
     return $cachedUser = ($user ?: null);

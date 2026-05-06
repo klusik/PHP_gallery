@@ -1109,12 +1109,6 @@ td {
     color: #1d7f39;
 }
 
-/* Styles the .lightbox-vote-indicator.is-down area of the gallery interface. */
-.lightbox-vote-indicator.is-down {
-    border-color: #a73333;
-    color: #a73333;
-}
-
 /* Styles the .lightbox-nav area of the gallery interface. */
 .lightbox-nav {
     min-width: 3rem;
@@ -1801,6 +1795,123 @@ body.has-mobile-lightbox {
     margin-top: 0.6rem;
 }
 
+/* Styles the .image-card area of the gallery interface. */
+.image-card {
+    position: relative;
+}
+
+/* Styles the .image-stage area of the gallery interface. */
+.image-stage {
+    position: relative;
+    overflow: hidden;
+    line-height: 0;
+}
+
+/* Keeps the generated <picture> wrapper from adding inline text spacing below thumbnails. */
+.image-stage > .image-preview-link,
+.image-stage > .image-preview-link picture {
+    display: block;
+    line-height: 0;
+}
+
+/* Styles the .image-vote-overlay area of the gallery interface. */
+.image-vote-overlay {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    z-index: 6;
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
+    padding: 0.15rem 0.2rem;
+    border: 0;
+    border-radius: 0 8px 0 0;
+    background: transparent;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: none;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+/* Keeps the vote overlay anchored to the actual picture instead of the surrounding card chrome. */
+.image-stage > .image-vote-overlay {
+    bottom: 0.25rem;
+    left: 0.25rem;
+}
+
+/* Styles the .vote-score-badge area of the gallery interface. */
+.vote-score-badge {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.08rem;
+    min-width: 0;
+    padding: 0.08rem 0.2rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.0);
+    color: var(--accent-dark);
+    font-weight: 800;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+/* Overrides the generic vote-row span width inside image overlays so the arrow, score, and hover buttons stay compact. */
+.image-vote-overlay .vote-score-badge,
+.image-vote-overlay .vote-score-badge span,
+.image-vote-overlay .vote-action-group {
+    min-width: 0;
+}
+
+/* Keeps the arrow and count visually close together in the collapsed badge. */
+.vote-score-badge strong {
+    display: inline-block;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+
+/* Styles the .vote-action-group area of the gallery interface. */
+.vote-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Keeps the vote buttons hidden until the user hovers the image card or focuses inside it. */
+.image-vote-overlay .vote-action-group {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-0.25rem);
+    transition: max-width 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+/* Reveals the vote buttons on hover and keyboard focus. */
+.image-card:hover .image-vote-overlay .vote-action-group,
+.image-card:focus-within .image-vote-overlay .vote-action-group {
+    max-width: 6rem;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* Adjusts the hover vote overlay once the buttons are visible. */
+.image-card:hover .image-vote-overlay,
+.image-card:focus-within .image-vote-overlay {
+    background: rgba(15, 23, 42, 0.35);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+
+.image-card:hover .vote-score-badge,
+.image-card:focus-within .vote-score-badge {
+    background: rgba(255, 253, 248, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
 /* Styles the .vote-row span area of the gallery interface. */
 .vote-row span {
     min-width: 5.25rem;
@@ -1811,6 +1922,12 @@ body.has-mobile-lightbox {
     min-width: 2.1rem;
     font-weight: 800;
     line-height: 1;
+}
+
+/* Keeps the overlay buttons compact inside the image corner badge. */
+.image-vote-overlay button {
+    min-width: 1.9rem;
+    padding: 0.15rem 0.35rem;
 }
 
 /* Styles the .lightbox figure area of the gallery interface. */
@@ -2222,22 +2339,68 @@ svg.leaflet-image-layer.leaflet-interactive path {
 /* Styles the .photo-map-pin area of the gallery interface. */
 .photo-map-pin {
     align-items: center;
-    background: rgba(15, 23, 42, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    --gps-pin-size: 26;
+    --gps-pin-background-size: 22;
+    --gps-pin-background-color: rgba(15, 23, 42, 0.55);
+    --gps-pin-border-color: rgba(255, 255, 255, 0.25);
+    --gps-pin-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    --gps-pin-backdrop: blur(4px);
+    background: var(--gps-pin-background-color);
+    border: 1px solid var(--gps-pin-border-color);
     border-radius: 999px;
-    color: #fff;
+    color: rgba(255, 255, 255, 0.9);
     cursor: pointer;
     display: inline-flex;
-    font-size: 1.1rem;
-    height: 2.2rem;
+    font-size: calc(var(--gps-pin-size) * 0.55px);
+    height: calc(var(--gps-pin-background-size) * 1px);
     justify-content: center;
     line-height: 1;
+    min-width: calc(var(--gps-pin-background-size) * 1px);
     padding: 0;
     position: absolute;
-    right: 0.85rem;
-    top: 0.85rem;
-    width: 2.2rem;
+    right: 0.6rem;
+    top: 0.6rem;
+    width: calc(var(--gps-pin-background-size) * 1px);
     z-index: 2;
+    backdrop-filter: var(--gps-pin-backdrop);
+    box-shadow: var(--gps-pin-shadow);
+    box-sizing: border-box;
+}
+
+.photo-map-pin[data-pin-background="off"],
+.photo-map-pin[data-theme-pin-background="off"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.photo-map-pin[data-pin-hidden="1"] {
+    display: none !important;
+}
+
+.theme-gps-pin-settings {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.theme-gps-pin-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+}
+
+.theme-gps-pin-preview .photo-map-pin {
+    position: relative;
+    right: auto;
+    top: auto;
+    flex: 0 0 auto;
 }
 
 .photo-map-pin:hover,
@@ -3221,7 +3384,7 @@ body.admin-image-order-active {
     min-height: 2.35rem;
     padding: 0.45rem 0.75rem;
     border: 1px solid rgba(122, 83, 45, 0.22);
-    border-radius: 999px;
+    border-radius: var(--radius, 16px);
     background: rgba(255, 250, 240, 0.78);
     color: var(--text);
     font-weight: 700;
@@ -3822,4 +3985,290 @@ button.danger {
 
 [data-admin-log-live-state] {
     min-width: 7rem;
+}
+
+.nsfw-stage {
+    align-items: stretch;
+    background: rgba(0, 0, 0, 0.08);
+    min-height: 180px;
+}
+
+.nsfw-placeholder {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    justify-content: center;
+    min-height: 180px;
+    padding: 1.5rem;
+    text-align: center;
+    width: 100%;
+}
+
+.nsfw-placeholder strong {
+    font-size: 1.15rem;
+}
+
+.nsfw-placeholder span {
+    color: var(--muted-text, #666);
+    max-width: 18rem;
+}
+
+/* Refines the admin account screen into readable profile and recovery panels. */
+.account-settings-page {
+    display: grid;
+    gap: 1rem;
+}
+
+/* Keeps the page title, help text, and recovery state visible before the forms. */
+.account-settings-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem);
+    gap: 1rem;
+    align-items: stretch;
+    padding: 1rem;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #ffffff, #f6f7f7);
+}
+
+.account-settings-kicker {
+    margin: 0 0 0.35rem;
+    color: #646970;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.account-settings-hero h1 {
+    margin-bottom: 0.35rem !important;
+}
+
+/* Shows whether password reset is usable without forcing the admin to inspect every field. */
+.account-settings-status {
+    display: grid;
+    gap: 0.2rem;
+    align-content: center;
+    padding: 0.9rem;
+    border: 1px solid #dcdcde;
+    border-left-width: 4px;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.account-settings-status.is-ready {
+    border-left-color: #008a20;
+}
+
+.account-settings-status.is-incomplete {
+    border-left-color: #d63638;
+}
+
+.account-settings-status-label {
+    color: #646970;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.account-settings-status strong {
+    font-size: 1.05rem;
+}
+
+.account-settings-status small {
+    color: #646970;
+    line-height: 1.35;
+}
+
+/* Places profile and recovery configuration next to each other on wider admin screens. */
+.account-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.account-settings-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.account-settings-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.account-settings-card-header h2 {
+    margin-bottom: 0.35rem !important;
+}
+
+.account-settings-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.account-settings-form input,
+.account-settings-form select {
+    width: 100%;
+}
+
+.account-settings-two-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.account-settings-help {
+    margin: 0;
+    color: #646970;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.account-settings-callout,
+.account-settings-readiness {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #c3c4c7;
+    border-left: 4px solid #2271b1;
+    border-radius: 6px;
+    background: #f6f7f7;
+    line-height: 1.45;
+}
+
+.account-settings-toggle {
+    display: flex !important;
+    gap: 0.65rem !important;
+    align-items: flex-start !important;
+    padding: 0.8rem;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.account-settings-toggle input {
+    flex: 0 0 auto;
+    margin-top: 0.2rem !important;
+}
+
+.account-settings-toggle span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.account-settings-toggle small {
+    color: #646970;
+    font-weight: 400;
+    line-height: 1.35;
+}
+
+.account-settings-details {
+    padding: 0.85rem;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #fbfbfc;
+}
+
+.account-settings-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.account-settings-details > * + * {
+    margin-top: 0.8rem;
+}
+
+.account-settings-actions {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 0.25rem;
+}
+
+.account-settings-test-form {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.85rem;
+    border: 1px dashed #c3c4c7;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.account-settings-test-form p {
+    margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+    .account-settings-hero,
+    .account-settings-grid,
+    .account-settings-two-column {
+        grid-template-columns: 1fr;
+    }
+
+    .account-settings-test-form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+/* Keeps public photo metadata over the thumbnail so descriptions do not change the card height. */
+.image-stage > .image-meta-overlay {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.35rem;
+    left: 2.9rem;
+    z-index: 5;
+    max-width: calc(100% - 3.25rem);
+    max-height: calc(100% - 0.7rem);
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: rgba(255, 250, 240, 0.88);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+    color: var(--text);
+    line-height: 1.25;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Keeps overlaid titles compact and prevents long titles from stretching the grid. */
+.image-stage > .image-meta-overlay h2 {
+    margin: 0 0 0.18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Truncates public photo descriptions to a readable two-line caption with an ellipsis. */
+.image-stage > .image-meta-overlay p {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+/* Keeps tag chips from turning the metadata overlay into a tall panel. */
+.image-stage > .image-meta-overlay .tag-list {
+    max-height: 1.65rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+}
+
+/* Gives the metadata overlay more room on narrow screens where the vote badge is less likely to overlap. */
+@media (max-width: 520px) {
+    .image-stage > .image-meta-overlay {
+        left: 0.35rem;
+        max-width: calc(100% - 0.7rem);
+    }
 }

@@ -44,6 +44,56 @@
  */
 
 /**
+ * Returns the current active vote value for one form.
+ *
+ * Card forms can read their state from the surrounding image node. The lightbox
+ * form has no image card parent, so it must also be able to read the active
+ * button state directly from the form itself.
+ *
+ * @param {HTMLFormElement} form Vote form currently being submitted.
+ * @returns {string} Active vote value as posted to the server.
+ */
+function currentVoteForForm(form) {
+    // Variable `cardVote` stores this steps working value.
+    const cardVote = form.closest('[data-image-id]')?.dataset.userVote;
+    if (cardVote === '1') {
+        return '1';
+    }
+
+    // Variable `activeButton` stores this steps working value.
+    const activeButton = form.querySelector('button[name="vote"].is-active');
+    return activeButton ? activeButton.value : '0';
+}
+
+/**
+ * Updates all visible and hidden vote forms for a single image.
+ *
+ * The gallery card, image-detail markup, and lightbox form may all exist on the
+ * same page. Updating only the submitted form leaves another entry point stale,
+ * which makes the next click look like a new upvote instead of a revoke.
+ *
+ * @param {number|string} imageId Image ID returned by the server.
+ * @param {number|string} vote Current viewer vote returned by the server.
+ * @returns {void}
+ */
+function syncVoteFormsForImage(imageId, vote) {
+    document.querySelectorAll('[data-vote-form]').forEach((form) => {
+        // Variable `imageInput` stores this steps working value.
+        const imageInput = form.querySelector('input[name="image_id"]');
+        if (!imageInput || imageInput.value !== String(imageId)) {
+            return;
+        }
+
+        form.querySelectorAll('button[name="vote"]').forEach((button) => {
+            // Variable `active` stores this steps working value.
+            const active = button.value === String(vote);
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    });
+}
+
+/**
  * Attaches AJAX submit handling to every gallery vote form.
  *
  * The server returns the authoritative score and vote state. This helper writes
@@ -62,11 +112,16 @@ export function setupVoteForms() {
         if (!form) {
             return;
         }
+        // Allow the already-liked state to toggle back to no vote when the user
+        // clicks the like button again. This must work from the card, normal
+        // picture view, lightbox form, and lightbox keyboard shortcut.
+        const activeVote = currentVoteForForm(form);
         event.preventDefault();
         // Variable `body` stores this steps working value.
         const body = new FormData(form);
         if (event.submitter && event.submitter.name) {
-            body.set(event.submitter.name, event.submitter.value);
+            const submittedValue = event.submitter.value;
+            body.set(event.submitter.name, activeVote === '1' && submittedValue === '1' ? '0' : submittedValue);
         }
         // Variable `response` stores this steps working value.
         const response = await fetch(form.action, {
@@ -86,12 +141,7 @@ export function setupVoteForms() {
             node.dataset.score = String(result.score);
             node.dataset.userVote = String(result.vote);
         });
-        form.querySelectorAll('button[name="vote"]').forEach((button) => {
-            // Variable `active` stores this steps working value.
-            const active = button.value === String(result.vote);
-            button.classList.toggle('is-active', active);
-            button.setAttribute('aria-pressed', active ? 'true' : 'false');
-        });
+        syncVoteFormsForImage(result.image_id, result.vote);
         // Variable `lightbox` stores this steps working value.
         const lightbox = document.querySelector('[data-lightbox]');
         // Variable `lightboxScore` stores this steps working value.
