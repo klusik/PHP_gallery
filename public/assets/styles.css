@@ -4220,3 +4220,55 @@ button.danger {
         flex-direction: column;
     }
 }
+
+/* Keeps public photo metadata over the thumbnail so descriptions do not change the card height. */
+.image-stage > .image-meta-overlay {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.35rem;
+    left: 2.9rem;
+    z-index: 5;
+    max-width: calc(100% - 3.25rem);
+    max-height: calc(100% - 0.7rem);
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: rgba(255, 250, 240, 0.88);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+    color: var(--text);
+    line-height: 1.25;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Keeps overlaid titles compact and prevents long titles from stretching the grid. */
+.image-stage > .image-meta-overlay h2 {
+    margin: 0 0 0.18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Truncates public photo descriptions to a readable two-line caption with an ellipsis. */
+.image-stage > .image-meta-overlay p {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+/* Keeps tag chips from turning the metadata overlay into a tall panel. */
+.image-stage > .image-meta-overlay .tag-list {
+    max-height: 1.65rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+}
+
+/* Gives the metadata overlay more room on narrow screens where the vote badge is less likely to overlap. */
+@media (max-width: 520px) {
+    .image-stage > .image-meta-overlay {
+        left: 0.35rem;
+        max-width: calc(100% - 0.7rem);
+    }
+}

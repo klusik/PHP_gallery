@@ -295,13 +295,12 @@ function cms_gallery(): void
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
         render_vote_form((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
-        echo '</div>';
-        // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata area has visible content.
+        // Variable $hasPublicImageMeta stores whether the anonymous-facing metadata overlay has visible content.
         // Empty metadata is not rendered, because hidden file names should not leave a blank bar under the photo.
-        // Voting controls are excluded here because they are rendered as an overlay inside .image-stage.
+        // The metadata is rendered inside .image-stage so long descriptions do not increase card height or break the grid rhythm.
         $hasPublicImageMeta = $displayTitle !== '' || trim((string) $image['description']) !== '' || $imageTags;
         if ($hasPublicImageMeta) {
-            echo '<div class="image-meta">';
+            echo '<div class="image-meta image-meta-overlay">';
             if ($displayTitle !== '') {
                 echo '<h2>' . e($displayTitle) . '</h2>';
             }
@@ -311,6 +310,7 @@ function cms_gallery(): void
             render_tag_list($imageTags);
             echo '</div>';
         }
+        echo '</div>';
         render_public_image_admin_form($image);
         echo '</article>';
     }
