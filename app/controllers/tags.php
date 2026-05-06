@@ -105,7 +105,6 @@ function render_vote_form(int $imageId, int $score, int $currentVote, bool $voti
     echo '<span class="vote-score-badge" aria-label="Likes"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
     echo '<span class="vote-action-group">';
     echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="Vote up">&#9650;</button>';
-    echo '<button type="submit" name="vote" value="-1" class="' . ($currentVote === -1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === -1 ? 'true' : 'false') . '" aria-label="Vote down">&#9660;</button>';
     echo '</span>';
     echo '</form>';
 }
@@ -123,14 +122,13 @@ function cms_vote(): void
     verify_csrf();
     // Variable $imageId stores this steps working value.
     $imageId = (int) ($_POST['image_id'] ?? 0);
-    verify_vote_rate_limit($imageId);
     // Variable $vote stores this steps working value.
     $vote = (int) ($_POST['vote'] ?? 0);
     // $image stores an intermediate value used by the surrounding gallery workflow.
     $image = find_image($imageId);
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = $image ? find_gallery((int) $image['gallery_id']) : null;
-    if (!in_array($vote, [-1, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
+    if (!in_array($vote, [0, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         http_response_code(422);
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Invalid vote.']);
@@ -138,6 +136,51 @@ function cms_vote(): void
     }
     // Variable $user stores this steps working value.
     $user = current_user();
+    // $existingVote stores the current vote for the logged-in user or visitor.
+    $existingVote = current_vote_for_image($imageId);
+
+    // Revoking an existing like must be allowed immediately. The rate limiter is
+    // kept for new likes only, otherwise a fast second click would be rejected
+    // before it can remove the previous vote.
+    if ($vote === 1 && $existingVote !== 1) {
+        verify_vote_rate_limit($imageId);
+    }
+
+    if ($vote === 0) {
+        if ($user) {
+            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND user_id = ?');
+            $stmt->execute([$imageId, (int) $user['id']]);
+        } else {
+            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
+            $stmt->execute([$imageId, visitor_hash()]);
+        }
+        $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
+        if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+            header('Content-Type: application/json');
+            echo json_encode($result);
+            return;
+        }
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+    }
+    // Submitting the active like again is treated as a revoke. This keeps normal
+    // card votes, image-detail votes, lightbox votes, and keyboard-triggered
+    // lightbox votes consistent even if older cached JavaScript still posts 1.
+    if ($existingVote === 1) {
+        if ($user) {
+            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND user_id = ?');
+            $stmt->execute([$imageId, (int) $user['id']]);
+        } else {
+            $stmt = db()->prepare('DELETE FROM image_votes WHERE image_id = ? AND visitor_hash = ?');
+            $stmt->execute([$imageId, visitor_hash()]);
+        }
+        $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 0];
+        if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+            header('Content-Type: application/json');
+            echo json_encode($result);
+            return;
+        }
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? url_for('home')));
+    }
     if ($user) {
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('INSERT INTO image_votes (image_id, user_id, visitor_hash, vote, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?) ON DUPLICATE KEY UPDATE vote = VALUES(vote), updated_at = VALUES(updated_at)');
@@ -150,7 +193,7 @@ function cms_vote(): void
         $stmt->execute([$imageId, $hash, $vote, now_sql(), now_sql()]);
     }
     // Variable $result stores this steps working value.
-    $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => $vote];
+    $result = ['image_id' => $imageId, 'score' => vote_score($imageId), 'vote' => 1];
     if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
         header('Content-Type: application/json');
         echo json_encode($result);

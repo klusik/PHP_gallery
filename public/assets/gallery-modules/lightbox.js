@@ -212,16 +212,24 @@ export function setupGalleryLightbox() {
             return;
         }
         // Variable `vote` stores this steps working value.
-        const vote = card.dataset.userVote || '0';
+        const vote = card.dataset.userVote === '1' ? '1' : '0';
         lightboxVoteForm.querySelector('input[name="image_id"]').value = card.dataset.imageId || '';
         score.dataset.scoreFor = card.dataset.imageId || '';
+        updateLightboxVoteButtons(vote);
+        updateLightboxVoteIndicator(vote);
+    }
+
+    // Function `updateLightboxVoteButtons` executes this focused behavior.
+    function updateLightboxVoteButtons(vote) {
+        if (!lightboxVoteForm) {
+            return;
+        }
         lightboxVoteForm.querySelectorAll('button[name="vote"]').forEach((button) => {
             // Variable `active` stores this steps working value.
             const active = button.value === vote;
             button.classList.toggle('is-active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
-        updateLightboxVoteIndicator(vote);
     }
 
     // Function `updateLightboxVoteIndicator` executes this focused behavior.
@@ -230,8 +238,7 @@ export function setupGalleryLightbox() {
             return;
         }
         lightboxVoteIndicator.classList.toggle('is-up', vote === '1');
-        lightboxVoteIndicator.classList.toggle('is-down', vote === '-1');
-        lightboxVoteIndicator.textContent = vote === '1' ? 'Voted up' : vote === '-1' ? 'Voted down' : 'No vote';
+        lightboxVoteIndicator.textContent = vote === '1' ? 'Liked' : 'No like';
     }
 
     /**
@@ -1347,10 +1354,6 @@ export function setupGalleryLightbox() {
             event.preventDefault();
             submitLightboxVote(1);
         }
-        if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            submitLightboxVote(-1);
-        }
         if (event.key === 'f' || (event.key === 'F' && event.shiftKey === false) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f')) {
             event.preventDefault();
             toggleLightboxFullscreen();
@@ -2188,6 +2191,7 @@ export function setupGalleryLightbox() {
         const result = event.detail || {};
         if (overlay && score && overlay.dataset.currentImageId === String(result.image_id)) {
             score.textContent = String(result.score);
+            updateLightboxVoteButtons(String(result.vote));
             updateLightboxVoteIndicator(String(result.vote));
         }
     });

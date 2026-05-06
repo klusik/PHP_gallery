@@ -1109,12 +1109,6 @@ td {
     color: #1d7f39;
 }
 
-/* Styles the .lightbox-vote-indicator.is-down area of the gallery interface. */
-.lightbox-vote-indicator.is-down {
-    border-color: #a73333;
-    color: #a73333;
-}
-
 /* Styles the .lightbox-nav area of the gallery interface. */
 .lightbox-nav {
     min-width: 3rem;
