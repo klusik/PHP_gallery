@@ -3986,3 +3986,30 @@ button.danger {
 [data-admin-log-live-state] {
     min-width: 7rem;
 }
+
+.nsfw-stage {
+    align-items: stretch;
+    background: rgba(0, 0, 0, 0.08);
+    min-height: 180px;
+}
+
+.nsfw-placeholder {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    justify-content: center;
+    min-height: 180px;
+    padding: 1.5rem;
+    text-align: center;
+    width: 100%;
+}
+
+.nsfw-placeholder strong {
+    font-size: 1.15rem;
+}
+
+.nsfw-placeholder span {
+    color: var(--muted-text, #666);
+    max-width: 18rem;
+}

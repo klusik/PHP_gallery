@@ -347,6 +347,9 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
  */
 function gallery_social_preview_image(array $gallery, array $images = []): ?array
 {
+    if (gallery_nsfw_requirement($gallery) !== null) {
+        return null;
+    }
     // $candidates stores images in priority order while avoiding duplicate ids.
     $candidates = [];
     // $seenIds stores ids that were already added to the candidate list.
@@ -355,7 +358,7 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
     foreach ($images as $image) {
         // $imageId stores the normalized image id used for duplicate protection.
         $imageId = (int) ($image['id'] ?? 0);
-        if ($imageId <= 0 || isset($seenIds[$imageId])) {
+        if ($imageId <= 0 || isset($seenIds[$imageId]) || (int) ($image['nsfw_enabled'] ?? 0) === 1) {
             continue;
         }
         $seenIds[$imageId] = true;
@@ -367,7 +370,7 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
     if ($cover) {
         // $coverId stores the normalized cover image id for duplicate protection.
         $coverId = (int) ($cover['id'] ?? 0);
-        if ($coverId > 0 && !isset($seenIds[$coverId])) {
+        if ($coverId > 0 && !isset($seenIds[$coverId]) && !image_nsfw_restricted($cover, find_gallery((int) ($cover['gallery_id'] ?? 0)) ?: $gallery)) {
             $seenIds[$coverId] = true;
             array_unshift($candidates, $cover);
         }
@@ -376,7 +379,7 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
     foreach (gallery_cover_collage_images((int) ($gallery['id'] ?? 0), true, 4) as $descendantCover) {
         // $descendantCoverId stores the normalized image id used for duplicate protection.
         $descendantCoverId = (int) ($descendantCover['id'] ?? 0);
-        if ($descendantCoverId <= 0 || isset($seenIds[$descendantCoverId])) {
+        if ($descendantCoverId <= 0 || isset($seenIds[$descendantCoverId]) || (int) ($descendantCover['nsfw_enabled'] ?? 0) === 1) {
             continue;
         }
         $seenIds[$descendantCoverId] = true;
@@ -405,7 +408,7 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
     // cover images can belong to child galleries, so using only the current
     // gallery would produce an invalid thumbnail path for parent galleries.
     $imageGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
-    if (!$imageGallery) {
+    if (!$imageGallery || image_nsfw_restricted($image, $imageGallery)) {
         return null;
     }
 
@@ -549,6 +552,9 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
     // $position stores an intermediate value used by the surrounding gallery workflow.
     $position = 1;
     foreach ($images as $image) {
+        if (image_nsfw_restricted($image, $gallery)) {
+            continue;
+        }
         $items[] = [
             '@type' => 'ImageObject',
             'position' => $position++,

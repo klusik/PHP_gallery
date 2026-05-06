@@ -618,6 +618,8 @@ function cms_admin_edit_gallery(): void
         $votingEnabled = gallery_voting_schema_ready() && !empty($_POST['voting_enabled']) ? 1 : 0;
         // Variable $showFilenames stores this steps working value.
         $showFilenames = gallery_filename_display_schema_ready() && !empty($_POST['show_filenames']) ? 1 : 0;
+        // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
+        $nsfwEnabled = nsfw_guard_schema_ready() && !empty($_POST['nsfw_enabled']) ? 1 : 0;
         if ($pictureGameEnabled) {
             // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
             $votingEnabled = 1;
@@ -756,6 +758,9 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_filename_display_schema_ready()) {
             $fields['show_filenames = ?'] = $showFilenames;
+        }
+        if (nsfw_guard_schema_ready()) {
+            $fields['nsfw_enabled = ?'] = $nsfwEnabled;
         }
         if (gallery_grid_schema_ready()) {
             $fields['grid_columns = ?'] = $gridColumns;
@@ -901,6 +906,12 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<p class="muted">File name display control will be available after the database migration is applied.</p>';
     }
+    if (nsfw_guard_schema_ready()) {
+        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this gallery as NSFW / 18+</label>';
+        echo '<p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files.</p>';
+    } else {
+        echo '<p class="muted">NSFW Guard controls will be available after the database migration is applied.</p>';
+    }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
         $galleryUsesCustomGrid = gallery_grid_has_explicit_override($gallery);
@@ -946,7 +957,7 @@ function cms_admin_edit_gallery(): void
     echo '<button type="submit">Scan/import images in this gallery</button></form></section>';
     echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
+    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
     echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
@@ -1552,6 +1563,15 @@ function cms_admin_bulk_images(): void
         $stmt = db()->prepare('UPDATE images SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
         $stmt->execute(array_merge([$action, now_sql()], $ownedIds));
     }
+    if (in_array($action, ['nsfw_on', 'nsfw_off'], true) && nsfw_guard_schema_ready()) {
+        // $placeholders stores this steps working value.
+        $placeholders = implode(',', array_fill(0, count($ownedIds), '?'));
+        // $stmt stores this steps working value.
+        $stmt = db()->prepare('UPDATE images SET nsfw_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
+        $stmt->execute(array_merge([$action === 'nsfw_on' ? 1 : 0, now_sql()], $ownedIds));
+        flash_message('admin_notice', 'Updated NSFW Guard on ' . count($ownedIds) . ' image(s).');
+        redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
+    }
     if ($action === 'thumbs') {
         foreach ($ownedIds as $imageId) {
             // Variable $image stores this steps working value.
@@ -1628,6 +1648,9 @@ function cms_admin_public_update_gallery(): void
     if (gallery_filename_display_schema_ready()) {
         $fields['show_filenames = ?'] = !empty($_POST['show_filenames']) ? 1 : 0;
     }
+    if (nsfw_guard_schema_ready()) {
+        $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
+    }
     $fields['updated_at = ?'] = now_sql();
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -1679,9 +1702,19 @@ function cms_admin_public_update_image(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'private';
     }
+    // Variable $fields stores this steps working value.
+    $fields = [
+        'title = ?' => trim((string) ($_POST['title'] ?? '')),
+        'description = ?' => (string) ($_POST['description'] ?? ''),
+        'visibility = ?' => $visibility,
+    ];
+    if (nsfw_guard_schema_ready()) {
+        $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
+    }
+    $fields['updated_at = ?'] = now_sql();
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([trim((string) ($_POST['title'] ?? '')), (string) ($_POST['description'] ?? ''), $visibility, now_sql(), (int) $image['id']]);
+    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
+    $stmt->execute(array_merge(array_values($fields), [(int) $image['id']]));
     if (public_path_schema_ready()) {
         regenerate_public_paths();
     }
@@ -1705,9 +1738,20 @@ function cms_admin_edit_image(): void
         verify_csrf();
         // Variable $visibility stores this steps working value.
         $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'public';
+        // Variable $fields stores this steps working value.
+        $fields = [
+            'title = ?' => (string) $_POST['title'],
+            'description = ?' => (string) $_POST['description'],
+            'visibility = ?' => $visibility,
+            'sort_order = ?' => (int) $_POST['sort_order'],
+        ];
+        if (nsfw_guard_schema_ready()) {
+            $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
+        }
+        $fields['updated_at = ?'] = now_sql();
         // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE images SET title = ?, description = ?, visibility = ?, sort_order = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([(string) $_POST['title'], (string) $_POST['description'], $visibility, (int) $_POST['sort_order'], now_sql(), (int) $image['id']]);
+        $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
+        $stmt->execute(array_merge(array_values($fields), [(int) $image['id']]));
         sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
         if (public_path_schema_ready()) {
             regenerate_public_paths();
@@ -1721,6 +1765,10 @@ function cms_admin_edit_image(): void
     echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>Description<textarea name="description">' . e($image['description']) . '</textarea></label>';
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $image['visibility']) . '</select></label>';
+    if (nsfw_guard_schema_ready()) {
+        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
+        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served.</p>';
+    }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();

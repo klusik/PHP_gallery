@@ -89,7 +89,7 @@ function cms_home(): void
 function cms_gallery(): void
 {
     // Variable $viewer stores this steps working value.
-    $viewer = current_user();
+    $viewer = current_user_is_known_under_18() ? null : current_user();
     // Variable $gallery stores this steps working value.
     $gallery = null;
     // Variable $requestedImage stores this steps working value.
@@ -130,6 +130,10 @@ function cms_gallery(): void
     }
     if (!$viewer && !visitor_can_access_gallery($gallery)) {
         render_gallery_access_gate($gallery);
+        return;
+    }
+    if (!$viewer && $requestedImage && image_nsfw_restricted($requestedImage, $gallery) && !visitor_can_access_nsfw_content()) {
+        render_gallery_access_gate($gallery, '', $requestedImage);
         return;
     }
     // Variable $publicOnly stores this steps working value.
@@ -254,6 +258,14 @@ function cms_gallery(): void
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-gallery-image-list>';
     }
     foreach ($images as $index => $image) {
+        // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
+        $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
+        if ($imageNeedsNsfwGate) {
+            echo '<article class="image-card nsfw-card"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>18+ photo</strong><span>Confirm your age to view this restricted photo.</span></a></div>';
+            render_public_image_admin_form($image);
+            echo '</article>';
+            continue;
+        }
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
@@ -345,17 +357,29 @@ function render_breadcrumbs(?array $gallery = null): void
  * @param mixed $error Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_gallery_access_gate(array $gallery, string $error = ''): void
+function render_gallery_access_gate(array $gallery, string $error = '', ?array $image = null): void
 {
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery) ?: $gallery;
+    // $nsfwRequirement stores the inherited NSFW source, or the current gallery for per-image NSFW.
+    $nsfwRequirement = gallery_nsfw_requirement($gallery) ?: ($image !== null && image_nsfw_restricted($image, $gallery) ? $gallery : null);
     render_header((string) $gallery['title']);
     render_breadcrumbs($gallery);
     echo '<section class="panel"><h1>' . e($gallery['title']) . '</h1>';
     if ($error !== '') {
         echo '<div class="notice">' . e($error) . '</div>';
     }
-    if (empty($requirement['access_password_hash'])) {
+    if ($nsfwRequirement !== null && !visitor_can_access_nsfw_content()) {
+        echo '<p>This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session.</p>';
+        echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
+        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+        if ($image !== null) {
+            echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
+        }
+        echo '<input type="hidden" name="access_action" value="confirm_nsfw_age">';
+        echo '<label><input type="checkbox" name="adult_confirmed" value="1" required> I confirm that I am at least 18 years old.</label>';
+        echo '<button type="submit">Continue</button></form>';
+    } elseif (empty($requirement['access_password_hash'])) {
         echo '<p>This gallery is available only through its share link.</p>';
     } else {
         echo '<p>This gallery is password protected. Access closes after ' . (int) (gallery_access_lifetime_seconds() / 60) . ' minutes of session time.</p>';
@@ -385,6 +409,25 @@ function cms_gallery_access(): void
     if (!$gallery || (string) $gallery['visibility'] !== 'public') {
         cms_not_found();
         return;
+    }
+    // $image stores the optional image that sent the visitor to the NSFW confirmation gate.
+    $image = find_image((int) ($_POST['image_id'] ?? 0));
+    if ($image && (int) $image['gallery_id'] !== (int) $gallery['id']) {
+        $image = null;
+    }
+    // $accessAction stores whether this request confirms age or submits a gallery password.
+    $accessAction = (string) ($_POST['access_action'] ?? 'password');
+    if ($accessAction === 'confirm_nsfw_age') {
+        if (current_user_is_known_under_18()) {
+            render_gallery_access_gate($gallery, 'This account is not eligible to access 18+ content.', $image);
+            return;
+        }
+        if (empty($_POST['adult_confirmed'])) {
+            render_gallery_access_gate($gallery, 'You must confirm that you are at least 18 years old.', $image);
+            return;
+        }
+        grant_nsfw_guard_access();
+        redirect_to($image ? image_public_url($image, $gallery) : gallery_public_url($gallery));
     }
     // $requirement stores an intermediate value used by the surrounding gallery workflow.
     $requirement = gallery_access_requirement($gallery);
@@ -513,6 +556,9 @@ function render_public_gallery_admin_form(array $gallery): void
     if (gallery_filename_display_schema_ready()) {
         echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
     }
+    if (nsfw_guard_schema_ready()) {
+        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+    }
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
@@ -538,6 +584,9 @@ function render_public_image_admin_form(array $image): void
     echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
     echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
     echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
+    if (nsfw_guard_schema_ready()) {
+        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+    }
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
@@ -582,6 +631,9 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
 {
     echo '<div class="lightbox-source-list" hidden aria-hidden="true">';
     foreach ($allImages as $image) {
+        if (!current_user() && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
+            continue;
+        }
         // Variable $mediaUrl stores this steps working value.
         $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
