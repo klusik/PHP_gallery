@@ -739,37 +739,23 @@ function admin_menu_structure(): array
         [
             'label' => 'Galleries',
             'items' => [
-                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-galleries'],
+                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => 'Create gallery', 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => 'Upload photos', 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
-                ['label' => 'Ordering', 'page' => 'admin', 'url' => url_for('admin') . '#admin-ordering'],
-            ],
-        ],
-        [
-            'label' => 'Media',
-            'items' => [
-                ['label' => 'Thumbnails', 'page' => 'admin', 'url' => url_for('admin') . '#admin-thumbnails'],
-                ['label' => 'Cache', 'page' => 'admin', 'url' => url_for('admin') . '#admin-cache'],
-                ['label' => 'ZIP downloads', 'page' => 'download_all', 'url' => url_for('download_all')],
             ],
         ],
         [
             'label' => 'Appearance',
             'items' => [
-                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-theme'],
-                ['label' => 'Custom CSS', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-custom-css'],
-                ['label' => 'Favicon', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-favicon'],
-                ['label' => 'Backgrounds', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-backgrounds'],
+                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
             ],
         ],
         [
             'label' => 'Maintenance',
             'items' => [
-                ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => 'Telemetry', 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
                 ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
-                ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],
         ],
@@ -782,7 +768,6 @@ function admin_menu_structure(): array
         ],
     ];
 }
-
 /**
  * Return true when one admin menu item should be marked as active.
  */
@@ -800,9 +785,84 @@ function admin_menu_item_is_active(array $item, string $currentPage): bool
         return true;
     }
     if ($itemPage === 'admin' && in_array($currentPage, ['admin_edit_gallery', 'admin_edit_image'], true)) {
-        return str_contains((string) ($item['url'] ?? ''), '#admin-galleries');
+        return str_contains((string) ($item['url'] ?? ''), '#admin-tab-galleries');
     }
     return false;
+}
+
+
+/**
+ * Render a reusable admin tab list.
+ *
+ * Each tab accepts id, label, optional badge, optional href, and optional active.
+ * The generated anchors keep normal hash navigation available when JavaScript is
+ * unavailable, while the browser module upgrades them to in-page tab controls.
+ *
+ * @param array<int, array<string, mixed>> $tabs Tab definitions.
+ * @param string $activeId Preferred active tab id. The first tab is used when empty.
+ * @return void
+ */
+function render_admin_tabs(array $tabs, string $activeId = ''): void
+{
+    // $resolvedActiveId stores the tab id that should be announced as selected.
+    $resolvedActiveId = $activeId;
+    if ($resolvedActiveId === '') {
+        foreach ($tabs as $tab) {
+            if (!empty($tab['active']) && !empty($tab['id'])) {
+                $resolvedActiveId = (string) $tab['id'];
+                break;
+            }
+        }
+    }
+    if ($resolvedActiveId === '' && isset($tabs[0]['id'])) {
+        $resolvedActiveId = (string) $tabs[0]['id'];
+    }
+
+    echo '<nav class="admin-tabs" data-admin-tabs aria-label="Admin sections">';
+    echo '<div class="admin-tab-list" role="tablist">';
+    foreach ($tabs as $tab) {
+        // $tabId stores the panel id controlled by this tab.
+        $tabId = trim((string) ($tab['id'] ?? ''));
+        if ($tabId === '') {
+            continue;
+        }
+        // $tabLabel stores the visible tab label.
+        $tabLabel = (string) ($tab['label'] ?? $tabId);
+        // $tabHref stores the normal link target used without JavaScript.
+        $tabHref = (string) ($tab['href'] ?? ('#' . $tabId));
+        // $isActive stores whether this tab is selected in server-rendered markup.
+        $isActive = $tabId === $resolvedActiveId;
+        // $controlId stores the accessible id for the tab control.
+        $controlId = $tabId . '-control';
+        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" href="' . e($tabHref) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($tabId) . '">';
+        echo '<span>' . e($tabLabel) . '</span>';
+        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
+            echo '<span class="admin-tab-badge">' . e((string) $tab['badge']) . '</span>';
+        }
+        echo '</a>';
+    }
+    echo '</div></nav>';
+}
+
+/**
+ * Render one reusable admin tab panel.
+ *
+ * Panels are intentionally visible in the raw server response. JavaScript hides
+ * inactive panels after it reads the current hash, so the page remains usable
+ * when scripting is unavailable.
+ *
+ * @param string $id Panel id referenced by the matching tab.
+ * @param string $contentHtml Trusted admin HTML rendered by the caller.
+ * @param bool $active Whether the panel should start selected.
+ * @return void
+ */
+function render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
+{
+    // $controlId stores the generated tab id used by aria-labelledby.
+    $controlId = $id . '-control';
+    echo '<section class="panel admin-tab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-tab-panel>';
+    echo $contentHtml;
+    echo '</section>';
 }
 
 /**

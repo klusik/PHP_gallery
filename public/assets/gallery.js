@@ -62,6 +62,7 @@ import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lig
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
+    setupAdminTabs,
     setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupAdminLogStatusForms,
@@ -103,6 +104,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupGalleryBulkDeleteConfirmation();
     setupThumbnailCacheDeleteConfirmation();
+    setupAdminTabs();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

@@ -102,7 +102,7 @@ function cms_admin_dismiss_thumbnail_notice(): void
         flash_message('admin_notice', 'Thumbnail maintenance warning was not dismissed because the image list changed.');
     }
 
-    redirect_to(url_for('admin') . '#admin-thumbnails');
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
 }
 
 /**
@@ -263,7 +263,7 @@ function cms_admin_delete_thumbnails(): void
 
     if ($expectedWord === '' || $typedWord === '' || $expectedWord !== $typedWord || !in_array($expectedWord, $allowedWords, true)) {
         flash_message('admin_notice', 'Thumbnail deletion was not confirmed. No thumbnail files were deleted.');
-        redirect_to(url_for('admin') . '#admin-thumbnails');
+        redirect_to(url_for('admin') . '#admin-tab-maintenance');
     }
 
     try {
@@ -282,7 +282,7 @@ function cms_admin_delete_thumbnails(): void
         flash_message('admin_notice', 'Thumbnail deletion failed: ' . $exception->getMessage());
     }
 
-    redirect_to(url_for('admin') . '#admin-thumbnails');
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
 }
 
 /**

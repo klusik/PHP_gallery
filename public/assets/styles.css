@@ -2986,37 +2986,96 @@ body.has-map-overlay {
     gap: 0.45rem;
 }
 
-.admin-section-tabs {
+.admin-tabs {
     position: sticky;
     top: 3.25rem;
     z-index: 30;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
     margin: 1rem 0;
-    padding: 0.55rem;
+    padding: 0.5rem;
     border: 1px solid var(--admin-border);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.88);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
     backdrop-filter: blur(10px);
 }
 
-.admin-section-tabs a {
-    padding: 0.45rem 0.7rem;
+.admin-tab-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.admin-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.2rem;
+    padding: 0.45rem 0.75rem;
     border: 1px solid transparent;
     border-radius: 999px;
     color: #1d2327;
     font-size: 0.9rem;
-    font-weight: 700;
+    font-weight: 750;
     text-decoration: none;
 }
 
-.admin-section-tabs a:hover,
-.admin-section-tabs a:focus {
+.admin-tab:hover,
+.admin-tab:focus,
+.admin-tab.is-active {
     border-color: var(--admin-accent);
     background: var(--admin-accent-soft);
     color: #0f4f80;
+}
+
+.admin-tab:focus-visible {
+    outline: 2px solid var(--admin-accent);
+    outline-offset: 2px;
+}
+
+.admin-tab[aria-selected="true"] {
+    border-color: var(--admin-accent);
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.admin-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: #e8f2fa;
+    color: #0f4f80;
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.admin-tab-panel {
+    scroll-margin-top: 7.5rem;
+    margin-bottom: 1rem;
+}
+
+.admin-tab-panel[hidden] {
+    display: none;
+}
+
+.admin-tab-intro {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.admin-tab-intro h2,
+.admin-tab-intro p {
+    margin-top: 0;
+}
+
+.admin-dashboard-progress-slot {
+    margin: 0.85rem 0;
 }
 
 .admin-metric-grid {
@@ -3094,6 +3153,42 @@ body.has-map-overlay {
     background: #fff9e7;
 }
 
+.admin-maintenance-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-maintenance-card {
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    min-height: 8.5rem;
+    padding: 0.9rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.admin-maintenance-card strong {
+    color: #1d2327;
+    font-size: 1rem;
+}
+
+.admin-maintenance-card span {
+    color: #64717d;
+    font-size: 0.9rem;
+}
+
+.admin-maintenance-card.is-attention {
+    border-color: #c99700;
+    background: #fff9e7;
+}
+
+.admin-maintenance-card .nav {
+    margin-top: 0;
+}
+
 .admin-panel-heading {
     display: flex;
     align-items: center;
@@ -3104,15 +3199,6 @@ body.has-map-overlay {
 
 .admin-panel-heading h2 {
     margin: 0;
-}
-
-.admin-data-panel,
-.admin-info-panel {
-    scroll-margin-top: 7.5rem;
-}
-
-.admin-info-panel .nav {
-    margin-top: 0.75rem;
 }
 
 .admin-page .bulk-row {
@@ -3180,7 +3266,8 @@ body.has-map-overlay {
     }
 
     .admin-metric-grid,
-    .admin-action-grid {
+    .admin-action-grid,
+    .admin-maintenance-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -3201,12 +3288,17 @@ body.has-map-overlay {
         justify-content: flex-start;
     }
 
-    .admin-section-tabs {
+    .admin-tabs {
         position: static;
     }
 
+    .admin-tab-intro {
+        flex-direction: column;
+    }
+
     .admin-metric-grid,
-    .admin-action-grid {
+    .admin-action-grid,
+    .admin-maintenance-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -4270,5 +4362,67 @@ button.danger {
     .image-stage > .image-meta-overlay {
         left: 0.35rem;
         max-width: calc(100% - 0.7rem);
+    }
+}
+
+/* Gives the Theme editor the same calm workspace rhythm as the Dashboard tabs. */
+.admin-theme-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-theme-hero h1 {
+    margin-bottom: 0.25rem;
+    font-size: 2rem;
+    letter-spacing: -0.035em;
+}
+
+.admin-theme-hero p {
+    margin: 0;
+}
+
+.admin-theme-form {
+    margin-top: 0;
+}
+
+.admin-theme-form > .admin-tab-panel {
+    margin-top: 0;
+}
+
+.theme-tab-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.theme-tab-card-grid > fieldset,
+.admin-theme-form > .admin-tab-panel > fieldset {
+    margin: 0;
+}
+
+.admin-theme-save-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0;
+}
+
+.admin-theme-save-panel p {
+    margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+    .admin-theme-hero,
+    .admin-theme-save-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .theme-tab-card-grid {
+        grid-template-columns: 1fr;
     }
 }
