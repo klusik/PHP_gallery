@@ -334,6 +334,164 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
 }
 
 /**
+ * Build the strongest social-preview image candidate for a gallery page.
+ *
+ * Link-preview crawlers are much stricter than normal browsers. Discord,
+ * WhatsApp, Facebook, Slack, X/Twitter, and similar consumers behave most
+ * consistently when the first image is a public JPEG URL with a stable absolute
+ * URL, a real Content-Type, explicit pixel dimensions, and alt text. This helper
+ * prefers an existing generated JPEG thumbnail because it is smaller than the
+ * original upload and does not depend on WebP support in the crawler.
+ *
+ * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null
+ */
+function gallery_social_preview_image(array $gallery, array $images = []): ?array
+{
+    // $candidates stores images in priority order while avoiding duplicate ids.
+    $candidates = [];
+    // $seenIds stores ids that were already added to the candidate list.
+    $seenIds = [];
+
+    foreach ($images as $image) {
+        // $imageId stores the normalized image id used for duplicate protection.
+        $imageId = (int) ($image['id'] ?? 0);
+        if ($imageId <= 0 || isset($seenIds[$imageId])) {
+            continue;
+        }
+        $seenIds[$imageId] = true;
+        $candidates[] = $image;
+    }
+
+    // $cover stores the configured or inferred direct cover image for this gallery.
+    $cover = gallery_cover_image((int) ($gallery['id'] ?? 0), true);
+    if ($cover) {
+        // $coverId stores the normalized cover image id for duplicate protection.
+        $coverId = (int) ($cover['id'] ?? 0);
+        if ($coverId > 0 && !isset($seenIds[$coverId])) {
+            $seenIds[$coverId] = true;
+            array_unshift($candidates, $cover);
+        }
+    }
+
+    foreach (gallery_cover_collage_images((int) ($gallery['id'] ?? 0), true, 4) as $descendantCover) {
+        // $descendantCoverId stores the normalized image id used for duplicate protection.
+        $descendantCoverId = (int) ($descendantCover['id'] ?? 0);
+        if ($descendantCoverId <= 0 || isset($seenIds[$descendantCoverId])) {
+            continue;
+        }
+        $seenIds[$descendantCoverId] = true;
+        $candidates[] = $descendantCover;
+    }
+
+    foreach ($candidates as $candidate) {
+        // $preview stores the crawler-safe metadata for one generated JPEG thumbnail.
+        $preview = social_preview_image_from_thumbnail($candidate, $gallery, 1280);
+        if ($preview !== null) {
+            return $preview;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Build crawler-facing metadata for one generated JPEG thumbnail.
+ *
+ * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null
+ */
+function social_preview_image_from_thumbnail(array $image, array $currentGallery, int $preferredSize = 1280): ?array
+{
+    // $imageGallery stores the real gallery for the candidate image. Descendant
+    // cover images can belong to child galleries, so using only the current
+    // gallery would produce an invalid thumbnail path for parent galleries.
+    $imageGallery = find_gallery((int) ($image['gallery_id'] ?? 0));
+    if (!$imageGallery) {
+        return null;
+    }
+
+    try {
+        // $fallback stores the closest existing JPEG thumbnail, preferring a
+        // wider image so large-preview consumers can render a rich card.
+        $fallback = thumbnail_existing_fallback($image, $imageGallery, $preferredSize, 'jpg');
+        if ($fallback === null || (string) ($fallback['format'] ?? '') !== 'jpg') {
+            return null;
+        }
+        // $thumbnailPath stores the local file so dimensions can be emitted in
+        // the Open Graph metadata instead of asking crawlers to infer them.
+        $thumbnailPath = thumbnail_abs_path($image, $imageGallery, (int) $fallback['size'], 'jpg');
+    } catch (RuntimeException) {
+        return null;
+    }
+
+    if (!is_file($thumbnailPath)) {
+        return null;
+    }
+
+    // $imageSize stores the actual thumbnail dimensions from disk.
+    $imageSize = @getimagesize($thumbnailPath);
+    if ($imageSize === false || (int) $imageSize[0] < 200 || (int) $imageSize[1] < 200) {
+        return null;
+    }
+
+    // $url stores the absolute public URL that social crawlers receive.
+    $url = absolute_public_url(thumbnail_serving_url($image, $imageGallery, (int) $fallback['size'], 'jpg'));
+    // $alt stores descriptive text for Open Graph and Twitter image metadata.
+    $alt = image_alt_text($image, $currentGallery);
+
+    // $versionedUrl stores a stable cache-busting URL. Discord caches embed
+    // images aggressively, so using the thumbnail modification time makes the
+    // preview refresh when the underlying thumbnail is regenerated without
+    // changing normal visitor URLs.
+    $versionedUrl = social_preview_cache_busted_url($url, $thumbnailPath);
+
+    return [
+        'url' => $versionedUrl,
+        'secure_url' => preg_replace('#^http://#i', 'https://', $versionedUrl) ?: $versionedUrl,
+        'type' => 'image/jpeg',
+        'width' => (int) $imageSize[0],
+        'height' => (int) $imageSize[1],
+        'alt' => $alt,
+    ];
+}
+
+/**
+ * Add a deterministic version marker to one social preview image URL.
+ *
+ * Discord, Slack, Facebook, and other crawlers cache fetched preview images. A
+ * version marker based on the generated thumbnail file keeps the URL stable for
+ * normal sharing, but changes when the thumbnail is rebuilt.
+ */
+function social_preview_cache_busted_url(string $url, string $filePath): string
+{
+    // $modifiedAt stores the thumbnail timestamp used as a cheap content version.
+    $modifiedAt = is_file($filePath) ? (string) filemtime($filePath) : '';
+    if ($modifiedAt === '') {
+        return $url;
+    }
+
+    // $separator stores the correct query separator for URLs that already carry
+    // parameters, such as the legacy index.php?page=thumb route.
+    $separator = str_contains($url, '?') ? '&' : '?';
+    return $url . $separator . 'v=' . rawurlencode($modifiedAt);
+}
+
+/**
+ * Emit one meta tag followed by a newline so crawler diagnostics are readable.
+ */
+function render_meta_tag(string $attributeName, string $attributeValue, string $content): void
+{
+    echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
+}
+
+/**
+ * Emit one link tag followed by a newline so crawler diagnostics are readable.
+ */
+function render_link_tag(string $rel, string $href): void
+{
+    echo '<link rel="' . e($rel) . '" href="' . e($href) . '">' . "\n";
+}
+
+/**
  * Render SEO tags for a gallery page.
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
@@ -344,32 +502,40 @@ function render_public_seo_tags(array $gallery, array $images = []): void
     $description = gallery_seo_description($gallery);
     // $canonical stores an intermediate value used by the surrounding gallery workflow.
     $canonical = canonical_url_for_gallery($gallery);
+    // $previewImage stores crawler-safe social image metadata when available.
+    $previewImage = gallery_social_preview_image($gallery, $images);
     // $ogImage stores an intermediate value used by the surrounding gallery workflow.
-    $ogImage = '';
-    foreach ($images as $image) {
-        // $preview stores an intermediate value used by the surrounding gallery workflow.
-        $preview = thumbnail_url($image, 800);
-        if ($preview !== '') {
-            // $ogImage stores an intermediate value used by the surrounding gallery workflow.
-            $ogImage = absolute_public_url($preview);
-            break;
+    $ogImage = $previewImage['url'] ?? '';
+
+    render_link_tag('canonical', $canonical);
+    render_meta_tag('name', 'description', $description);
+    render_meta_tag('property', 'og:type', 'website');
+    render_meta_tag('property', 'og:title', $title);
+    render_meta_tag('property', 'og:description', $description);
+    render_meta_tag('property', 'og:url', $canonical);
+    render_meta_tag('property', 'og:site_name', site_name());
+    render_meta_tag('property', 'og:locale', 'cs_CZ');
+    if ($previewImage !== null) {
+        render_meta_tag('property', 'og:image', $previewImage['url']);
+        render_meta_tag('property', 'og:image:url', $previewImage['url']);
+        if (str_starts_with((string) $previewImage['secure_url'], 'https://')) {
+            render_meta_tag('property', 'og:image:secure_url', $previewImage['secure_url']);
         }
+        render_meta_tag('property', 'og:image:type', $previewImage['type']);
+        render_meta_tag('property', 'og:image:width', (string) $previewImage['width']);
+        render_meta_tag('property', 'og:image:height', (string) $previewImage['height']);
+        render_meta_tag('property', 'og:image:alt', $previewImage['alt']);
+        render_meta_tag('name', 'image', $previewImage['url']);
+        render_meta_tag('itemprop', 'image', $previewImage['url']);
     }
-    echo '<link rel="canonical" href="' . e($canonical) . '">';
-    echo '<meta name="description" content="' . e($description) . '">';
-    echo '<meta property="og:type" content="website">';
-    echo '<meta property="og:title" content="' . e($title) . '">';
-    echo '<meta property="og:description" content="' . e($description) . '">';
-    echo '<meta property="og:url" content="' . e($canonical) . '">';
-    echo '<meta property="og:site_name" content="' . e(site_name()) . '">';
-    if ($ogImage !== '') {
-        echo '<meta property="og:image" content="' . e($ogImage) . '">';
-    }
-    echo '<meta name="twitter:card" content="' . ($ogImage !== '' ? 'summary_large_image' : 'summary') . '">';
-    echo '<meta name="twitter:title" content="' . e($title) . '">';
-    echo '<meta name="twitter:description" content="' . e($description) . '">';
-    if ($ogImage !== '') {
-        echo '<meta name="twitter:image" content="' . e($ogImage) . '">';
+    render_meta_tag('name', 'twitter:card', $ogImage !== '' ? 'summary_large_image' : 'summary');
+    render_meta_tag('name', 'twitter:title', $title);
+    render_meta_tag('name', 'twitter:description', $description);
+    render_meta_tag('name', 'twitter:url', $canonical);
+    if ($previewImage !== null) {
+        render_meta_tag('name', 'twitter:image', $previewImage['url']);
+        render_meta_tag('name', 'twitter:image:src', $previewImage['url']);
+        render_meta_tag('name', 'twitter:image:alt', $previewImage['alt']);
     }
 }
 
