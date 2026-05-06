@@ -908,7 +908,7 @@ function cms_admin_edit_gallery(): void
     }
     if (nsfw_guard_schema_ready()) {
         echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this gallery as NSFW / 18+</label>';
-        echo '<p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files.</p>';
+        echo '<p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it, since some providers restrict or prohibit adult content.</p>';
     } else {
         echo '<p class="muted">NSFW Guard controls will be available after the database migration is applied.</p>';
     }
@@ -1767,7 +1767,7 @@ function cms_admin_edit_image(): void
     echo '<label>Visibility<select name="visibility">' . visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
         echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
-        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served.</p>';
+        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
