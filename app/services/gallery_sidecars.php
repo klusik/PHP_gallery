@@ -49,7 +49,13 @@ function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
 {
     // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
-    return file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
+    // $directory stores the destination folder where gallery.json should be written.
+    $directory = dirname($path);
+    if (!is_dir($directory)) {
+        return false;
+    }
+
+    return @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
 }
 
 /**

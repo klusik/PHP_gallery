@@ -71,7 +71,7 @@ import {
     setupGalleryUploadProgress,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260507-gallery-drag-click-fix';
+} from './gallery-modules/admin-operations.js?v=20260507-gallery-json-buffer';
 
 /**
  * Runs a setup callback after the DOM is ready.

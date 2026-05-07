@@ -301,7 +301,7 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
     sync_gallery_parent_ids();
     foreach (array_keys($pathMap) as $id) {
         // $updated stores an intermediate value used by the surrounding gallery workflow.
-        $updated = find_gallery((int) $id);
+        $updated = find_gallery((int) $id, true);
         if ($updated) {
             write_gallery_sidecar($updated);
         }

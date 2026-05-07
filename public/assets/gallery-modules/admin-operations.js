@@ -1122,9 +1122,9 @@ export function setupAdminGalleryFilters() {
 
 // Function `setupAdminGalleryTree` executes this focused behavior.
 export function setupAdminGalleryTree() {
-    // Variable `rows` stores this steps working value.
-    const rows = Array.from(document.querySelectorAll('[data-gallery-row]'));
-    if (rows.length === 0) {
+    // Variable `table` stores this steps working value.
+    const table = document.querySelector('[data-admin-gallery-order-table]');
+    if (!table) {
         return;
     }
     // Variable `csrf` stores this steps working value.
@@ -1133,9 +1133,19 @@ export function setupAdminGalleryTree() {
     const saveUrl = new URL(window.location.href);
     saveUrl.search = '?page=admin_save_gallery_collapse';
 
+    // Function `currentRows` executes this focused behavior.
+    function currentRows() {
+        return Array.from(table.querySelectorAll('[data-gallery-row]'));
+    }
+
+    // Function `rowById` executes this focused behavior.
+    function rowById(galleryId) {
+        return currentRows().find((candidate) => candidate.dataset.galleryId === String(galleryId)) || null;
+    }
+
     // Function `collapsedIds` executes this focused behavior.
     function collapsedIds() {
-        return rows.filter((row) => row.classList.contains('is-collapsed')).map((row) => row.dataset.galleryId);
+        return currentRows().filter((row) => row.classList.contains('is-collapsed')).map((row) => row.dataset.galleryId);
     }
 
     // Function `save` executes this focused behavior.
@@ -1147,8 +1157,75 @@ export function setupAdminGalleryTree() {
         fetch(saveUrl.toString(), {method: 'POST', body, headers: {'Accept': 'application/json'}});
     }
 
+    /**
+     * Ensures the row has the correct expand/collapse control for its current children.
+     *
+     * Reordering can turn a leaf gallery into a parent or remove the last child
+     * from a previous parent without a page reload. The visible control must be
+     * rebuilt from current parent_id values before tree visibility is recalculated.
+     *
+     * @param {HTMLTableRowElement} row Gallery row to refresh.
+     * @param {boolean} hasChildren Whether this row currently owns child rows.
+     * @returns {void}
+     */
+    function syncRowToggle(row, hasChildren) {
+        const title = row.querySelector('.tree-title');
+        if (!title) {
+            return;
+        }
+        const galleryId = row.dataset.galleryId || '';
+        const existingToggle = title.querySelector('[data-gallery-toggle]');
+        const existingSpacer = title.querySelector('.tree-spacer');
+        if (hasChildren) {
+            if (existingToggle) {
+                existingToggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
+                existingToggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+                return;
+            }
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'tree-toggle';
+            toggle.dataset.galleryToggle = galleryId;
+            toggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
+            toggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+            existingSpacer?.remove();
+            title.insertBefore(toggle, title.firstChild);
+            return;
+        }
+        row.classList.remove('is-collapsed');
+        existingToggle?.remove();
+        if (!existingSpacer) {
+            const spacer = document.createElement('span');
+            spacer.className = 'tree-spacer';
+            spacer.setAttribute('aria-hidden', 'true');
+            title.insertBefore(spacer, title.firstChild);
+        }
+    }
+
+    /**
+     * Rebuilds child-aware toggle controls from current parent_id metadata.
+     *
+     * @returns {void}
+     */
+    function syncTreeControls() {
+        const childCounts = new Map();
+        currentRows().forEach((row) => {
+            const parentId = row.dataset.parentId || '0';
+            if (parentId === '0') {
+                return;
+            }
+            childCounts.set(parentId, (childCounts.get(parentId) || 0) + 1);
+        });
+        currentRows().forEach((row) => {
+            syncRowToggle(row, (childCounts.get(row.dataset.galleryId || '') || 0) > 0);
+        });
+    }
+
     // Function `refreshVisibility` executes this focused behavior.
     function refreshVisibility() {
+        syncTreeControls();
+        // Variable `rows` stores this steps working value.
+        const rows = currentRows();
         // Variable `collapsed` stores this steps working value.
         const collapsed = new Set(collapsedIds().map(String));
         rows.forEach((row) => {
@@ -1162,7 +1239,7 @@ export function setupAdminGalleryTree() {
                     break;
                 }
                 // Variable `parent` stores this steps working value.
-                const parent = rows.find((candidate) => candidate.dataset.galleryId === parentId);
+                const parent = rowById(parentId);
                 parentId = parent ? (parent.dataset.parentId || '0') : '0';
             }
             setGalleryRowHiddenReason(row, 'tree', hidden);
@@ -1182,25 +1259,31 @@ export function setupAdminGalleryTree() {
         document.dispatchEvent(new Event('galleryRowsChanged'));
     }
 
-    document.querySelectorAll('[data-gallery-toggle]').forEach((button) => {
-        button.addEventListener('click', () => {
-            // Variable `row` stores this steps working value.
-            const row = button.closest('[data-gallery-row]');
-            // Variable `collapsed` stores this steps working value.
-            const collapsed = !row.classList.contains('is-collapsed');
-            row.classList.toggle('is-collapsed', collapsed);
-            button.textContent = collapsed ? '+' : '-';
-            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-            refreshVisibility();
-            save();
-        });
+    table.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-gallery-toggle]') : null;
+        if (!button) {
+            return;
+        }
+        // Variable `row` stores this steps working value.
+        const row = button.closest('[data-gallery-row]');
+        if (!row) {
+            return;
+        }
+        // Variable `collapsed` stores this steps working value.
+        const collapsed = !row.classList.contains('is-collapsed');
+        row.classList.toggle('is-collapsed', collapsed);
+        button.textContent = collapsed ? '+' : '-';
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        refreshVisibility();
+        save();
     });
 
     document.querySelectorAll('[data-gallery-tree-action]').forEach((button) => {
         button.addEventListener('click', () => {
             // Variable `collapse` stores this steps working value.
             const collapse = button.dataset.galleryTreeAction === 'collapse-all';
-            rows.forEach((row) => {
+            syncTreeControls();
+            currentRows().forEach((row) => {
                 // Variable `toggle` stores this steps working value.
                 const toggle = row.querySelector('[data-gallery-toggle]');
                 if (!toggle) {
@@ -1215,6 +1298,7 @@ export function setupAdminGalleryTree() {
         });
     });
 
+    document.addEventListener('adminGalleryTreeMutated', refreshVisibility);
     refreshVisibility();
 }
 
@@ -1296,6 +1380,28 @@ export function setupAdminGalleryReordering() {
         }
         status.textContent = message;
         status.dataset.state = state;
+    }
+
+    /**
+     * Converts accidental HTML output from a JSON endpoint into readable admin text.
+     *
+     * Shared hosting can print PHP warnings as HTML before JSON when display_errors
+     * is enabled. The server now buffers that output, but this fallback keeps older
+     * cached PHP files from showing raw parser errors to the admin.
+     *
+     * @param {string} responseText Raw response returned by the reorder endpoint.
+     * @returns {string} Friendly status message for the toolbar.
+     */
+    function cleanAdminJsonParseMessage(responseText) {
+        const plainText = String(responseText || '')
+            .replace(/<br\s*\/?>(\s*)/gi, '\n')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (plainText) {
+            return `Gallery order was saved, but the server returned a diagnostic message instead of clean JSON: ${plainText.slice(0, 240)}`;
+        }
+        return 'Gallery order was saved, but the server returned an empty response. Refresh the page to verify the current order.';
     }
 
     /**
@@ -1382,22 +1488,12 @@ export function setupAdminGalleryReordering() {
         ghost.className = 'admin-image-order-ghost admin-gallery-order-ghost';
         ghost.style.width = `${firstBox.width}px`;
         ghost.style.left = `${firstBox.left}px`;
-        rows.slice(0, 6).forEach((row) => {
-            const clonedRow = row.cloneNode(true);
-            copyCellWidths(row, clonedRow);
-            clonedRow.classList.add('is-ghost-row');
-            clonedRow.removeAttribute('data-gallery-row');
-            clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
-            ghostBody.appendChild(clonedRow);
-        });
-        if (rows.length > 6) {
-            const summaryRow = document.createElement('tr');
-            const summaryCell = document.createElement('td');
-            summaryCell.colSpan = Math.max(1, rows[0].children.length);
-            summaryCell.textContent = `and ${rows.length - 6} nested galleries`;
-            summaryRow.appendChild(summaryCell);
-            ghostBody.appendChild(summaryRow);
-        }
+        const clonedRow = rows[0].cloneNode(true);
+        copyCellWidths(rows[0], clonedRow);
+        clonedRow.classList.add('is-ghost-row');
+        clonedRow.removeAttribute('data-gallery-row');
+        clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+        ghostBody.appendChild(clonedRow);
         ghost.appendChild(ghostBody);
         document.body.appendChild(ghost);
         return ghost;
@@ -1495,11 +1591,21 @@ export function setupAdminGalleryReordering() {
      */
     function applyPlaceholderDepth(depth) {
         proposedDepth = depth;
+        const direction = depth > originalDepth ? 'right' : (depth < originalDepth ? 'left' : 'level');
+        const message = direction === 'right'
+            ? '→ Release to nest the gallery here.'
+            : (direction === 'left' ? '← Release to move the gallery out here.' : '↓ Release to save the new gallery position.');
         if (placeholderRow) {
             placeholderRow.dataset.depth = String(depth);
+            placeholderRow.dataset.dragDirection = direction;
             placeholderRow.style.setProperty('--gallery-drag-depth', String(depth));
         }
-        setStatus(depth > originalDepth ? 'Release to nest the gallery here.' : (depth < originalDepth ? 'Release to move the gallery out here.' : 'Release to save the new gallery position.'), 'dragging');
+        if (ghostTable) {
+            ghostTable.dataset.dragDirection = direction;
+        }
+        table.dataset.galleryDragDirection = direction;
+        document.body.dataset.galleryDragDirection = direction;
+        setStatus(message, 'dragging');
     }
 
     /**
@@ -1546,6 +1652,7 @@ export function setupAdminGalleryReordering() {
     function setGalleryRowDepth(row, depth) {
         const title = row.querySelector('.tree-title');
         row.dataset.depth = String(depth);
+        row.style.setProperty('--gallery-depth', String(Math.min(depth, 8)));
         row.classList.toggle('is-subgallery', depth > 0);
         if (!title) {
             return;
@@ -1585,6 +1692,68 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Returns the stable folder name segment for a gallery row.
+     *
+     * The Admin table can update visible paths immediately after a tree move
+     * without waiting for the next page load. The folder segment is captured
+     * once from the current path, then reused even after the displayed path is
+     * recalculated under another parent.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose folder name is needed.
+     * @returns {string} Last folder path segment for this gallery.
+     */
+    function galleryFolderName(row) {
+        if (row.dataset.galleryFolderName) {
+            return row.dataset.galleryFolderName;
+        }
+        const pathText = row.querySelector('.admin-gallery-path')?.textContent?.trim() || '';
+        const parts = pathText.split('/').filter((part) => part !== '');
+        const folderName = parts.length > 0 ? parts[parts.length - 1] : (row.dataset.galleryTitle || row.dataset.galleryId || 'gallery');
+        row.dataset.galleryFolderName = folderName;
+        return folderName;
+    }
+
+    /**
+     * Updates visible parent labels and folder paths after a client-side tree move.
+     *
+     * @returns {void}
+     */
+    function refreshVisibleGalleryTreeMetadata() {
+        const titlesById = new Map();
+        const pathsById = new Map();
+        galleryRows().forEach((row) => {
+            titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || 'Gallery');
+        });
+        galleryRows().forEach((row) => {
+            const id = row.dataset.galleryId || '';
+            const parentId = row.dataset.parentId || '0';
+            const folderName = galleryFolderName(row);
+            const parentPath = parentId !== '0' ? (pathsById.get(parentId) || '') : '';
+            const nextPath = parentPath !== '' ? `${parentPath}/${folderName}` : folderName;
+            const pathLabel = row.querySelector('.admin-gallery-path');
+            let parentLabel = row.querySelector('.admin-gallery-parent');
+            if (!parentLabel) {
+                parentLabel = document.createElement('span');
+                parentLabel.className = 'admin-gallery-parent';
+                row.querySelector('.admin-gallery-summary-text')?.appendChild(parentLabel);
+            }
+            pathsById.set(id, nextPath);
+            if (pathLabel) {
+                pathLabel.textContent = nextPath;
+            }
+            if (parentLabel) {
+                if (parentId !== '0') {
+                    parentLabel.textContent = `Parent: ${titlesById.get(parentId) || 'Gallery'}`;
+                    parentLabel.hidden = false;
+                } else {
+                    parentLabel.textContent = '';
+                    parentLabel.hidden = true;
+                }
+            }
+        });
+    }
+
+    /**
      * Sends the complete gallery order to PHP for validation and persistence.
      *
      * @returns {Promise<void>} Promise resolved after the save attempt finishes.
@@ -1608,10 +1777,16 @@ export function setupAdminGalleryReordering() {
                 headers: {'Accept': 'application/json'},
                 signal: controller.signal,
             });
-            if (!response.ok) {
-                throw new Error('The server rejected the gallery reorder request.');
+            const responseText = await response.text();
+            let result = null;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                throw new Error(cleanAdminJsonParseMessage(responseText));
             }
-            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || 'The server rejected the gallery reorder request.');
+            }
             if (!result.ok) {
                 throw new Error(result.message || 'Gallery order could not be saved.');
             }
@@ -1736,6 +1911,8 @@ export function setupAdminGalleryReordering() {
         ghostTable?.remove();
         placeholderRow?.remove();
         document.body.classList.remove('admin-gallery-order-active');
+        delete document.body.dataset.galleryDragDirection;
+        delete table.dataset.galleryDragDirection;
         removeDocumentListeners();
         draggedRows = [];
         draggedHandle = null;
@@ -1769,6 +1946,8 @@ export function setupAdminGalleryReordering() {
         }
         cleanupVisuals(true);
         serializeGalleryTree();
+        refreshVisibleGalleryTreeMetadata();
+        document.dispatchEvent(new Event('adminGalleryTreeMutated'));
         document.dispatchEvent(new Event('galleryRowsChanged'));
         if (currentGallerySignature() !== originalSignature) {
             saveGalleryTree();

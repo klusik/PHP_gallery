@@ -154,11 +154,11 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
 /**
  * Fetch one gallery by numeric ID.
  */
-function find_gallery(int $id): ?array
+function find_gallery(int $id, bool $fresh = false): ?array
 {
     static $cache = [];
 
-    if (array_key_exists($id, $cache)) {
+    if (!$fresh && array_key_exists($id, $cache)) {
         return $cache[$id];
     }
 

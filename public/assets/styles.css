@@ -3981,9 +3981,9 @@ body.admin-image-order-active {
     opacity: 0.72;
 }
 
-/* Keeps moved gallery rows in the table model while the ghost follows the pointer. */
+/* Removes the moved subtree from the table flow while the ghost follows the pointer. */
 .admin-gallery-order-table tr.is-reorder-hidden {
-    visibility: hidden;
+    display: none;
 }
 
 /* Prevents accidental text selection while galleries are being reordered or nested. */
@@ -3994,6 +3994,7 @@ body.admin-gallery-order-active {
 
 /* Shows the exact drop position and uses indentation to preview the target tree depth. */
 .admin-gallery-order-placeholder td {
+    position: relative;
     padding: 0;
     border: 2px dashed #2271b1;
     background: linear-gradient(90deg, transparent 0, transparent calc(var(--gallery-drag-depth, 0) * 28px), rgba(34, 113, 177, 0.10) calc(var(--gallery-drag-depth, 0) * 28px));
@@ -4009,10 +4010,48 @@ body.admin-gallery-order-active {
     background: #2271b1;
 }
 
+/* Adds a directional cue so nesting and moving out are visible before the drop is committed. */
+.admin-gallery-order-placeholder td::after {
+    content: '↓ same level';
+    position: absolute;
+    top: 50%;
+    left: calc((var(--gallery-drag-depth, 0) * 28px) + 0.85rem);
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid rgba(34, 113, 177, 0.28);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #0f4f97;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+    box-shadow: 0 0.35rem 1rem rgba(15, 79, 151, 0.16);
+    white-space: nowrap;
+}
+
+.admin-gallery-order-placeholder[data-drag-direction="right"] td::after {
+    content: '→ nest deeper';
+}
+
+.admin-gallery-order-placeholder[data-drag-direction="left"] td::after {
+    content: '← move out';
+}
+
 /* Keeps the gallery ghost readable when several nested rows move together. */
 .admin-gallery-order-ghost {
     max-height: 420px;
     overflow: hidden;
+}
+
+.admin-gallery-order-ghost[data-drag-direction="right"] {
+    box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.22), 0 1rem 2rem rgba(15, 79, 151, 0.22);
+}
+
+.admin-gallery-order-ghost[data-drag-direction="left"] {
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.22), 0 1rem 2rem rgba(120, 53, 15, 0.18);
 }
 
 /* Keeps older cloned gallery drag handles consistent inside the ghost row. */
