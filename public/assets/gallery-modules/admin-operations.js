@@ -1256,7 +1256,7 @@ export function setupAdminGalleryReordering() {
     const indentWidth = 28;
     // draggedRows stores the moved root row and all descendant rows.
     let draggedRows = [];
-    // draggedHandle stores the handle that started the drag, so its visual state can be restored.
+    // draggedHandle stores the gallery-column area that started the drag, so its visual state can be restored.
     let draggedHandle = null;
     // placeholderRow stores the temporary row marking the insertion point.
     let placeholderRow = null;
@@ -1276,6 +1276,10 @@ export function setupAdminGalleryReordering() {
     let activePointerId = null;
     // activeMouseFallback stores whether classic mouse events are currently driving movement.
     let activeMouseFallback = false;
+    // pendingDrag stores a possible drag that has not crossed the movement threshold yet.
+    let pendingDrag = null;
+    // suppressClickUntil stores a short timestamp window used to stop link clicks after dragging a title area.
+    let suppressClickUntil = 0;
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
@@ -1846,9 +1850,152 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
-     * Starts moving the gallery subtree controlled by a drag handle.
+     * Returns whether a pointer target should keep its native control behavior instead of starting gallery movement.
      *
-     * @param {HTMLElement} handle Drag handle pressed by the admin.
+     * @param {EventTarget|null} target Original pointer or mouse target.
+     * @returns {boolean} Whether the target should be ignored by the row drag controller.
+     */
+    function isNativeGalleryControl(target) {
+        if (!(target instanceof Element)) {
+            return true;
+        }
+        return Boolean(target.closest('a[href], input, select, textarea, button, label, [contenteditable], [data-gallery-toggle], .gallery-row-action, .admin-gallery-row-action'));
+    }
+
+    /**
+     * Removes listeners for a drag candidate that never crossed the movement threshold.
+     *
+     * @returns {void}
+     */
+    function removePendingDragListeners() {
+        document.removeEventListener('pointermove', handlePendingPointerMove, true);
+        document.removeEventListener('pointerup', handlePendingPointerEnd, true);
+        document.removeEventListener('pointercancel', handlePendingPointerEnd, true);
+        document.removeEventListener('mousemove', handlePendingMouseMove, true);
+        document.removeEventListener('mouseup', handlePendingMouseEnd, true);
+    }
+
+    /**
+     * Clears a not-yet-started drag candidate and restores document listeners.
+     *
+     * @returns {void}
+     */
+    function clearPendingDrag() {
+        removePendingDragListeners();
+        pendingDrag = null;
+    }
+
+    /**
+     * Starts row movement only after the pointer clearly becomes a drag gesture.
+     *
+     * @param {number} clientX Current viewport X coordinate.
+     * @param {number} clientY Current viewport Y coordinate.
+     * @returns {void}
+     */
+    function maybeStartPendingDrag(clientX, clientY) {
+        if (!pendingDrag || draggedRows.length > 0) {
+            return;
+        }
+        const deltaX = clientX - pendingDrag.startX;
+        const deltaY = clientY - pendingDrag.startY;
+        if (Math.hypot(deltaX, deltaY) < 12) {
+            return;
+        }
+        const candidate = pendingDrag;
+        clearPendingDrag();
+        suppressClickUntil = Date.now() + 450;
+        startReorder(candidate.zone, candidate.startX, candidate.startY, candidate.pointerId, candidate.mouseFallback);
+        moveGhost(clientY);
+        movePlaceholder(clientY, clientX);
+    }
+
+    /**
+     * Watches pointer movement for the gallery-column drag threshold.
+     *
+     * @param {PointerEvent} event Pointer movement emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingPointerMove(event) {
+        if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
+            return;
+        }
+        maybeStartPendingDrag(event.clientX, event.clientY);
+        if (draggedRows.length > 0) {
+            event.preventDefault();
+        }
+    }
+
+    /**
+     * Clears a pointer candidate when the admin clicked without dragging.
+     *
+     * @param {PointerEvent} event Pointer end event emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingPointerEnd(event) {
+        if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
+            return;
+        }
+        clearPendingDrag();
+    }
+
+    /**
+     * Watches classic mouse movement for browsers that do not use Pointer Events for this input.
+     *
+     * @param {MouseEvent} event Mouse movement emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingMouseMove(event) {
+        if (!pendingDrag || !pendingDrag.mouseFallback) {
+            return;
+        }
+        maybeStartPendingDrag(event.clientX, event.clientY);
+        if (draggedRows.length > 0) {
+            event.preventDefault();
+        }
+    }
+
+    /**
+     * Clears a mouse candidate when the admin clicked without dragging.
+     *
+     * @returns {void}
+     */
+    function handlePendingMouseEnd() {
+        if (!pendingDrag || !pendingDrag.mouseFallback) {
+            return;
+        }
+        clearPendingDrag();
+    }
+
+    /**
+     * Arms a gallery-column area so normal clicks still work and only movement starts reordering.
+     *
+     * @param {HTMLElement} zone Gallery-column area that can initiate row movement.
+     * @param {number} clientX Starting viewport X coordinate.
+     * @param {number} clientY Starting viewport Y coordinate.
+     * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
+     * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
+     * @returns {void}
+     */
+    function armGalleryDragZone(zone, clientX, clientY, pointerId, mouseFallback) {
+        if (draggedRows.length > 0) {
+            return;
+        }
+        clearPendingDrag();
+        pendingDrag = {zone, startX: clientX, startY: clientY, pointerId, mouseFallback};
+        if (mouseFallback) {
+            document.addEventListener('mousemove', handlePendingMouseMove, true);
+            document.addEventListener('mouseup', handlePendingMouseEnd, true);
+            return;
+        }
+        document.addEventListener('pointermove', handlePendingPointerMove, true);
+        document.addEventListener('pointerup', handlePendingPointerEnd, true);
+        document.addEventListener('pointercancel', handlePendingPointerEnd, true);
+    }
+
+    /**
+     * Starts moving the gallery subtree controlled by a gallery-column drag zone.
+     *
+     * @param {HTMLElement} handle Gallery-column area dragged by the admin.
      * @param {number} clientX Starting viewport X coordinate.
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
@@ -1897,28 +2044,34 @@ export function setupAdminGalleryReordering() {
         row.setAttribute('draggable', 'false');
     });
 
-    body.querySelectorAll('[data-admin-gallery-drag-handle]').forEach((handle) => {
-        // Prevents native text selection and browser drag images from interfering with the custom controller.
-        handle.setAttribute('draggable', 'false');
-        handle.addEventListener('dragstart', (event) => event.preventDefault());
-        handle.addEventListener('click', (event) => event.preventDefault());
-
-        handle.addEventListener('pointerdown', (event) => {
-            if (event.button !== 0) {
-                return;
+    body.querySelectorAll('[data-admin-gallery-drag-zone]').forEach((zone) => {
+        // Prevents browser-provided drag images while keeping ordinary title and preview clicks usable.
+        zone.setAttribute('draggable', 'false');
+        zone.addEventListener('dragstart', (event) => {
+            if (!isNativeGalleryControl(event.target)) {
+                event.preventDefault();
             }
-            event.preventDefault();
-            event.stopPropagation();
-            startReorder(handle, event.clientX, event.clientY, event.pointerId, false);
         });
 
-        handle.addEventListener('mousedown', (event) => {
-            if (event.button !== 0 || draggedRows.length > 0) {
+        zone.addEventListener('click', (event) => {
+            if (Date.now() <= suppressClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }, true);
+
+        zone.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0 || event.isPrimary === false || isNativeGalleryControl(event.target)) {
                 return;
             }
-            event.preventDefault();
-            event.stopPropagation();
-            startReorder(handle, event.clientX, event.clientY, null, true);
+            armGalleryDragZone(zone, event.clientX, event.clientY, event.pointerId, false);
+        });
+
+        zone.addEventListener('mousedown', (event) => {
+            if (window.PointerEvent || event.button !== 0 || draggedRows.length > 0 || isNativeGalleryControl(event.target)) {
+                return;
+            }
+            armGalleryDragZone(zone, event.clientX, event.clientY, null, true);
         });
     });
 
@@ -1969,7 +2122,7 @@ export function setupAdminImageReordering() {
 
     // draggedRow stores the real table row being reordered.
     let draggedRow = null;
-    // draggedHandle stores the handle that started the drag, so its visual state can be restored.
+    // draggedHandle stores the gallery-column area that started the drag, so its visual state can be restored.
     let draggedHandle = null;
     // placeholderRow stores the temporary table row marking the insertion point.
     let placeholderRow = null;
@@ -1983,6 +2136,10 @@ export function setupAdminImageReordering() {
     let activePointerId = null;
     // activeMouseFallback stores whether classic mouse events are currently driving movement.
     let activeMouseFallback = false;
+    // pendingDrag stores a possible drag that has not crossed the movement threshold yet.
+    let pendingDrag = null;
+    // suppressClickUntil stores a short timestamp window used to stop link clicks after dragging a title area.
+    let suppressClickUntil = 0;
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
@@ -2340,7 +2497,7 @@ export function setupAdminImageReordering() {
     /**
      * Starts moving the row controlled by a drag handle.
      *
-     * @param {HTMLElement} handle Drag handle pressed by the admin.
+     * @param {HTMLElement} handle Gallery-column area dragged by the admin.
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.

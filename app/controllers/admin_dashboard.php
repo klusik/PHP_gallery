@@ -59,6 +59,8 @@ function cms_admin(): void
     $backgroundSourceReady = gallery_background_source_schema_ready();
     // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
     $publicPathReady = public_path_schema_ready();
+    // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
+    $coverAssetReady = gallery_cover_asset_schema_ready();
 
     if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
         // Self-heal voting/game state periodically instead of on every admin navigation.
@@ -77,7 +79,7 @@ function cms_admin(): void
     }
 
     // Variable $galleries stores this steps working value.
-    $galleries = admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady);
+    $galleries = admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady);
     // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
     $galleries = admin_ordered_gallery_rows($galleries);
     // Variable $collapsedIds stores this steps working value.
@@ -191,11 +193,13 @@ function cms_admin(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Galleries</p><h2>All galleries</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></div>';
     echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><p class="muted">Drag galleries by the handle. Move vertically to change order. Move slightly right to make a gallery a subgallery. Move left to take it out of its parent.</p><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">Gallery ordering ready.</span></div>';
-    echo '<div class="bulk-row">';
-    echo '<label>Filter galleries<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
-    echo '<span class="muted" data-gallery-filter-summary></span>';
-    echo '<label><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed galleries</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
+    echo '<section class="admin-gallery-workspace" aria-label="Gallery management">';
+    echo '<div class="admin-gallery-command-panel">';
+    echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><div><strong>Tree ordering</strong><p class="muted">Drag a gallery thumbnail or title area to reorder. Move right to nest a gallery, or left to move it back out.</p></div><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">Gallery ordering ready.</span></div>';
+    echo '<div class="bulk-row admin-gallery-controls">';
+    echo '<label>Filter<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
+    echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
     if ($filenameDisplayReady) {
         echo '<option value="filenames_on">Show file names</option><option value="filenames_off">Hide file names</option>';
     }
@@ -205,23 +209,8 @@ function cms_admin(): void
     if ($pictureGameReady) {
         echo '<option value="game_on">Enable picture game</option><option value="game_off">Disable picture game</option>';
     }
-    echo '</select></label><button type="submit">Apply to selected</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div>';
-    echo '<table class="admin-gallery-order-table" data-admin-gallery-order-table><thead><tr><th>Move</th><th>Select</th><th>Title</th><th>Parent</th><th>Folder</th><th>Status</th>';
-    if ($accessReady) {
-        echo '<th>Access</th>';
-    }
-    echo '<th title="Maps">M</th>';
-    echo '<th>B</th>';
-    if ($filenameDisplayReady) {
-        echo '<th title="File names shown">N</th>';
-    }
-    if ($votingReady) {
-        echo '<th title="Voting">V</th>';
-    }
-    if ($pictureGameReady) {
-        echo '<th title="Game">G</th>';
-    }
-    echo '<th>Images</th><th>Actions</th></tr></thead><tbody>';
+    echo '</select></label><button type="submit">Apply</button><button type="button" class="secondary" data-gallery-tree-action="collapse-all">Collapse all</button><button type="button" class="secondary" data-gallery-tree-action="expand-all">Expand all</button></div></div>';
+    echo '<div class="admin-gallery-table-shell"><table class="admin-gallery-order-table admin-gallery-tree-table" data-admin-gallery-order-table><thead><tr><th class="admin-gallery-select-heading">Select</th><th>Gallery</th><th>State</th><th>Features</th><th class="admin-gallery-count-heading">Images</th><th class="admin-gallery-actions-heading">Actions</th></tr></thead><tbody>';
     foreach ($galleries as $gallery) {
         // Variable $depth stores this steps working value.
         $depth = substr_count((string) $gallery['folder_path'], '/');
@@ -229,33 +218,42 @@ function cms_admin(): void
         $hasChildren = !empty($childrenByParent[(int) $gallery['id']]);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle admin-gallery-drag-handle" data-admin-gallery-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $gallery['title']) . '" title="Drag to reorder or nest">↕</span></td><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '" style="--gallery-depth: ' . min($depth, 8) . ';"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
-        echo '<td><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span></td>';
-        echo '<td>' . e($gallery['parent_title'] ?: '') . '</td><td>' . e($gallery['folder_path']) . '</td><td>' . e($gallery['visibility']) . '</td>';
+        // $previewUrl stores a small non-blocking gallery preview image for faster visual scanning.
+        $previewUrl = admin_gallery_preview_url($gallery);
+        echo '<td class="admin-gallery-title-cell"><div class="admin-gallery-summary" data-admin-gallery-drag-zone title="Drag the thumbnail, path text, or empty gallery area to reorder or nest. Click the gallery name to open it."><span class="admin-gallery-depth-rail" aria-hidden="true"></span>';
+        if ($previewUrl !== '') {
+            echo '<span class="admin-gallery-preview" role="img" aria-label="Preview for ' . e((string) $gallery['title']) . '"><img src="' . e($previewUrl) . '" alt="" loading="lazy" decoding="async"></span>';
+        } else {
+            echo '<span class="admin-gallery-preview is-empty" aria-hidden="true"><span>Gallery</span></span>';
+        }
+        echo '<div class="admin-gallery-summary-text"><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a class="admin-gallery-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span><span class="admin-gallery-path">' . e($gallery['folder_path']) . '</span>' . ((string) ($gallery['parent_title'] ?: '') !== '' ? '<span class="admin-gallery-parent">Parent: ' . e((string) $gallery['parent_title']) . '</span>' : '') . '</div></div></td>';
+        echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e((string) $gallery['visibility']) . '">' . e($gallery['visibility']) . '</span>';
         if ($accessReady) {
             // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
-            echo '<td>' . e($accessLabel) . '</td>';
+            echo '<span class="admin-gallery-access-label">' . e($accessLabel) . '</span>';
         }
-        echo '<td>' . render_admin_feature_flag($gpsMapReady && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</td>';
-        echo '<td>' . render_admin_feature_flag($backgroundSourceReady && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</td>';
+        echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="Maps">M ' . render_admin_feature_flag($gpsMapReady && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</span>';
+        echo '<span class="admin-gallery-feature" title="Background">B ' . render_admin_feature_flag($backgroundSourceReady && gallery_background_source($gallery) !== null, '✓', 'Custom gallery background set') . '</span>';
         if ($filenameDisplayReady) {
-            echo '<td>' . render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '✓', 'File names are shown') . '</td>';
+            echo '<span class="admin-gallery-feature" title="File names shown">N ' . render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '✓', 'File names are shown') . '</span>';
         }
         if ($votingReady) {
-            echo '<td>' . render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '✓', 'Voting enabled') . '</td>';
+            echo '<span class="admin-gallery-feature" title="Voting">V ' . render_admin_feature_flag((int) ($gallery['voting_enabled'] ?? 0) === 1, '✓', 'Voting enabled') . '</span>';
         }
         if ($pictureGameReady) {
-            echo '<td>' . render_admin_feature_flag((int) ($gallery['picture_game_enabled'] ?? 0) === 1, '✓', 'Picture game enabled') . '</td>';
+            echo '<span class="admin-gallery-feature" title="Game">G ' . render_admin_feature_flag((int) ($gallery['picture_game_enabled'] ?? 0) === 1, '✓', 'Picture game enabled') . '</span>';
         }
-        echo '<td>' . (int) $gallery['image_count'] . '</td><td class="nav gallery-row-actions">';
-        echo '<a class="gallery-row-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Edit</a>';
-        echo '<button type="submit" class="secondary gallery-row-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Thumbs</button>';
-        echo '</td></tr>';
+        echo '</td><td class="admin-gallery-image-count"><strong>' . (int) $gallery['image_count'] . '</strong></td><td class="nav gallery-row-actions">';
+        echo '<div class="gallery-row-action-set" aria-label="Actions for ' . e((string) $gallery['title']) . '">';
+        echo '<a class="gallery-row-action is-edit-action" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" aria-label="Edit ' . e((string) $gallery['title']) . '" title="Edit gallery"><span class="gallery-row-action-icon" aria-hidden="true">✎</span><span class="admin-visually-hidden">Edit</span></a>';
+        echo '<button type="submit" class="secondary gallery-row-action is-thumbnail-action" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '" aria-label="Create thumbnails for ' . e((string) $gallery['title']) . '" title="Create thumbnails"><span class="gallery-row-action-icon" aria-hidden="true">▧</span><span class="admin-visually-hidden">Thumbs</span></button>';
+        echo '</div></td></tr>';
     }
-    echo '</tbody></table></form>';
+    echo '</tbody></table></div></section></form>';
     $galleriesHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false);
 
@@ -293,7 +291,7 @@ function cms_admin(): void
  * keeps partially upgraded installations safe while avoiding SELECT * in the
  * dashboard hot path.
  */
-function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady): array
+function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady): array
 {
     // $selects stores the explicit gallery columns required by dashboard rendering.
     $selects = [
@@ -316,6 +314,7 @@ function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool
     $selects[] = $filenameDisplayReady ? 'g.show_filenames' : '0 AS show_filenames';
     $selects[] = $votingReady ? 'g.voting_enabled' : '0 AS voting_enabled';
     $selects[] = $pictureGameReady ? 'g.picture_game_enabled' : '0 AS picture_game_enabled';
+    $selects[] = $coverAssetReady ? 'g.cover_image_path' : 'NULL AS cover_image_path';
 
     // $sql stores a one-pass gallery query with image counts pre-aggregated by gallery.
     $sql = 'SELECT ' . implode(', ', $selects) . "
@@ -348,6 +347,35 @@ function admin_gallery_children_by_parent(array $rows): array
         $childrenByParent[$parentId][] = (int) ($row['id'] ?? 0);
     }
     return $childrenByParent;
+}
+
+/**
+ * Return a small gallery preview URL for the admin gallery table.
+ *
+ * The dashboard uses existing generated thumbnails when available and falls back
+ * through the same cover-selection rules used by public gallery cards. Nothing
+ * is generated while rendering the table, so repeated admin navigation stays
+ * cheap.
+ */
+function admin_gallery_preview_url(array $gallery): string
+{
+    // $coverAssetUrl stores an uploaded gallery-specific cover asset when the optional column exists.
+    $coverAssetUrl = gallery_cover_asset_url($gallery, false);
+    if ($coverAssetUrl !== '') {
+        return $coverAssetUrl;
+    }
+
+    // $cover stores the explicit or first direct image for this gallery.
+    $cover = gallery_cover_image((int) ($gallery['id'] ?? 0), false);
+    if ($cover) {
+        return thumbnail_url($cover, 300);
+    }
+
+    foreach (gallery_cover_collage_images((int) ($gallery['id'] ?? 0), false, 1) as $descendantCover) {
+        return thumbnail_url($descendantCover, 300);
+    }
+
+    return '';
 }
 
 /**

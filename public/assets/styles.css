@@ -1392,15 +1392,14 @@ body.has-mobile-lightbox {
 
 /* Styles the .admin-page .gallery-row-actions area of the gallery interface. */
 .admin-page .gallery-row-actions {
-    gap: 0.2rem;
     white-space: nowrap;
 }
 
 /* Styles the .admin-page .gallery-row-actions .gallery-row-action area of the gallery interface. */
 .admin-page .gallery-row-actions .gallery-row-action {
-    padding: 0.16rem 0.38rem;
-    font-size: 12px;
-    line-height: 1.05;
+    padding: 0;
+    font-size: 0.95rem;
+    line-height: 1;
 }
 
 .admin-page .site-main,
@@ -3971,7 +3970,7 @@ body.admin-image-order-active {
     margin-top: 0;
 }
 
-/* Keeps the gallery move handle visually aligned with the existing photo move handle. */
+/* Keeps the legacy gallery move handle visually aligned with the existing photo move handle. */
 .admin-gallery-drag-handle {
     font-size: 14px;
 }
@@ -4016,7 +4015,7 @@ body.admin-gallery-order-active {
     overflow: hidden;
 }
 
-/* Makes the cloned gallery drag handle consistent inside the ghost row. */
+/* Keeps older cloned gallery drag handles consistent inside the ghost row. */
 .admin-gallery-order-ghost .admin-gallery-drag-handle {
     cursor: grabbing;
 }
@@ -4425,4 +4424,550 @@ button.danger {
     .theme-tab-card-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Gives the gallery management tab one calm surface instead of several loose controls. */
+.admin-gallery-workspace {
+    overflow: hidden;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: calc(var(--radius, 16px) + 4px);
+    background: #fff;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.07);
+}
+
+/* Keeps ordering help and bulk controls visually attached to the table they affect. */
+.admin-gallery-command-panel {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border-bottom: 1px solid #e5ebf2;
+    background: linear-gradient(180deg, #fbfdff, #f6f9fc);
+}
+
+/* Turns the drag guidance into a compact status strip with one clear message. */
+.admin-gallery-order-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0;
+    padding: 0.8rem 0.95rem;
+    border: 1px solid #dbe5ef;
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.admin-gallery-order-toolbar strong {
+    display: block;
+    margin-bottom: 0.2rem;
+    color: #17212b;
+    font-size: 0.92rem;
+}
+
+.admin-gallery-order-toolbar p {
+    margin: 0;
+}
+
+/* Makes gallery filters read as a real toolbar and keeps buttons from crowding the table. */
+.admin-page .admin-gallery-controls {
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.admin-gallery-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: auto;
+    margin: 0;
+    color: #17212b;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.admin-gallery-controls select {
+    min-width: 11rem;
+    margin: 0;
+    background: #fff;
+}
+
+.admin-gallery-select-all {
+    padding: 0.45rem 0.65rem;
+    border: 1px solid #dbe5ef;
+    border-radius: 999px;
+    background: #fff;
+}
+
+.admin-gallery-filter-summary {
+    min-width: 8rem;
+}
+
+/* Allows wide folder paths without making the whole admin page look broken. */
+.admin-gallery-table-shell {
+    overflow-x: auto;
+}
+
+/* Uses separate borders so gallery rows can be styled as readable records. */
+.admin-page .admin-gallery-tree-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+}
+
+.admin-gallery-tree-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.72rem 0.8rem;
+    border-bottom: 1px solid #dbe5ef;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.admin-gallery-tree-table tbody td {
+    padding: 0.78rem 0.8rem;
+    border-bottom: 1px solid #edf1f5;
+    vertical-align: middle;
+}
+
+.admin-gallery-tree-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-gallery-tree-table tbody tr:hover td {
+    background: #f8fbff;
+}
+
+.admin-gallery-tree-table tbody tr.is-subgallery td {
+    background-image: linear-gradient(90deg, rgba(34, 113, 177, 0.07), rgba(34, 113, 177, 0) 16rem);
+}
+
+.admin-gallery-select-heading,
+.admin-gallery-count-heading,
+.admin-gallery-actions-heading {
+    width: 1%;
+}
+
+/* Keeps the legacy handle style available for older cached markup during a deployment. */
+.admin-gallery-drag-handle {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid #cbd8e5;
+    border-radius: 0.65rem;
+    background: #fff;
+    color: #475569;
+    font-size: 14px;
+    cursor: grab;
+}
+
+.admin-gallery-drag-handle:hover,
+.admin-gallery-drag-handle:focus-visible {
+    border-color: #2271b1;
+    color: #2271b1;
+    outline: none;
+}
+
+.admin-gallery-title-cell {
+    min-width: 32rem;
+}
+
+.admin-gallery-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+
+/* Uses the visual gallery record itself as the drag affordance, avoiding a separate move column. */
+.admin-gallery-summary[data-admin-gallery-drag-zone] {
+    cursor: default;
+    touch-action: pan-y;
+}
+
+.admin-gallery-summary[data-admin-gallery-drag-zone]:active {
+    cursor: grabbing;
+}
+
+.admin-gallery-summary[data-admin-gallery-drag-zone] a,
+.admin-gallery-summary[data-admin-gallery-drag-zone] button {
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.admin-gallery-summary[data-admin-gallery-drag-zone] .admin-gallery-preview,
+.admin-gallery-summary[data-admin-gallery-drag-zone] .admin-gallery-path,
+.admin-gallery-summary[data-admin-gallery-drag-zone] .admin-gallery-parent {
+    cursor: grab;
+}
+
+.admin-gallery-summary[data-admin-gallery-drag-zone] .admin-gallery-title-link {
+    cursor: pointer;
+}
+
+.admin-gallery-summary[data-admin-gallery-drag-zone] .tree-toggle {
+    cursor: pointer;
+}
+
+.admin-gallery-preview {
+    display: inline-flex;
+    flex: 0 0 7.25rem;
+    align-items: center;
+    justify-content: center;
+    width: 7.25rem;
+    height: 4.65rem;
+    overflow: hidden;
+    border: 1px solid #dbe5ef;
+    border-radius: 0.85rem;
+    background: linear-gradient(135deg, #f8fafc, #eaf1f8);
+    color: #718096;
+    text-decoration: none;
+}
+
+.admin-gallery-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.admin-gallery-preview.is-empty span {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.admin-gallery-summary-text {
+    min-width: 0;
+}
+
+.admin-gallery-title-link {
+    color: #0f4f97;
+    font-size: 0.94rem;
+    font-weight: 800;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+}
+
+.admin-gallery-path,
+.admin-gallery-parent {
+    display: block;
+    max-width: 44rem;
+    margin-top: 0.24rem;
+    overflow: hidden;
+    color: #64748b;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-gallery-parent {
+    color: #7a8796;
+}
+
+.admin-gallery-state-cell {
+    min-width: 8.5rem;
+}
+
+.admin-gallery-status-pill,
+.admin-gallery-access-label {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin: 0 0.35rem 0.35rem 0;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid #dbe5ef;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.74rem;
+    font-weight: 800;
+    line-height: 1.3;
+    text-transform: capitalize;
+}
+
+.admin-gallery-status-pill.is-public {
+    border-color: rgba(30, 126, 52, 0.22);
+    background: rgba(30, 126, 52, 0.10);
+    color: #166534;
+}
+
+.admin-gallery-status-pill.is-draft {
+    border-color: rgba(180, 83, 9, 0.24);
+    background: rgba(245, 158, 11, 0.12);
+    color: #92400e;
+}
+
+.admin-gallery-status-pill.is-private {
+    border-color: rgba(71, 85, 105, 0.25);
+    background: rgba(100, 116, 139, 0.12);
+    color: #334155;
+}
+
+.admin-gallery-access-label {
+    background: #fff;
+    color: #64748b;
+    text-transform: none;
+}
+
+.admin-gallery-feature-cell {
+    min-width: 12rem;
+}
+
+.admin-gallery-feature {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem;
+    min-width: 2.9rem;
+    margin: 0 0.3rem 0.3rem 0;
+    padding: 0.22rem 0.42rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.admin-gallery-feature .admin-flag.is-enabled {
+    color: #16833a;
+    font-weight: 900;
+}
+
+.admin-gallery-image-count {
+    text-align: right;
+}
+
+.admin-gallery-image-count strong {
+    display: inline-flex;
+    justify-content: center;
+    min-width: 2.35rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #17212b;
+}
+
+.gallery-row-actions {
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.gallery-row-action-set {
+    display: inline-flex;
+    align-items: center;
+    overflow: hidden;
+    border: 1px solid #cbd9e7;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.gallery-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #0f4f97;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.gallery-row-action + .gallery-row-action {
+    border-left: 1px solid #d8e3ef;
+}
+
+button.gallery-row-action.secondary {
+    background: transparent;
+}
+
+.gallery-row-action:hover,
+.gallery-row-action:focus-visible {
+    background: #eaf3fb;
+    color: #063f7d;
+    text-decoration: none;
+}
+
+.gallery-row-action-icon {
+    transform: translateY(-0.02rem);
+}
+
+.admin-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+    .admin-gallery-order-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .admin-gallery-title-cell {
+        min-width: 22rem;
+    }
+
+    .admin-gallery-preview {
+        flex-basis: 5.5rem;
+        width: 5.5rem;
+        height: 3.75rem;
+    }
+}
+
+/* Makes tree depth visible directly inside the gallery record without bringing back a separate move column. */
+.admin-gallery-tree-table tbody tr[data-depth] .admin-gallery-title-cell {
+    position: relative;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth] .admin-gallery-title-cell::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: calc((var(--gallery-depth, 0) + 1) * 0.3rem);
+    background: linear-gradient(180deg, rgba(34, 113, 177, 0.15), rgba(34, 113, 177, 0.04));
+    opacity: calc(0.38 + (var(--gallery-depth, 0) * 0.08));
+    pointer-events: none;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-title-cell::before {
+    width: 0.3rem;
+    background: rgba(34, 113, 177, 0.24);
+}
+
+/* Prevents the legacy title-only tree indent from fighting the new full-row depth cue. */
+.admin-gallery-tree-table .tree-title[class*="tree-depth-"] {
+    padding-left: 0;
+}
+
+.admin-gallery-summary {
+    position: relative;
+    padding-left: calc(var(--gallery-depth, 0) * 1.25rem);
+}
+
+/* Adds a stepped guide behind the gallery summary so each nesting level is visible,
+   even when the state column uses a wrapped access label such as "Protected, unlisted". */
+.admin-gallery-summary::before {
+    content: "";
+    position: absolute;
+    top: 0.3rem;
+    bottom: 0.3rem;
+    left: 0;
+    width: calc(var(--gallery-depth, 0) * 1.05rem);
+    border-radius: 0.75rem;
+    background: repeating-linear-gradient(
+        90deg,
+        rgba(34, 113, 177, 0.15) 0,
+        rgba(34, 113, 177, 0.15) 0.22rem,
+        transparent 0.22rem,
+        transparent 0.9rem
+    );
+    opacity: calc(0.18 + (var(--gallery-depth, 0) * 0.09));
+    pointer-events: none;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-summary::before {
+    display: none;
+}
+
+.admin-gallery-preview {
+    margin-left: calc(var(--gallery-depth, 0) * 0.15rem);
+}
+
+.admin-gallery-depth-rail {
+    position: absolute;
+    top: 0.35rem;
+    bottom: 0.35rem;
+    left: calc(var(--gallery-depth, 0) * 0.95rem);
+    width: 0.22rem;
+    border-radius: 999px;
+    background: rgba(34, 113, 177, 0.22);
+    pointer-events: none;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-depth-rail {
+    background: rgba(34, 113, 177, 0.36);
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="1"] .admin-gallery-depth-rail {
+    background: rgba(34, 113, 177, 0.28);
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="2"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="3"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="4"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="5"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="6"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="7"] .admin-gallery-depth-rail,
+.admin-gallery-tree-table tbody tr[data-depth="8"] .admin-gallery-depth-rail {
+    background: rgba(34, 113, 177, 0.21);
+}
+
+.admin-gallery-depth-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.28rem;
+}
+
+.admin-gallery-depth-pill {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 0.12rem 0.45rem;
+    border: 1px solid rgba(34, 113, 177, 0.18);
+    border-radius: 999px;
+    background: rgba(34, 113, 177, 0.06);
+    color: #315f8c;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.admin-gallery-depth-meta .admin-gallery-parent {
+    display: inline-flex;
+    margin-top: 0;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-depth-pill {
+    background: rgba(34, 113, 177, 0.11);
+    color: #0f4f97;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth="0"] .admin-gallery-parent {
+    color: #526174;
+    font-weight: 700;
+}
+
+.admin-gallery-tree-table tbody tr[data-depth]:hover .admin-gallery-depth-rail {
+    background: rgba(34, 113, 177, 0.45);
 }
