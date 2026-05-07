@@ -88,8 +88,10 @@ function cms_home(): void
  */
 function cms_gallery(): void
 {
+    // Variable $anonymousPreview stores whether a logged-in admin asked to render the page with anonymous visitor rules.
+    $anonymousPreview = admin_anonymous_preview_active();
     // Variable $viewer stores this steps working value.
-    $viewer = current_user_is_known_under_18() ? null : current_user();
+    $viewer = $anonymousPreview ? null : (current_user_is_known_under_18() ? null : current_user());
     // Variable $gallery stores this steps working value.
     $gallery = null;
     // Variable $requestedImage stores this steps working value.
@@ -239,6 +241,7 @@ function cms_gallery(): void
     render_breadcrumbs($gallery);
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
+    render_public_gallery_preview_toolbar($gallery);
     render_public_gallery_admin_form($gallery);
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
@@ -335,6 +338,33 @@ function cms_gallery(): void
     render_footer();
 }
 
+
+
+/**
+ * Render the anonymous preview control for logged-in admins viewing a public gallery page.
+ */
+function render_public_gallery_preview_toolbar(array $gallery): void
+{
+    if (!current_user()) {
+        return;
+    }
+    // $isPreview stores whether the current request is already using anonymous visitor rules.
+    $isPreview = admin_anonymous_preview_active();
+    // $baseUrl stores the clean gallery URL used to avoid carrying image or pagination state unexpectedly.
+    $baseUrl = gallery_public_url($gallery);
+    // $targetUrl stores the destination for entering or leaving preview mode.
+    $targetUrl = anonymous_preview_url($baseUrl, !$isPreview);
+
+    echo '<div class="anonymous-preview-toolbar" role="status">';
+    if ($isPreview) {
+        echo '<span><strong>Anonymous preview active.</strong> Admin controls are hidden and visitor visibility rules are being applied.</span>';
+        echo '<a class="button" href="' . e($targetUrl) . '">Exit preview</a>';
+    } else {
+        echo '<span>Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.</span>';
+        echo '<a class="button secondary" href="' . e($targetUrl) . '">View as anonymous</a>';
+    }
+    echo '</div>';
+}
 
 /**
  * Render the public gallery title area with optional banner and logo assets.
@@ -600,7 +630,7 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
  */
 function render_public_gallery_admin_form(array $gallery): void
 {
-    if (!current_user()) {
+    if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
     echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
@@ -631,7 +661,7 @@ function render_public_gallery_admin_form(array $gallery): void
  */
 function render_public_image_admin_form(array $image): void
 {
-    if (!current_user()) {
+    if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
     echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';

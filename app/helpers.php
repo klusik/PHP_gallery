@@ -220,6 +220,68 @@ function public_path_segment(string $path): string
     return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
 }
 
+
+/**
+ * Return true when a logged-in admin explicitly requested the public page as an anonymous visitor.
+ *
+ * The request keeps the admin session intact, but public controllers can use this
+ * read-only flag to apply anonymous visibility, access gates, and navigation.
+ */
+function admin_anonymous_preview_active(): bool
+{
+    if (!current_user()) {
+        return false;
+    }
+    return (string) ($_GET['view_as'] ?? '') === 'anonymous';
+}
+
+/**
+ * Add or remove the anonymous preview query flag for the supplied URL.
+ */
+function anonymous_preview_url(string $url, bool $enabled): string
+{
+    // $parts stores the parsed route while preserving clean gallery paths.
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return $url;
+    }
+    // $query stores the existing query values that should survive the preview toggle.
+    $query = [];
+    parse_str((string) ($parts['query'] ?? ''), $query);
+    if ($enabled) {
+        $query['view_as'] = 'anonymous';
+    } else {
+        unset($query['view_as']);
+    }
+
+    // $rebuilt stores the URL rebuilt with the original scheme, host, port, path, and fragment.
+    $rebuilt = '';
+    if (isset($parts['scheme'])) {
+        $rebuilt .= $parts['scheme'] . '://';
+    }
+    if (isset($parts['user'])) {
+        $rebuilt .= $parts['user'];
+        if (isset($parts['pass'])) {
+            $rebuilt .= ':' . $parts['pass'];
+        }
+        $rebuilt .= '@';
+    }
+    if (isset($parts['host'])) {
+        $rebuilt .= $parts['host'];
+    }
+    if (isset($parts['port'])) {
+        $rebuilt .= ':' . $parts['port'];
+    }
+    $rebuilt .= (string) ($parts['path'] ?? '');
+    if ($query) {
+        $rebuilt .= '?' . http_build_query($query);
+    }
+    if (isset($parts['fragment'])) {
+        $rebuilt .= '#' . $parts['fragment'];
+    }
+    return $rebuilt;
+}
+
 /**
  * Encode one relative gallery path for clean public URLs while preserving slashes.
  */
@@ -944,6 +1006,8 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
 {
     // Variable $user stores this steps working value.
     $user = current_user();
+    // Variable $anonymousPreview stores whether this public request should hide authenticated navigation.
+    $anonymousPreview = admin_anonymous_preview_active();
     // Variable $siteName stores this steps working value.
     $siteName = site_name();
     // Variable $theme stores this steps working value.
@@ -1004,7 +1068,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     }
     echo '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
-    if ($user) {
+    if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             // $updatePending stores an intermediate value used by the surrounding gallery workflow.
             $updatePending = application_update_pending();

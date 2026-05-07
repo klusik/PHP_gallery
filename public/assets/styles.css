@@ -282,6 +282,35 @@ button.is-update-pending {
     padding: 0.75rem;
 }
 
+
+/* Keeps the anonymous preview entry and exit control visible without mixing it into editable admin forms. */
+.anonymous-preview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(92, 64, 51, 0.18);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 253, 248, 0.88);
+    box-shadow: 0 10px 28px rgba(78, 48, 34, 0.08);
+    color: var(--text);
+}
+
+/* Keeps the preview toolbar usable on narrow public gallery pages. */
+@media (max-width: 720px) {
+    .anonymous-preview-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .anonymous-preview-toolbar .button {
+        justify-content: center;
+        text-align: center;
+    }
+}
+
 /* Styles the .inline-editor area of the gallery interface. */
 .inline-editor {
     margin: 0.75rem;
