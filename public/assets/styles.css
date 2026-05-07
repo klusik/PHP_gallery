@@ -4705,6 +4705,7 @@ button.danger {
     color: #166534;
 }
 
+.admin-gallery-status-pill.is-unpublished,
 .admin-gallery-status-pill.is-draft {
     border-color: rgba(180, 83, 9, 0.24);
     background: rgba(245, 158, 11, 0.12);

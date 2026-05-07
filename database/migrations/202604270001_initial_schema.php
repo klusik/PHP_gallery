@@ -53,7 +53,7 @@ return [
         description TEXT NULL,
         cover_image_id BIGINT UNSIGNED NULL,
         sort_order INT NOT NULL DEFAULT 0,
-        visibility ENUM('draft','public','private') NOT NULL DEFAULT 'draft',
+        visibility ENUM('unpublished','public','private') NOT NULL DEFAULT 'unpublished',
         voting_enabled TINYINT(1) NOT NULL DEFAULT 0,
         show_filenames TINYINT(1) NOT NULL DEFAULT 0,
         access_mode ENUM('normal','password') NOT NULL DEFAULT 'normal',

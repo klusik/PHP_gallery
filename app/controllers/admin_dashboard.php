@@ -99,15 +99,15 @@ function cms_admin(): void
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
     $totalImages = 0;
-    // $draftGalleries stores an intermediate value used by the surrounding gallery workflow.
-    $draftGalleries = 0;
+    // $unpublishedGalleries stores an intermediate value used by the surrounding gallery workflow.
+    $unpublishedGalleries = 0;
     // $privateGalleries stores an intermediate value used by the surrounding gallery workflow.
     $privateGalleries = 0;
     foreach ($galleries as $gallery) {
         $totalImages += (int) ($gallery['image_count'] ?? 0);
-        if ((string) ($gallery['visibility'] ?? '') === 'draft') {
-            $draftGalleries++;
-        } elseif ((string) ($gallery['visibility'] ?? '') === 'private') {
+        if (gallery_effective_visibility($gallery) === 'unpublished') {
+            $unpublishedGalleries++;
+        } elseif (gallery_effective_visibility($gallery) === 'private') {
             $privateGalleries++;
         }
     }
@@ -162,7 +162,7 @@ function cms_admin(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Overview</p><h2>Admin at a glance</h2></div><p class="muted">Use this page for immediate work. Dedicated tools stay on their own pages.</p></div>';
     echo '<section class="admin-metric-grid" aria-label="Admin summary">';
-    echo '<article class="admin-metric-card"><span>Galleries</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $draftGalleries . ' draft, ' . (int) $privateGalleries . ' private</small></article>';
+    echo '<article class="admin-metric-card"><span>Galleries</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' unpublished, ' . (int) $privateGalleries . ' private</small></article>';
     echo '<article class="admin-metric-card"><span>Top-level images</span><strong>' . (int) $totalImages . '</strong><small>Imported images shown in gallery lists</small></article>';
     echo '<article class="admin-metric-card"><span>Thumbnail gaps</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' images sampled</small></article>';
     echo '<article class="admin-metric-card"><span>System state</span><strong>' . ($migrationPending ? 'Action' : 'Ready') . '</strong><small>' . ($migrationPending ? 'Database migration pending' : 'No migration warning') . '</small></article>';
@@ -197,9 +197,9 @@ function cms_admin(): void
     echo '<div class="admin-gallery-command-panel">';
     echo '<div class="admin-image-order-toolbar admin-gallery-order-toolbar" data-admin-gallery-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_galleries')) . '"><div><strong>Tree ordering</strong><p class="muted">Drag a gallery thumbnail or title area to reorder. Move right to nest a gallery, or left to move it back out.</p></div><span class="admin-image-order-status" data-admin-gallery-order-status aria-live="polite">Gallery ordering ready.</span></div>';
     echo '<div class="bulk-row admin-gallery-controls">';
-    echo '<label>Filter<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="draft">Only drafts</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
+    echo '<label>Filter<select data-gallery-visibility-filter><option value="all">All statuses</option><option value="unpublished">Only unpublished</option><option value="public">Only public</option><option value="private">Only private</option></select></label>';
     echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
-    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> Select displayed</label><label>Bulk action<select name="action"><option value="scan">Scan/import images</option><option value="thumbs">Create thumbnails</option><option value="public">Set public</option><option value="unpublished">Set unpublished</option><option value="private">Set private</option><option value="maps_on">Enable GPS maps</option><option value="maps_off">Disable GPS maps</option><option value="delete">Delete selected galleries</option>';
     if ($filenameDisplayReady) {
         echo '<option value="filenames_on">Show file names</option><option value="filenames_off">Hide file names</option>';
     }
@@ -218,7 +218,7 @@ function cms_admin(): void
         $hasChildren = !empty($childrenByParent[(int) $gallery['id']]);
         // Variable $isCollapsed stores this steps working value.
         $isCollapsed = isset($collapsedIds[(int) $gallery['id']]);
-        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e((string) $gallery['visibility']) . '" data-gallery-title="' . e((string) $gallery['title']) . '" style="--gallery-depth: ' . min($depth, 8) . ';"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
+        echo '<tr class="' . ($depth > 0 ? 'is-subgallery' : '') . ($isCollapsed ? ' is-collapsed' : '') . '" data-gallery-row data-gallery-id="' . (int) $gallery['id'] . '" data-parent-id="' . (int) ($gallery['parent_id'] ?? 0) . '" data-depth="' . $depth . '" data-gallery-visibility="' . e(gallery_effective_visibility($gallery)) . '" data-gallery-title="' . e((string) $gallery['title']) . '" style="--gallery-depth: ' . min($depth, 8) . ';"><td><input type="checkbox" name="gallery_ids[]" value="' . (int) $gallery['id'] . '"></td>';
         // Variable $depthClass stores this steps working value.
         $depthClass = 'tree-depth-' . min($depth, 8);
         // $previewUrl stores a small non-blocking gallery preview image for faster visual scanning.
@@ -230,10 +230,10 @@ function cms_admin(): void
             echo '<span class="admin-gallery-preview is-empty" aria-hidden="true"><span>Gallery</span></span>';
         }
         echo '<div class="admin-gallery-summary-text"><span class="tree-title ' . e($depthClass) . '">' . ($hasChildren ? '<button type="button" class="tree-toggle" data-gallery-toggle="' . (int) $gallery['id'] . '" aria-expanded="' . ($isCollapsed ? 'false' : 'true') . '">' . ($isCollapsed ? '+' : '-') . '</button>' : '<span class="tree-spacer" aria-hidden="true"></span>') . ($depth > 0 ? '<span class="tree-branch" aria-hidden="true"></span>' : '') . '<a class="admin-gallery-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></span><span class="admin-gallery-path">' . e($gallery['folder_path']) . '</span>' . ((string) ($gallery['parent_title'] ?: '') !== '' ? '<span class="admin-gallery-parent">Parent: ' . e((string) $gallery['parent_title']) . '</span>' : '') . '</div></div></td>';
-        echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e((string) $gallery['visibility']) . '">' . e($gallery['visibility']) . '</span>';
+        echo '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-' . e(gallery_effective_visibility($gallery)) . '">' . e(gallery_visibility_label(gallery_effective_visibility($gallery))) . '</span>';
         if ($accessReady) {
             // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
-            $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? 'Protected' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ', unlisted' : ', listed') : 'Normal';
+            $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? (!empty($gallery['access_password_hash']) ? 'Password locked' : 'Direct-link token') : 'No password';
             echo '<span class="admin-gallery-access-label">' . e($accessLabel) . '</span>';
         }
         echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="Maps">M ' . render_admin_feature_flag($gpsMapReady && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '✓', 'GPS maps enabled') . '</span>';

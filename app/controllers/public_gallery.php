@@ -124,7 +124,7 @@ function cms_gallery(): void
         // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
-    if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
+    if (!$gallery || (!$viewer && !gallery_allows_direct_public_request($gallery) && !visitor_can_access_gallery($gallery))) {
         cms_not_found();
         return;
     }
@@ -406,7 +406,7 @@ function cms_gallery_access(): void
     verify_csrf();
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
-    if (!$gallery || (string) $gallery['visibility'] !== 'public') {
+    if (!$gallery || (!gallery_allows_direct_public_request($gallery) && !current_user())) {
         cms_not_found();
         return;
     }
@@ -461,11 +461,11 @@ function cms_share(): void
     $galleryId = (int) ($_GET['id'] ?? 0);
     if ($galleryId > 0) {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? AND visibility = 'public' LIMIT 1");
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? LIMIT 1");
         $stmt->execute([$galleryId, hash('sha256', $token)]);
     } else {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? AND visibility = 'public' ORDER BY updated_at DESC, id DESC LIMIT 1");
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1");
         $stmt->execute([hash('sha256', $token)]);
     }
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -561,7 +561,7 @@ function render_public_gallery_admin_form(array $gallery): void
     }
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
-    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '">Create gallery here</a>';

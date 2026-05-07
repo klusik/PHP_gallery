@@ -133,7 +133,7 @@ function discover_gallery_candidates(): array
                 'folder_path' => $relative,
                 'title' => $metadata['title'] ?? basename($relative),
                 'description' => $metadata['description'] ?? '',
-                'visibility' => $metadata['visibility'] ?? 'draft',
+                'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
                 'access_mode' => $metadata['access_mode'] ?? 'normal',
                 'access_listing' => $metadata['access_listing'] ?? 'listed',
                 'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -275,7 +275,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'folder_path' => $folderPath,
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
-        'visibility' => $metadata['visibility'] ?? 'draft',
+        'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
@@ -294,7 +294,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
  * 1. normal imports selected from the discovery screen;
  * 2. automatic repair of missing parent rows for already-imported deep folders.
  *
- * The created row is deliberately conservative: visibility defaults to draft
+ * The created row is deliberately conservative: visibility defaults to unpublished
  * unless gallery.json says otherwise, and images are scanned only by the caller.
  */
 function create_gallery_row_for_folder(string $folderPath): ?array
@@ -314,7 +314,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
     // Variable $visibility stores this steps working value.
-    $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    $visibility = gallery_visibility_storage_value((string) ($candidate['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
@@ -390,7 +390,7 @@ function create_empty_gallery(array $input): array
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
     // $visibility stores an intermediate value used by the surrounding gallery workflow.
-    $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
+    $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.

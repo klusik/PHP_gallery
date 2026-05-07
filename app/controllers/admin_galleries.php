@@ -116,7 +116,7 @@ function cms_admin_new_gallery(): void
                 'title' => $_POST['title'] ?? '',
                 'folder_name' => $_POST['folder_name'] ?? '',
                 'description' => $_POST['description'] ?? '',
-                'visibility' => $_POST['visibility'] ?? 'draft',
+                'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
                 'parent_id' => $_POST['parent_id'] ?? 0,
                 'voting_enabled' => $_POST['voting_enabled'] ?? 0,
                 'show_filenames' => $_POST['show_filenames'] ?? 0,
@@ -146,7 +146,7 @@ function cms_admin_new_gallery(): void
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
@@ -202,12 +202,12 @@ function cms_admin_bulk_galleries(): void
             redirect_to(url_for('admin'));
         }
     }
-    if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
+    if (in_array($action, gallery_visibility_values(), true) && $galleryIds) {
         // Variable $placeholders stores this steps working value.
         $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE galleries SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-        $stmt->execute(array_merge([$action, now_sql()], $galleryIds));
+        $stmt->execute(array_merge([gallery_visibility_storage_value($action), now_sql()], $galleryIds));
         foreach ($galleryIds as $galleryId) {
             // Variable $gallery stores this steps working value.
             $gallery = find_gallery($galleryId);
@@ -609,7 +609,7 @@ function cms_admin_edit_gallery(): void
         // Variable $slug stores this steps working value.
         $slug = trim((string) $_POST['slug']);
         // Variable $visibility stores this steps working value.
-        $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
+        $visibility = gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished'));
         // Variable $pictureGameEnabled stores this steps working value.
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $gpsMapEnabled stores this steps working value.
@@ -628,18 +628,14 @@ function cms_admin_edit_gallery(): void
             // $pictureGameEnabled stores an intermediate value used by the surrounding gallery workflow.
             $pictureGameEnabled = 0;
         }
+        // $accessAction stores an intermediate value used by the surrounding gallery workflow.
+        $accessAction = $accessReady ? (string) ($_POST['access_action'] ?? 'save') : 'save';
         // Variable $accessType stores this steps working value.
-        $accessType = $accessReady && in_array($_POST['access_type'] ?? '', ['password', 'share'], true) ? (string) $_POST['access_type'] : 'normal';
-        // Variable $accessMode stores this steps working value.
-        $accessMode = $accessType === 'normal' ? 'normal' : 'password';
+        $accessType = $accessReady && ($_POST['access_type'] ?? '') === 'password' ? 'password' : 'normal';
         // Variable $accessListing stores this steps working value.
-        $accessListing = $accessType === 'share' || ($accessReady && ($_POST['access_listing'] ?? '') === 'unlisted') ? 'unlisted' : 'listed';
+        $accessListing = normalize_gallery_visibility((string) ($_POST['visibility'] ?? 'unpublished')) === 'public' ? 'listed' : 'unlisted';
         // Variable $accessPasswordHash stores this steps working value.
         $accessPasswordHash = $accessReady ? ($gallery['access_password_hash'] ?? null) : null;
-        if ($accessType === 'share') {
-            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
-            $accessPasswordHash = null;
-        }
         if ($accessReady && !empty($_POST['clear_access_password'])) {
             // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = null;
@@ -649,6 +645,16 @@ function cms_admin_edit_gallery(): void
         if ($accessReady && $accessType === 'password' && $newAccessPassword !== '') {
             // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = password_hash($newAccessPassword, PASSWORD_DEFAULT);
+        }
+        if ($accessType !== 'password') {
+            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
+            $accessPasswordHash = null;
+        }
+        // Variable $accessMode stores this steps working value.
+        $accessMode = $accessReady && ($accessType === 'password' || !empty($gallery['access_token_hash']) || $accessAction === 'generate_link') ? 'password' : 'normal';
+        if ($accessAction === 'revoke_link' && $accessType !== 'password') {
+            // $accessMode stores an intermediate value used by the surrounding gallery workflow.
+            $accessMode = 'normal';
         }
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
@@ -744,7 +750,7 @@ function cms_admin_edit_gallery(): void
             'title = ?' => $title,
             'description = ?' => (string) $_POST['description'],
             'slug = ?' => unique_slug_for_value($slug, (int) $gallery['id']),
-            'visibility = ?' => $visibility,
+            'visibility = ?' => gallery_visibility_storage_value($visibility),
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
         if ($pictureGameReady) {
@@ -769,7 +775,7 @@ function cms_admin_edit_gallery(): void
         }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
-            $fields['access_listing = ?'] = $accessMode === 'password' ? $accessListing : 'listed';
+            $fields['access_listing = ?'] = $accessListing;
             $fields['access_password_hash = ?'] = $accessMode === 'password' ? $accessPasswordHash : null;
             if ($accessMode !== 'password') {
                 if (gallery_access_share_token_schema_ready()) {
@@ -790,16 +796,12 @@ function cms_admin_edit_gallery(): void
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
         if ($accessReady) {
-            // $accessAction stores an intermediate value used by the surrounding gallery workflow.
-            $accessAction = (string) ($_POST['access_action'] ?? 'save');
             if ($accessAction === 'revoke_link') {
                 revoke_gallery_share_token((int) $gallery['id']);
             }
         }
         if ($accessReady && $accessMode === 'password') {
-            // $needsShareLink stores an intermediate value used by the surrounding gallery workflow.
-            $needsShareLink = $accessType === 'share' && empty($gallery['access_token_hash']);
-            if ($accessAction === 'generate_link' || $needsShareLink) {
+            if ($accessAction === 'generate_link') {
                 // $expires stores an intermediate value used by the surrounding gallery workflow.
                 $expires = trim((string) ($_POST['access_token_expires_at'] ?? ''));
                 // $expiresTimestamp stores an intermediate value used by the surrounding gallery workflow.
@@ -864,13 +866,13 @@ function cms_admin_edit_gallery(): void
         unset($_SESSION['new_gallery_share_token_' . (int) $gallery['id']]);
         // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
         $currentAccessType = 'normal';
-        if ((string) ($gallery['access_mode'] ?? 'normal') === 'password') {
+        if ((string) ($gallery['access_mode'] ?? 'normal') === 'password' && !empty($gallery['access_password_hash'])) {
             // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
-            $currentAccessType = empty($gallery['access_password_hash']) ? 'share' : 'password';
+            $currentAccessType = 'password';
         }
-        echo '<fieldset class="form-grid"><legend>Protected access</legend>';
-        echo '<label>Access<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>Normal public access</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Password protected</option><option value="share"' . ($currentAccessType === 'share' ? ' selected' : '') . '>Share link only</option></select></label>';
-        echo '<label>Public listing<select name="access_listing"><option value="listed"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'listed' ? ' selected' : '') . '>Listed without thumbnail</option><option value="unlisted"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ' selected' : '') . '>Unlisted, direct link only</option></select></label>';
+        echo '<fieldset class="form-grid"><legend>Password and direct link access</legend>';
+        echo '<label>Password lock<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>No password</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Require password</option></select><span class="muted">Password locking is independent of public, unpublished, or private visibility.</span></label>';
+        echo '<p class="muted">Public galleries are listed. Unpublished and private galleries are hidden from listings; unpublished galleries still open from their normal URL.</p>';
         echo '<label>New gallery password<input name="access_password" type="password" autocomplete="new-password"><span class="muted">Leave empty to keep the current gallery password.</span></label>';
         if (!empty($gallery['access_password_hash'])) {
             echo '<label><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
@@ -887,7 +889,7 @@ function cms_admin_edit_gallery(): void
         } else {
             echo '<p class="muted">No share link is active.</p>';
         }
-        echo '<p class="muted">Share-link-only galleries are hidden from public listings and get a link automatically when saved.</p>';
+        echo '<p class="muted">Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.</p>';
         echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">Generate/regenerate share link</button><button type="submit" class="secondary" name="access_action" value="revoke_link">Revoke share link</button></div>';
         echo '</fieldset>';
     } else {
@@ -1613,7 +1615,7 @@ function cms_admin_public_update_gallery(): void
         $title = (string) $gallery['title'];
     }
     // Variable $visibility stores this steps working value.
-    $visibility = (string) $gallery['visibility'];
+    $visibility = gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished'));
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
@@ -1636,9 +1638,9 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
     }
-    if ($action === 'hide') {
+    if (in_array($action, gallery_visibility_values(), true)) {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
-        $visibility = 'private';
+        $visibility = gallery_visibility_storage_value($action);
     }
     // Variable $fields stores this steps working value.
     $fields = [
@@ -1765,7 +1767,7 @@ function cms_admin_edit_image(): void
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>Description<textarea name="description">' . e($image['description']) . '</textarea></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options((string) $image['visibility']) . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
         echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
         echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
@@ -1792,6 +1794,23 @@ function cms_admin_edit_image(): void
  * @return mixed Result produced by this operation.
  */
 function visibility_options(string $selected): string
+{
+    // Variable $html stores this steps working value.
+    $html = '';
+    // $selected stores the canonical value shown by the simplified visibility UI.
+    $selected = normalize_gallery_visibility($selected);
+    foreach (gallery_visibility_values() as $visibility) {
+        $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e(gallery_visibility_label($visibility)) . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * Handles image visibility options logic for the gallery application.
+ * @param mixed $selected Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function image_visibility_options(string $selected): string
 {
     // Variable $html stores this steps working value.
     $html = '';
