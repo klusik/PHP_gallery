@@ -73,7 +73,7 @@ function cms_admin_upload(): void
                     'title' => $_POST['title'] ?? '',
                     'folder_name' => $_POST['folder_name'] ?? '',
                     'description' => $_POST['description'] ?? '',
-                    'visibility' => $_POST['visibility'] ?? 'draft',
+                    'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
                     'parent_id' => $_POST['parent_id'] ?? 0,
                 ]);
             } else {
@@ -183,7 +183,7 @@ function cms_admin_upload(): void
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillGalleryId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillGalleryId) . '</select></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
     echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required></label>';

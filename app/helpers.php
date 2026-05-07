@@ -220,6 +220,68 @@ function public_path_segment(string $path): string
     return implode('/', array_map(static fn (string $segment): string => rawurlencode($segment), $segments));
 }
 
+
+/**
+ * Return true when a logged-in admin explicitly requested the public page as an anonymous visitor.
+ *
+ * The request keeps the admin session intact, but public controllers can use this
+ * read-only flag to apply anonymous visibility, access gates, and navigation.
+ */
+function admin_anonymous_preview_active(): bool
+{
+    if (!current_user()) {
+        return false;
+    }
+    return (string) ($_GET['view_as'] ?? '') === 'anonymous';
+}
+
+/**
+ * Add or remove the anonymous preview query flag for the supplied URL.
+ */
+function anonymous_preview_url(string $url, bool $enabled): string
+{
+    // $parts stores the parsed route while preserving clean gallery paths.
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return $url;
+    }
+    // $query stores the existing query values that should survive the preview toggle.
+    $query = [];
+    parse_str((string) ($parts['query'] ?? ''), $query);
+    if ($enabled) {
+        $query['view_as'] = 'anonymous';
+    } else {
+        unset($query['view_as']);
+    }
+
+    // $rebuilt stores the URL rebuilt with the original scheme, host, port, path, and fragment.
+    $rebuilt = '';
+    if (isset($parts['scheme'])) {
+        $rebuilt .= $parts['scheme'] . '://';
+    }
+    if (isset($parts['user'])) {
+        $rebuilt .= $parts['user'];
+        if (isset($parts['pass'])) {
+            $rebuilt .= ':' . $parts['pass'];
+        }
+        $rebuilt .= '@';
+    }
+    if (isset($parts['host'])) {
+        $rebuilt .= $parts['host'];
+    }
+    if (isset($parts['port'])) {
+        $rebuilt .= ':' . $parts['port'];
+    }
+    $rebuilt .= (string) ($parts['path'] ?? '');
+    if ($query) {
+        $rebuilt .= '?' . http_build_query($query);
+    }
+    if (isset($parts['fragment'])) {
+        $rebuilt .= '#' . $parts['fragment'];
+    }
+    return $rebuilt;
+}
+
 /**
  * Encode one relative gallery path for clean public URLs while preserving slashes.
  */
@@ -739,37 +801,23 @@ function admin_menu_structure(): array
         [
             'label' => 'Galleries',
             'items' => [
-                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-galleries'],
+                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => 'Create gallery', 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => 'Upload photos', 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
-                ['label' => 'Ordering', 'page' => 'admin', 'url' => url_for('admin') . '#admin-ordering'],
-            ],
-        ],
-        [
-            'label' => 'Media',
-            'items' => [
-                ['label' => 'Thumbnails', 'page' => 'admin', 'url' => url_for('admin') . '#admin-thumbnails'],
-                ['label' => 'Cache', 'page' => 'admin', 'url' => url_for('admin') . '#admin-cache'],
-                ['label' => 'ZIP downloads', 'page' => 'download_all', 'url' => url_for('download_all')],
             ],
         ],
         [
             'label' => 'Appearance',
             'items' => [
-                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-theme'],
-                ['label' => 'Custom CSS', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-custom-css'],
-                ['label' => 'Favicon', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-favicon'],
-                ['label' => 'Backgrounds', 'page' => 'admin_theme', 'url' => url_for('admin_theme') . '#admin-backgrounds'],
+                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
             ],
         ],
         [
             'label' => 'Maintenance',
             'items' => [
-                ['label' => 'Health check', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => 'Telemetry', 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
                 ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
-                ['label' => 'Migrations', 'page' => 'admin', 'url' => url_for('admin') . '#admin-migrations'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],
         ],
@@ -782,7 +830,6 @@ function admin_menu_structure(): array
         ],
     ];
 }
-
 /**
  * Return true when one admin menu item should be marked as active.
  */
@@ -800,9 +847,84 @@ function admin_menu_item_is_active(array $item, string $currentPage): bool
         return true;
     }
     if ($itemPage === 'admin' && in_array($currentPage, ['admin_edit_gallery', 'admin_edit_image'], true)) {
-        return str_contains((string) ($item['url'] ?? ''), '#admin-galleries');
+        return str_contains((string) ($item['url'] ?? ''), '#admin-tab-galleries');
     }
     return false;
+}
+
+
+/**
+ * Render a reusable admin tab list.
+ *
+ * Each tab accepts id, label, optional badge, optional href, and optional active.
+ * The generated anchors keep normal hash navigation available when JavaScript is
+ * unavailable, while the browser module upgrades them to in-page tab controls.
+ *
+ * @param array<int, array<string, mixed>> $tabs Tab definitions.
+ * @param string $activeId Preferred active tab id. The first tab is used when empty.
+ * @return void
+ */
+function render_admin_tabs(array $tabs, string $activeId = ''): void
+{
+    // $resolvedActiveId stores the tab id that should be announced as selected.
+    $resolvedActiveId = $activeId;
+    if ($resolvedActiveId === '') {
+        foreach ($tabs as $tab) {
+            if (!empty($tab['active']) && !empty($tab['id'])) {
+                $resolvedActiveId = (string) $tab['id'];
+                break;
+            }
+        }
+    }
+    if ($resolvedActiveId === '' && isset($tabs[0]['id'])) {
+        $resolvedActiveId = (string) $tabs[0]['id'];
+    }
+
+    echo '<nav class="admin-tabs" data-admin-tabs aria-label="Admin sections">';
+    echo '<div class="admin-tab-list" role="tablist">';
+    foreach ($tabs as $tab) {
+        // $tabId stores the panel id controlled by this tab.
+        $tabId = trim((string) ($tab['id'] ?? ''));
+        if ($tabId === '') {
+            continue;
+        }
+        // $tabLabel stores the visible tab label.
+        $tabLabel = (string) ($tab['label'] ?? $tabId);
+        // $tabHref stores the normal link target used without JavaScript.
+        $tabHref = (string) ($tab['href'] ?? ('#' . $tabId));
+        // $isActive stores whether this tab is selected in server-rendered markup.
+        $isActive = $tabId === $resolvedActiveId;
+        // $controlId stores the accessible id for the tab control.
+        $controlId = $tabId . '-control';
+        echo '<a class="admin-tab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" href="' . e($tabHref) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-tab-target="' . e($tabId) . '">';
+        echo '<span>' . e($tabLabel) . '</span>';
+        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
+            echo '<span class="admin-tab-badge">' . e((string) $tab['badge']) . '</span>';
+        }
+        echo '</a>';
+    }
+    echo '</div></nav>';
+}
+
+/**
+ * Render one reusable admin tab panel.
+ *
+ * Panels are intentionally visible in the raw server response. JavaScript hides
+ * inactive panels after it reads the current hash, so the page remains usable
+ * when scripting is unavailable.
+ *
+ * @param string $id Panel id referenced by the matching tab.
+ * @param string $contentHtml Trusted admin HTML rendered by the caller.
+ * @param bool $active Whether the panel should start selected.
+ * @return void
+ */
+function render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
+{
+    // $controlId stores the generated tab id used by aria-labelledby.
+    $controlId = $id . '-control';
+    echo '<section class="panel admin-tab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-tab-panel>';
+    echo $contentHtml;
+    echo '</section>';
 }
 
 /**
@@ -847,13 +969,45 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
     echo '</div>';
 }
 
+
+/**
+ * Return optional artwork for the shared public header.
+ */
+function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
+{
+    // $model stores URLs used by render_header without forcing callers to know the branding precedence.
+    $model = [
+        'banner_url' => '',
+        'logo_url' => '',
+        'separator_url' => '',
+    ];
+    if ($bodyClass !== 'public-page') {
+        return $model;
+    }
+    if ($currentGallery !== null && function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        // Per-gallery artwork overrides Theme fallback artwork on that gallery page.
+        $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
+        $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
+        $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
+    }
+    if ($model['banner_url'] === '' && function_exists('theme_branding_asset_url')) {
+        $model['banner_url'] = theme_branding_asset_url('banner');
+    }
+    if ($model['separator_url'] === '' && function_exists('theme_branding_asset_url')) {
+        $model['separator_url'] = theme_branding_asset_url('separator');
+    }
+    return $model;
+}
+
 /**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
-function render_header(string $title): void
+function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     // Variable $user stores this steps working value.
     $user = current_user();
+    // Variable $anonymousPreview stores whether this public request should hide authenticated navigation.
+    $anonymousPreview = admin_anonymous_preview_active();
     // Variable $siteName stores this steps working value.
     $siteName = site_name();
     // Variable $theme stores this steps working value.
@@ -900,10 +1054,21 @@ function render_header(string $title): void
         echo '<div class="theme-background-image"></div>';
         echo '</div>';
     }
+    // $headerBranding stores optional artwork that replaces the visible site title.
+    $headerBranding = public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
     echo '<header class="site-header">';
-    echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
+    echo '<a class="brand' . ($headerBranding['banner_url'] !== '' ? ' brand-with-banner' : '') . '" href="' . e(url_for('home')) . '">';
+    if ($headerBranding['logo_url'] !== '') {
+        echo '<img class="brand-logo" src="' . e($headerBranding['logo_url']) . '" alt="" aria-hidden="true" decoding="async">';
+    }
+    if ($headerBranding['banner_url'] !== '') {
+        echo '<span class="visually-hidden">' . e($siteName) . '</span><img class="brand-banner" src="' . e($headerBranding['banner_url']) . '" alt="" aria-hidden="true" decoding="async">';
+    } else {
+        echo e($siteName);
+    }
+    echo '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
-    if ($user) {
+    if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             // $updatePending stores an intermediate value used by the surrounding gallery workflow.
             $updatePending = application_update_pending();
@@ -919,6 +1084,9 @@ function render_header(string $title): void
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
     }
     echo '</nav></header>';
+    if ($headerBranding['separator_url'] !== '') {
+        echo '<div class="site-branding-separator" aria-hidden="true"><img src="' . e($headerBranding['separator_url']) . '" alt="" decoding="async"></div>';
+    }
     if ($bodyClass === 'admin-page' && $user) {
         echo '<div class="admin-shell">';
         render_admin_sidebar($page);

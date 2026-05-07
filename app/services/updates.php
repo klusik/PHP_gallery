@@ -117,7 +117,32 @@ function check_application_update(): array
  */
 function cached_application_update_check(int $ttlSeconds = 3600): array
 {
-    return check_application_update();
+    static $requestCache = null;
+
+    // $ttlSeconds stores the shortest acceptable cache lifetime for admin badges.
+    $ttlSeconds = max(60, $ttlSeconds);
+    if (is_array($requestCache) && time() - (int) ($requestCache['cached_at'] ?? 0) <= $ttlSeconds) {
+        return (array) ($requestCache['status'] ?? []);
+    }
+
+    // $cachedAt stores the Unix timestamp for the DB-backed update-check cache.
+    $cachedAt = (int) app_setting('application_update_check_cached_at', '0');
+    // $cachedJson stores the last update-check payload used by admin navigation badges.
+    $cachedJson = (string) app_setting('application_update_check_status_json', '');
+    if ($cachedAt > 0 && $cachedJson !== '' && time() - $cachedAt <= $ttlSeconds) {
+        // $cachedStatus stores the decoded update-check payload when it is still usable.
+        $cachedStatus = json_decode($cachedJson, true);
+        if (is_array($cachedStatus)) {
+            $requestCache = ['cached_at' => $cachedAt, 'status' => $cachedStatus];
+            return $cachedStatus;
+        }
+    }
+
+    // $status stores the fresh remote status when the cache is missing or expired.
+    $status = check_application_update();
+    cache_application_update_check($status);
+    $requestCache = ['cached_at' => time(), 'status' => $status];
+    return $status;
 }
 
 /**
@@ -125,7 +150,8 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
  */
 function cache_application_update_check(array $status): void
 {
-    // Update checks are intentionally uncached now.
+    set_app_setting('application_update_check_status_json', json_encode($status, JSON_UNESCAPED_SLASHES));
+    set_app_setting('application_update_check_cached_at', (string) time());
 }
 
 /**
@@ -134,7 +160,7 @@ function cache_application_update_check(array $status): void
 function application_update_pending(): bool
 {
     // $status stores an intermediate value used by the surrounding gallery workflow.
-    $status = check_application_update();
+    $status = cached_application_update_check(3600);
     return empty($status['error']) && !empty($status['update_available']);
 }
 
@@ -227,7 +253,7 @@ function install_application_beta(string $commitId): array
     set_app_setting('application_update_channel', 'beta');
     set_app_setting('application_update_beta_commit', $commitId);
     set_app_setting('application_update_beta_backup_path', str_replace('\\', '/', substr($backupPath, strlen($root) + 1)));
-    delete_app_settings(['application_update_check_cache']);
+    delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
 
     return [
         'version' => $commitId,
@@ -478,7 +504,7 @@ function install_application_update(): array
     // $migrations stores an intermediate value used by the surrounding gallery workflow.
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
-    delete_app_settings(['application_update_check_cache']);
+    delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
 
     return [
         'version' => (string) $status['latest_version'],

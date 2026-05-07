@@ -49,7 +49,13 @@ function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
 {
     // $path stores an intermediate value used by the surrounding gallery workflow.
     $path = gallery_abs_path($folderPath) . DIRECTORY_SEPARATOR . 'gallery.json';
-    return file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
+    // $directory stores the destination folder where gallery.json should be written.
+    $directory = dirname($path);
+    if (!is_dir($directory)) {
+        return false;
+    }
+
+    return @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) !== false;
 }
 
 /**
@@ -133,9 +139,12 @@ function discover_gallery_candidates(): array
                 'folder_path' => $relative,
                 'title' => $metadata['title'] ?? basename($relative),
                 'description' => $metadata['description'] ?? '',
-                'visibility' => $metadata['visibility'] ?? 'draft',
+                'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
                 'access_mode' => $metadata['access_mode'] ?? 'normal',
                 'access_listing' => $metadata['access_listing'] ?? 'listed',
+                'banner_image_path' => $metadata['banner_image_path'] ?? null,
+                'logo_image_path' => $metadata['logo_image_path'] ?? null,
+                'separator_image_path' => $metadata['separator_image_path'] ?? null,
                 'sort_order' => (int) ($metadata['sort_order'] ?? 0),
             ];
         }
@@ -237,6 +246,14 @@ function write_gallery_sidecar(array $gallery): void
         $data['grid_rows'] = (int) $gallery['grid_rows'];
         $data['grid_use_for_subgalleries'] = (int) ($gallery['grid_use_for_subgalleries'] ?? 1);
     }
+    if (thumbnail_bounds_schema_ready()) {
+        if (isset($gallery['thumbnail_min_size']) && $gallery['thumbnail_min_size'] !== null) {
+            $data['thumbnail_min_size'] = (int) $gallery['thumbnail_min_size'];
+        }
+        if (isset($gallery['thumbnail_max_size']) && $gallery['thumbnail_max_size'] !== null) {
+            $data['thumbnail_max_size'] = (int) $gallery['thumbnail_max_size'];
+        }
+    }
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
         $data['access_listing'] = $gallery['access_listing'] ?? 'listed';
@@ -250,6 +267,15 @@ function write_gallery_sidecar(array $gallery): void
     }
     if (!empty($gallery['cover_image_path'])) {
         $data['cover_image_path'] = (string) $gallery['cover_image_path'];
+    }
+    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        foreach (gallery_branding_asset_types() as $kind => $definition) {
+            // $column stores an intermediate value used by the surrounding gallery workflow.
+            $column = (string) $definition['column'];
+            if (!empty($gallery[$column])) {
+                $data[$column] = (string) $gallery[$column];
+            }
+        }
     }
     write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
@@ -275,12 +301,17 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'folder_path' => $folderPath,
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
-        'visibility' => $metadata['visibility'] ?? 'draft',
+        'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
+        'thumbnail_min_size' => isset($metadata['thumbnail_min_size']) ? (int) $metadata['thumbnail_min_size'] : null,
+        'thumbnail_max_size' => isset($metadata['thumbnail_max_size']) ? (int) $metadata['thumbnail_max_size'] : null,
+        'banner_image_path' => $metadata['banner_image_path'] ?? null,
+        'logo_image_path' => $metadata['logo_image_path'] ?? null,
+        'separator_image_path' => $metadata['separator_image_path'] ?? null,
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -294,7 +325,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
  * 1. normal imports selected from the discovery screen;
  * 2. automatic repair of missing parent rows for already-imported deep folders.
  *
- * The created row is deliberately conservative: visibility defaults to draft
+ * The created row is deliberately conservative: visibility defaults to unpublished
  * unless gallery.json says otherwise, and images are scanned only by the caller.
  */
 function create_gallery_row_for_folder(string $folderPath): ?array
@@ -314,7 +345,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
     // Variable $visibility stores this steps working value.
-    $visibility = in_array($candidate['visibility'], ['draft', 'public', 'private'], true) ? $candidate['visibility'] : 'draft';
+    $visibility = gallery_visibility_storage_value((string) ($candidate['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = (int) ($candidate['voting_enabled'] ?? 0) === 1 ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
@@ -323,6 +354,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
     $candidateHasGrid = gallery_grid_schema_ready() && isset($candidate['grid_columns'], $candidate['grid_rows']) && $candidate['grid_columns'] !== null && $candidate['grid_rows'] !== null;
+    // $candidateHasThumbnailBounds stores whether gallery.json defines responsive thumbnail size guardrails.
+    $candidateHasThumbnailBounds = thumbnail_bounds_schema_ready() && ($candidate['thumbnail_min_size'] !== null || $candidate['thumbnail_max_size'] !== null);
     // $accessListing stores an intermediate value used by the surrounding gallery workflow.
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
@@ -355,11 +388,25 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
         $values[] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
     }
+    if (thumbnail_bounds_schema_ready()) {
+        $columns[] = 'thumbnail_min_size';
+        $columns[] = 'thumbnail_max_size';
+        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_min_size']) : null;
+        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_max_size']) : null;
+    }
     if (gallery_access_schema_ready()) {
         $columns[] = 'access_mode';
         $columns[] = 'access_listing';
         $values[] = $accessMode;
         $values[] = $accessMode === 'password' ? $accessListing : 'listed';
+    }
+    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        foreach (gallery_branding_asset_types() as $kind => $definition) {
+            // $column stores an intermediate value used by the surrounding gallery workflow.
+            $column = (string) $definition['column'];
+            $columns[] = $column;
+            $values[] = !empty($candidate[$column]) ? normalize_relative_path((string) $candidate[$column]) : null;
+        }
     }
     $columns[] = 'created_at';
     $columns[] = 'updated_at';
@@ -390,7 +437,7 @@ function create_empty_gallery(array $input): array
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
     // $visibility stores an intermediate value used by the surrounding gallery workflow.
-    $visibility = in_array($input['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $input['visibility'] : 'draft';
+    $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.

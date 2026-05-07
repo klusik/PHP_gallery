@@ -326,3 +326,89 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     return $relative;
 }
 
+/**
+ * Store one uploaded gallery branding asset inside the gallery folder.
+ * @param mixed $galleryId Input used by this operation.
+ * @param mixed $kind Input used by this operation.
+ * @param mixed $file Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, array $file): string
+{
+    // $kind stores an intermediate value used by the surrounding gallery workflow.
+    $kind = gallery_branding_asset_kind($kind);
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+    // $uploadError stores an intermediate value used by the surrounding gallery workflow.
+    $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError === UPLOAD_ERR_NO_FILE) {
+        throw new RuntimeException('Choose a branding image to upload.');
+    }
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        throw new RuntimeException(upload_error_message($uploadError));
+    }
+    // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
+    $tmpPath = (string) ($file['tmp_name'] ?? '');
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        throw new RuntimeException('Uploaded branding image is not available.');
+    }
+    // $originalName stores an intermediate value used by the surrounding gallery workflow.
+    $originalName = (string) ($file['name'] ?? '');
+    if (!gallery_branding_upload_extension_allowed($originalName)) {
+        throw new RuntimeException('Only JPG, PNG, GIF, and WebP branding images can be uploaded.');
+    }
+    // $size stores an intermediate value used by the surrounding gallery workflow.
+    $size = (int) ($file['size'] ?? 0);
+    if ($size > gallery_branding_uploaded_asset_max_bytes()) {
+        throw new RuntimeException('The branding image is larger than 8 MB.');
+    }
+    // $info stores an intermediate value used by the surrounding gallery workflow.
+    $info = @getimagesize($tmpPath);
+    if ($info === false || empty($info['mime'])) {
+        throw new RuntimeException('The uploaded branding image is not a valid image.');
+    }
+    // $extension stores an intermediate value used by the surrounding gallery workflow.
+    $extension = gallery_branding_mime_extension((string) $info['mime']);
+    if ($extension === null) {
+        throw new RuntimeException('Only JPG, PNG, GIF, and WebP branding images can be uploaded.');
+    }
+    // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
+        throw new RuntimeException('Gallery folder is not writable.');
+    }
+    // $brandingDir stores an intermediate value used by the surrounding gallery workflow.
+    $brandingDir = $galleryRoot . DIRECTORY_SEPARATOR . 'branding';
+    if (!is_dir($brandingDir) && !mkdir($brandingDir, 0775, true)) {
+        throw new RuntimeException('Could not create branding folder.');
+    }
+    if (!path_inside($galleryRoot, $brandingDir)) {
+        throw new RuntimeException('Branding path is outside its gallery.');
+    }
+    // $stem stores an intermediate value used by the surrounding gallery workflow.
+    $stem = gallery_branding_asset_filename_stem($kind);
+    // $target stores an intermediate value used by the surrounding gallery workflow.
+    $target = $brandingDir . DIRECTORY_SEPARATOR . $stem . '.' . $extension;
+    // $stagedTarget stores the uploaded file before the previous asset is replaced.
+    $stagedTarget = $brandingDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
+    if (!move_uploaded_file($tmpPath, $stagedTarget)) {
+        throw new RuntimeException('Could not store gallery branding image.');
+    }
+    foreach (glob($brandingDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
+        if (is_file($oldFile)) {
+            @unlink($oldFile);
+        }
+    }
+    if (!@rename($stagedTarget, $target)) {
+        @unlink($stagedTarget);
+        throw new RuntimeException('Could not finalize gallery branding image.');
+    }
+    // $relative stores an intermediate value used by the surrounding gallery workflow.
+    $relative = 'branding/' . $stem . '.' . $extension;
+    set_gallery_branding_asset_path($galleryId, $kind, $relative);
+    return $relative;
+}
+

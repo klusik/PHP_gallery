@@ -67,6 +67,38 @@ function cms_theme_background_asset(): void
     readfile($absolute);
 }
 
+
+
+/**
+ * Stream one stored global theme branding fallback image.
+ */
+function cms_theme_branding_asset(): void
+{
+    try {
+        // $kind stores an intermediate value used by the surrounding gallery workflow.
+        $kind = theme_branding_asset_kind((string) ($_GET['kind'] ?? ''));
+    } catch (InvalidArgumentException) {
+        cms_not_found();
+        return;
+    }
+    // $absolute stores an intermediate value used by the surrounding gallery workflow.
+    $absolute = theme_branding_asset_abs_path($kind);
+    if ($absolute === null) {
+        cms_not_found();
+        return;
+    }
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
+    $mime = mime_content_type($absolute) ?: 'application/octet-stream';
+    if (!str_starts_with($mime, 'image/')) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: ' . $mime);
+    header('Content-Length: ' . (string) filesize($absolute));
+    header('Cache-Control: public, max-age=86400');
+    readfile($absolute);
+}
+
 /**
  * Stream the stored favicon image variant.
  */

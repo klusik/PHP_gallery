@@ -88,8 +88,10 @@ function cms_home(): void
  */
 function cms_gallery(): void
 {
+    // Variable $anonymousPreview stores whether a logged-in admin asked to render the page with anonymous visitor rules.
+    $anonymousPreview = admin_anonymous_preview_active();
     // Variable $viewer stores this steps working value.
-    $viewer = current_user_is_known_under_18() ? null : current_user();
+    $viewer = $anonymousPreview ? null : (current_user_is_known_under_18() ? null : current_user());
     // Variable $gallery stores this steps working value.
     $gallery = null;
     // Variable $requestedImage stores this steps working value.
@@ -124,7 +126,7 @@ function cms_gallery(): void
         // $gallery stores an intermediate value used by the surrounding gallery workflow.
         $gallery = find_gallery_by_slug((string) ($_GET['slug'] ?? ''));
     }
-    if (!$gallery || ($gallery['visibility'] !== 'public' && !$viewer)) {
+    if (!$gallery || (!$viewer && !gallery_allows_direct_public_request($gallery) && !visitor_can_access_gallery($gallery))) {
         cms_not_found();
         return;
     }
@@ -220,8 +222,9 @@ function cms_gallery(): void
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
     }
 
-    render_header((string) $seo['title']);
-    echo '<section class="hero"><h1>' . e((string) $seo['title']) . '</h1><p>' . e((string) $seo['description']) . '</p>';
+    render_header((string) $seo['title'], $gallery, $publicOnly);
+    echo '<section class="hero">';
+    render_public_gallery_branding_header($gallery, $seo, $publicOnly);
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
@@ -237,6 +240,8 @@ function cms_gallery(): void
     echo '</div>';
     render_breadcrumbs($gallery);
     echo '</section>';
+    render_public_gallery_branding_separator($gallery, $publicOnly);
+    render_public_gallery_preview_toolbar($gallery);
     render_public_gallery_admin_form($gallery);
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
@@ -333,6 +338,86 @@ function cms_gallery(): void
     render_footer();
 }
 
+
+
+/**
+ * Render the anonymous preview control for logged-in admins viewing a public gallery page.
+ */
+function render_public_gallery_preview_toolbar(array $gallery): void
+{
+    if (!current_user()) {
+        return;
+    }
+    // $isPreview stores whether the current request is already using anonymous visitor rules.
+    $isPreview = admin_anonymous_preview_active();
+    // $baseUrl stores the clean gallery URL used to avoid carrying image or pagination state unexpectedly.
+    $baseUrl = gallery_public_url($gallery);
+    // $targetUrl stores the destination for entering or leaving preview mode.
+    $targetUrl = anonymous_preview_url($baseUrl, !$isPreview);
+
+    echo '<div class="anonymous-preview-toolbar" role="status">';
+    if ($isPreview) {
+        echo '<span><strong>Anonymous preview active.</strong> Admin controls are hidden and visitor visibility rules are being applied.</span>';
+        echo '<a class="button" href="' . e($targetUrl) . '">Exit preview</a>';
+    } else {
+        echo '<span>Review this gallery without inline admin controls, admin navigation, hidden photos, or admin-only visibility.</span>';
+        echo '<a class="button secondary" href="' . e($targetUrl) . '">View as anonymous</a>';
+    }
+    echo '</div>';
+}
+
+/**
+ * Render the public gallery title area with optional banner and logo assets.
+ *
+ * The text title remains in the h1 for accessibility and SEO even when a banner
+ * image visually replaces it. The logo is decorative here because it appears
+ * beside an existing text or banner title and would otherwise duplicate content.
+ */
+function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
+{
+    // $title stores the accessible gallery title used by the current page.
+    $title = (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery');
+    // $description stores the public gallery description.
+    $description = (string) ($seo['description'] ?? $gallery['description'] ?? '');
+    // $bannerUrl stores only the per-gallery title-replacement image. Theme fallback banners belong to the shared site header.
+    $bannerUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '';
+    // $logoUrl stores the optional supplementary logo image.
+    $logoUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '';
+    // $titleBarClasses stores layout flags for tight and wide gallery headers.
+    $titleBarClasses = 'gallery-title-bar' . ($bannerUrl !== '' ? ' has-gallery-banner' : '') . ($logoUrl !== '' ? ' has-gallery-logo' : '');
+
+    echo '<div class="' . e($titleBarClasses) . '">';
+    if ($logoUrl !== '') {
+        echo '<img class="gallery-branding-logo" src="' . e($logoUrl) . '" alt="" aria-hidden="true" decoding="async">';
+    }
+    if ($bannerUrl !== '') {
+        echo '<h1 class="gallery-title gallery-title-with-banner"><span class="visually-hidden">' . e($title) . '</span><img class="gallery-branding-banner" src="' . e($bannerUrl) . '" alt="" aria-hidden="true" decoding="async"></h1>';
+    } else {
+        echo '<h1 class="gallery-title">' . e($title) . '</h1>';
+    }
+    echo '</div>';
+    if (trim($description) !== '') {
+        echo '<p>' . e($description) . '</p>';
+    }
+}
+
+/**
+ * Render the optional horizontal branding separator below the gallery title area.
+ */
+function render_public_gallery_branding_separator(array $gallery, bool $publicOnly): void
+{
+    if (!gallery_branding_schema_ready()) {
+        return;
+    }
+    // $separatorUrl stores only the per-gallery divider image. Theme fallback separators belong to the shared site header.
+    $separatorUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'separator', $publicOnly) : '';
+    if ($separatorUrl === '') {
+        return;
+    }
+    echo '<div class="gallery-branding-separator" aria-hidden="true"><img src="' . e($separatorUrl) . '" alt="" decoding="async"></div>';
+}
+
+
 /**
  * Handles render breadcrumbs logic for the gallery application.
  * @param mixed $gallery Input used by this operation.
@@ -370,7 +455,7 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
         echo '<div class="notice">' . e($error) . '</div>';
     }
     if ($nsfwRequirement !== null && !visitor_can_access_nsfw_content()) {
-        echo '<p>This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session.</p>';
+        echo '<p>This gallery or photo is marked as restricted 18+ content. Anonymous visitors must confirm they are at least 18 before access is granted for this browser session. If you are an administrator planning to publish NSFW content, please verify that your hosting provider or web hosting terms allow it before enabling access.</p>';
         echo '<form method="post" action="' . e(url_for('gallery_access')) . '" class="form-grid">' . csrf_field();
         echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
         if ($image !== null) {
@@ -406,7 +491,7 @@ function cms_gallery_access(): void
     verify_csrf();
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
-    if (!$gallery || (string) $gallery['visibility'] !== 'public') {
+    if (!$gallery || (!gallery_allows_direct_public_request($gallery) && !current_user())) {
         cms_not_found();
         return;
     }
@@ -461,11 +546,11 @@ function cms_share(): void
     $galleryId = (int) ($_GET['id'] ?? 0);
     if ($galleryId > 0) {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? AND visibility = 'public' LIMIT 1");
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE id = ? AND access_token_hash = ? LIMIT 1");
         $stmt->execute([$galleryId, hash('sha256', $token)]);
     } else {
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
-        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? AND visibility = 'public' ORDER BY updated_at DESC, id DESC LIMIT 1");
+        $stmt = db()->prepare("SELECT * FROM galleries WHERE access_token_hash = ? ORDER BY updated_at DESC, id DESC LIMIT 1");
         $stmt->execute([hash('sha256', $token)]);
     }
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -545,7 +630,7 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
  */
 function render_public_gallery_admin_form(array $gallery): void
 {
-    if (!current_user()) {
+    if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
     echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
@@ -561,7 +646,7 @@ function render_public_gallery_admin_form(array $gallery): void
     }
     echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
-    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
+    echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '">Create gallery here</a>';
@@ -576,7 +661,7 @@ function render_public_gallery_admin_form(array $gallery): void
  */
 function render_public_image_admin_form(array $image): void
 {
-    if (!current_user()) {
+    if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
     echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';

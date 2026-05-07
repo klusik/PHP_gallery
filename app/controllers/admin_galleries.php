@@ -116,7 +116,7 @@ function cms_admin_new_gallery(): void
                 'title' => $_POST['title'] ?? '',
                 'folder_name' => $_POST['folder_name'] ?? '',
                 'description' => $_POST['description'] ?? '',
-                'visibility' => $_POST['visibility'] ?? 'draft',
+                'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
                 'parent_id' => $_POST['parent_id'] ?? 0,
                 'voting_enabled' => $_POST['voting_enabled'] ?? 0,
                 'show_filenames' => $_POST['show_filenames'] ?? 0,
@@ -146,7 +146,7 @@ function cms_admin_new_gallery(): void
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options('draft') . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
@@ -202,12 +202,12 @@ function cms_admin_bulk_galleries(): void
             redirect_to(url_for('admin'));
         }
     }
-    if (in_array($action, ['draft', 'public', 'private'], true) && $galleryIds) {
+    if (in_array($action, gallery_visibility_values(), true) && $galleryIds) {
         // Variable $placeholders stores this steps working value.
         $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE galleries SET visibility = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-        $stmt->execute(array_merge([$action, now_sql()], $galleryIds));
+        $stmt->execute(array_merge([gallery_visibility_storage_value($action), now_sql()], $galleryIds));
         foreach ($galleryIds as $galleryId) {
             // Variable $gallery stores this steps working value.
             $gallery = find_gallery($galleryId);
@@ -397,6 +397,16 @@ function cms_admin_save_gallery_collapse(): void
  */
 function cms_admin_reorder_galleries(): void
 {
+    // The reorder endpoint must return clean JSON. Some shared-hosting setups
+    // print PHP warnings as HTML when display_errors is enabled, so this small
+    // response buffer lets the endpoint log and discard accidental diagnostic
+    // output before the final JSON payload is emitted.
+    $jsonResponseBufferStarted = false;
+    if (!headers_sent()) {
+        ob_start();
+        $jsonResponseBufferStarted = true;
+    }
+
     require_admin();
     verify_csrf();
     // Variable $rawTree stores the JSON payload submitted by the JavaScript nested ordering handler.
@@ -404,7 +414,7 @@ function cms_admin_reorder_galleries(): void
     // Variable $decodedTree stores the decoded row list before it is normalized.
     $decodedTree = json_decode($rawTree, true);
     if (!is_array($decodedTree)) {
-        admin_reorder_galleries_response(false, 'The submitted gallery tree was not valid JSON.');
+        admin_reorder_galleries_response(false, 'The submitted gallery tree was not valid JSON.', $jsonResponseBufferStarted);
         return;
     }
 
@@ -412,7 +422,7 @@ function cms_admin_reorder_galleries(): void
     $submittedEntries = [];
     foreach ($decodedTree as $entry) {
         if (!is_array($entry)) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid row.');
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid row.', $jsonResponseBufferStarted);
             return;
         }
         // Variable $galleryId stores the gallery id from one submitted tree row.
@@ -420,20 +430,20 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id for one submitted tree row.
         $parentId = (int) ($entry['parent_id'] ?? 0);
         if ($galleryId <= 0 || $parentId < 0) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid gallery id.');
+            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid gallery id.', $jsonResponseBufferStarted);
             return;
         }
         $submittedEntries[] = ['id' => $galleryId, 'parent_id' => $parentId];
     }
     if (!$submittedEntries) {
-        admin_reorder_galleries_response(false, 'No galleries were submitted for reordering.');
+        admin_reorder_galleries_response(false, 'No galleries were submitted for reordering.', $jsonResponseBufferStarted);
         return;
     }
 
     // Variable $submittedIds stores the submitted gallery id list for set validation.
     $submittedIds = array_map(static fn (array $entry): int => (int) $entry['id'], $submittedEntries);
     if (count($submittedIds) !== count(array_unique($submittedIds))) {
-        admin_reorder_galleries_response(false, 'The submitted gallery tree contained duplicate galleries.');
+        admin_reorder_galleries_response(false, 'The submitted gallery tree contained duplicate galleries.', $jsonResponseBufferStarted);
         return;
     }
 
@@ -447,7 +457,7 @@ function cms_admin_reorder_galleries(): void
     sort($sortedSubmittedIds);
     sort($currentIds);
     if ($sortedSubmittedIds !== $currentIds) {
-        admin_reorder_galleries_response(false, 'The gallery list changed while you were reordering. Reload the page and try again.');
+        admin_reorder_galleries_response(false, 'The gallery list changed while you were reordering. Reload the page and try again.', $jsonResponseBufferStarted);
         return;
     }
 
@@ -461,15 +471,15 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id being validated.
         $parentId = (int) $entry['parent_id'];
         if ($parentId === $galleryId) {
-            admin_reorder_galleries_response(false, 'A gallery cannot be moved under itself.');
+            admin_reorder_galleries_response(false, 'A gallery cannot be moved under itself.', $jsonResponseBufferStarted);
             return;
         }
         if ($parentId > 0 && !isset($validIds[$parentId])) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree referenced a missing parent gallery.');
+            admin_reorder_galleries_response(false, 'The submitted gallery tree referenced a missing parent gallery.', $jsonResponseBufferStarted);
             return;
         }
         if ($parentId > 0 && !isset($seenIds[$parentId])) {
-            admin_reorder_galleries_response(false, 'A subgallery must appear below its parent in the submitted tree.');
+            admin_reorder_galleries_response(false, 'A subgallery must appear below its parent in the submitted tree.', $jsonResponseBufferStarted);
             return;
         }
         $seenIds[$galleryId] = true;
@@ -487,6 +497,10 @@ function cms_admin_reorder_galleries(): void
     $now = now_sql();
     // Variable $movedCount stores how many gallery folders changed parent.
     $movedCount = 0;
+    // Variable $reorderDiagnostics stores filesystem details for moved galleries if saving fails.
+    $reorderDiagnostics = [];
+    // Variable $activeMoveDiagnostics stores the move currently being processed when an exception is raised.
+    $activeMoveDiagnostics = null;
     try {
         foreach ($submittedEntries as $entry) {
             // Variable $galleryId stores the gallery being checked for a parent move.
@@ -496,8 +510,11 @@ function cms_admin_reorder_galleries(): void
             if (($currentParentById[$galleryId] ?? 0) === $parentId) {
                 continue;
             }
+            $activeMoveDiagnostics = admin_gallery_reorder_move_diagnostics($galleryId, $parentId > 0 ? $parentId : null);
+            $reorderDiagnostics[] = $activeMoveDiagnostics;
             move_gallery_folder_to_parent($galleryId, $parentId > 0 ? $parentId : null);
             $movedCount++;
+            $activeMoveDiagnostics = null;
             sync_gallery_parent_ids();
         }
 
@@ -519,30 +536,152 @@ function cms_admin_reorder_galleries(): void
         $pdo->commit();
 
         sync_gallery_parent_ids();
+
+        // Sidecar and clean URL refresh are follow-up maintenance tasks. The
+        // visible tree and the database order have already been saved at this
+        // point, so a stale or missing folder must not turn a successful move
+        // into a red failure message for the admin.
+        $maintenanceWarnings = [];
         foreach ($submittedEntries as $entry) {
-            // Variable $gallery stores the refreshed row written to its gallery.json sidecar.
-            $gallery = find_gallery((int) $entry['id']);
-            if ($gallery) {
-                write_gallery_sidecar($gallery);
+            try {
+                // Variable $gallery stores the refreshed row written to its gallery.json sidecar.
+                $gallery = find_gallery((int) $entry['id'], true);
+                if ($gallery) {
+                    write_gallery_sidecar($gallery);
+                }
+            } catch (Throwable $sidecarException) {
+                $maintenanceWarnings[] = $sidecarException->getMessage();
             }
         }
         if (public_path_schema_ready()) {
-            regenerate_public_paths();
+            try {
+                regenerate_public_paths();
+            } catch (Throwable $publicPathException) {
+                $maintenanceWarnings[] = $publicPathException->getMessage();
+            }
         }
+
         admin_log_event('info', 'gallery.reordered', 'Admin reordered gallery tree.', [
             'galleries' => count($submittedEntries),
             'moved_folders' => $movedCount,
+            'maintenance_warnings' => array_values(array_unique($maintenanceWarnings)),
         ]);
-        admin_reorder_galleries_response(true, $movedCount > 0 ? 'Gallery order saved. Folder paths were updated for moved subgalleries.' : 'Gallery order saved.');
+
+        if ($maintenanceWarnings) {
+            admin_log_event('warning', 'gallery.reorder_maintenance_warning', 'Gallery reorder was saved, but a follow-up refresh reported a warning.', [
+                'warnings' => array_values(array_unique($maintenanceWarnings)),
+            ]);
+            admin_reorder_galleries_response(true, 'Gallery moved. The visible order is saved. Some gallery metadata will be refreshed during the next maintenance scan.', $jsonResponseBufferStarted);
+            return;
+        }
+
+        admin_reorder_galleries_response(true, $movedCount > 0 ? 'Gallery moved and saved.' : 'Gallery order saved.', $jsonResponseBufferStarted);
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
         admin_log_event('error', 'gallery.reorder_failed', 'Admin gallery reorder failed.', [
             'error' => $exception->getMessage(),
+            'exception_class' => get_class($exception),
+            'previous_error' => $exception->getPrevious() ? $exception->getPrevious()->getMessage() : null,
+            'submitted_entries' => $submittedEntries,
+            'moved_before_failure' => $movedCount,
+            'active_move' => $activeMoveDiagnostics,
+            'move_diagnostics' => $reorderDiagnostics,
+            'gallery_root' => gallery_path_diagnostics('', 'configured gallery root'),
         ]);
-        admin_reorder_galleries_response(false, 'Gallery order could not be saved: ' . $exception->getMessage());
+        admin_reorder_galleries_response(false, admin_reorder_galleries_user_error_message($exception), $jsonResponseBufferStarted);
     }
+}
+
+
+
+/**
+ * Build diagnostic context for one requested gallery hierarchy move.
+ *
+ * The returned array is written only to the admin log. It intentionally keeps
+ * low-level filesystem details out of the red UI message while making the real
+ * configured root, source folder, parent folder, and target folder visible for
+ * troubleshooting.
+ */
+function admin_gallery_reorder_move_diagnostics(int $galleryId, ?int $parentId): array
+{
+    // $gallery stores the gallery row before the filesystem move is attempted.
+    $gallery = find_gallery($galleryId);
+    // $parent stores the requested parent row before the filesystem move is attempted.
+    $parent = $parentId !== null && $parentId > 0 ? find_gallery($parentId) : null;
+    // $diagnostics stores the full context used by admin logs.
+    $diagnostics = [
+        'gallery_id' => $galleryId,
+        'requested_parent_id' => $parentId,
+        'gallery_found' => $gallery !== null,
+        'parent_found' => $parentId === null || $parent !== null,
+    ];
+
+    if (!$gallery) {
+        return $diagnostics;
+    }
+
+    // $oldPath stores the gallery folder path before the move.
+    $oldPath = normalize_relative_path((string) $gallery['folder_path']);
+    // $folderName stores the final directory segment that should be preserved when the gallery is moved.
+    $folderName = gallery_folder_name_from_path($oldPath);
+    // $newPath stores the expected destination path based on the submitted parent id.
+    $newPath = $parent ? normalize_relative_path((string) $parent['folder_path'] . '/' . $folderName) : $folderName;
+
+    $diagnostics += [
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'old_parent_id' => isset($gallery['parent_id']) ? (int) $gallery['parent_id'] : null,
+        'old_folder_path' => $oldPath,
+        'expected_new_folder_path' => $newPath,
+        'folder_name' => $folderName,
+        'parent_title' => $parent ? (string) ($parent['title'] ?? '') : null,
+        'parent_folder_path' => $parent ? normalize_relative_path((string) $parent['folder_path']) : null,
+        'source_path' => gallery_path_diagnostics($oldPath, 'move source'),
+        'target_path' => gallery_path_diagnostics($newPath, 'move target'),
+    ];
+
+    if ($parent) {
+        $diagnostics['parent_path'] = gallery_path_diagnostics((string) $parent['folder_path'], 'requested parent');
+    }
+
+    return $diagnostics;
+}
+
+/**
+ * Convert internal gallery reorder exceptions into admin-facing language.
+ *
+ * @param Throwable $exception Original exception raised while saving the gallery tree.
+ * @return string Message safe to show directly in the admin interface.
+ */
+function admin_reorder_galleries_user_error_message(Throwable $exception): string
+{
+    // Variable $message stores the technical message used only for mapping.
+    $message = $exception->getMessage();
+
+    if (str_contains($message, 'outside the configured root')) {
+        return 'This gallery could not be moved because one of its folders is not inside the configured gallery storage folder. The gallery was left in its previous safe location.';
+    }
+    if (str_contains($message, 'target parent is outside the configured root or does not exist')) {
+        return 'This gallery could not be moved because the destination folder is not available. Refresh the page and try again.';
+    }
+    if (str_contains($message, 'Gallery target path is outside the configured root')) {
+        return 'This gallery could not be moved because the requested destination is outside the gallery storage folder. The gallery was left in its previous safe location.';
+    }
+    if (str_contains($message, 'Current gallery folder does not exist on disk')) {
+        return 'This gallery could not be moved because its folder is missing on disk. Run a gallery scan before reordering it.';
+    }
+    if (str_contains($message, 'Destination folder already exists on disk') || str_contains($message, 'Another gallery already uses the destination folder path')) {
+        return 'This gallery could not be moved because another folder already uses that destination. Rename one of the galleries and try again.';
+    }
+    if (str_contains($message, 'own subgalleries')) {
+        return 'This gallery cannot be moved into one of its own subgalleries.';
+    }
+    if (str_contains($message, 'A subgallery must appear below its parent')) {
+        return 'The gallery order was not saved because the submitted tree was incomplete. Refresh the page and try again.';
+    }
+
+    return 'Gallery order could not be saved. Refresh the page and try again.';
 }
 
 /**
@@ -552,8 +691,25 @@ function cms_admin_reorder_galleries(): void
  * @param string $message Human-readable result message.
  * @return void
  */
-function admin_reorder_galleries_response(bool $ok, string $message): void
+function admin_reorder_galleries_response(bool $ok, string $message, bool $cleanBufferedOutput = false): void
 {
+    // $unexpectedOutput stores accidental HTML warnings or notices generated
+    // before the JSON response. This keeps the browser-side fetch parser from
+    // seeing "<br /><b>Warning" before the actual JSON object.
+    $unexpectedOutput = '';
+    if ($cleanBufferedOutput && ob_get_level() > 0) {
+        $unexpectedOutput = (string) ob_get_clean();
+    }
+
+    if ($unexpectedOutput !== '') {
+        admin_log_event($ok ? 'warning' : 'error', 'gallery.reorder_response_output_discarded', 'Gallery reorder generated output before its JSON response.', [
+            'operation_saved' => $ok,
+            'message' => $message,
+            'discarded_output_preview' => mb_substr(trim(strip_tags($unexpectedOutput)), 0, 1000),
+            'discarded_output_bytes' => strlen($unexpectedOutput),
+        ]);
+    }
+
     header('Content-Type: application/json');
     echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
 }
@@ -609,7 +765,7 @@ function cms_admin_edit_gallery(): void
         // Variable $slug stores this steps working value.
         $slug = trim((string) $_POST['slug']);
         // Variable $visibility stores this steps working value.
-        $visibility = in_array($_POST['visibility'] ?? '', ['draft', 'public', 'private'], true) ? (string) $_POST['visibility'] : 'draft';
+        $visibility = gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished'));
         // Variable $pictureGameEnabled stores this steps working value.
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $gpsMapEnabled stores this steps working value.
@@ -628,18 +784,14 @@ function cms_admin_edit_gallery(): void
             // $pictureGameEnabled stores an intermediate value used by the surrounding gallery workflow.
             $pictureGameEnabled = 0;
         }
+        // $accessAction stores an intermediate value used by the surrounding gallery workflow.
+        $accessAction = $accessReady ? (string) ($_POST['access_action'] ?? 'save') : 'save';
         // Variable $accessType stores this steps working value.
-        $accessType = $accessReady && in_array($_POST['access_type'] ?? '', ['password', 'share'], true) ? (string) $_POST['access_type'] : 'normal';
-        // Variable $accessMode stores this steps working value.
-        $accessMode = $accessType === 'normal' ? 'normal' : 'password';
+        $accessType = $accessReady && ($_POST['access_type'] ?? '') === 'password' ? 'password' : 'normal';
         // Variable $accessListing stores this steps working value.
-        $accessListing = $accessType === 'share' || ($accessReady && ($_POST['access_listing'] ?? '') === 'unlisted') ? 'unlisted' : 'listed';
+        $accessListing = normalize_gallery_visibility((string) ($_POST['visibility'] ?? 'unpublished')) === 'public' ? 'listed' : 'unlisted';
         // Variable $accessPasswordHash stores this steps working value.
         $accessPasswordHash = $accessReady ? ($gallery['access_password_hash'] ?? null) : null;
-        if ($accessType === 'share') {
-            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
-            $accessPasswordHash = null;
-        }
         if ($accessReady && !empty($_POST['clear_access_password'])) {
             // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = null;
@@ -649,6 +801,16 @@ function cms_admin_edit_gallery(): void
         if ($accessReady && $accessType === 'password' && $newAccessPassword !== '') {
             // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
             $accessPasswordHash = password_hash($newAccessPassword, PASSWORD_DEFAULT);
+        }
+        if ($accessType !== 'password') {
+            // $accessPasswordHash stores an intermediate value used by the surrounding gallery workflow.
+            $accessPasswordHash = null;
+        }
+        // Variable $accessMode stores this steps working value.
+        $accessMode = $accessReady && ($accessType === 'password' || !empty($gallery['access_token_hash']) || $accessAction === 'generate_link') ? 'password' : 'normal';
+        if ($accessAction === 'revoke_link' && $accessType !== 'password') {
+            // $accessMode stores an intermediate value used by the surrounding gallery workflow.
+            $accessMode = 'normal';
         }
         // Variable $parentId stores this steps working value.
         $parentId = (int) ($_POST['parent_id'] ?? 0);
@@ -694,6 +856,8 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
         $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        // $brandingAssetPaths stores optional banner, logo, and separator paths before form changes.
+        $brandingAssetPaths = gallery_branding_schema_ready() ? gallery_branding_asset_paths($gallery) : [];
         // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = null;
         if (gallery_background_source_schema_ready()) {
@@ -727,6 +891,29 @@ function cms_admin_edit_gallery(): void
                 $coverImageId = null;
             }
         }
+        if (gallery_branding_schema_ready()) {
+            try {
+                foreach (array_keys(gallery_branding_asset_types()) as $brandingKind) {
+                    // $uploadField stores the file-input name for this gallery branding asset.
+                    $uploadField = 'branding_' . $brandingKind . '_upload';
+                    // $removeField stores the remove-checkbox name for this gallery branding asset.
+                    $removeField = 'remove_branding_' . $brandingKind;
+                    // $hasUpload stores whether this asset is being replaced by a new file.
+                    $hasUpload = !empty($_FILES[$uploadField]['name'] ?? '');
+                    if ($hasUpload) {
+                        $brandingAssetPaths[$brandingKind] = store_uploaded_gallery_branding_asset((int) $gallery['id'], $brandingKind, $_FILES[$uploadField]);
+                        continue;
+                    }
+                    if (!empty($_POST[$removeField])) {
+                        delete_gallery_branding_asset((int) $gallery['id'], $brandingKind);
+                        $brandingAssetPaths[$brandingKind] = null;
+                    }
+                }
+            } catch (RuntimeException $exception) {
+                flash_message('admin_notice', 'Gallery branding update failed: ' . $exception->getMessage());
+                redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
+            }
+        }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
         // $gridUsesCustomSettings stores whether this gallery should stop inheriting the display grid.
@@ -737,6 +924,10 @@ function cms_admin_edit_gallery(): void
         $gridRows = $gridUsesCustomSettings ? pagination_dimension_value($_POST['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
         // $gridUseForSubgalleries stores whether descendants may inherit this gallery grid.
         $gridUseForSubgalleries = !empty($_POST['grid_use_for_subgalleries']) ? 1 : 0;
+        // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this gallery.
+        $thumbnailBounds = thumbnail_bounds_schema_ready() ? thumbnail_bound_pair_from_post('gallery_thumbnail') : [null, null];
+        // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
+        $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($_POST['gallery_thumbnail_bounds_recursive']);
         // $fields stores an intermediate value used by the surrounding gallery workflow.
         $fields = [
             'parent_id = ?' => $parentId,
@@ -744,7 +935,7 @@ function cms_admin_edit_gallery(): void
             'title = ?' => $title,
             'description = ?' => (string) $_POST['description'],
             'slug = ?' => unique_slug_for_value($slug, (int) $gallery['id']),
-            'visibility = ?' => $visibility,
+            'visibility = ?' => gallery_visibility_storage_value($visibility),
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
         if ($pictureGameReady) {
@@ -767,9 +958,13 @@ function cms_admin_edit_gallery(): void
             $fields['grid_rows = ?'] = $gridRows;
             $fields['grid_use_for_subgalleries = ?'] = $gridUseForSubgalleries;
         }
+        if (thumbnail_bounds_schema_ready()) {
+            $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
+            $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
+        }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
-            $fields['access_listing = ?'] = $accessMode === 'password' ? $accessListing : 'listed';
+            $fields['access_listing = ?'] = $accessListing;
             $fields['access_password_hash = ?'] = $accessMode === 'password' ? $accessPasswordHash : null;
             if ($accessMode !== 'password') {
                 if (gallery_access_share_token_schema_ready()) {
@@ -782,6 +977,13 @@ function cms_admin_edit_gallery(): void
         if (gallery_cover_asset_schema_ready()) {
             $fields['cover_image_path = ?'] = $coverImagePath;
         }
+        if (gallery_branding_schema_ready()) {
+            foreach (gallery_branding_asset_types() as $brandingKind => $definition) {
+                // $column stores an intermediate value used by the surrounding gallery workflow.
+                $column = (string) $definition['column'];
+                $fields[$column . ' = ?'] = $brandingAssetPaths[$brandingKind] ?? null;
+            }
+        }
         if (gallery_background_source_schema_ready()) {
             $fields['background_source = ?'] = $backgroundSource;
         }
@@ -789,17 +991,16 @@ function cms_admin_edit_gallery(): void
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
+        if (thumbnail_bounds_schema_ready() && $thumbnailBoundsRecursive) {
+            save_gallery_thumbnail_bounds($gallery, $thumbnailBounds[0], $thumbnailBounds[1], true);
+        }
         if ($accessReady) {
-            // $accessAction stores an intermediate value used by the surrounding gallery workflow.
-            $accessAction = (string) ($_POST['access_action'] ?? 'save');
             if ($accessAction === 'revoke_link') {
                 revoke_gallery_share_token((int) $gallery['id']);
             }
         }
         if ($accessReady && $accessMode === 'password') {
-            // $needsShareLink stores an intermediate value used by the surrounding gallery workflow.
-            $needsShareLink = $accessType === 'share' && empty($gallery['access_token_hash']);
-            if ($accessAction === 'generate_link' || $needsShareLink) {
+            if ($accessAction === 'generate_link') {
                 // $expires stores an intermediate value used by the surrounding gallery workflow.
                 $expires = trim((string) ($_POST['access_token_expires_at'] ?? ''));
                 // $expiresTimestamp stores an intermediate value used by the surrounding gallery workflow.
@@ -811,7 +1012,7 @@ function cms_admin_edit_gallery(): void
         }
         sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         // Variable $gallery stores this steps working value.
-        $gallery = find_gallery((int) $gallery['id']);
+        $gallery = find_gallery((int) $gallery['id'], true);
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
@@ -850,32 +1051,67 @@ function cms_admin_edit_gallery(): void
     if (!$pictureGameReady) {
         render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
     }
-    echo '<section class="panel"><h1>Edit gallery</h1><nav class="nav"><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav><form method="post" enctype="multipart/form-data" class="form-grid" autocomplete="off">' . csrf_field();
+    // $imageCount stores the number of images currently attached to this gallery.
+    $imageCount = count($images);
+    // $activeVisibility stores the normalized gallery visibility label for summary cards.
+    $activeVisibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
+    // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.
+    $adminTabs = [
+        ['id' => 'admin-edit-identity', 'label' => 'Identity'],
+        ['id' => 'admin-edit-access', 'label' => 'Access'],
+        ['id' => 'admin-edit-display', 'label' => 'Display'],
+        ['id' => 'admin-edit-media', 'label' => 'Media'],
+        ['id' => 'admin-edit-images', 'label' => 'Images', 'badge' => $imageCount],
+    ];
+
+    echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
+    echo '<div><p class="admin-kicker">Gallery editor</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">Edit identity, access, presentation, media assets, and photo ordering from one focused workspace.</p></div>';
+    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
+    echo '</section>';
+
+    echo '<div class="admin-metric-grid admin-edit-gallery-summary">';
+    echo '<div class="admin-metric-card"><span>Visibility</span><strong>' . e(ucfirst($activeVisibility)) . '</strong><small>Listing and direct URL behavior</small></div>';
+    echo '<div class="admin-metric-card"><span>Images</span><strong>' . (int) $imageCount . '</strong><small>Photos in this gallery</small></div>';
+    echo '<div class="admin-metric-card"><span>Folder</span><strong>' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '</strong><small>Filesystem folder name</small></div>';
+    echo '<div class="admin-metric-card"><span>Parent</span><strong>' . ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : 'Root') . '</strong><small>Gallery tree position</small></div>';
+    echo '</div>';
+
+    render_admin_tabs($adminTabs, 'admin-edit-identity');
+
+    echo '<form method="post" enctype="multipart/form-data" class="admin-edit-gallery-form" autocomplete="off">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
-    echo '<label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
-    echo '<label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
-    echo '<label>Slug<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required></label>';
-    echo '<label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">Changing this renames the folder on disk.</span></label>';
-    echo '<label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label>';
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Identity</p><h2>Names and placement</h2></div><p class="muted">Controls the public title, URL slug, disk folder, and gallery tree position.</p></div>';
+    echo '<div class="admin-edit-card-grid">';
+    echo '<div class="admin-edit-card is-wide"><label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label></div>';
+    echo '<div class="admin-edit-card"><label>Slug<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">Used in the public gallery URL.</span></label><label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">Changing this renames the folder on disk.</span></label></div>';
+    echo '<div class="admin-edit-card"><label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label><label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
+    echo '<div class="admin-edit-card is-wide"><label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label></div>';
+    echo '</div>';
+    render_tag_datalist();
+    render_admin_tab_panel('admin-edit-identity', (string) ob_get_clean(), true);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Access</p><h2>Visibility and protection</h2></div><p class="muted">Visibility decides discoverability. Passwords and generated links are optional on top of it.</p></div>';
+    echo '<div class="admin-edit-card-grid">';
+    echo '<div class="admin-edit-card"><label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label><p class="muted">Public galleries are listed. Unpublished galleries are hidden but open from their normal URL. Private galleries are admin-only except for supported direct-token access.</p></div>';
     if ($accessReady) {
         // $newShareToken stores an intermediate value used by the surrounding gallery workflow.
         $newShareToken = (string) ($_SESSION['new_gallery_share_token_' . (int) $gallery['id']] ?? '');
         unset($_SESSION['new_gallery_share_token_' . (int) $gallery['id']]);
         // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
         $currentAccessType = 'normal';
-        if ((string) ($gallery['access_mode'] ?? 'normal') === 'password') {
+        if ((string) ($gallery['access_mode'] ?? 'normal') === 'password' && !empty($gallery['access_password_hash'])) {
             // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
-            $currentAccessType = empty($gallery['access_password_hash']) ? 'share' : 'password';
+            $currentAccessType = 'password';
         }
-        echo '<fieldset class="form-grid"><legend>Protected access</legend>';
-        echo '<label>Access<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>Normal public access</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Password protected</option><option value="share"' . ($currentAccessType === 'share' ? ' selected' : '') . '>Share link only</option></select></label>';
-        echo '<label>Public listing<select name="access_listing"><option value="listed"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'listed' ? ' selected' : '') . '>Listed without thumbnail</option><option value="unlisted"' . ((string) ($gallery['access_listing'] ?? 'listed') === 'unlisted' ? ' selected' : '') . '>Unlisted, direct link only</option></select></label>';
-        echo '<label>New gallery password<input name="access_password" type="password" autocomplete="new-password"><span class="muted">Leave empty to keep the current gallery password.</span></label>';
+        echo '<div class="admin-edit-card"><label>Password lock<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>No password</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Require password</option></select><span class="muted">Password locking is independent of public, unpublished, or private visibility.</span></label><label>New gallery password<input name="access_password" type="password" autocomplete="new-password"><span class="muted">Leave empty to keep the current gallery password.</span></label>';
         if (!empty($gallery['access_password_hash'])) {
-            echo '<label><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
+            echo '<label class="checkbox-label"><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
         }
-        echo '<label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
+        echo '</div>';
+        echo '<div class="admin-edit-card is-wide"><label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
         // $visibleShareToken stores an intermediate value used by the surrounding gallery workflow.
         $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
         if ($visibleShareToken !== null && $visibleShareToken !== '') {
@@ -887,30 +1123,34 @@ function cms_admin_edit_gallery(): void
         } else {
             echo '<p class="muted">No share link is active.</p>';
         }
-        echo '<p class="muted">Share-link-only galleries are hidden from public listings and get a link automatically when saved.</p>';
-        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">Generate/regenerate share link</button><button type="submit" class="secondary" name="access_action" value="revoke_link">Revoke share link</button></div>';
-        echo '</fieldset>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">Generate/regenerate share link</button><button type="submit" class="secondary" name="access_action" value="revoke_link">Revoke share link</button></div><p class="muted">Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.</p></div>';
     } else {
-        echo '<p class="notice">Protected gallery settings are hidden until the v0.13 database migration is applied.</p>';
-    }
-    if ($pictureGameReady) {
-        echo '<label><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label>';
-    }
-    if (gallery_voting_schema_ready()) {
-        echo '<label><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable image voting for this gallery</label>';
-        echo '<p class="muted">When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.</p>';
-    }
-    if (gallery_filename_display_schema_ready()) {
-        echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
-        echo '<p class="muted">Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.</p>';
-    } else {
-        echo '<p class="muted">File name display control will be available after the database migration is applied.</p>';
+        echo '<div class="notice">Protected gallery settings are hidden until the v0.13 database migration is applied.</div>';
     }
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this gallery as NSFW / 18+</label>';
-        echo '<p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files.</p>';
+        echo '<div class="admin-edit-card is-wide"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this gallery as NSFW / 18+</label><p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it.</p></div>';
     } else {
-        echo '<p class="muted">NSFW Guard controls will be available after the database migration is applied.</p>';
+        echo '<div class="admin-edit-card is-wide"><p class="muted">NSFW Guard controls will be available after the database migration is applied.</p></div>';
+    }
+    echo '</div>';
+    render_admin_tab_panel('admin-edit-access', (string) ob_get_clean(), false);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Display</p><h2>Gallery behavior</h2></div><p class="muted">Feature toggles and grid overrides affecting this gallery branch.</p></div>';
+    echo '<div class="admin-edit-card-grid">';
+    if ($pictureGameReady) {
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label></div>';
+    }
+    if (gallery_voting_schema_ready()) {
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable image voting for this gallery</label><p class="muted">When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.</p></div>';
+    }
+    if (gallery_filename_display_schema_ready()) {
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label><p class="muted">Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.</p></div>';
+    } else {
+        echo '<div class="admin-edit-card"><p class="muted">File name display control will be available after the database migration is applied.</p></div>';
+    }
+    if ($gpsMapReady) {
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label><p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p></div>';
     }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
@@ -921,27 +1161,36 @@ function cms_admin_edit_gallery(): void
         $gridColumns = gallery_grid_form_columns($gallery);
         // $gridRows stores the form value. In inherit mode it previews the currently effective inherited/default value.
         $gridRows = gallery_grid_form_rows($gallery);
-        echo '<fieldset class="form-grid"><legend>Display grid</legend>';
-        echo '<label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> Use a custom grid for this gallery</label>';
-        echo '<label>Columns <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label>';
-        echo '<label>Rows <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label>';
-        echo '<label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> Use for subgalleries</label>';
-        echo '<p class="muted">Current source: ' . e((string) ($effectiveGridSettings['grid_source'] ?? 'global')) . '. If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.</p>';
-        echo '</fieldset>';
+        echo '<div class="admin-edit-card is-wide"><h3>Display grid</h3><label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> Use a custom grid for this gallery</label><div class="admin-edit-range-grid"><label>Columns <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label><label>Rows <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label></div><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> Use for subgalleries</label><p class="muted">Current source: ' . e((string) ($effectiveGridSettings['grid_source'] ?? 'global')) . '. If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.</p></div>';
     } else {
-        echo '<p class="muted">Gallery display-grid overrides will be available after the database migration is applied.</p>';
+        echo '<div class="admin-edit-card is-wide"><p class="muted">Gallery display-grid overrides will be available after the database migration is applied.</p></div>';
     }
-    if ($gpsMapReady) {
-        echo '<label><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label>';
-        echo '<p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p>';
+    if (thumbnail_bounds_schema_ready()) {
+        echo '<div class="admin-edit-card is-wide">';
+        render_admin_thumbnail_bound_slider('gallery_thumbnail', isset($gallery['thumbnail_min_size']) ? (int) $gallery['thumbnail_min_size'] : null, isset($gallery['thumbnail_max_size']) ? (int) $gallery['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.');
+        echo '<label class="checkbox-label"><input type="checkbox" name="gallery_thumbnail_bounds_recursive" value="1"> Save these bounds recursively to subgalleries</label>';
+        echo '<p class="muted">Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.</p>';
+        echo '</div>';
+    } else {
+        echo '<div class="admin-edit-card is-wide"><p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p></div>';
     }
-    echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label>';
-    echo '<label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">Includes images from subgalleries.</span></label>';
+    echo '</div>';
+    render_admin_tab_panel('admin-edit-display', (string) ob_get_clean(), false);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Media</p><h2>Thumbnail, branding, and background</h2></div><p class="muted">Optional visual assets override theme fallbacks only for this gallery.</p></div>';
+    echo '<div class="admin-edit-card-grid">';
+    echo '<div class="admin-edit-card is-wide"><label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">Includes images from subgalleries.</span></label>';
     if (gallery_cover_asset_schema_ready()) {
         echo '<label>Upload gallery thumbnail<input type="file" name="cover_upload" accept="image/*"><span class="muted">This is stored separately from gallery images.</span></label>';
     } else {
         echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
     }
+    echo '</div>';
+    echo '<div class="admin-edit-card is-wide">';
+    render_admin_gallery_branding_fields($gallery);
+    echo '</div>';
+    echo '<div class="admin-edit-card is-wide">';
     if (gallery_background_source_schema_ready()) {
         // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = gallery_background_source($gallery);
@@ -949,15 +1198,17 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<p class="muted">Background source selection will be available after the background migration is applied.</p>';
     }
-    echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
-    render_tag_datalist();
-    echo '<button type="submit">Save gallery</button></form></section>';
-    echo '<section class="panel"><h2>Scan</h2><form method="post" action="' . e(url_for('admin_scan_images')) . '" class="form-grid">' . csrf_field();
+    echo '</div></div>';
+    render_admin_tab_panel('admin-edit-media', (string) ob_get_clean(), false);
+
+    echo '<div class="admin-edit-gallery-savebar"><button type="submit">Save gallery</button><span class="muted">Saves all settings from Identity, Access, Display, and Media.</span></div>';
+    echo '</form>';
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Images</p><h2>Photos and ordering</h2></div><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">Scan/import images</button></form></div>';
+    echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<button type="submit">Scan/import images in this gallery</button></form></section>';
-    echo '<section class="panel"><h2>Images</h2><form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
-    echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<div class="bulk-row"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
+    echo '<div class="bulk-row admin-edit-image-toolbar"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
     echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
@@ -967,10 +1218,47 @@ function cms_admin_edit_gallery(): void
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
         echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a></td></tr>';
     }
-    echo '</tbody></table></form></section>';
+    echo '</tbody></table></form>';
+    render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), false);
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Render upload, replace, and remove controls for optional gallery branding images.
+ *
+ * Banner replaces the visible public title text, logo is supplementary, and the
+ * separator acts as a visual divider below the public title area.
+ */
+function render_admin_gallery_branding_fields(array $gallery): void
+{
+    if (!gallery_branding_schema_ready()) {
+        echo '<p class="muted">Gallery branding assets will be available after the branding migration is applied.</p>';
+        return;
+    }
+
+    echo '<fieldset class="form-grid admin-branding-assets"><legend>Gallery branding</legend>';
+    echo '<p class="muted">All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.</p>';
+    foreach (gallery_branding_asset_types() as $kind => $definition) {
+        // $label stores the user-facing asset label.
+        $label = (string) $definition['label'];
+        // $description stores concise guidance for the current asset control.
+        $description = (string) $definition['description'];
+        // $assetUrl stores the currently configured asset preview URL for admins.
+        $assetUrl = gallery_branding_asset_url($gallery, (string) $kind, false);
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e($label) . '</strong><span class="muted">' . e($description) . '</span></div>';
+        if ($assetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-branding-preview-' . e((string) $kind) . '" src="' . e($assetUrl) . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_' . e((string) $kind) . '" value="1"> Remove current ' . e(strtolower($label)) . '</label></div>';
+        } else {
+            echo '<p class="muted">No ' . e(strtolower($label)) . ' is configured.</p>';
+        }
+        echo '<label>Upload or replace ' . e(strtolower($label)) . '<input type="file" name="branding_' . e((string) $kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '</div>';
+    }
+    echo '</fieldset>';
 }
 
 
@@ -1580,6 +1868,7 @@ function cms_admin_bulk_images(): void
                 $count += create_image_thumbnails($image, $gallery);
             }
         }
+        thumbnail_maintenance_summary_cache_clear();
         flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
@@ -1612,7 +1901,7 @@ function cms_admin_public_update_gallery(): void
         $title = (string) $gallery['title'];
     }
     // Variable $visibility stores this steps working value.
-    $visibility = (string) $gallery['visibility'];
+    $visibility = gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished'));
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
@@ -1635,9 +1924,9 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
     }
-    if ($action === 'hide') {
+    if (in_array($action, gallery_visibility_values(), true)) {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
-        $visibility = 'private';
+        $visibility = gallery_visibility_storage_value($action);
     }
     // Variable $fields stores this steps working value.
     $fields = [
@@ -1748,6 +2037,12 @@ function cms_admin_edit_image(): void
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
         }
+        if (thumbnail_bounds_schema_ready()) {
+            // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this image.
+            $thumbnailBounds = thumbnail_bound_pair_from_post('image_thumbnail');
+            $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
+            $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
+        }
         $fields['updated_at = ?'] = now_sql();
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -1764,12 +2059,17 @@ function cms_admin_edit_image(): void
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>Description<textarea name="description">' . e($image['description']) . '</textarea></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options((string) $image['visibility']) . '</select></label>';
+    echo '<label>Visibility<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
         echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
-        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served.</p>';
+        echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    if (thumbnail_bounds_schema_ready()) {
+        render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.');
+    } else {
+        echo '<p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p>';
+    }
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
     if (exif_gps_schema_ready()) {
@@ -1791,6 +2091,23 @@ function cms_admin_edit_image(): void
  * @return mixed Result produced by this operation.
  */
 function visibility_options(string $selected): string
+{
+    // Variable $html stores this steps working value.
+    $html = '';
+    // $selected stores the canonical value shown by the simplified visibility UI.
+    $selected = normalize_gallery_visibility($selected);
+    foreach (gallery_visibility_values() as $visibility) {
+        $html .= '<option value="' . e($visibility) . '"' . ($visibility === $selected ? ' selected' : '') . '>' . e(gallery_visibility_label($visibility)) . '</option>';
+    }
+    return $html;
+}
+
+/**
+ * Handles image visibility options logic for the gallery application.
+ * @param mixed $selected Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function image_visibility_options(string $selected): string
 {
     // Variable $html stores this steps working value.
     $html = '';

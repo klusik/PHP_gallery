@@ -40,6 +40,89 @@ declare(strict_types=1);
  * This module owns password protection, share token handling, visitor access checks, and public listing rules for galleries. It does not alter theme or admin styling settings.
  */
 
+
+/**
+ * Return canonical gallery visibility values used by the simplified public model.
+ */
+function gallery_visibility_values(): array
+{
+    return ['public', 'unpublished', 'private'];
+}
+
+/**
+ * Normalize legacy and current gallery visibility values to the public model.
+ */
+function normalize_gallery_visibility(string $visibility): string
+{
+    $visibility = strtolower(trim($visibility));
+    if ($visibility === 'draft' || $visibility === 'unlisted') {
+        return 'unpublished';
+    }
+    return in_array($visibility, gallery_visibility_values(), true) ? $visibility : 'unpublished';
+}
+
+/**
+ * Return the effective visibility for a gallery row, including legacy listing flags.
+ */
+function gallery_effective_visibility(array $gallery): string
+{
+    $visibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
+    if ($visibility === 'public' && (string) ($gallery['access_listing'] ?? 'listed') === 'unlisted') {
+        return 'unpublished';
+    }
+    return $visibility;
+}
+
+/**
+ * Return the database value to store for one gallery visibility.
+ */
+function gallery_visibility_storage_value(string $visibility): string
+{
+    $visibility = normalize_gallery_visibility($visibility);
+    if ($visibility === 'unpublished' && !gallery_visibility_schema_supports_unpublished()) {
+        return 'draft';
+    }
+    return $visibility;
+}
+
+/**
+ * Return true when the current galleries.visibility enum accepts unpublished.
+ */
+function gallery_visibility_schema_supports_unpublished(): bool
+{
+    static $supports = null;
+    if ($supports !== null) {
+        return $supports;
+    }
+    try {
+        // $column stores the database enum definition used by compatibility installs.
+        $column = db()->query("SHOW COLUMNS FROM galleries LIKE 'visibility'")->fetch();
+        return $supports = $column && str_contains((string) ($column['Type'] ?? ''), "'unpublished'");
+    } catch (Throwable) {
+        return $supports = false;
+    }
+}
+
+/**
+ * Return the UI label for one canonical gallery visibility value.
+ */
+function gallery_visibility_label(string $visibility): string
+{
+    return match (normalize_gallery_visibility($visibility)) {
+        'public' => 'public',
+        'private' => 'private',
+        default => 'unpublished',
+    };
+}
+
+/**
+ * Return true when anonymous visitors may request this gallery by its normal URL.
+ */
+function gallery_allows_direct_public_request(array $gallery): bool
+{
+    return in_array(gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
+}
+
 function admin_feature_schema_ready(): bool
 {
     return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready() && nsfw_guard_schema_ready();
@@ -318,14 +401,19 @@ function visitor_can_access_gallery(array $gallery): bool
     if (current_user() && !current_user_is_known_under_18()) {
         return true;
     }
-    if ((string) $gallery['visibility'] !== 'public') {
-        return false;
+    // $requirement stores an intermediate value used by the surrounding gallery workflow.
+    $requirement = gallery_access_requirement($gallery);
+    if (!gallery_allows_direct_public_request($gallery)) {
+        if (!$requirement) {
+            return false;
+        }
+        if (!gallery_public_access_session_is_valid((int) $requirement['id']) && !request_share_token_allows_gallery($gallery)) {
+            return false;
+        }
     }
     if (gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
         return false;
     }
-    // $requirement stores an intermediate value used by the surrounding gallery workflow.
-    $requirement = gallery_access_requirement($gallery);
     if (!$requirement) {
         return true;
     }
@@ -342,7 +430,7 @@ function visitor_can_access_gallery(array $gallery): bool
  */
 function gallery_is_public_listed(array $gallery): bool
 {
-    if ((string) $gallery['visibility'] !== 'public') {
+    if (gallery_effective_visibility($gallery) !== 'public') {
         return false;
     }
     if (!gallery_access_schema_ready()) {

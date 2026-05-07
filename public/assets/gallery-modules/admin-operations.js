@@ -41,6 +41,133 @@
  * setupExample();
  */
 
+const legacyAdminTabHashes = new Map([
+    ['#admin-galleries', '#admin-tab-galleries'],
+    ['#admin-ordering', '#admin-tab-galleries'],
+    ['#admin-thumbnails', '#admin-tab-maintenance'],
+    ['#admin-cache', '#admin-tab-maintenance'],
+    ['#admin-migrations', '#admin-tab-maintenance'],
+    ['#admin-appearance', '#admin-tab-overview'],
+]);
+
+// Function `normalizedAdminTabHash` executes this focused behavior.
+function normalizedAdminTabHash(hash) {
+    if (!hash) {
+        return '';
+    }
+    return legacyAdminTabHashes.get(hash) || hash;
+}
+
+// Function `setupAdminTabs` executes this focused behavior.
+export function setupAdminTabs() {
+    document.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+        // tabs stores state or configuration for the admin tab flow.
+        const tabs = Array.from(tabsRoot.querySelectorAll('[role="tab"][data-admin-tab-target]'));
+        if (!tabs.length) {
+            return;
+        }
+        // panels stores state or configuration for the admin tab flow.
+        const panels = tabs
+            .map((tab) => document.getElementById(tab.dataset.adminTabTarget || ''))
+            .filter((panel) => panel instanceof HTMLElement && panel.matches('[data-admin-tab-panel]'));
+        if (!panels.length) {
+            return;
+        }
+
+        // activateTab stores behavior for selecting one tab and hiding the other panels.
+        const activateTab = (targetId, options = {}) => {
+            // targetPanel stores the panel selected by the current hash or click.
+            const targetPanel = panels.find((panel) => panel.id === targetId) || panels[0];
+            if (!targetPanel) {
+                return;
+            }
+            tabs.forEach((tab) => {
+                // isSelected stores whether this control owns the selected panel.
+                const isSelected = tab.dataset.adminTabTarget === targetPanel.id;
+                tab.classList.toggle('is-active', isSelected);
+                tab.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+                tab.setAttribute('tabindex', isSelected ? '0' : '-1');
+            });
+            panels.forEach((panel) => {
+                // isSelected stores whether this panel should be visible.
+                const isSelected = panel.id === targetPanel.id;
+                panel.hidden = !isSelected;
+                panel.classList.toggle('is-active', isSelected);
+            });
+            if (options.focusTab) {
+                tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
+            }
+            if (options.updateHash) {
+                const nextHash = `#${targetPanel.id}`;
+                if (window.location.hash !== nextHash) {
+                    window.history.pushState(null, '', nextHash);
+                }
+            }
+        };
+
+        // activeHash stores the hash that should select the initial tab.
+        const activeHash = normalizedAdminTabHash(window.location.hash);
+        if (activeHash && activeHash !== window.location.hash) {
+            window.history.replaceState(null, '', activeHash);
+        }
+        activateTab((activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '');
+
+        tabs.forEach((tab) => {
+            tab.addEventListener('click', (event) => {
+                // targetId stores the panel id requested by the clicked tab.
+                const targetId = tab.dataset.adminTabTarget || '';
+                if (!targetId || !panels.some((panel) => panel.id === targetId)) {
+                    return;
+                }
+                event.preventDefault();
+                activateTab(targetId, {updateHash: true});
+            });
+            tab.addEventListener('keydown', (event) => {
+                // currentIndex stores the focused tab position.
+                const currentIndex = tabs.indexOf(tab);
+                if (currentIndex < 0) {
+                    return;
+                }
+                // nextIndex stores the tab position selected by the keyboard.
+                let nextIndex = currentIndex;
+                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                    nextIndex = (currentIndex + 1) % tabs.length;
+                } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                } else if (event.key === 'Home') {
+                    nextIndex = 0;
+                } else if (event.key === 'End') {
+                    nextIndex = tabs.length - 1;
+                } else if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    activateTab(tab.dataset.adminTabTarget || '', {updateHash: true});
+                    return;
+                } else {
+                    return;
+                }
+                event.preventDefault();
+                activateTab(tabs[nextIndex].dataset.adminTabTarget || '', {updateHash: true, focusTab: true});
+            });
+        });
+
+        // handleHashNavigation stores behavior shared by hashchange and history traversal.
+        const handleHashNavigation = () => {
+            // hash stores the normalized browser hash after navigation.
+            const hash = normalizedAdminTabHash(window.location.hash);
+            if (!hash) {
+                return;
+            }
+            if (hash !== window.location.hash) {
+                window.history.replaceState(null, '', hash);
+            }
+            activateTab(hash.replace(/^#/, ''));
+        };
+
+        window.addEventListener('hashchange', handleHashNavigation);
+        window.addEventListener('popstate', handleHashNavigation);
+    });
+}
+
 // Function `setupGalleryRefreshProgress` executes this focused behavior.
 export function setupGalleryRefreshProgress() {
     document.querySelectorAll('[data-refresh-galleries-form]').forEach((form) => {
@@ -995,9 +1122,9 @@ export function setupAdminGalleryFilters() {
 
 // Function `setupAdminGalleryTree` executes this focused behavior.
 export function setupAdminGalleryTree() {
-    // Variable `rows` stores this steps working value.
-    const rows = Array.from(document.querySelectorAll('[data-gallery-row]'));
-    if (rows.length === 0) {
+    // Variable `table` stores this steps working value.
+    const table = document.querySelector('[data-admin-gallery-order-table]');
+    if (!table) {
         return;
     }
     // Variable `csrf` stores this steps working value.
@@ -1006,9 +1133,19 @@ export function setupAdminGalleryTree() {
     const saveUrl = new URL(window.location.href);
     saveUrl.search = '?page=admin_save_gallery_collapse';
 
+    // Function `currentRows` executes this focused behavior.
+    function currentRows() {
+        return Array.from(table.querySelectorAll('[data-gallery-row]'));
+    }
+
+    // Function `rowById` executes this focused behavior.
+    function rowById(galleryId) {
+        return currentRows().find((candidate) => candidate.dataset.galleryId === String(galleryId)) || null;
+    }
+
     // Function `collapsedIds` executes this focused behavior.
     function collapsedIds() {
-        return rows.filter((row) => row.classList.contains('is-collapsed')).map((row) => row.dataset.galleryId);
+        return currentRows().filter((row) => row.classList.contains('is-collapsed')).map((row) => row.dataset.galleryId);
     }
 
     // Function `save` executes this focused behavior.
@@ -1020,8 +1157,75 @@ export function setupAdminGalleryTree() {
         fetch(saveUrl.toString(), {method: 'POST', body, headers: {'Accept': 'application/json'}});
     }
 
+    /**
+     * Ensures the row has the correct expand/collapse control for its current children.
+     *
+     * Reordering can turn a leaf gallery into a parent or remove the last child
+     * from a previous parent without a page reload. The visible control must be
+     * rebuilt from current parent_id values before tree visibility is recalculated.
+     *
+     * @param {HTMLTableRowElement} row Gallery row to refresh.
+     * @param {boolean} hasChildren Whether this row currently owns child rows.
+     * @returns {void}
+     */
+    function syncRowToggle(row, hasChildren) {
+        const title = row.querySelector('.tree-title');
+        if (!title) {
+            return;
+        }
+        const galleryId = row.dataset.galleryId || '';
+        const existingToggle = title.querySelector('[data-gallery-toggle]');
+        const existingSpacer = title.querySelector('.tree-spacer');
+        if (hasChildren) {
+            if (existingToggle) {
+                existingToggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
+                existingToggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+                return;
+            }
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'tree-toggle';
+            toggle.dataset.galleryToggle = galleryId;
+            toggle.textContent = row.classList.contains('is-collapsed') ? '+' : '-';
+            toggle.setAttribute('aria-expanded', row.classList.contains('is-collapsed') ? 'false' : 'true');
+            existingSpacer?.remove();
+            title.insertBefore(toggle, title.firstChild);
+            return;
+        }
+        row.classList.remove('is-collapsed');
+        existingToggle?.remove();
+        if (!existingSpacer) {
+            const spacer = document.createElement('span');
+            spacer.className = 'tree-spacer';
+            spacer.setAttribute('aria-hidden', 'true');
+            title.insertBefore(spacer, title.firstChild);
+        }
+    }
+
+    /**
+     * Rebuilds child-aware toggle controls from current parent_id metadata.
+     *
+     * @returns {void}
+     */
+    function syncTreeControls() {
+        const childCounts = new Map();
+        currentRows().forEach((row) => {
+            const parentId = row.dataset.parentId || '0';
+            if (parentId === '0') {
+                return;
+            }
+            childCounts.set(parentId, (childCounts.get(parentId) || 0) + 1);
+        });
+        currentRows().forEach((row) => {
+            syncRowToggle(row, (childCounts.get(row.dataset.galleryId || '') || 0) > 0);
+        });
+    }
+
     // Function `refreshVisibility` executes this focused behavior.
     function refreshVisibility() {
+        syncTreeControls();
+        // Variable `rows` stores this steps working value.
+        const rows = currentRows();
         // Variable `collapsed` stores this steps working value.
         const collapsed = new Set(collapsedIds().map(String));
         rows.forEach((row) => {
@@ -1035,7 +1239,7 @@ export function setupAdminGalleryTree() {
                     break;
                 }
                 // Variable `parent` stores this steps working value.
-                const parent = rows.find((candidate) => candidate.dataset.galleryId === parentId);
+                const parent = rowById(parentId);
                 parentId = parent ? (parent.dataset.parentId || '0') : '0';
             }
             setGalleryRowHiddenReason(row, 'tree', hidden);
@@ -1055,25 +1259,31 @@ export function setupAdminGalleryTree() {
         document.dispatchEvent(new Event('galleryRowsChanged'));
     }
 
-    document.querySelectorAll('[data-gallery-toggle]').forEach((button) => {
-        button.addEventListener('click', () => {
-            // Variable `row` stores this steps working value.
-            const row = button.closest('[data-gallery-row]');
-            // Variable `collapsed` stores this steps working value.
-            const collapsed = !row.classList.contains('is-collapsed');
-            row.classList.toggle('is-collapsed', collapsed);
-            button.textContent = collapsed ? '+' : '-';
-            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-            refreshVisibility();
-            save();
-        });
+    table.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-gallery-toggle]') : null;
+        if (!button) {
+            return;
+        }
+        // Variable `row` stores this steps working value.
+        const row = button.closest('[data-gallery-row]');
+        if (!row) {
+            return;
+        }
+        // Variable `collapsed` stores this steps working value.
+        const collapsed = !row.classList.contains('is-collapsed');
+        row.classList.toggle('is-collapsed', collapsed);
+        button.textContent = collapsed ? '+' : '-';
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        refreshVisibility();
+        save();
     });
 
     document.querySelectorAll('[data-gallery-tree-action]').forEach((button) => {
         button.addEventListener('click', () => {
             // Variable `collapse` stores this steps working value.
             const collapse = button.dataset.galleryTreeAction === 'collapse-all';
-            rows.forEach((row) => {
+            syncTreeControls();
+            currentRows().forEach((row) => {
                 // Variable `toggle` stores this steps working value.
                 const toggle = row.querySelector('[data-gallery-toggle]');
                 if (!toggle) {
@@ -1088,6 +1298,7 @@ export function setupAdminGalleryTree() {
         });
     });
 
+    document.addEventListener('adminGalleryTreeMutated', refreshVisibility);
     refreshVisibility();
 }
 
@@ -1129,7 +1340,7 @@ export function setupAdminGalleryReordering() {
     const indentWidth = 28;
     // draggedRows stores the moved root row and all descendant rows.
     let draggedRows = [];
-    // draggedHandle stores the handle that started the drag, so its visual state can be restored.
+    // draggedHandle stores the gallery-column area that started the drag, so its visual state can be restored.
     let draggedHandle = null;
     // placeholderRow stores the temporary row marking the insertion point.
     let placeholderRow = null;
@@ -1149,6 +1360,10 @@ export function setupAdminGalleryReordering() {
     let activePointerId = null;
     // activeMouseFallback stores whether classic mouse events are currently driving movement.
     let activeMouseFallback = false;
+    // pendingDrag stores a possible drag that has not crossed the movement threshold yet.
+    let pendingDrag = null;
+    // suppressClickUntil stores a short timestamp window used to stop link clicks after dragging a title area.
+    let suppressClickUntil = 0;
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
@@ -1165,6 +1380,28 @@ export function setupAdminGalleryReordering() {
         }
         status.textContent = message;
         status.dataset.state = state;
+    }
+
+    /**
+     * Converts accidental HTML output from a JSON endpoint into readable admin text.
+     *
+     * Shared hosting can print PHP warnings as HTML before JSON when display_errors
+     * is enabled. The server now buffers that output, but this fallback keeps older
+     * cached PHP files from showing raw parser errors to the admin.
+     *
+     * @param {string} responseText Raw response returned by the reorder endpoint.
+     * @returns {string} Friendly status message for the toolbar.
+     */
+    function cleanAdminJsonParseMessage(responseText) {
+        const plainText = String(responseText || '')
+            .replace(/<br\s*\/?>(\s*)/gi, '\n')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (plainText) {
+            return `Gallery order was saved, but the server returned a diagnostic message instead of clean JSON: ${plainText.slice(0, 240)}`;
+        }
+        return 'Gallery order was saved, but the server returned an empty response. Refresh the page to verify the current order.';
     }
 
     /**
@@ -1251,22 +1488,12 @@ export function setupAdminGalleryReordering() {
         ghost.className = 'admin-image-order-ghost admin-gallery-order-ghost';
         ghost.style.width = `${firstBox.width}px`;
         ghost.style.left = `${firstBox.left}px`;
-        rows.slice(0, 6).forEach((row) => {
-            const clonedRow = row.cloneNode(true);
-            copyCellWidths(row, clonedRow);
-            clonedRow.classList.add('is-ghost-row');
-            clonedRow.removeAttribute('data-gallery-row');
-            clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
-            ghostBody.appendChild(clonedRow);
-        });
-        if (rows.length > 6) {
-            const summaryRow = document.createElement('tr');
-            const summaryCell = document.createElement('td');
-            summaryCell.colSpan = Math.max(1, rows[0].children.length);
-            summaryCell.textContent = `and ${rows.length - 6} nested galleries`;
-            summaryRow.appendChild(summaryCell);
-            ghostBody.appendChild(summaryRow);
-        }
+        const clonedRow = rows[0].cloneNode(true);
+        copyCellWidths(rows[0], clonedRow);
+        clonedRow.classList.add('is-ghost-row');
+        clonedRow.removeAttribute('data-gallery-row');
+        clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+        ghostBody.appendChild(clonedRow);
         ghost.appendChild(ghostBody);
         document.body.appendChild(ghost);
         return ghost;
@@ -1364,11 +1591,27 @@ export function setupAdminGalleryReordering() {
      */
     function applyPlaceholderDepth(depth) {
         proposedDepth = depth;
+        const direction = depth > originalDepth ? 'right' : (depth < originalDepth ? 'left' : 'level');
+        const levelDelta = Math.abs(depth - originalDepth);
+        const levelText = levelDelta === 1 ? '1 level' : `${levelDelta} levels`;
+        const message = direction === 'right'
+            ? `→ Nest deeper (${levelText}).`
+            : (direction === 'left' ? `← Move out (${levelText}).` : '↓ Same level.');
         if (placeholderRow) {
+            const placeholderCell = placeholderRow.firstElementChild;
             placeholderRow.dataset.depth = String(depth);
+            placeholderRow.dataset.dragDirection = direction;
+            if (placeholderCell) {
+                placeholderCell.dataset.dragHint = message;
+            }
             placeholderRow.style.setProperty('--gallery-drag-depth', String(depth));
         }
-        setStatus(depth > originalDepth ? 'Release to nest the gallery here.' : (depth < originalDepth ? 'Release to move the gallery out here.' : 'Release to save the new gallery position.'), 'dragging');
+        if (ghostTable) {
+            ghostTable.dataset.dragDirection = direction;
+        }
+        table.dataset.galleryDragDirection = direction;
+        document.body.dataset.galleryDragDirection = direction;
+        setStatus(message, 'dragging');
     }
 
     /**
@@ -1415,6 +1658,7 @@ export function setupAdminGalleryReordering() {
     function setGalleryRowDepth(row, depth) {
         const title = row.querySelector('.tree-title');
         row.dataset.depth = String(depth);
+        row.style.setProperty('--gallery-depth', String(Math.min(depth, 8)));
         row.classList.toggle('is-subgallery', depth > 0);
         if (!title) {
             return;
@@ -1454,6 +1698,146 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Returns the stable folder name segment for a gallery row.
+     *
+     * The Admin table can update visible paths immediately after a tree move
+     * without waiting for the next page load. The folder segment is captured
+     * once from the current path, then reused even after the displayed path is
+     * recalculated under another parent.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose folder name is needed.
+     * @returns {string} Last folder path segment for this gallery.
+     */
+    function galleryFolderName(row) {
+        if (row.dataset.galleryFolderName) {
+            return row.dataset.galleryFolderName;
+        }
+        const pathText = row.querySelector('.admin-gallery-path')?.textContent?.trim() || '';
+        const parts = pathText.split('/').filter((part) => part !== '');
+        const folderName = parts.length > 0 ? parts[parts.length - 1] : (row.dataset.galleryTitle || row.dataset.galleryId || 'gallery');
+        row.dataset.galleryFolderName = folderName;
+        return folderName;
+    }
+
+    /**
+     * Returns the base public gallery URL prefix from the current link.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose public link should be refreshed.
+     * @returns {string} Public URL prefix ending at `/gallery/`, or the current href prefix.
+     */
+    function galleryUrlPrefix(row) {
+        if (row.dataset.galleryUrlPrefix) {
+            return row.dataset.galleryUrlPrefix;
+        }
+        const link = row.querySelector('.admin-gallery-title-link');
+        const href = link?.getAttribute('href') || '';
+        const marker = '/gallery/';
+        const markerIndex = href.indexOf(marker);
+        const prefix = markerIndex >= 0 ? href.slice(0, markerIndex + marker.length) : '';
+        row.dataset.galleryUrlPrefix = prefix;
+        return prefix;
+    }
+
+    /**
+     * Returns the gallery's canonical public URL segment from the current link.
+     *
+     * The admin tree must preserve the existing slug segment for the gallery
+     * itself and only recompute the parent path when nesting changes.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose public segment is needed.
+     * @returns {string} Decoded canonical public URL segment.
+     */
+    function galleryUrlSegment(row) {
+        if (row.dataset.galleryUrlSegment) {
+            return row.dataset.galleryUrlSegment;
+        }
+        const link = row.querySelector('.admin-gallery-title-link');
+        const href = link?.getAttribute('href') || '';
+        const marker = '/gallery/';
+        const markerIndex = href.indexOf(marker);
+        if (markerIndex < 0) {
+            row.dataset.galleryUrlSegment = galleryFolderName(row);
+            return row.dataset.galleryUrlSegment;
+        }
+        const path = href.slice(markerIndex + marker.length).replace(/\/+$/, '');
+        const parts = path.split('/').filter((part) => part !== '');
+        const segment = parts.length > 0 ? decodeURIComponent(parts[parts.length - 1]) : galleryFolderName(row);
+        row.dataset.galleryUrlSegment = segment;
+        return segment;
+    }
+
+    /**
+     * Rebuilds the gallery link from the current tree path.
+     *
+     * The admin table already knows the live nesting order, so this keeps the
+     * public link aligned with the just-saved move without a full refresh.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose link should be refreshed.
+     * @param {string} nextPath Newly computed gallery path.
+     * @returns {void}
+     */
+    function refreshGalleryLink(row, nextPath) {
+        const link = row.querySelector('.admin-gallery-title-link');
+        if (!link) {
+            return;
+        }
+        const prefix = galleryUrlPrefix(row);
+        if (!prefix) {
+            return;
+        }
+        const path = nextPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+        const nextUrl = `${prefix}${path}/`;
+        link.href = nextUrl;
+        row.dataset.galleryUrl = nextUrl;
+    }
+
+    /**
+     * Updates visible parent labels and folder paths after a client-side tree move.
+     *
+     * @returns {void}
+     */
+    function refreshVisibleGalleryTreeMetadata() {
+        const titlesById = new Map();
+        const pathsById = new Map();
+        const urlPathsById = new Map();
+        galleryRows().forEach((row) => {
+            titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || 'Gallery');
+        });
+        galleryRows().forEach((row) => {
+            const id = row.dataset.galleryId || '';
+            const parentId = row.dataset.parentId || '0';
+            const folderName = galleryFolderName(row);
+            const parentPath = parentId !== '0' ? (pathsById.get(parentId) || '') : '';
+            const nextPath = parentPath !== '' ? `${parentPath}/${folderName}` : folderName;
+            const segment = galleryUrlSegment(row);
+            const parentUrlPath = parentId !== '0' ? (urlPathsById.get(parentId) || '') : '';
+            const nextUrlPath = parentUrlPath !== '' ? `${parentUrlPath}/${segment}` : segment;
+            const pathLabel = row.querySelector('.admin-gallery-path');
+            let parentLabel = row.querySelector('.admin-gallery-parent');
+            if (!parentLabel) {
+                parentLabel = document.createElement('span');
+                parentLabel.className = 'admin-gallery-parent';
+                row.querySelector('.admin-gallery-summary-text')?.appendChild(parentLabel);
+            }
+            pathsById.set(id, nextPath);
+            urlPathsById.set(id, nextUrlPath);
+            if (pathLabel) {
+                pathLabel.textContent = nextPath;
+            }
+            refreshGalleryLink(row, nextUrlPath);
+            if (parentLabel) {
+                if (parentId !== '0') {
+                    parentLabel.textContent = `Parent: ${titlesById.get(parentId) || 'Gallery'}`;
+                    parentLabel.hidden = false;
+                } else {
+                    parentLabel.textContent = '';
+                    parentLabel.hidden = true;
+                }
+            }
+        });
+    }
+
+    /**
      * Sends the complete gallery order to PHP for validation and persistence.
      *
      * @returns {Promise<void>} Promise resolved after the save attempt finishes.
@@ -1477,10 +1861,16 @@ export function setupAdminGalleryReordering() {
                 headers: {'Accept': 'application/json'},
                 signal: controller.signal,
             });
-            if (!response.ok) {
-                throw new Error('The server rejected the gallery reorder request.');
+            const responseText = await response.text();
+            let result = null;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                throw new Error(cleanAdminJsonParseMessage(responseText));
             }
-            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || 'The server rejected the gallery reorder request.');
+            }
             if (!result.ok) {
                 throw new Error(result.message || 'Gallery order could not be saved.');
             }
@@ -1605,6 +1995,8 @@ export function setupAdminGalleryReordering() {
         ghostTable?.remove();
         placeholderRow?.remove();
         document.body.classList.remove('admin-gallery-order-active');
+        delete document.body.dataset.galleryDragDirection;
+        delete table.dataset.galleryDragDirection;
         removeDocumentListeners();
         draggedRows = [];
         draggedHandle = null;
@@ -1638,6 +2030,8 @@ export function setupAdminGalleryReordering() {
         }
         cleanupVisuals(true);
         serializeGalleryTree();
+        refreshVisibleGalleryTreeMetadata();
+        document.dispatchEvent(new Event('adminGalleryTreeMutated'));
         document.dispatchEvent(new Event('galleryRowsChanged'));
         if (currentGallerySignature() !== originalSignature) {
             saveGalleryTree();
@@ -1719,9 +2113,152 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
-     * Starts moving the gallery subtree controlled by a drag handle.
+     * Returns whether a pointer target should keep its native control behavior instead of starting gallery movement.
      *
-     * @param {HTMLElement} handle Drag handle pressed by the admin.
+     * @param {EventTarget|null} target Original pointer or mouse target.
+     * @returns {boolean} Whether the target should be ignored by the row drag controller.
+     */
+    function isNativeGalleryControl(target) {
+        if (!(target instanceof Element)) {
+            return true;
+        }
+        return Boolean(target.closest('a[href], input, select, textarea, button, label, [contenteditable], [data-gallery-toggle], .gallery-row-action, .admin-gallery-row-action'));
+    }
+
+    /**
+     * Removes listeners for a drag candidate that never crossed the movement threshold.
+     *
+     * @returns {void}
+     */
+    function removePendingDragListeners() {
+        document.removeEventListener('pointermove', handlePendingPointerMove, true);
+        document.removeEventListener('pointerup', handlePendingPointerEnd, true);
+        document.removeEventListener('pointercancel', handlePendingPointerEnd, true);
+        document.removeEventListener('mousemove', handlePendingMouseMove, true);
+        document.removeEventListener('mouseup', handlePendingMouseEnd, true);
+    }
+
+    /**
+     * Clears a not-yet-started drag candidate and restores document listeners.
+     *
+     * @returns {void}
+     */
+    function clearPendingDrag() {
+        removePendingDragListeners();
+        pendingDrag = null;
+    }
+
+    /**
+     * Starts row movement only after the pointer clearly becomes a drag gesture.
+     *
+     * @param {number} clientX Current viewport X coordinate.
+     * @param {number} clientY Current viewport Y coordinate.
+     * @returns {void}
+     */
+    function maybeStartPendingDrag(clientX, clientY) {
+        if (!pendingDrag || draggedRows.length > 0) {
+            return;
+        }
+        const deltaX = clientX - pendingDrag.startX;
+        const deltaY = clientY - pendingDrag.startY;
+        if (Math.hypot(deltaX, deltaY) < 12) {
+            return;
+        }
+        const candidate = pendingDrag;
+        clearPendingDrag();
+        suppressClickUntil = Date.now() + 450;
+        startReorder(candidate.zone, candidate.startX, candidate.startY, candidate.pointerId, candidate.mouseFallback);
+        moveGhost(clientY);
+        movePlaceholder(clientY, clientX);
+    }
+
+    /**
+     * Watches pointer movement for the gallery-column drag threshold.
+     *
+     * @param {PointerEvent} event Pointer movement emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingPointerMove(event) {
+        if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
+            return;
+        }
+        maybeStartPendingDrag(event.clientX, event.clientY);
+        if (draggedRows.length > 0) {
+            event.preventDefault();
+        }
+    }
+
+    /**
+     * Clears a pointer candidate when the admin clicked without dragging.
+     *
+     * @param {PointerEvent} event Pointer end event emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingPointerEnd(event) {
+        if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
+            return;
+        }
+        clearPendingDrag();
+    }
+
+    /**
+     * Watches classic mouse movement for browsers that do not use Pointer Events for this input.
+     *
+     * @param {MouseEvent} event Mouse movement emitted before a drag officially starts.
+     * @returns {void}
+     */
+    function handlePendingMouseMove(event) {
+        if (!pendingDrag || !pendingDrag.mouseFallback) {
+            return;
+        }
+        maybeStartPendingDrag(event.clientX, event.clientY);
+        if (draggedRows.length > 0) {
+            event.preventDefault();
+        }
+    }
+
+    /**
+     * Clears a mouse candidate when the admin clicked without dragging.
+     *
+     * @returns {void}
+     */
+    function handlePendingMouseEnd() {
+        if (!pendingDrag || !pendingDrag.mouseFallback) {
+            return;
+        }
+        clearPendingDrag();
+    }
+
+    /**
+     * Arms a gallery-column area so normal clicks still work and only movement starts reordering.
+     *
+     * @param {HTMLElement} zone Gallery-column area that can initiate row movement.
+     * @param {number} clientX Starting viewport X coordinate.
+     * @param {number} clientY Starting viewport Y coordinate.
+     * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
+     * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
+     * @returns {void}
+     */
+    function armGalleryDragZone(zone, clientX, clientY, pointerId, mouseFallback) {
+        if (draggedRows.length > 0) {
+            return;
+        }
+        clearPendingDrag();
+        pendingDrag = {zone, startX: clientX, startY: clientY, pointerId, mouseFallback};
+        if (mouseFallback) {
+            document.addEventListener('mousemove', handlePendingMouseMove, true);
+            document.addEventListener('mouseup', handlePendingMouseEnd, true);
+            return;
+        }
+        document.addEventListener('pointermove', handlePendingPointerMove, true);
+        document.addEventListener('pointerup', handlePendingPointerEnd, true);
+        document.addEventListener('pointercancel', handlePendingPointerEnd, true);
+    }
+
+    /**
+     * Starts moving the gallery subtree controlled by a gallery-column drag zone.
+     *
+     * @param {HTMLElement} handle Gallery-column area dragged by the admin.
      * @param {number} clientX Starting viewport X coordinate.
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
@@ -1770,28 +2307,34 @@ export function setupAdminGalleryReordering() {
         row.setAttribute('draggable', 'false');
     });
 
-    body.querySelectorAll('[data-admin-gallery-drag-handle]').forEach((handle) => {
-        // Prevents native text selection and browser drag images from interfering with the custom controller.
-        handle.setAttribute('draggable', 'false');
-        handle.addEventListener('dragstart', (event) => event.preventDefault());
-        handle.addEventListener('click', (event) => event.preventDefault());
-
-        handle.addEventListener('pointerdown', (event) => {
-            if (event.button !== 0) {
-                return;
+    body.querySelectorAll('[data-admin-gallery-drag-zone]').forEach((zone) => {
+        // Prevents browser-provided drag images while keeping ordinary title and preview clicks usable.
+        zone.setAttribute('draggable', 'false');
+        zone.addEventListener('dragstart', (event) => {
+            if (!isNativeGalleryControl(event.target)) {
+                event.preventDefault();
             }
-            event.preventDefault();
-            event.stopPropagation();
-            startReorder(handle, event.clientX, event.clientY, event.pointerId, false);
         });
 
-        handle.addEventListener('mousedown', (event) => {
-            if (event.button !== 0 || draggedRows.length > 0) {
+        zone.addEventListener('click', (event) => {
+            if (Date.now() <= suppressClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }, true);
+
+        zone.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0 || event.isPrimary === false || isNativeGalleryControl(event.target)) {
                 return;
             }
-            event.preventDefault();
-            event.stopPropagation();
-            startReorder(handle, event.clientX, event.clientY, null, true);
+            armGalleryDragZone(zone, event.clientX, event.clientY, event.pointerId, false);
+        });
+
+        zone.addEventListener('mousedown', (event) => {
+            if (window.PointerEvent || event.button !== 0 || draggedRows.length > 0 || isNativeGalleryControl(event.target)) {
+                return;
+            }
+            armGalleryDragZone(zone, event.clientX, event.clientY, null, true);
         });
     });
 
@@ -1842,7 +2385,7 @@ export function setupAdminImageReordering() {
 
     // draggedRow stores the real table row being reordered.
     let draggedRow = null;
-    // draggedHandle stores the handle that started the drag, so its visual state can be restored.
+    // draggedHandle stores the gallery-column area that started the drag, so its visual state can be restored.
     let draggedHandle = null;
     // placeholderRow stores the temporary table row marking the insertion point.
     let placeholderRow = null;
@@ -1856,6 +2399,10 @@ export function setupAdminImageReordering() {
     let activePointerId = null;
     // activeMouseFallback stores whether classic mouse events are currently driving movement.
     let activeMouseFallback = false;
+    // pendingDrag stores a possible drag that has not crossed the movement threshold yet.
+    let pendingDrag = null;
+    // suppressClickUntil stores a short timestamp window used to stop link clicks after dragging a title area.
+    let suppressClickUntil = 0;
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
@@ -2213,7 +2760,7 @@ export function setupAdminImageReordering() {
     /**
      * Starts moving the row controlled by a drag handle.
      *
-     * @param {HTMLElement} handle Drag handle pressed by the admin.
+     * @param {HTMLElement} handle Gallery-column area dragged by the admin.
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.

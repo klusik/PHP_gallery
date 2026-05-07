@@ -62,6 +62,7 @@ import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lig
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
+    setupAdminTabs,
     setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupAdminLogStatusForms,
@@ -70,7 +71,7 @@ import {
     setupGalleryUploadProgress,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260505-admin-log-live-search';
+} from './gallery-modules/admin-operations.js?v=20260507-gallery-json-buffer';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -103,6 +104,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupGalleryBulkDeleteConfirmation();
     setupThumbnailCacheDeleteConfirmation();
+    setupAdminTabs();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

@@ -87,6 +87,9 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
         return '';
     }
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    }
     foreach ($sizes as $size) {
         // $size stores an intermediate value used by the surrounding gallery workflow.
         $size = (int) $size;
@@ -286,6 +289,9 @@ function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
+        if (function_exists('thumbnail_bound_fallback_size')) {
+            $size = thumbnail_bound_fallback_size($image, $size, $gallery);
+        }
         try {
             // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = thumbnail_abs_path($image, $gallery, $size, $format);
@@ -336,6 +342,9 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
 {
     // Variable $sizes stores this steps working value.
     $sizes = thumbnail_sizes();
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    }
     usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
         return abs($left - $preferredSize) <=> abs($right - $preferredSize);
     });
@@ -366,6 +375,10 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
  */
 function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = ''): string
 {
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $gallery = find_gallery((int) $image['gallery_id']);
+        $srcsetSizes = thumbnail_bound_filter_sizes($srcsetSizes, $image, $gallery);
+    }
     // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.
     $fallbackUrl = thumbnail_url($image, $fallbackSize);
     // $webpSrcset stores an intermediate value used by the surrounding gallery workflow.
@@ -522,6 +535,70 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
         'limited' => $limited,
         'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
+}
+
+/**
+ * Return a short-lived thumbnail maintenance summary for admin dashboards.
+ *
+ * The expensive part of thumbnail maintenance is checking source files and
+ * generated variants on disk. The image inventory fingerprint keeps this cache
+ * tied to the current set of indexed direct images, while explicit cache
+ * generation invalidation makes thumbnail creation and deletion visible on the
+ * next admin load.
+ *
+ * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ */
+function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
+{
+    // $galleryIds stores the normalized optional gallery scope used by both cache keys and summary queries.
+    $galleryIds = $galleryIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if ($galleryIds !== null && $galleryIds === []) {
+        return thumbnail_maintenance_summary([], $maxImagesToScan);
+    }
+
+    // $scopeKey stores a compact stable key for the dashboard-wide or gallery-scoped summary.
+    $scopeKey = $galleryIds === null ? 'all' : implode(',', $galleryIds);
+    // $cacheKey stores the DB setting that contains the cached summary payload.
+    $cacheKey = 'thumbnail_maintenance_summary_' . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
+    // $generation stores the invalidation marker changed after thumbnail creation or deletion.
+    $generation = (string) app_setting('thumbnail_maintenance_summary_generation', '0');
+    // $fingerprint stores the cheap image inventory state. It changes when images are imported.
+    $fingerprint = thumbnail_inventory_fingerprint($galleryIds);
+    // $cachedJson stores the previous summary payload, if any.
+    $cachedJson = (string) app_setting($cacheKey, '');
+
+    if ($cachedJson !== '') {
+        // $cachedPayload stores the decoded summary cache candidate.
+        $cachedPayload = json_decode($cachedJson, true);
+        if (is_array($cachedPayload)
+            && (string) ($cachedPayload['generation'] ?? '') === $generation
+            && (string) ($cachedPayload['fingerprint'] ?? '') === $fingerprint
+            && time() - (int) ($cachedPayload['created_at'] ?? 0) <= max(30, $ttlSeconds)
+            && is_array($cachedPayload['summary'] ?? null)
+        ) {
+            $cachedPayload['summary']['inventory_fingerprint'] = $fingerprint;
+            return $cachedPayload['summary'];
+        }
+    }
+
+    // $summary stores the fresh filesystem-backed maintenance state.
+    $summary = thumbnail_maintenance_summary($galleryIds, $maxImagesToScan);
+    set_app_setting($cacheKey, json_encode([
+        'created_at' => time(),
+        'generation' => $generation,
+        'fingerprint' => (string) ($summary['inventory_fingerprint'] ?? $fingerprint),
+        'summary' => $summary,
+    ], JSON_UNESCAPED_SLASHES));
+
+    return $summary;
+}
+
+/**
+ * Invalidate cached thumbnail maintenance summaries after cache files change.
+ */
+function thumbnail_maintenance_summary_cache_clear(): void
+{
+    set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
 }
 
 /**

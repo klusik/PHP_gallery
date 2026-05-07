@@ -180,6 +180,10 @@ function cms_admin_theme(): void
                 }
             }
             set_app_setting('theme_background_path', '');
+        } elseif (!empty($_POST['reset_theme_branding_banner'])) {
+            delete_theme_branding_asset('banner');
+        } elseif (!empty($_POST['reset_theme_branding_separator'])) {
+            delete_theme_branding_asset('separator');
         } elseif (!empty($_POST['reset_all_gallery_backgrounds'])) {
             if (gallery_background_source_schema_ready()) {
                 db()->exec("UPDATE galleries SET background_source = NULL, updated_at = " . db()->quote(now_sql()) . " WHERE background_source IS NOT NULL");
@@ -251,6 +255,13 @@ function cms_admin_theme(): void
                     store_uploaded_theme_background($_FILES['theme_background']);
                 }
             }
+            foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
+                // $uploadField stores the file input name for one global Theme fallback branding asset.
+                $uploadField = 'theme_branding_' . $themeBrandingKind;
+                if (!empty($_FILES[$uploadField]['tmp_name']) && is_uploaded_file($_FILES[$uploadField]['tmp_name'])) {
+                    store_uploaded_theme_branding_asset((string) $themeBrandingKind, $_FILES[$uploadField]);
+                }
+            }
             set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
@@ -308,8 +319,21 @@ function cms_admin_theme(): void
     }
     // $themeBackgroundUrl stores the current global background asset so the live preview can mirror the public page before saving.
     $themeBackgroundUrl = theme_background_asset_url();
-    echo '<section class="panel" id="admin-theme"><h1>Appearance</h1><form method="post" enctype="multipart/form-data" class="form-grid" data-theme-form>' . csrf_field();
+    echo '<section class="panel admin-theme-hero" id="admin-theme"><div><h1>Theme</h1><p class="muted">Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.</p></div><div class="bulk-row"><button type="submit" form="admin-theme-form">Save theme</button></div></section>';
+
+    $themeTabs = [
+        ['id' => 'admin-theme-tab-appearance', 'label' => 'Appearance'],
+        ['id' => 'admin-theme-tab-media', 'label' => 'Media'],
+        ['id' => 'admin-theme-tab-layout', 'label' => 'Layout'],
+        ['id' => 'admin-theme-tab-custom-css', 'label' => 'Custom CSS'],
+    ];
+    render_admin_tabs($themeTabs, 'admin-theme-tab-appearance');
+
+    echo '<form id="admin-theme-form" method="post" enctype="multipart/form-data" class="form-grid admin-theme-form" data-theme-form>' . csrf_field();
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Appearance</p><h2>Visual appearance</h2></div><p class="muted">Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.</p></div>';
     echo '<fieldset class="theme-appearance-editor" data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
     echo '<legend>Visual appearance</legend>';
     echo '<div class="theme-appearance-controls">';
@@ -361,6 +385,12 @@ function cms_admin_theme(): void
     echo '<p class="muted">Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.</p>';
     echo '</aside>';
     echo '</fieldset>';
+    $appearanceHtml = ob_get_clean();
+    render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Media</p><h2>Favicon and backgrounds</h2></div><p class="muted">Manage browser identity and the global gallery background fallback.</p></div>';
+    echo '<div class="theme-tab-card-grid">';
     echo '<fieldset class="form-grid" id="admin-favicon"><legend>Favicon</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
@@ -384,8 +414,31 @@ function cms_admin_theme(): void
     }
     echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
     echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button></div>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div>';
     echo '</fieldset>';
+    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>Public header branding</legend>';
+    echo '<p class="muted">These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.</p>';
+    foreach (theme_branding_asset_types() as $themeBrandingKind => $definition) {
+        // $assetUrl stores the current global fallback asset URL for one branding type.
+        $assetUrl = theme_branding_asset_url((string) $themeBrandingKind);
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $definition['label']) . '</strong><span class="muted">' . e((string) $definition['description']) . '</span></div>';
+        if ($assetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="Current ' . e((string) $definition['label']) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>Remove ' . e((string) $definition['label']) . '</button></div>';
+        } else {
+            echo '<p class="muted">No fallback image is stored yet.</p>';
+        }
+        echo '<label>Upload replacement<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '</div>';
+    }
+    echo '</fieldset>';
+    echo '</div>';
+    $mediaHtml = ob_get_clean();
+    render_admin_tab_panel('admin-theme-tab-media', $mediaHtml, false);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Layout</p><h2>Pagination and gallery grids</h2></div><p class="muted">Tune the default public grid while keeping per-gallery overrides available from gallery editing.</p></div>';
+    echo '<div class="theme-tab-card-grid">';
     echo '<fieldset class="form-grid" id="admin-pagination"><legend>Pagination</legend>';
     echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> Enable pagination</label>';
     echo '<label>Columns per page <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
@@ -400,9 +453,15 @@ function cms_admin_theme(): void
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.&quot;);">Reset all custom gallery grids</button></div>';
     echo '<p class="muted">This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.</p>';
     echo '</fieldset>';
+    echo '</div>';
+    $layoutHtml = ob_get_clean();
+    render_admin_tab_panel('admin-theme-tab-layout', $layoutHtml, false);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Custom CSS</p><h2>Skins and manual CSS</h2></div><p class="muted">Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.</p></div>';
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
-    echo '<div id="admin-custom-css"></div><label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    echo '<div id="admin-custom-css"></div><fieldset class="form-grid"><legend>Custom CSS</legend><label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
         $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
@@ -411,6 +470,10 @@ function cms_admin_theme(): void
     echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
     echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div></form></section>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></fieldset>';
+    $customCssHtml = ob_get_clean();
+    render_admin_tab_panel('admin-theme-tab-custom-css', $customCssHtml, false);
+
+    echo '<div class="panel admin-theme-save-panel"><div><strong>Save changes</strong><p class="muted">All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.</p></div><div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button></div></div></form>';
     render_footer();
 }
