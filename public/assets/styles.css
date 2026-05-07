@@ -4064,7 +4064,11 @@ body.admin-image-order-active {
 /* Makes the nested gallery table advertise pointer-based ordering without changing table layout. */
 .admin-gallery-order-table tr.is-dragging td {
     background: #e8f2ff;
-    opacity: 0.72;
+    opacity: 0.2;
+}
+
+.admin-gallery-order-placeholder td::after {
+    content: attr(data-drag-hint);
 }
 
 /* Removes the moved subtree from the table flow while the ghost follows the pointer. */
@@ -4130,6 +4134,7 @@ body.admin-gallery-order-active {
 .admin-gallery-order-ghost {
     max-height: 420px;
     overflow: hidden;
+    opacity: 0.2;
 }
 
 .admin-gallery-order-ghost[data-drag-direction="right"] {
@@ -5464,7 +5469,13 @@ button.gallery-row-action.secondary {
         flex-direction: column;
     }
 
-    .admin-edit-gallery-savebar .muted {
+.admin-edit-gallery-savebar .muted {
         order: -1;
     }
+}
+
+.admin-gallery-order-placeholder td::after,
+.admin-gallery-order-placeholder[data-drag-direction="right"] td::after,
+.admin-gallery-order-placeholder[data-drag-direction="left"] td::after {
+    content: attr(data-drag-hint);
 }

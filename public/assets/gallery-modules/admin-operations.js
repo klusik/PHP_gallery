@@ -1592,12 +1592,18 @@ export function setupAdminGalleryReordering() {
     function applyPlaceholderDepth(depth) {
         proposedDepth = depth;
         const direction = depth > originalDepth ? 'right' : (depth < originalDepth ? 'left' : 'level');
+        const levelDelta = Math.abs(depth - originalDepth);
+        const levelText = levelDelta === 1 ? '1 level' : `${levelDelta} levels`;
         const message = direction === 'right'
-            ? '→ Release to nest the gallery here.'
-            : (direction === 'left' ? '← Release to move the gallery out here.' : '↓ Release to save the new gallery position.');
+            ? `→ Nest deeper (${levelText}).`
+            : (direction === 'left' ? `← Move out (${levelText}).` : '↓ Same level.');
         if (placeholderRow) {
+            const placeholderCell = placeholderRow.firstElementChild;
             placeholderRow.dataset.depth = String(depth);
             placeholderRow.dataset.dragDirection = direction;
+            if (placeholderCell) {
+                placeholderCell.dataset.dragHint = message;
+            }
             placeholderRow.style.setProperty('--gallery-drag-depth', String(depth));
         }
         if (ghostTable) {
