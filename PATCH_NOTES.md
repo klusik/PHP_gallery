@@ -1,5 +1,283 @@
 # Patch Notes
 
+## Version 0.58
+
+This release brings a broad admin and public-gallery update set:
+
+- gallery access rules were simplified and made more explicit
+- anonymous preview was added in the public gallery view
+- per-gallery branding assets were added
+- the admin dashboard and gallery tree UI were redesigned
+- thumbnail handling gained quality and bounds controls
+- gallery path handling was hardened for nested moves and clean public URLs
+- update/maintenance helpers now cache more expensive checks
+- new tests were added for visibility and branding behavior
+
+### Highlights
+
+#### Admin gallery management is much more capable
+
+The admin area now supports more direct tree editing, clearer gallery status display, and a reorganized dashboard layout.
+
+What changed:
+
+- galleries can be nested and re-parented directly from the dashboard tree
+- drag-and-drop ordering now supports moving galleries left and right to change nesting
+- the gallery tree shows live nesting depth feedback while dragging
+- the dragged row and ghost preview are visually softened so the move state is easier to read
+- the dashboard tabs and navigation hashes were updated for the new admin layout
+- the gallery detail editor was reorganized into clearer sections
+- admin actions now use more consistent status messaging and metadata updates
+
+User impact:
+
+- nesting and un-nesting galleries is faster
+- the current tree structure is easier to understand while dragging
+- the public gallery link in the admin tree updates immediately after a move
+- the admin interface feels more structured and less crowded
+
+#### Public gallery access is more explicit
+
+The public gallery flow now understands a clearer gallery visibility model and supports anonymous preview in the admin view.
+
+What changed:
+
+- gallery visibility now uses `public`, `unpublished`, and `private` more consistently
+- legacy `draft` and `unlisted` behaviors are normalized during migration
+- anonymous preview mode was added for public gallery pages
+- public media and gallery access checks were updated to match the new visibility model
+- password and NSFW gating continue to work through the public flow
+
+User impact:
+
+- unpublished galleries can be direct-linked but stay out of public listings
+- private galleries remain hidden from normal public browsing
+- admins can preview the public gallery flow in a more visitor-like mode
+
+#### Per-gallery branding is now supported
+
+The release adds branding assets that can be attached to galleries and to the theme fallback area.
+
+What changed:
+
+- gallery banner uploads were added
+- gallery logo uploads were added
+- gallery separator uploads were added
+- theme-level fallback branding assets were added
+- new public asset routes serve the branding files
+- admin forms were updated to upload, replace, and remove branding assets
+- public gallery rendering now integrates the branding model
+
+User impact:
+
+- galleries can carry their own visual identity
+- shared theme branding can provide fallback visuals when a gallery has no custom branding
+- branding assets are validated and stored through dedicated upload handling
+
+#### Thumbnail generation now has bounded quality controls
+
+The admin editing flow includes new thumbnail-size and quality-bound support.
+
+What changed:
+
+- thumbnail bounds logic was added as a dedicated service
+- migration support was added for thumbnail quality bounds
+- the admin editing UI now exposes thumbnail-bound controls
+- thumbnail handling is now more explicit about allowed sizing behavior
+
+User impact:
+
+- thumbnail generation is easier to tune
+- admin users can better control the visual quality and size boundaries of generated thumbnails
+
+#### Gallery path handling is more robust
+
+The release improves how gallery paths are built and updated.
+
+What changed:
+
+- gallery URL regeneration now works with cleaner public-path logic
+- nested galleries preserve a canonical public path
+- client-side admin tree updates now refresh gallery links immediately after a move
+- URL-safe segments are preserved when gallery names include spaces or accented characters
+- filesystem move logic and public URL logic were both hardened
+
+User impact:
+
+- moved galleries keep their public links aligned without a refresh
+- nested gallery URLs stay clean and stable
+- admin users get immediate feedback after tree changes
+
+#### Maintenance and dashboard performance were improved
+
+Several expensive admin tasks were optimized or cached.
+
+What changed:
+
+- dashboard gallery rows now use more explicit SQL and pre-aggregated counts
+- thumbnail maintenance summaries are cached
+- update-check navigation data is cached
+- app settings now support cache-aware deletion
+- public gallery lookup and sidecar refresh flows were streamlined
+
+User impact:
+
+- the admin dashboard should load faster
+- thumbnail maintenance and update checks should feel less expensive
+- gallery refresh operations are more predictable
+
+### Detailed Change Areas
+
+#### Admin dashboard and gallery tree
+
+Files:
+
+- `app/controllers/admin_dashboard.php`
+- `app/controllers/admin_galleries.php`
+- `public/assets/gallery-modules/admin-operations.js`
+- `public/assets/styles.css`
+
+Notable updates:
+
+- redesigned admin dashboard sections and tabs
+- gallery tree drag-and-drop with nesting support
+- immediate public-link refresh after tree changes
+- live placeholder hints for move direction and nesting depth
+- lighter drag preview styling
+- improved visibility and status labels
+- better mobile and compact-layout support in the admin CSS
+
+#### Public gallery and access logic
+
+Files:
+
+- `app/controllers/public_gallery.php`
+- `app/controllers/public_media.php`
+- `app/services/gallery_access.php`
+- `app/services/public_paths.php`
+- `app/helpers.php`
+
+Notable updates:
+
+- new anonymous preview behavior
+- revised gallery visibility model
+- public gallery rendering now understands updated visibility and branding logic
+- media and branding routes were added for public gallery assets
+- public path regeneration and lookup rules were improved
+
+#### Branding
+
+Files:
+
+- `app/services/gallery_branding.php`
+- `app/services/uploads.php`
+- `app/controllers/admin_theme.php`
+- `app/controllers/theme_assets.php`
+- `app/controllers/public_media.php`
+- `public/assets/gallery-modules/theme-form.js`
+- `public/assets/styles.css`
+
+Notable updates:
+
+- gallery-level branding assets: banner, logo, separator
+- theme fallback branding assets
+- upload validation and MIME checks
+- public serving routes for branding assets
+- admin-side preview and editing controls
+
+#### Thumbnail quality and size controls
+
+Files:
+
+- `app/services/thumbnail_bounds.php`
+- `database/migrations/202605070003_thumbnail_quality_bounds.php`
+- `app/controllers/admin_galleries.php`
+- `public/assets/gallery-modules/theme-form.js`
+- `public/assets/styles.css`
+
+Notable updates:
+
+- new backend logic for thumbnail bounds
+- migration support for stored bounds settings
+- admin UI controls for editing thumbnail limits
+
+#### Sidecars, paths, and storage handling
+
+Files:
+
+- `app/services/gallery_paths.php`
+- `app/services/gallery_sidecars.php`
+- `app/services/gallery_mutations.php`
+- `app/services/gallery_lookup.php`
+- `app/services/thumbnails.php`
+- `app/services/updates.php`
+
+Notable updates:
+
+- more resilient path handling for future destinations and nested moves
+- sidecar regeneration now carries more metadata
+- thumbnail and update maintenance use cached summaries
+- gallery mutations better preserve filesystem and database consistency
+
+### Migrations
+
+Files:
+
+- `database/migrations/202604270001_initial_schema.php`
+- `database/migrations/202605070001_gallery_visibility_model.php`
+- `database/migrations/202605070002_gallery_branding_assets.php`
+- `database/migrations/202605070003_thumbnail_quality_bounds.php`
+
+Migration summary:
+
+- gallery visibility defaults were aligned with the new `unpublished` model
+- legacy visibility states are converted during upgrade
+- gallery branding columns are added to the schema
+- thumbnail quality-bound storage is added
+
+### Tests Added
+
+Files:
+
+- `tests/gallery_visibility_model_test.php`
+- `tests/gallery_branding_model_test.php`
+
+Coverage added:
+
+- gallery visibility model behavior
+- public/unpublished/private behavior
+- branding asset validation rules
+- MIME/extension handling for gallery branding uploads
+
+### UI and Behavior Changes Users Will Notice
+
+- admin dashboard layout and tabs are reorganized
+- gallery tree reordering is more interactive and more readable
+- gallery links update immediately after nesting changes
+- drag previews are lighter and easier to distinguish
+- drag hints now show how many levels a gallery will move
+- public gallery preview supports an anonymous-view mode in the admin flow
+- galleries can now have custom branding assets
+- thumbnails can be governed by new size and quality bounds
+
+### Important Release Notes
+
+- This release changes gallery visibility semantics and requires migration testing.
+- Anonymous preview should be verified against real public/private/password/NSFW cases before release.
+- Per-gallery branding placement should be checked in a browser on both desktop and mobile widths.
+- The admin tree drag-and-drop flow should be smoke-tested after the new link-refresh behavior.
+- The new thumbnail bounds feature should be verified against a few representative galleries.
+
+### Suggested Short Release Blurb
+
+If you want a concise announcement version:
+
+> This release adds anonymous preview, gallery branding, and a redesigned admin gallery tree with live nesting feedback. It also improves thumbnail bounds control, public-path handling, and dashboard performance.
+
+### Files Changed
+
+The branch touches 33 files and introduces several new backend services, migrations, admin UI updates, and public-gallery rendering changes.
+
 ## Version 0.57
 
 This release is the largest public-facing and administrative step forward since 0.56. It adds richer public gallery presentation, NSFW access control, admin recovery email support, and a complete password reset workflow, while also tightening the generated theme asset pipeline and keeping release metadata in sync.
