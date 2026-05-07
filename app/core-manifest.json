@@ -12,7 +12,7 @@
         "app/controllers.php": "sha256:8b4ed711b1bf37bbc11eaf0acff608d843dc77dc5a98506160ba3c9a0c755e34",
         "app/controllers/admin_auth.php": "sha256:cfe73faee5d6f32c4594f6d294e7af97146a2dd8e431ff11db13e350f58ed9ff",
         "app/controllers/admin_dashboard.php": "sha256:2ee3c074bab96cc2d27d5be40d657993ba519a398d49f6537151ecb3d2cb294b",
-        "app/controllers/admin_galleries.php": "sha256:e63f29729608538cf1c498becc23e70a25be6d0baa3d3775e4e17b00699b2f92",
+        "app/controllers/admin_galleries.php": "sha256:314bb298feed12965adea4dc25f8276c829109bd0a23e460f7acd37fffad266d",
         "app/controllers/admin_integrity.php": "sha256:a0e310b721e9c998157fa880e60ee65b27908cb581bcffb8eacbe41cd0958e11",
         "app/controllers/admin_logs.php": "sha256:2740d98349b5832ba88334d07e2b3bf9f30da755ac322829646a820c31eda23c",
         "app/controllers/admin_telemetry.php": "sha256:3335798bf1604785de6067442d658979aa9fc69c8ffc3b2f6b568e4d01839492",
