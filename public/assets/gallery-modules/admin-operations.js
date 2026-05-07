@@ -1714,6 +1714,78 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Returns the base public gallery URL prefix from the current link.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose public link should be refreshed.
+     * @returns {string} Public URL prefix ending at `/gallery/`, or the current href prefix.
+     */
+    function galleryUrlPrefix(row) {
+        if (row.dataset.galleryUrlPrefix) {
+            return row.dataset.galleryUrlPrefix;
+        }
+        const link = row.querySelector('.admin-gallery-title-link');
+        const href = link?.getAttribute('href') || '';
+        const marker = '/gallery/';
+        const markerIndex = href.indexOf(marker);
+        const prefix = markerIndex >= 0 ? href.slice(0, markerIndex + marker.length) : '';
+        row.dataset.galleryUrlPrefix = prefix;
+        return prefix;
+    }
+
+    /**
+     * Returns the gallery's canonical public URL segment from the current link.
+     *
+     * The admin tree must preserve the existing slug segment for the gallery
+     * itself and only recompute the parent path when nesting changes.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose public segment is needed.
+     * @returns {string} Decoded canonical public URL segment.
+     */
+    function galleryUrlSegment(row) {
+        if (row.dataset.galleryUrlSegment) {
+            return row.dataset.galleryUrlSegment;
+        }
+        const link = row.querySelector('.admin-gallery-title-link');
+        const href = link?.getAttribute('href') || '';
+        const marker = '/gallery/';
+        const markerIndex = href.indexOf(marker);
+        if (markerIndex < 0) {
+            row.dataset.galleryUrlSegment = galleryFolderName(row);
+            return row.dataset.galleryUrlSegment;
+        }
+        const path = href.slice(markerIndex + marker.length).replace(/\/+$/, '');
+        const parts = path.split('/').filter((part) => part !== '');
+        const segment = parts.length > 0 ? decodeURIComponent(parts[parts.length - 1]) : galleryFolderName(row);
+        row.dataset.galleryUrlSegment = segment;
+        return segment;
+    }
+
+    /**
+     * Rebuilds the gallery link from the current tree path.
+     *
+     * The admin table already knows the live nesting order, so this keeps the
+     * public link aligned with the just-saved move without a full refresh.
+     *
+     * @param {HTMLTableRowElement} row Gallery row whose link should be refreshed.
+     * @param {string} nextPath Newly computed gallery path.
+     * @returns {void}
+     */
+    function refreshGalleryLink(row, nextPath) {
+        const link = row.querySelector('.admin-gallery-title-link');
+        if (!link) {
+            return;
+        }
+        const prefix = galleryUrlPrefix(row);
+        if (!prefix) {
+            return;
+        }
+        const path = nextPath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+        const nextUrl = `${prefix}${path}/`;
+        link.href = nextUrl;
+        row.dataset.galleryUrl = nextUrl;
+    }
+
+    /**
      * Updates visible parent labels and folder paths after a client-side tree move.
      *
      * @returns {void}
@@ -1721,6 +1793,7 @@ export function setupAdminGalleryReordering() {
     function refreshVisibleGalleryTreeMetadata() {
         const titlesById = new Map();
         const pathsById = new Map();
+        const urlPathsById = new Map();
         galleryRows().forEach((row) => {
             titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || 'Gallery');
         });
@@ -1730,6 +1803,9 @@ export function setupAdminGalleryReordering() {
             const folderName = galleryFolderName(row);
             const parentPath = parentId !== '0' ? (pathsById.get(parentId) || '') : '';
             const nextPath = parentPath !== '' ? `${parentPath}/${folderName}` : folderName;
+            const segment = galleryUrlSegment(row);
+            const parentUrlPath = parentId !== '0' ? (urlPathsById.get(parentId) || '') : '';
+            const nextUrlPath = parentUrlPath !== '' ? `${parentUrlPath}/${segment}` : segment;
             const pathLabel = row.querySelector('.admin-gallery-path');
             let parentLabel = row.querySelector('.admin-gallery-parent');
             if (!parentLabel) {
@@ -1738,9 +1814,11 @@ export function setupAdminGalleryReordering() {
                 row.querySelector('.admin-gallery-summary-text')?.appendChild(parentLabel);
             }
             pathsById.set(id, nextPath);
+            urlPathsById.set(id, nextUrlPath);
             if (pathLabel) {
                 pathLabel.textContent = nextPath;
             }
+            refreshGalleryLink(row, nextUrlPath);
             if (parentLabel) {
                 if (parentId !== '0') {
                     parentLabel.textContent = `Parent: ${titlesById.get(parentId) || 'Gallery'}`;
