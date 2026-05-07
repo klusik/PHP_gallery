@@ -220,8 +220,9 @@ function cms_gallery(): void
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
     }
 
-    render_header((string) $seo['title']);
-    echo '<section class="hero"><h1>' . e((string) $seo['title']) . '</h1><p>' . e((string) $seo['description']) . '</p>';
+    render_header((string) $seo['title'], $gallery, $publicOnly);
+    echo '<section class="hero">';
+    render_public_gallery_branding_header($gallery, $seo, $publicOnly);
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
@@ -237,6 +238,7 @@ function cms_gallery(): void
     echo '</div>';
     render_breadcrumbs($gallery);
     echo '</section>';
+    render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_admin_form($gallery);
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
@@ -332,6 +334,59 @@ function cms_gallery(): void
     }
     render_footer();
 }
+
+
+/**
+ * Render the public gallery title area with optional banner and logo assets.
+ *
+ * The text title remains in the h1 for accessibility and SEO even when a banner
+ * image visually replaces it. The logo is decorative here because it appears
+ * beside an existing text or banner title and would otherwise duplicate content.
+ */
+function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
+{
+    // $title stores the accessible gallery title used by the current page.
+    $title = (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery');
+    // $description stores the public gallery description.
+    $description = (string) ($seo['description'] ?? $gallery['description'] ?? '');
+    // $bannerUrl stores only the per-gallery title-replacement image. Theme fallback banners belong to the shared site header.
+    $bannerUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '';
+    // $logoUrl stores the optional supplementary logo image.
+    $logoUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'logo', $publicOnly) : '';
+    // $titleBarClasses stores layout flags for tight and wide gallery headers.
+    $titleBarClasses = 'gallery-title-bar' . ($bannerUrl !== '' ? ' has-gallery-banner' : '') . ($logoUrl !== '' ? ' has-gallery-logo' : '');
+
+    echo '<div class="' . e($titleBarClasses) . '">';
+    if ($logoUrl !== '') {
+        echo '<img class="gallery-branding-logo" src="' . e($logoUrl) . '" alt="" aria-hidden="true" decoding="async">';
+    }
+    if ($bannerUrl !== '') {
+        echo '<h1 class="gallery-title gallery-title-with-banner"><span class="visually-hidden">' . e($title) . '</span><img class="gallery-branding-banner" src="' . e($bannerUrl) . '" alt="" aria-hidden="true" decoding="async"></h1>';
+    } else {
+        echo '<h1 class="gallery-title">' . e($title) . '</h1>';
+    }
+    echo '</div>';
+    if (trim($description) !== '') {
+        echo '<p>' . e($description) . '</p>';
+    }
+}
+
+/**
+ * Render the optional horizontal branding separator below the gallery title area.
+ */
+function render_public_gallery_branding_separator(array $gallery, bool $publicOnly): void
+{
+    if (!gallery_branding_schema_ready()) {
+        return;
+    }
+    // $separatorUrl stores only the per-gallery divider image. Theme fallback separators belong to the shared site header.
+    $separatorUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'separator', $publicOnly) : '';
+    if ($separatorUrl === '') {
+        return;
+    }
+    echo '<div class="gallery-branding-separator" aria-hidden="true"><img src="' . e($separatorUrl) . '" alt="" decoding="async"></div>';
+}
+
 
 /**
  * Handles render breadcrumbs logic for the gallery application.

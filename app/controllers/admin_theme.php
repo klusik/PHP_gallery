@@ -180,6 +180,10 @@ function cms_admin_theme(): void
                 }
             }
             set_app_setting('theme_background_path', '');
+        } elseif (!empty($_POST['reset_theme_branding_banner'])) {
+            delete_theme_branding_asset('banner');
+        } elseif (!empty($_POST['reset_theme_branding_separator'])) {
+            delete_theme_branding_asset('separator');
         } elseif (!empty($_POST['reset_all_gallery_backgrounds'])) {
             if (gallery_background_source_schema_ready()) {
                 db()->exec("UPDATE galleries SET background_source = NULL, updated_at = " . db()->quote(now_sql()) . " WHERE background_source IS NOT NULL");
@@ -249,6 +253,13 @@ function cms_admin_theme(): void
                         throw new RuntimeException('The uploaded theme background is not a valid image.');
                     }
                     store_uploaded_theme_background($_FILES['theme_background']);
+                }
+            }
+            foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
+                // $uploadField stores the file input name for one global Theme fallback branding asset.
+                $uploadField = 'theme_branding_' . $themeBrandingKind;
+                if (!empty($_FILES[$uploadField]['tmp_name']) && is_uploaded_file($_FILES[$uploadField]['tmp_name'])) {
+                    store_uploaded_theme_branding_asset((string) $themeBrandingKind, $_FILES[$uploadField]);
                 }
             }
             set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
@@ -404,6 +415,22 @@ function cms_admin_theme(): void
     echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
     echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>Public header branding</legend>';
+    echo '<p class="muted">These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.</p>';
+    foreach (theme_branding_asset_types() as $themeBrandingKind => $definition) {
+        // $assetUrl stores the current global fallback asset URL for one branding type.
+        $assetUrl = theme_branding_asset_url((string) $themeBrandingKind);
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $definition['label']) . '</strong><span class="muted">' . e((string) $definition['description']) . '</span></div>';
+        if ($assetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="Current ' . e((string) $definition['label']) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>Remove ' . e((string) $definition['label']) . '</button></div>';
+        } else {
+            echo '<p class="muted">No fallback image is stored yet.</p>';
+        }
+        echo '<label>Upload replacement<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '</div>';
+    }
     echo '</fieldset>';
     echo '</div>';
     $mediaHtml = ob_get_clean();

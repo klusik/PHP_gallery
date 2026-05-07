@@ -142,6 +142,9 @@ function discover_gallery_candidates(): array
                 'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
                 'access_mode' => $metadata['access_mode'] ?? 'normal',
                 'access_listing' => $metadata['access_listing'] ?? 'listed',
+                'banner_image_path' => $metadata['banner_image_path'] ?? null,
+                'logo_image_path' => $metadata['logo_image_path'] ?? null,
+                'separator_image_path' => $metadata['separator_image_path'] ?? null,
                 'sort_order' => (int) ($metadata['sort_order'] ?? 0),
             ];
         }
@@ -257,6 +260,15 @@ function write_gallery_sidecar(array $gallery): void
     if (!empty($gallery['cover_image_path'])) {
         $data['cover_image_path'] = (string) $gallery['cover_image_path'];
     }
+    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        foreach (gallery_branding_asset_types() as $kind => $definition) {
+            // $column stores an intermediate value used by the surrounding gallery workflow.
+            $column = (string) $definition['column'];
+            if (!empty($gallery[$column])) {
+                $data[$column] = (string) $gallery[$column];
+            }
+        }
+    }
     write_gallery_sidecar_for_path((string) $gallery['folder_path'], $data);
 }
 
@@ -287,6 +299,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
+        'banner_image_path' => $metadata['banner_image_path'] ?? null,
+        'logo_image_path' => $metadata['logo_image_path'] ?? null,
+        'separator_image_path' => $metadata['separator_image_path'] ?? null,
         'access_mode' => $metadata['access_mode'] ?? 'normal',
         'access_listing' => $metadata['access_listing'] ?? 'listed',
         'sort_order' => (int) ($metadata['sort_order'] ?? 0),
@@ -366,6 +381,14 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $columns[] = 'access_listing';
         $values[] = $accessMode;
         $values[] = $accessMode === 'password' ? $accessListing : 'listed';
+    }
+    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        foreach (gallery_branding_asset_types() as $kind => $definition) {
+            // $column stores an intermediate value used by the surrounding gallery workflow.
+            $column = (string) $definition['column'];
+            $columns[] = $column;
+            $values[] = !empty($candidate[$column]) ? normalize_relative_path((string) $candidate[$column]) : null;
+        }
     }
     $columns[] = 'created_at';
     $columns[] = 'updated_at';

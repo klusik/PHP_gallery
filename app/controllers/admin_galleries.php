@@ -856,6 +856,8 @@ function cms_admin_edit_gallery(): void
         $coverImageId = $coverImage && (int) $coverImage['gallery_id'] === (int) $gallery['id'] ? $coverImageId : null;
         // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
         $coverImagePath = gallery_cover_asset_schema_ready() ? gallery_cover_path($gallery) : null;
+        // $brandingAssetPaths stores optional banner, logo, and separator paths before form changes.
+        $brandingAssetPaths = gallery_branding_schema_ready() ? gallery_branding_asset_paths($gallery) : [];
         // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = null;
         if (gallery_background_source_schema_ready()) {
@@ -887,6 +889,29 @@ function cms_admin_edit_gallery(): void
                 $coverImagePath = store_uploaded_gallery_cover((int) $gallery['id'], $_FILES['cover_upload']);
                 // $coverImageId stores an intermediate value used by the surrounding gallery workflow.
                 $coverImageId = null;
+            }
+        }
+        if (gallery_branding_schema_ready()) {
+            try {
+                foreach (array_keys(gallery_branding_asset_types()) as $brandingKind) {
+                    // $uploadField stores the file-input name for this gallery branding asset.
+                    $uploadField = 'branding_' . $brandingKind . '_upload';
+                    // $removeField stores the remove-checkbox name for this gallery branding asset.
+                    $removeField = 'remove_branding_' . $brandingKind;
+                    // $hasUpload stores whether this asset is being replaced by a new file.
+                    $hasUpload = !empty($_FILES[$uploadField]['name'] ?? '');
+                    if ($hasUpload) {
+                        $brandingAssetPaths[$brandingKind] = store_uploaded_gallery_branding_asset((int) $gallery['id'], $brandingKind, $_FILES[$uploadField]);
+                        continue;
+                    }
+                    if (!empty($_POST[$removeField])) {
+                        delete_gallery_branding_asset((int) $gallery['id'], $brandingKind);
+                        $brandingAssetPaths[$brandingKind] = null;
+                    }
+                }
+            } catch (RuntimeException $exception) {
+                flash_message('admin_notice', 'Gallery branding update failed: ' . $exception->getMessage());
+                redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id']]));
             }
         }
         // Variable $slug stores this steps working value.
@@ -944,6 +969,13 @@ function cms_admin_edit_gallery(): void
         if (gallery_cover_asset_schema_ready()) {
             $fields['cover_image_path = ?'] = $coverImagePath;
         }
+        if (gallery_branding_schema_ready()) {
+            foreach (gallery_branding_asset_types() as $brandingKind => $definition) {
+                // $column stores an intermediate value used by the surrounding gallery workflow.
+                $column = (string) $definition['column'];
+                $fields[$column . ' = ?'] = $brandingAssetPaths[$brandingKind] ?? null;
+            }
+        }
         if (gallery_background_source_schema_ready()) {
             $fields['background_source = ?'] = $backgroundSource;
         }
@@ -969,7 +1001,7 @@ function cms_admin_edit_gallery(): void
         }
         sync_entity_tags('gallery', (int) $gallery['id'], (string) ($_POST['tags'] ?? ''));
         // Variable $gallery stores this steps working value.
-        $gallery = find_gallery((int) $gallery['id']);
+        $gallery = find_gallery((int) $gallery['id'], true);
         if ($gallery) {
             write_gallery_sidecar($gallery);
         }
@@ -1100,6 +1132,7 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
     }
+    render_admin_gallery_branding_fields($gallery);
     if (gallery_background_source_schema_ready()) {
         // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = gallery_background_source($gallery);
@@ -1129,6 +1162,42 @@ function cms_admin_edit_gallery(): void
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Render upload, replace, and remove controls for optional gallery branding images.
+ *
+ * Banner replaces the visible public title text, logo is supplementary, and the
+ * separator acts as a visual divider below the public title area.
+ */
+function render_admin_gallery_branding_fields(array $gallery): void
+{
+    if (!gallery_branding_schema_ready()) {
+        echo '<p class="muted">Gallery branding assets will be available after the branding migration is applied.</p>';
+        return;
+    }
+
+    echo '<fieldset class="form-grid admin-branding-assets"><legend>Gallery branding</legend>';
+    echo '<p class="muted">All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.</p>';
+    foreach (gallery_branding_asset_types() as $kind => $definition) {
+        // $label stores the user-facing asset label.
+        $label = (string) $definition['label'];
+        // $description stores concise guidance for the current asset control.
+        $description = (string) $definition['description'];
+        // $assetUrl stores the currently configured asset preview URL for admins.
+        $assetUrl = gallery_branding_asset_url($gallery, (string) $kind, false);
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e($label) . '</strong><span class="muted">' . e($description) . '</span></div>';
+        if ($assetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-branding-preview-' . e((string) $kind) . '" src="' . e($assetUrl) . '" alt=""><label class="checkbox-label"><input type="checkbox" name="remove_branding_' . e((string) $kind) . '" value="1"> Remove current ' . e(strtolower($label)) . '</label></div>';
+        } else {
+            echo '<p class="muted">No ' . e(strtolower($label)) . ' is configured.</p>';
+        }
+        echo '<label>Upload or replace ' . e(strtolower($label)) . '<input type="file" name="branding_' . e((string) $kind) . '_upload" accept="image/jpeg,image/png,image/gif,image/webp"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '</div>';
+    }
+    echo '</fieldset>';
 }
 
 

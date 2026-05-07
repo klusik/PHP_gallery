@@ -244,6 +244,59 @@ function cms_gallery_cover_asset(): void
     readfile($path);
 }
 
+
+/**
+ * Stream one stored gallery branding asset.
+ * @return mixed Result produced by this operation.
+ */
+function cms_gallery_branding_asset(): void
+{
+    // $gallery stores an intermediate value used by the surrounding gallery workflow.
+    $gallery = find_gallery((int) ($_GET['id'] ?? 0));
+    if (!$gallery || !gallery_branding_schema_ready()) {
+        cms_not_found();
+        return;
+    }
+    try {
+        // $kind stores an intermediate value used by the surrounding gallery workflow.
+        $kind = gallery_branding_asset_kind((string) ($_GET['kind'] ?? ''));
+    } catch (InvalidArgumentException) {
+        cms_not_found();
+        return;
+    }
+    if (!current_user() && !visitor_can_access_gallery($gallery)) {
+        cms_not_found();
+        return;
+    }
+    if ((!current_user() || current_user_is_known_under_18()) && gallery_nsfw_requirement($gallery) !== null && !visitor_can_access_nsfw_content()) {
+        cms_not_found();
+        return;
+    }
+    // $path stores an intermediate value used by the surrounding gallery workflow.
+    $path = gallery_branding_asset_abs_path($gallery, $kind);
+    if ($path === null) {
+        cms_not_found();
+        return;
+    }
+    // $finfo stores an intermediate value used by the surrounding gallery workflow.
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    // $mime stores an intermediate value used by the surrounding gallery workflow.
+    $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
+    if (gallery_branding_mime_extension($mime) === null) {
+        cms_not_found();
+        return;
+    }
+    header('Content-Type: ' . $mime);
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: inline; filename="' . basename($path) . '"');
+    // $cacheControl stores a conservative policy for protected or restricted galleries.
+    $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=86400';
+    send_conditional_file_headers($path, $cacheControl);
+    header('Content-Length: ' . (string) filesize($path));
+    readfile($path);
+}
+
+
 /**
  * Handles cms media logic for the gallery application.
  * @return mixed Result produced by this operation.

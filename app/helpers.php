@@ -907,10 +907,40 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
     echo '</div>';
 }
 
+
+/**
+ * Return optional artwork for the shared public header.
+ */
+function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
+{
+    // $model stores URLs used by render_header without forcing callers to know the branding precedence.
+    $model = [
+        'banner_url' => '',
+        'logo_url' => '',
+        'separator_url' => '',
+    ];
+    if ($bodyClass !== 'public-page') {
+        return $model;
+    }
+    if ($currentGallery !== null && function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+        // Per-gallery artwork overrides Theme fallback artwork on that gallery page.
+        $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
+        $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
+        $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
+    }
+    if ($model['banner_url'] === '' && function_exists('theme_branding_asset_url')) {
+        $model['banner_url'] = theme_branding_asset_url('banner');
+    }
+    if ($model['separator_url'] === '' && function_exists('theme_branding_asset_url')) {
+        $model['separator_url'] = theme_branding_asset_url('separator');
+    }
+    return $model;
+}
+
 /**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
-function render_header(string $title): void
+function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     // Variable $user stores this steps working value.
     $user = current_user();
@@ -960,8 +990,19 @@ function render_header(string $title): void
         echo '<div class="theme-background-image"></div>';
         echo '</div>';
     }
+    // $headerBranding stores optional artwork that replaces the visible site title.
+    $headerBranding = public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
     echo '<header class="site-header">';
-    echo '<a class="brand" href="' . e(url_for('home')) . '">' . e($siteName) . '</a><nav class="nav">';
+    echo '<a class="brand' . ($headerBranding['banner_url'] !== '' ? ' brand-with-banner' : '') . '" href="' . e(url_for('home')) . '">';
+    if ($headerBranding['logo_url'] !== '') {
+        echo '<img class="brand-logo" src="' . e($headerBranding['logo_url']) . '" alt="" aria-hidden="true" decoding="async">';
+    }
+    if ($headerBranding['banner_url'] !== '') {
+        echo '<span class="visually-hidden">' . e($siteName) . '</span><img class="brand-banner" src="' . e($headerBranding['banner_url']) . '" alt="" aria-hidden="true" decoding="async">';
+    } else {
+        echo e($siteName);
+    }
+    echo '</a><nav class="nav">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($user) {
         if ($bodyClass === 'public-page') {
@@ -979,6 +1020,9 @@ function render_header(string $title): void
         echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
     }
     echo '</nav></header>';
+    if ($headerBranding['separator_url'] !== '') {
+        echo '<div class="site-branding-separator" aria-hidden="true"><img src="' . e($headerBranding['separator_url']) . '" alt="" decoding="async"></div>';
+    }
     if ($bodyClass === 'admin-page' && $user) {
         echo '<div class="admin-shell">';
         render_admin_sidebar($page);

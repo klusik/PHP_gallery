@@ -1729,6 +1729,63 @@ body.has-mobile-lightbox {
     max-width: 68ch;
 }
 
+
+/* Styles the public gallery title area when branding assets are present. */
+.gallery-title-bar {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* Keeps the gallery title flexible beside optional logo artwork. */
+.gallery-title-bar .gallery-title {
+    flex: 1 1 min(28rem, 100%);
+    min-width: 0;
+}
+
+/* Constrains the optional gallery logo on desktop and mobile. */
+.gallery-branding-logo {
+    display: block;
+    flex: 0 0 auto;
+    max-width: min(14rem, 38vw);
+    max-height: clamp(3.25rem, 9vw, 7rem);
+    object-fit: contain;
+}
+
+/* Makes a banner act as the visible gallery title replacement. */
+.gallery-title-with-banner {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+/* Prevents large uploaded banners from stretching the hero panel. */
+.gallery-branding-banner {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: clamp(5rem, 18vw, 12rem);
+    object-fit: contain;
+}
+
+/* Keeps the optional separator independent from gallery lists and cards. */
+.gallery-branding-separator {
+    display: flex;
+    justify-content: center;
+    margin: -0.25rem 0 1rem;
+    pointer-events: none;
+}
+
+/* Constrains uploaded divider artwork without forcing a fixed height. */
+.gallery-branding-separator img {
+    display: block;
+    width: 100%;
+    max-height: clamp(1.5rem, 8vw, 5rem);
+    object-fit: contain;
+}
+
 /* Styles the .public-page .hero-actions area of the gallery interface. */
 .public-page .hero-actions {
     display: flex;
@@ -4855,6 +4912,79 @@ button.gallery-row-action.secondary {
     transform: translateY(-0.02rem);
 }
 
+
+/* Keeps Admin branding asset controls readable inside the edit-gallery form. */
+.admin-branding-assets {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 253, 248, 0.55);
+    border-radius: var(--radius, 16px);
+}
+
+/* Separates each branding asset control without creating a separate page. */
+.admin-branding-asset {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border: 1px solid rgba(98, 105, 117, 0.22);
+    border-radius: calc(var(--radius, 16px) * 0.75);
+}
+
+/* Keeps branding labels and descriptions compact. */
+.admin-branding-copy {
+    display: grid;
+    gap: 0.15rem;
+}
+
+/* Aligns current branding previews with the remove checkbox. */
+.admin-branding-current {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Constrains current branding previews so extreme uploads do not distort Admin. */
+.admin-branding-preview {
+    display: block;
+    max-width: min(26rem, 100%);
+    max-height: 8rem;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    background: var(--field);
+    border-radius: calc(var(--radius, 16px) * 0.6);
+}
+
+.admin-branding-preview-logo {
+    max-width: min(12rem, 100%);
+}
+
+.admin-branding-preview-separator {
+    max-height: 4rem;
+}
+
+@media (max-width: 640px) {
+    .gallery-title-bar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .gallery-branding-logo {
+        max-width: min(11rem, 70vw);
+    }
+
+    .gallery-title-bar .gallery-title {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .gallery-branding-banner {
+        width: 100%;
+        max-height: 8rem;
+    }
+}
+
+.visually-hidden,
 .admin-visually-hidden {
     position: absolute;
     width: 1px;
@@ -5010,4 +5140,73 @@ button.gallery-row-action.secondary {
 
 .admin-gallery-tree-table tbody tr[data-depth]:hover .admin-gallery-depth-rail {
     background: rgba(34, 113, 177, 0.45);
+}
+
+/* Makes Theme banner artwork replace the visible site title in the shared public header. */
+.brand-with-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(0.5rem, 1.5vw, 1rem);
+    min-width: 0;
+    letter-spacing: 0;
+}
+
+/* Keeps an optional per-gallery logo stable beside the shared header banner. */
+.brand-logo {
+    display: block;
+    flex: 0 0 auto;
+    max-width: min(9rem, 26vw);
+    max-height: clamp(2.5rem, 7vw, 5rem);
+    object-fit: contain;
+}
+
+/* Constrains the public header banner so uploaded artwork cannot collapse navigation. */
+.brand-banner {
+    display: block;
+    width: auto;
+    max-width: min(42rem, 58vw);
+    max-height: clamp(3rem, 9vw, 6.5rem);
+    object-fit: contain;
+}
+
+/* Renders the Theme separator below the shared public header and above page content. */
+.site-branding-separator {
+    width: min(var(--page-width-default, 1120px), calc(100% - 2rem));
+    margin: -0.5rem auto 1rem;
+    pointer-events: none;
+}
+
+.public-page.page-width-wide .site-branding-separator {
+    width: min(var(--page-width-wide, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-custom .site-branding-separator {
+    width: min(var(--page-width-custom, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-full .site-branding-separator {
+    width: calc(100% - clamp(1rem, 3vw, 3rem));
+}
+
+.site-branding-separator img {
+    display: block;
+    width: 100%;
+    max-height: clamp(1.25rem, 7vw, 4.5rem);
+    object-fit: contain;
+}
+
+@media (max-width: 680px) {
+    .brand-banner {
+        max-width: min(100%, 82vw);
+        max-height: clamp(2.75rem, 18vw, 5rem);
+    }
+
+    .brand-logo {
+        max-width: min(7rem, 28vw);
+        max-height: clamp(2.25rem, 14vw, 4rem);
+    }
+
+    .site-branding-separator {
+        margin-top: -0.25rem;
+    }
 }
