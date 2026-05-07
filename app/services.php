@@ -56,6 +56,7 @@ require_once __DIR__ . '/services/gallery_mutations.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/thumbnails.php';
+require_once __DIR__ . '/services/thumbnail_bounds.php';
 require_once __DIR__ . '/services/gallery_covers.php';
 // Load gallery branding helpers before sidecar persistence reads branding metadata.
 require_once __DIR__ . '/services/gallery_branding.php';

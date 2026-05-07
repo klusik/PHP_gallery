@@ -87,6 +87,9 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
         return '';
     }
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    }
     foreach ($sizes as $size) {
         // $size stores an intermediate value used by the surrounding gallery workflow.
         $size = (int) $size;
@@ -286,6 +289,9 @@ function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
+        if (function_exists('thumbnail_bound_fallback_size')) {
+            $size = thumbnail_bound_fallback_size($image, $size, $gallery);
+        }
         try {
             // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = thumbnail_abs_path($image, $gallery, $size, $format);
@@ -336,6 +342,9 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
 {
     // Variable $sizes stores this steps working value.
     $sizes = thumbnail_sizes();
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    }
     usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
         return abs($left - $preferredSize) <=> abs($right - $preferredSize);
     });
@@ -366,6 +375,10 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
  */
 function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = ''): string
 {
+    if (function_exists('thumbnail_bound_filter_sizes')) {
+        $gallery = find_gallery((int) $image['gallery_id']);
+        $srcsetSizes = thumbnail_bound_filter_sizes($srcsetSizes, $image, $gallery);
+    }
     // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.
     $fallbackUrl = thumbnail_url($image, $fallbackSize);
     // $webpSrcset stores an intermediate value used by the surrounding gallery workflow.

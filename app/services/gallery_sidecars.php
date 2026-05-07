@@ -246,6 +246,14 @@ function write_gallery_sidecar(array $gallery): void
         $data['grid_rows'] = (int) $gallery['grid_rows'];
         $data['grid_use_for_subgalleries'] = (int) ($gallery['grid_use_for_subgalleries'] ?? 1);
     }
+    if (thumbnail_bounds_schema_ready()) {
+        if (isset($gallery['thumbnail_min_size']) && $gallery['thumbnail_min_size'] !== null) {
+            $data['thumbnail_min_size'] = (int) $gallery['thumbnail_min_size'];
+        }
+        if (isset($gallery['thumbnail_max_size']) && $gallery['thumbnail_max_size'] !== null) {
+            $data['thumbnail_max_size'] = (int) $gallery['thumbnail_max_size'];
+        }
+    }
     if (gallery_access_schema_ready()) {
         $data['access_mode'] = $gallery['access_mode'] ?? 'normal';
         $data['access_listing'] = $gallery['access_listing'] ?? 'listed';
@@ -299,6 +307,8 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
+        'thumbnail_min_size' => isset($metadata['thumbnail_min_size']) ? (int) $metadata['thumbnail_min_size'] : null,
+        'thumbnail_max_size' => isset($metadata['thumbnail_max_size']) ? (int) $metadata['thumbnail_max_size'] : null,
         'banner_image_path' => $metadata['banner_image_path'] ?? null,
         'logo_image_path' => $metadata['logo_image_path'] ?? null,
         'separator_image_path' => $metadata['separator_image_path'] ?? null,
@@ -344,6 +354,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
     $candidateHasGrid = gallery_grid_schema_ready() && isset($candidate['grid_columns'], $candidate['grid_rows']) && $candidate['grid_columns'] !== null && $candidate['grid_rows'] !== null;
+    // $candidateHasThumbnailBounds stores whether gallery.json defines responsive thumbnail size guardrails.
+    $candidateHasThumbnailBounds = thumbnail_bounds_schema_ready() && ($candidate['thumbnail_min_size'] !== null || $candidate['thumbnail_max_size'] !== null);
     // $accessListing stores an intermediate value used by the surrounding gallery workflow.
     $accessListing = gallery_access_schema_ready() && ($candidate['access_listing'] ?? '') === 'unlisted' ? 'unlisted' : 'listed';
     // Variable $parent stores this steps working value.
@@ -375,6 +387,12 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_columns'], CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS) : null;
         $values[] = $candidateHasGrid ? pagination_dimension_value($candidate['grid_rows'], CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
         $values[] = !empty($candidate['grid_use_for_subgalleries']) ? 1 : 0;
+    }
+    if (thumbnail_bounds_schema_ready()) {
+        $columns[] = 'thumbnail_min_size';
+        $columns[] = 'thumbnail_max_size';
+        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_min_size']) : null;
+        $values[] = $candidateHasThumbnailBounds ? thumbnail_bound_post_value($candidate['thumbnail_max_size']) : null;
     }
     if (gallery_access_schema_ready()) {
         $columns[] = 'access_mode';

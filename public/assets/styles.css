@@ -5299,6 +5299,59 @@ button.gallery-row-action.secondary {
     gap: 0.75rem;
 }
 
+
+
+.admin-thumbnail-bound-control {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-thumbnail-bound-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-thumbnail-bound-header p {
+    margin: 0.25rem 0 0;
+}
+
+.admin-thumbnail-bound-header strong {
+    white-space: nowrap;
+    color: #16202a;
+}
+
+.admin-thumbnail-bound-slider {
+    position: relative;
+    min-height: 2.25rem;
+}
+
+.admin-thumbnail-bound-slider input[type="range"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    background: transparent;
+    pointer-events: none;
+}
+
+.admin-thumbnail-bound-slider input[type="range"]::-webkit-slider-thumb {
+    pointer-events: auto;
+}
+
+.admin-thumbnail-bound-slider input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+}
+
+.admin-thumbnail-bound-scale {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.35rem;
+    color: var(--admin-muted);
+    font-size: 0.78rem;
+}
+
 .admin-edit-gallery-savebar {
     position: sticky;
     bottom: 1rem;
@@ -5353,7 +5406,60 @@ button.gallery-row-action.secondary {
         grid-template-columns: 1fr;
     }
 
-    .admin-edit-gallery-savebar {
+    
+
+.admin-thumbnail-bound-control {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-thumbnail-bound-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-thumbnail-bound-header p {
+    margin: 0.25rem 0 0;
+}
+
+.admin-thumbnail-bound-header strong {
+    white-space: nowrap;
+    color: #16202a;
+}
+
+.admin-thumbnail-bound-slider {
+    position: relative;
+    min-height: 2.25rem;
+}
+
+.admin-thumbnail-bound-slider input[type="range"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    background: transparent;
+    pointer-events: none;
+}
+
+.admin-thumbnail-bound-slider input[type="range"]::-webkit-slider-thumb {
+    pointer-events: auto;
+}
+
+.admin-thumbnail-bound-slider input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+}
+
+.admin-thumbnail-bound-scale {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.35rem;
+    color: var(--admin-muted);
+    font-size: 0.78rem;
+}
+
+.admin-edit-gallery-savebar {
         align-items: stretch;
         flex-direction: column;
     }

@@ -114,6 +114,78 @@ function setupGalleryGridOverrideAutoEnable() {
 }
 
 
+
+/**
+ * Keeps the dual thumbnail-bound sliders ordered and copies their selected sizes to hidden inputs.
+ *
+ * @returns {void}
+ */
+function setupThumbnailBoundControls() {
+    document.querySelectorAll('[data-thumbnail-bound-control]').forEach((root) => {
+        // values stores the supported thumbnail sizes. Zero is the Auto sentinel.
+        const values = String(root.getAttribute('data-thumbnail-bound-values') || '0')
+            .split(',')
+            .map((value) => parseInt(value, 10))
+            .filter((value) => Number.isFinite(value));
+        const minIndexControl = root.querySelector('[data-thumbnail-bound-min-index]');
+        const maxIndexControl = root.querySelector('[data-thumbnail-bound-max-index]');
+        const minValueControl = root.querySelector('[data-thumbnail-bound-min-value]');
+        const maxValueControl = root.querySelector('[data-thumbnail-bound-max-value]');
+        const summary = root.querySelector('[data-thumbnail-bound-summary]');
+        if (values.length < 2 || !minIndexControl || !maxIndexControl || !minValueControl || !maxValueControl || !summary) {
+            return;
+        }
+
+        /**
+         * Formats one selected size for the visible summary.
+         *
+         * @param {number} value Selected thumbnail size, or zero for Auto.
+         * @param {'min'|'max'} side Which edge is being displayed.
+         * @returns {string} Human-readable size label.
+         */
+        const formatSize = (value, side) => {
+            if (value === 0) {
+                return side === 'min' ? 'Auto min' : 'Auto max';
+            }
+            return `${value}px`;
+        };
+
+        /**
+         * Synchronizes slider order, hidden form values, and the text summary.
+         *
+         * @param {HTMLInputElement|null} changedControl Control that initiated the update, if any.
+         * @returns {void}
+         */
+        const sync = (changedControl = null) => {
+            let minIndex = parseInt(minIndexControl.value, 10) || 0;
+            let maxIndex = parseInt(maxIndexControl.value, 10) || 0;
+            const highestIndex = values.length - 1;
+            minIndex = Math.max(0, Math.min(highestIndex, minIndex));
+            maxIndex = Math.max(0, Math.min(highestIndex, maxIndex));
+            if (minIndex > maxIndex) {
+                if (changedControl === minIndexControl) {
+                    maxIndex = minIndex;
+                } else {
+                    minIndex = maxIndex;
+                }
+            }
+            minIndexControl.value = String(minIndex);
+            maxIndexControl.value = String(maxIndex);
+            const minValue = values[minIndex] || 0;
+            const maxValue = values[maxIndex] || 0;
+            minValueControl.value = String(minValue);
+            maxValueControl.value = String(maxValue);
+            summary.textContent = `${formatSize(minValue, 'min')} to ${formatSize(maxValue, 'max')}`;
+        };
+
+        minIndexControl.addEventListener('input', () => sync(minIndexControl));
+        minIndexControl.addEventListener('change', () => sync(minIndexControl));
+        maxIndexControl.addEventListener('input', () => sync(maxIndexControl));
+        maxIndexControl.addEventListener('change', () => sync(maxIndexControl));
+        sync();
+    });
+}
+
 /**
  * Reads the first matching form control value from the Theme form.
  *
@@ -340,6 +412,7 @@ export function setupThemeOverrideForm() {
     syncGridRangeDisplay('[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]');
     syncGridRangeDisplay('[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]');
     setupGalleryGridOverrideAutoEnable();
+    setupThumbnailBoundControls();
 
     // form stores state or configuration for the gallery front-end flow.
     const form = document.querySelector('[data-theme-form]');

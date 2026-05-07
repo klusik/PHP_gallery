@@ -924,6 +924,10 @@ function cms_admin_edit_gallery(): void
         $gridRows = $gridUsesCustomSettings ? pagination_dimension_value($_POST['grid_rows'] ?? CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_DEFAULT_ROWS, CMS_PAGINATION_MAX_ROWS) : null;
         // $gridUseForSubgalleries stores whether descendants may inherit this gallery grid.
         $gridUseForSubgalleries = !empty($_POST['grid_use_for_subgalleries']) ? 1 : 0;
+        // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this gallery.
+        $thumbnailBounds = thumbnail_bounds_schema_ready() ? thumbnail_bound_pair_from_post('gallery_thumbnail') : [null, null];
+        // $thumbnailBoundsRecursive stores whether descendants should receive the same saved thumbnail bounds.
+        $thumbnailBoundsRecursive = thumbnail_bounds_schema_ready() && !empty($_POST['gallery_thumbnail_bounds_recursive']);
         // $fields stores an intermediate value used by the surrounding gallery workflow.
         $fields = [
             'parent_id = ?' => $parentId,
@@ -954,6 +958,10 @@ function cms_admin_edit_gallery(): void
             $fields['grid_rows = ?'] = $gridRows;
             $fields['grid_use_for_subgalleries = ?'] = $gridUseForSubgalleries;
         }
+        if (thumbnail_bounds_schema_ready()) {
+            $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
+            $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
+        }
         if ($accessReady) {
             $fields['access_mode = ?'] = $accessMode;
             $fields['access_listing = ?'] = $accessListing;
@@ -983,6 +991,9 @@ function cms_admin_edit_gallery(): void
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
         $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
+        if (thumbnail_bounds_schema_ready() && $thumbnailBoundsRecursive) {
+            save_gallery_thumbnail_bounds($gallery, $thumbnailBounds[0], $thumbnailBounds[1], true);
+        }
         if ($accessReady) {
             if ($accessAction === 'revoke_link') {
                 revoke_gallery_share_token((int) $gallery['id']);
@@ -1153,6 +1164,15 @@ function cms_admin_edit_gallery(): void
         echo '<div class="admin-edit-card is-wide"><h3>Display grid</h3><label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> Use a custom grid for this gallery</label><div class="admin-edit-range-grid"><label>Columns <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label><label>Rows <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label></div><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> Use for subgalleries</label><p class="muted">Current source: ' . e((string) ($effectiveGridSettings['grid_source'] ?? 'global')) . '. If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.</p></div>';
     } else {
         echo '<div class="admin-edit-card is-wide"><p class="muted">Gallery display-grid overrides will be available after the database migration is applied.</p></div>';
+    }
+    if (thumbnail_bounds_schema_ready()) {
+        echo '<div class="admin-edit-card is-wide">';
+        render_admin_thumbnail_bound_slider('gallery_thumbnail', isset($gallery['thumbnail_min_size']) ? (int) $gallery['thumbnail_min_size'] : null, isset($gallery['thumbnail_max_size']) ? (int) $gallery['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.');
+        echo '<label class="checkbox-label"><input type="checkbox" name="gallery_thumbnail_bounds_recursive" value="1"> Save these bounds recursively to subgalleries</label>';
+        echo '<p class="muted">Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.</p>';
+        echo '</div>';
+    } else {
+        echo '<div class="admin-edit-card is-wide"><p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p></div>';
     }
     echo '</div>';
     render_admin_tab_panel('admin-edit-display', (string) ob_get_clean(), false);
@@ -2017,6 +2037,12 @@ function cms_admin_edit_image(): void
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
         }
+        if (thumbnail_bounds_schema_ready()) {
+            // $thumbnailBounds stores the optional minimum and maximum responsive thumbnail sizes for this image.
+            $thumbnailBounds = thumbnail_bound_pair_from_post('image_thumbnail');
+            $fields['thumbnail_min_size = ?'] = $thumbnailBounds[0];
+            $fields['thumbnail_max_size = ?'] = $thumbnailBounds[1];
+        }
         $fields['updated_at = ?'] = now_sql();
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('UPDATE images SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
@@ -2039,6 +2065,11 @@ function cms_admin_edit_image(): void
         echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
     }
     echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    if (thumbnail_bounds_schema_ready()) {
+        render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.');
+    } else {
+        echo '<p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p>';
+    }
     echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
     render_tag_datalist();
     if (exif_gps_schema_ready()) {
