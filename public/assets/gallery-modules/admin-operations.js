@@ -529,6 +529,18 @@ export function setupThumbnailProgress() {
         // Variable `button` stores this steps working value.
         const button = event.target.closest('[data-create-all-thumbnails]');
         if (!button) {
+            // Variable `missingButton` stores this steps working value.
+            const missingButton = event.target.closest('[data-create-missing-thumbnails]');
+            if (!missingButton) {
+                return;
+            }
+            // Variable `missingForm` stores this steps working value.
+            const missingForm = document.querySelector('[data-thumbnail-maintenance-form]');
+            if (!(missingForm instanceof HTMLFormElement)) {
+                return;
+            }
+            event.preventDefault();
+            await runThumbnailJob(missingForm, null, {scope: 'missing'});
             return;
         }
         // Variable `form` stores this steps working value.
@@ -549,7 +561,7 @@ export function setupThumbnailProgress() {
         }
         button.disabled = true;
         try {
-            await runThumbnailJob(form, null);
+            await runThumbnailJob(form, null, {scope: 'all'});
         } finally {
             button.disabled = false;
         }
@@ -704,7 +716,7 @@ function thumbnailEndpoint(form, submitter) {
  * @param {*} submitter Value supplied by the caller or event context.
  * @returns {*} Result of the UI operation, when a value is produced.
  */
-async function runThumbnailJob(form, submitter) {
+async function runThumbnailJob(form, submitter, options = {}) {
     // Variable `progress` stores this steps working value.
     const progress = ensureThumbnailProgress(form);
     // Variable `buttons` stores this steps working value.
@@ -728,6 +740,9 @@ async function runThumbnailJob(form, submitter) {
             if (submitter?.name) {
                 body.set(submitter.name, submitter.value);
             }
+            if (options.scope) {
+                body.set('scope', options.scope);
+            }
             body.set('ajax', '1');
             body.set('offset', String(offset));
             body.set('batch_size', '6');
@@ -746,9 +761,20 @@ async function runThumbnailJob(form, submitter) {
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
-            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, 'Creating thumbnails...');
+            const scopeLabel = options.scope === 'missing' ? 'missing thumbnails' : 'thumbnails';
+            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Creating ${scopeLabel}...`);
             if (result.done) {
-                updateThumbnailProgress(progress, total, total, created, skipped, 'Thumbnail job complete.');
+                // finalLabel keeps an empty targeted maintenance run readable instead of showing only 0/0 counters.
+                const finalLabel = options.scope === 'missing' && total === 0
+                    ? 'No missing or stale thumbnails found.'
+                    : 'Thumbnail job complete.';
+                updateThumbnailProgress(progress, total, total, created, skipped, finalLabel);
+                if (options.scope === 'missing' && result.maintenance_after && (result.maintenance_after.images_with_missing || 0) <= 0) {
+                    const notice = form.closest('.admin-thumbnail-maintenance-notice');
+                    if (notice) {
+                        notice.remove();
+                    }
+                }
                 break;
             }
         }

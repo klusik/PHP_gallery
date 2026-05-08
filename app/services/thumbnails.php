@@ -414,7 +414,68 @@ function thumbnail_webp_required_for_source(string $sourcePath, string $mime): b
     if (!image_source_has_exif($sourcePath, $mime)) {
         return true;
     }
-    return class_exists('Imagick');
+
+    return thumbnail_imagick_webp_available();
+}
+
+/**
+ * Return whether Imagick can write WebP thumbnails on this server.
+ *
+ * Some shared hosts expose the Imagick PHP class without the WebP delegate.
+ * In that state class_exists('Imagick') is true, but writeImage() still fails
+ * for WebP targets. The maintenance scanner must not require WebP variants
+ * that the generator will refuse or fail to create.
+ */
+function thumbnail_imagick_webp_available(): bool
+{
+    if (!class_exists('Imagick')) {
+        return false;
+    }
+
+    try {
+        // $formats stores the concrete formats supported by the installed Imagick delegates.
+        $formats = Imagick::queryFormats('WEBP');
+        return is_array($formats) && in_array('WEBP', array_map('strtoupper', $formats), true);
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Return thumbnail formats that this server can actually keep up to date for one source image.
+ *
+ * WebP is deliberately excluded for JPEG files with EXIF metadata when Imagick is
+ * unavailable, because the WebP writer would reject those variants to avoid
+ * silently stripping EXIF metadata. The maintenance scanner and the generator
+ * must use this same decision or the dashboard can keep reporting variants that
+ * the repair job correctly refuses to create.
+ *
+ * @return array<int, string>
+ */
+function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
+{
+    // $formats stores the concrete variant formats that should exist on disk.
+    $formats = ['jpg'];
+    if ($mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime)) {
+        $formats[] = 'webp';
+    }
+
+    return $formats;
+}
+
+/**
+ * Return the number of WebP variants intentionally not required for one source image.
+ */
+function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $mime): int
+{
+    if ($mime !== 'image/jpeg' || !function_exists('imagewebp')) {
+        return 0;
+    }
+    if (!image_source_has_exif($sourcePath, $mime) || thumbnail_imagick_webp_available()) {
+        return 0;
+    }
+
+    return count(thumbnail_sizes());
 }
 
 /**
@@ -436,16 +497,10 @@ function thumbnail_maintenance_status(array $image, array $gallery): array
     $info = @getimagesize($sourcePath);
     // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
-    // $formats stores an intermediate value used by the surrounding gallery workflow.
-    $formats = ['jpg'];
-    // $webpSkipped stores an intermediate value used by the surrounding gallery workflow.
-    $webpSkipped = 0;
-    if ($mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime)) {
-        $formats[] = 'webp';
-    } elseif ($mime === 'image/jpeg' && function_exists('imagewebp') && image_source_has_exif($sourcePath, $mime) && !class_exists('Imagick')) {
-        // $webpSkipped stores an intermediate value used by the surrounding gallery workflow.
-        $webpSkipped = count(thumbnail_sizes());
-    }
+    // $formats stores the variants that should exist for this source on this server.
+    $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
+    // $webpSkipped stores variants intentionally excluded because this server cannot preserve EXIF in WebP.
+    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
     // Variable $required stores this steps working value.
     $required = 0;
     // Variable $missing stores this steps working value.
@@ -535,6 +590,124 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
         'limited' => $limited,
         'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
+}
+
+/**
+ * Return image IDs that need thumbnail regeneration for the current maintenance warning.
+ *
+ * This mirrors thumbnail_maintenance_summary() but returns only the images with
+ * missing or stale thumbnail files so the admin can rebuild the affected set
+ * without scanning or processing every image in the library.
+ *
+ * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ * @return array<int, int>
+ */
+function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImagesToScan = 1000): array
+{
+    // Variable $params stores this steps working value.
+    $params = [];
+    // $where stores an intermediate value used by the surrounding gallery workflow.
+    $where = "i.relative_path NOT LIKE '%/%'";
+    if ($galleryIds !== null) {
+        // $galleryIds stores this steps working value.
+        $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+        if (!$galleryIds) {
+            return [];
+        }
+        $where .= ' AND i.gallery_id IN (' . implode(',', array_fill(0, count($galleryIds), '?')) . ')';
+        // $params stores an intermediate value used by the surrounding gallery workflow.
+        $params = $galleryIds;
+    }
+
+    // $limit stores an intermediate value used by the surrounding gallery workflow.
+    $limit = max(1, $maxImagesToScan + 1);
+    // $stmt stores an intermediate value used by the surrounding gallery workflow.
+    $stmt = db()->prepare("SELECT i.*, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE $where ORDER BY g.folder_path, i.sort_order, i.filename LIMIT $limit");
+    $stmt->execute($params);
+    // $rows stores an intermediate value used by the surrounding gallery workflow.
+    $rows = $stmt->fetchAll();
+    if (count($rows) > $maxImagesToScan) {
+        array_pop($rows);
+    }
+
+    // Variable $galleryCache stores this steps working value.
+    $galleryCache = [];
+    // Variable $imageIds stores this steps working value.
+    $imageIds = [];
+    foreach ($rows as $image) {
+        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
+        $galleryId = (int) $image['gallery_id'];
+        if (!isset($galleryCache[$galleryId])) {
+            $galleryCache[$galleryId] = find_gallery($galleryId);
+        }
+        if (!$galleryCache[$galleryId]) {
+            continue;
+        }
+        // $status stores an intermediate value used by the surrounding gallery workflow.
+        $status = thumbnail_maintenance_status($image, $galleryCache[$galleryId]);
+        if (($status['missing'] ?? 0) > 0) {
+            $imageIds[] = (int) $image['id'];
+        }
+    }
+
+    return array_values(array_unique($imageIds));
+}
+
+/**
+ * Return compact diagnostic data for thumbnail repair logs.
+ *
+ * @param array<int, int> $imageIds Image IDs selected by the maintenance repair scope.
+ * @return array<int, array<string, mixed>>
+ */
+function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
+{
+    // $imageIds stores a short unique list so admin log context stays readable.
+    $imageIds = array_slice(array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0))), 0, 20);
+    // $rows stores the diagnostic entries included in the admin log.
+    $rows = [];
+    foreach ($imageIds as $imageId) {
+        // $image stores the database row for this diagnostic entry.
+        $image = find_image($imageId);
+        if (!$image) {
+            $rows[] = ['image_id' => $imageId, 'found' => false];
+            continue;
+        }
+
+        // $gallery stores the parent gallery needed to resolve source and thumbnail paths.
+        $gallery = find_gallery((int) $image['gallery_id']);
+        if (!$gallery) {
+            $rows[] = ['image_id' => $imageId, 'found' => true, 'gallery_found' => false];
+            continue;
+        }
+
+        // $sourcePath stores the absolute source path for filesystem checks.
+        $sourcePath = image_abs_path($image, $gallery);
+        // $info stores image metadata returned by PHP for this source.
+        $info = is_file($sourcePath) ? @getimagesize($sourcePath) : false;
+        // $mime stores the detected MIME type used for thumbnail format decisions.
+        $mime = is_array($info) ? (string) ($info['mime'] ?? '') : '';
+        // $status stores the same maintenance status used by the dashboard warning.
+        $status = thumbnail_maintenance_status($image, $gallery);
+
+        $rows[] = [
+            'image_id' => $imageId,
+            'found' => true,
+            'gallery_found' => true,
+            'gallery_id' => (int) $image['gallery_id'],
+            'filename' => (string) ($image['filename'] ?? ''),
+            'relative_path' => (string) ($image['relative_path'] ?? ''),
+            'source_exists' => is_file($sourcePath),
+            'mime' => $mime,
+            'has_exif' => $mime !== '' && image_source_has_exif($sourcePath, $mime),
+            'imagewebp_available' => function_exists('imagewebp'),
+            'imagick_available' => class_exists('Imagick'),
+            'imagick_webp_available' => thumbnail_imagick_webp_available(),
+            'target_formats' => $mime !== '' ? thumbnail_target_formats_for_source($sourcePath, $mime) : [],
+            'status' => $status,
+        ];
+    }
+
+    return $rows;
 }
 
 /**
@@ -801,6 +974,15 @@ function create_image_thumbnails_result(array $image, array $gallery): array
         return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0];
     }
     gallery_thumbs_dir($gallery, true);
+    // Variable $info stores this steps working value.
+    $info = @getimagesize($sourcePath);
+    if ($info === false || empty($info['mime'])) {
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0];
+    }
+    // $mime stores the source MIME value used by the scanner and generator format decision.
+    $mime = (string) $info['mime'];
+    // $formats stores the variants this server can actually keep current for this source.
+    $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // Variable $sourceMtime stores this steps working value.
     $sourceMtime = filemtime($sourcePath) ?: time();
     // Variable $targets stores this steps working value.
@@ -808,9 +990,9 @@ function create_image_thumbnails_result(array $image, array $gallery): array
     // Variable $skipped stores this steps working value.
     $skipped = 0;
     // Variable $webpSkipped stores this steps working value.
-    $webpSkipped = 0;
+    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
     foreach (thumbnail_sizes() as $size) {
-        foreach (['jpg', 'webp'] as $format) {
+        foreach ($formats as $format) {
             // Variable $targetPath stores this steps working value.
             $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
             if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {
@@ -821,11 +1003,6 @@ function create_image_thumbnails_result(array $image, array $gallery): array
         }
     }
     if (!$targets) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => 0];
-    }
-    // Variable $info stores this steps working value.
-    $info = @getimagesize($sourcePath);
-    if ($info === false || empty($info['mime'])) {
         return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped];
     }
     if (!extension_loaded('gd')) {
@@ -844,7 +1021,7 @@ function create_image_thumbnails_result(array $image, array $gallery): array
         }
         if (isset($formatTargets['webp'])) {
             // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
-            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['webp'], (string) $info['mime']);
+            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['webp'], $mime);
             if ($webpWritten) {
                 $created++;
             } else {
@@ -966,10 +1143,30 @@ function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdIm
     if (!function_exists('imagewebp')) {
         return false;
     }
-    if (image_source_has_exif($sourcePath, $mime)) {
-        return write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath);
+    if (image_source_has_exif($sourcePath, $mime) && thumbnail_imagick_webp_available()) {
+        // $imagickWritten stores whether the preferred metadata-preserving writer succeeded.
+        $imagickWritten = write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath);
+        if ($imagickWritten) {
+            return true;
+        }
+
+        // Some hosts expose WebP through Imagick, but individual panoramic JPEGs can still fail
+        // because of pixel-cache or image-policy limits. Falling back to GD keeps the thumbnail
+        // cache repairable instead of leaving one image permanently reported as missing.
+        thumbnail_remove_partial_file($targetPath);
     }
+
     return write_resized_webp_with_gd($source, $width, $height, $maxSide, $targetPath);
+}
+
+/**
+ * Remove a partially written target file after a failed writer attempt.
+ */
+function thumbnail_remove_partial_file(string $targetPath): void
+{
+    if (is_file($targetPath)) {
+        @unlink($targetPath);
+    }
 }
 
 /**
@@ -1012,9 +1209,12 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
  */
 function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, string $targetPath): bool
 {
-    if (!class_exists('Imagick')) {
+    if (!thumbnail_imagick_webp_available()) {
         return false;
     }
+
+    // $image stores the Imagick instance so it can be cleaned up even after a failed write.
+    $image = null;
     try {
         // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = new Imagick($sourcePath);
@@ -1030,8 +1230,13 @@ function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, 
         $written = $image->writeImage($targetPath);
         $image->clear();
         $image->destroy();
-        return $written;
+        return $written && is_file($targetPath);
     } catch (Throwable) {
+        thumbnail_remove_partial_file($targetPath);
+        if ($image instanceof Imagick) {
+            $image->clear();
+            $image->destroy();
+        }
         return false;
     }
 }
