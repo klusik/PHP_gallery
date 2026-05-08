@@ -334,6 +334,481 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
     ];
 }
 
+
+/**
+ * Move selected original image files, generated thumbnails, and display derivatives to another gallery.
+ *
+ * The filesystem move is attempted before the database ownership update. If a
+ * later file or database step fails, successfully moved files are moved back to
+ * their original source paths. This keeps the operation a real move while still
+ * giving the admin a clean failure report instead of silently copying files.
+ *
+ * @param int $sourceGalleryId Gallery that currently owns the selected images.
+ * @param int $destinationGalleryId Gallery that will receive the selected images.
+ * @param array<int> $imageIds Image ids submitted by the admin UI.
+ * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null}
+ */
+function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
+{
+    // $normalizedIds stores the unique positive image ids selected by the admin.
+    $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
+    if (!$normalizedIds) {
+        return [
+            'requested' => 0,
+            'moved' => 0,
+            'originals_moved' => 0,
+            'derivatives_moved' => 0,
+            'failures' => [],
+            'source_cover_image_id' => null,
+            'destination_cover_image_id' => null,
+        ];
+    }
+    if ($sourceGalleryId === $destinationGalleryId) {
+        throw new RuntimeException('Choose a different destination gallery.');
+    }
+
+    // $sourceGallery stores the gallery that currently owns the selected rows.
+    $sourceGallery = find_gallery($sourceGalleryId, true);
+    // $destinationGallery stores the gallery that will receive the selected rows.
+    $destinationGallery = find_gallery($destinationGalleryId, true);
+    if (!$sourceGallery || !$destinationGallery) {
+        throw new RuntimeException('Source or destination gallery was not found.');
+    }
+
+    // $sourceRoot stores the filesystem boundary for current originals and derivatives.
+    $sourceRoot = gallery_abs_path((string) $sourceGallery['folder_path']);
+    // $destinationRoot stores the filesystem boundary for moved originals and derivatives.
+    $destinationRoot = gallery_abs_path((string) $destinationGallery['folder_path']);
+    if (!is_dir($sourceRoot) || !is_dir($destinationRoot)) {
+        throw new RuntimeException('Source or destination gallery folder does not exist on disk.');
+    }
+
+    // $images stores validated image rows in the requested visual order.
+    $images = [];
+    // $failures stores per-image validation failures reported without touching disk.
+    $failures = [];
+    foreach ($normalizedIds as $imageId) {
+        // $image stores one selected database row.
+        $image = find_image($imageId);
+        if (!$image || (int) $image['gallery_id'] !== $sourceGalleryId) {
+            $failures[] = 'Image #' . $imageId . ' is not part of the source gallery.';
+            continue;
+        }
+        $images[] = $image;
+    }
+    if (!$images) {
+        return [
+            'requested' => count($normalizedIds),
+            'moved' => 0,
+            'originals_moved' => 0,
+            'derivatives_moved' => 0,
+            'failures' => $failures,
+            'source_cover_image_id' => null,
+            'destination_cover_image_id' => null,
+        ];
+    }
+
+    usort($images, static function (array $left, array $right): int {
+        // $sortCompare keeps moved images in the same relative order the admin sees in the source gallery.
+        $sortCompare = (int) ($left['sort_order'] ?? 0) <=> (int) ($right['sort_order'] ?? 0);
+        if ($sortCompare !== 0) {
+            return $sortCompare;
+        }
+        // $nameCompare gives a stable fallback when several rows share one order value.
+        $nameCompare = strcmp((string) ($left['filename'] ?? ''), (string) ($right['filename'] ?? ''));
+        if ($nameCompare !== 0) {
+            return $nameCompare;
+        }
+        return (int) ($left['id'] ?? 0) <=> (int) ($right['id'] ?? 0);
+    });
+
+    // $manifest stores every physical rename required for originals and generated files.
+    $manifest = [];
+    // $targetPaths stores target paths so collisions inside the selected set fail before any rename.
+    $targetPaths = [];
+    foreach ($images as $image) {
+        // $imageLabel stores a readable name for failure messages.
+        $imageLabel = (string) ($image['relative_path'] ?: $image['filename'] ?: ('#' . (int) $image['id']));
+        // $relativePath stores the same path under the destination gallery.
+        $relativePath = normalize_relative_path((string) $image['relative_path']);
+        if ($relativePath === '') {
+            $failures[] = $imageLabel . ': image relative path is empty.';
+            continue;
+        }
+        if (find_image_by_path($destinationGalleryId, $relativePath)) {
+            $failures[] = $imageLabel . ': destination gallery already has a database record with this path.';
+            continue;
+        }
+
+        try {
+            // $sourceOriginal stores the current original file location.
+            $sourceOriginal = image_abs_path($image, $sourceGallery);
+            // $destinationOriginal stores the future original file location.
+            $destinationOriginal = gallery_image_target_abs_path($image, $destinationGallery);
+        } catch (Throwable $exception) {
+            $failures[] = $imageLabel . ': ' . $exception->getMessage();
+            continue;
+        }
+
+        if (!thumbnail_path_inside_existing_gallery($sourceRoot, $sourceOriginal)) {
+            $failures[] = $imageLabel . ': source path is outside its gallery.';
+            continue;
+        }
+        if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationOriginal)) {
+            $failures[] = $imageLabel . ': destination path is outside its gallery.';
+            continue;
+        }
+        if (!is_file($sourceOriginal)) {
+            $failures[] = $imageLabel . ': original file is missing on disk.';
+            continue;
+        }
+        if (file_exists($destinationOriginal)) {
+            $failures[] = $imageLabel . ': destination original file already exists.';
+            continue;
+        }
+        gallery_add_image_move_manifest_entry($manifest, $targetPaths, $sourceOriginal, $destinationOriginal, 'original', $imageLabel, $failures);
+
+        try {
+            // $derivatives stores generated files already present on disk for this image.
+            $derivatives = gallery_image_derivative_move_paths($image, $sourceGallery, $destinationGallery, $sourceRoot, $destinationRoot);
+        } catch (Throwable $exception) {
+            $failures[] = $imageLabel . ': ' . $exception->getMessage();
+            continue;
+        }
+        foreach ($derivatives as $derivative) {
+            gallery_add_image_move_manifest_entry(
+                $manifest,
+                $targetPaths,
+                (string) $derivative['from'],
+                (string) $derivative['to'],
+                'derivative',
+                $imageLabel,
+                $failures
+            );
+        }
+    }
+
+    if ($failures) {
+        return [
+            'requested' => count($normalizedIds),
+            'moved' => 0,
+            'originals_moved' => 0,
+            'derivatives_moved' => 0,
+            'failures' => $failures,
+            'source_cover_image_id' => null,
+            'destination_cover_image_id' => null,
+        ];
+    }
+
+    // $movedFiles stores successful renames in reversible order.
+    $movedFiles = [];
+    try {
+        foreach ($manifest as $entry) {
+            // $targetDirectory stores the directory that must exist before rename().
+            $targetDirectory = dirname((string) $entry['to']);
+            if (!is_dir($targetDirectory) && !mkdir($targetDirectory, 0775, true)) {
+                throw new RuntimeException('Could not create destination directory: ' . $targetDirectory);
+            }
+            if (!@rename((string) $entry['from'], (string) $entry['to'])) {
+                throw new RuntimeException('Could not move file: ' . basename((string) $entry['from']));
+            }
+            $movedFiles[] = $entry;
+        }
+    } catch (Throwable $exception) {
+        gallery_rollback_image_file_moves($movedFiles);
+        throw $exception;
+    }
+
+    // $imageIdsToMove stores validated row IDs for the database update.
+    $imageIdsToMove = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // $destinationSortOrders stores append-style order values assigned in the destination gallery.
+    $destinationSortOrders = gallery_destination_sort_orders($destinationGalleryId, $imageIdsToMove);
+    // $placeholders stores SQL placeholders for selected image ids.
+    $placeholders = implode(',', array_fill(0, count($imageIdsToMove), '?'));
+    // $pdo stores the active database connection used for ownership and cover updates.
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // $sourceCoverImageId stores the title picture after selected images leave the source gallery.
+        $sourceCoverImageId = gallery_cover_id_after_source_move($sourceGalleryId, $imageIdsToMove);
+        // $sourceCoverStmt keeps the source title-picture field valid before rows change owners.
+        $sourceCoverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ? AND cover_image_id IN (' . $placeholders . ')');
+        $sourceCoverStmt->execute(array_merge([$sourceCoverImageId, now_sql(), $sourceGalleryId], $imageIdsToMove));
+
+        // $updatedRows counts how many database image rows were transferred.
+        $updatedRows = 0;
+        foreach ($imageIdsToMove as $imageId) {
+            // $updateStmt transfers one image so its destination sort_order can be preserved predictably.
+            $updateStmt = $pdo->prepare('UPDATE images SET gallery_id = ?, sort_order = ?, updated_at = ? WHERE gallery_id = ? AND id = ?');
+            $updateStmt->execute([
+                $destinationGalleryId,
+                $destinationSortOrders[$imageId] ?? next_gallery_image_sort_order($destinationGalleryId),
+                now_sql(),
+                $sourceGalleryId,
+                $imageId,
+            ]);
+            $updatedRows += $updateStmt->rowCount();
+        }
+
+        if ((int) $updatedRows !== count($imageIdsToMove)) {
+            throw new RuntimeException('Only ' . (int) $updatedRows . ' of ' . count($imageIdsToMove) . ' image records moved.');
+        }
+
+        // $destinationCoverImageId stores the title picture after the destination receives the moved images.
+        $destinationCoverImageId = gallery_cover_id_after_destination_move($destinationGalleryId);
+        // $destinationCoverStmt updates only missing or invalid destination title-picture references.
+        $destinationCoverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+        $destinationCoverStmt->execute([$destinationCoverImageId, now_sql(), $destinationGalleryId]);
+
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        gallery_rollback_image_file_moves($movedFiles);
+        throw $exception;
+    }
+
+    thumbnail_maintenance_summary_cache_clear();
+    if (public_path_schema_ready()) {
+        regenerate_public_paths();
+    }
+    // $updatedSourceGallery stores the source row after title-picture cleanup.
+    $updatedSourceGallery = find_gallery($sourceGalleryId, true);
+    if ($updatedSourceGallery) {
+        write_gallery_sidecar($updatedSourceGallery);
+    }
+    // $updatedDestinationGallery stores the destination row after image ownership changes.
+    $updatedDestinationGallery = find_gallery($destinationGalleryId, true);
+    if ($updatedDestinationGallery) {
+        write_gallery_sidecar($updatedDestinationGallery);
+    }
+
+    // $originalsMoved stores moved original media files.
+    $originalsMoved = count(array_filter($movedFiles, static fn (array $entry): bool => (string) $entry['kind'] === 'original'));
+    // $derivativesMoved stores moved generated files.
+    $derivativesMoved = count(array_filter($movedFiles, static fn (array $entry): bool => (string) $entry['kind'] === 'derivative'));
+
+    return [
+        'requested' => count($normalizedIds),
+        'moved' => (int) $updatedRows,
+        'originals_moved' => $originalsMoved,
+        'derivatives_moved' => $derivativesMoved,
+        'failures' => [],
+        'source_cover_image_id' => $sourceCoverImageId,
+        'destination_cover_image_id' => $destinationCoverImageId,
+    ];
+}
+
+/**
+ * Resolve a destination image path without requiring nested target directories to exist yet.
+ */
+function gallery_image_target_abs_path(array $image, array $gallery): string
+{
+    // $galleryRoot stores the receiving gallery directory.
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    // $relativePath stores the image path relative to the receiving gallery directory.
+    $relativePath = normalize_relative_path((string) $image['relative_path']);
+    if ($relativePath === '') {
+        throw new RuntimeException('Image path is empty.');
+    }
+    // $targetPath stores the future absolute path for the moved original.
+    $targetPath = $galleryRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    if (!thumbnail_path_inside_existing_gallery($galleryRoot, $targetPath)) {
+        throw new RuntimeException('Destination image path is outside its gallery.');
+    }
+    return $targetPath;
+}
+
+/**
+ * Add one file rename to a move manifest and report target collisions early.
+ *
+ * @param array<int,array{from:string,to:string,kind:string}> $manifest Mutable list of file renames.
+ * @param array<string,string> $targetPaths Target paths already used by this move.
+ * @param array<int,string> $failures Mutable validation errors.
+ */
+function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetPaths, string $sourcePath, string $destinationPath, string $kind, string $imageLabel, array &$failures): void
+{
+    // $normalizedDestination stores a platform-consistent key for duplicate target detection.
+    $normalizedDestination = normalize_filesystem_path($destinationPath);
+    if (isset($targetPaths[$normalizedDestination])) {
+        $failures[] = $imageLabel . ': generated file target conflicts with ' . $targetPaths[$normalizedDestination] . '.';
+        return;
+    }
+    if (file_exists($destinationPath)) {
+        $failures[] = $imageLabel . ': destination file already exists: ' . basename($destinationPath) . '.';
+        return;
+    }
+    $targetPaths[$normalizedDestination] = $imageLabel;
+    $manifest[] = ['from' => $sourcePath, 'to' => $destinationPath, 'kind' => $kind];
+}
+
+/**
+ * Return generated files that should move with one source image.
+ *
+ * @return array<int,array{from:string,to:string}>
+ */
+function gallery_image_derivative_move_paths(array $image, array $sourceGallery, array $destinationGallery, string $sourceRoot, string $destinationRoot): array
+{
+    // $paths stores derivative file renames that are present on disk.
+    $paths = [];
+    foreach (thumbnail_sizes() as $size) {
+        foreach (['jpg', 'webp'] as $format) {
+            // $sourceThumbnail stores one generated thumbnail path.
+            $sourceThumbnail = thumbnail_abs_path($image, $sourceGallery, (int) $size, $format);
+            // $destinationThumbnail stores the matching generated thumbnail path in the receiving gallery.
+            $destinationThumbnail = thumbnail_abs_path($image, $destinationGallery, (int) $size, $format);
+            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationThumbnail)) {
+                throw new RuntimeException('Destination thumbnail path is outside its gallery.');
+            }
+            if (file_exists($destinationThumbnail)) {
+                throw new RuntimeException('Destination generated file already exists: ' . basename($destinationThumbnail) . '.');
+            }
+            if (!thumbnail_path_inside_existing_gallery($sourceRoot, $sourceThumbnail) || !is_file($sourceThumbnail)) {
+                continue;
+            }
+            $paths[] = ['from' => $sourceThumbnail, 'to' => $destinationThumbnail];
+        }
+    }
+
+    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        // $sourceDisplayMaster stores the generated full-size WebP display derivative.
+        $sourceDisplayMaster = dng_display_master_abs_path($image, $sourceGallery, false);
+        if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourceDisplayMaster) && is_file($sourceDisplayMaster)) {
+            // $destinationDisplayMaster stores the matching DNG display derivative in the receiving gallery.
+            $destinationDisplayMaster = dng_display_master_abs_path($image, $destinationGallery, false);
+            if (!thumbnail_path_inside_existing_gallery($destinationRoot, $destinationDisplayMaster)) {
+                throw new RuntimeException('Destination DNG display derivative path is outside its gallery.');
+            }
+            if (file_exists($destinationDisplayMaster)) {
+                throw new RuntimeException('Destination DNG display derivative already exists.');
+            }
+            $paths[] = ['from' => $sourceDisplayMaster, 'to' => $destinationDisplayMaster];
+        }
+    }
+
+    return $paths;
+}
+
+/**
+ * Move already-renamed files back to their original locations after a failed operation.
+ *
+ * @param array<int,array{from:string,to:string,kind:string}> $movedFiles File moves completed before failure.
+ */
+function gallery_rollback_image_file_moves(array $movedFiles): void
+{
+    for ($index = count($movedFiles) - 1; $index >= 0; $index--) {
+        // $entry stores one file that should be restored to the source path.
+        $entry = $movedFiles[$index];
+        if (is_file((string) $entry['to']) && !is_file((string) $entry['from'])) {
+            @mkdir(dirname((string) $entry['from']), 0775, true);
+            @rename((string) $entry['to'], (string) $entry['from']);
+        }
+    }
+}
+
+/**
+ * Build destination sort_order values by appending moved images after current destination images.
+ *
+ * @param array<int> $imageIdsToMove Validated image ids in source order.
+ * @return array<int,int>
+ */
+function gallery_destination_sort_orders(int $destinationGalleryId, array $imageIdsToMove): array
+{
+    // $stmt stores the current destination tail value.
+    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
+    $stmt->execute([$destinationGalleryId]);
+    // $nextSortOrder stores the first appended order number.
+    $nextSortOrder = (int) $stmt->fetchColumn() + 10;
+    // $orders stores a sort_order value for each moved image id.
+    $orders = [];
+    foreach ($imageIdsToMove as $imageId) {
+        $orders[(int) $imageId] = $nextSortOrder;
+        $nextSortOrder += 10;
+    }
+    return $orders;
+}
+
+/**
+ * Choose the source gallery title picture after selected images leave.
+ *
+ * @param array<int> $movedImageIds Validated image ids that are being moved away.
+ */
+function gallery_cover_id_after_source_move(int $sourceGalleryId, array $movedImageIds): ?int
+{
+    // $gallery stores the source row whose current cover determines whether reassignment is needed.
+    $gallery = find_gallery($sourceGalleryId, true);
+    if (!$gallery || empty($gallery['cover_image_id'])) {
+        return null;
+    }
+    if (!in_array((int) $gallery['cover_image_id'], $movedImageIds, true)) {
+        return (int) $gallery['cover_image_id'];
+    }
+    return gallery_first_cover_candidate_excluding($sourceGalleryId, $movedImageIds);
+}
+
+/**
+ * Choose a valid destination title picture without overwriting an existing valid one.
+ */
+function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?int
+{
+    // $gallery stores the destination row after image ownership transfer.
+    $gallery = find_gallery($destinationGalleryId, true);
+    if (!$gallery) {
+        return null;
+    }
+    // $currentCoverId stores the existing title picture value, if any.
+    $currentCoverId = (int) ($gallery['cover_image_id'] ?? 0);
+    if ($currentCoverId > 0 && gallery_image_belongs_to_gallery_branch($currentCoverId, $destinationGalleryId)) {
+        return $currentCoverId;
+    }
+    return gallery_first_cover_candidate_excluding($destinationGalleryId, []);
+}
+
+/**
+ * Return the first direct image that can be used as a gallery title picture.
+ *
+ * @param array<int> $excludedImageIds Image ids not eligible for the result.
+ */
+function gallery_first_cover_candidate_excluding(int $galleryId, array $excludedImageIds): ?int
+{
+    // $params stores query parameters for the cover candidate lookup.
+    $params = [$galleryId];
+    // $sql stores the direct-image candidate lookup.
+    $sql = "SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'";
+    if ($excludedImageIds) {
+        // $placeholders stores placeholders for images that are leaving the gallery.
+        $placeholders = implode(',', array_fill(0, count($excludedImageIds), '?'));
+        $sql .= ' AND id NOT IN (' . $placeholders . ')';
+        $params = array_merge($params, $excludedImageIds);
+    }
+    $sql .= " ORDER BY CASE WHEN visibility = 'public' THEN 0 ELSE 1 END, sort_order, filename, id LIMIT 1";
+    // $stmt stores the candidate query.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    // $candidateId stores the selected replacement or false when the gallery is empty.
+    $candidateId = $stmt->fetchColumn();
+    return $candidateId ? (int) $candidateId : null;
+}
+
+/**
+ * Check whether an image currently belongs to a gallery or one of its descendants.
+ */
+function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): bool
+{
+    // $galleryIds stores the receiving gallery and all descendant galleries accepted by title-picture selection.
+    $galleryIds = gallery_subtree_ids($galleryId);
+    if (!$galleryIds) {
+        return false;
+    }
+    // $placeholders stores placeholders for the eligible gallery branch.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // $stmt stores the ownership query.
+    $stmt = db()->prepare('SELECT COUNT(*) FROM images WHERE id = ? AND gallery_id IN (' . $placeholders . ')');
+    $stmt->execute(array_merge([$imageId], $galleryIds));
+    return (int) $stmt->fetchColumn() > 0;
+}
+
 /**
  * Handles move gallery folder to parent logic for the gallery application.
  * @param mixed $galleryId Input used by this operation.

@@ -119,8 +119,269 @@ export function setupGalleryBulkDeleteConfirmation() {
 }
 
 
+export function setupImageBulkMoveFields() {
+    document.querySelectorAll('[data-admin-image-bulk-form]').forEach((form) => {
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+
+        // Variable `panel` stores the guided physical-move panel.
+        const panel = form.querySelector('[data-admin-image-move-panel]');
+        // Variable `openButton` stores the toolbar action that reveals the move flow.
+        const openButton = form.querySelector('[data-admin-image-move-open]');
+        // Variable `cancelButtons` stores controls that hide the move flow without changing selection.
+        const cancelButtons = Array.from(form.querySelectorAll('[data-admin-image-move-cancel]'));
+        // Variable `actionSelect` stores the existing bulk action field submitted to the backend.
+        const actionSelect = form.querySelector('[data-admin-image-bulk-action]');
+        // Variable `existingFields` stores the destination selector for existing-gallery moves.
+        const existingFields = form.querySelector('[data-admin-image-move-existing]');
+        // Variable `newFields` stores the title and folder fields for new-gallery moves.
+        const newFields = form.querySelector('[data-admin-image-move-new]');
+        // Variable `destinationSelect` stores the existing-gallery target field.
+        const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
+        // Variable `newGalleryTitle` stores the required title for the new gallery path.
+        const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
+        // Variable `summary` stores the live confirmation summary.
+        const summary = form.querySelector('[data-admin-image-move-summary]');
+        // Variable `submitButton` stores the final physical-move submit button.
+        const submitButton = form.querySelector('[data-admin-image-move-submit]');
+        // Variable `selectedCounts` stores the compact selected-photo counters.
+        const selectedCounts = Array.from(form.querySelectorAll('[data-admin-image-selected-count]'));
+        // Variable `stepItems` stores the visual progress markers for the guided move panel.
+        const stepItems = Array.from(form.querySelectorAll('[data-admin-image-move-step]'));
+        // Variable `choiceButtons` stores the two action choice cards.
+        const choiceButtons = Array.from(form.querySelectorAll('[data-admin-image-move-choice]'));
+
+        if (!(panel instanceof HTMLElement) || !(openButton instanceof HTMLElement) || !(actionSelect instanceof HTMLSelectElement)) {
+            return;
+        }
+
+        // Variable `moveAction` stores the staged action selected inside the guided panel.
+        let moveAction = actionSelect.value === 'move_existing' || actionSelect.value === 'move_new' ? actionSelect.value : '';
+
+        /**
+         * Return checked photo boxes from this form only.
+         *
+         * @returns {HTMLInputElement[]} Selected image checkboxes.
+         */
+        function selectedImageCheckboxes() {
+            return Array.from(form.querySelectorAll('input[type="checkbox"][name="image_ids[]"]:checked'))
+                .filter((checkbox) => checkbox instanceof HTMLInputElement);
+        }
+
+        /**
+         * Return readable names for selected photos.
+         *
+         * @returns {string[]} Selected photo names.
+         */
+        function selectedImageNames() {
+            return selectedImageCheckboxes()
+                .map((checkbox) => checkbox.closest('[data-admin-image-order-row]'))
+                .filter((row) => row instanceof HTMLElement)
+                .map((row) => row.dataset.imageName || row.querySelector('[data-admin-image-name-cell]')?.textContent?.trim() || `Image ${row.dataset.imageId || ''}`.trim());
+        }
+
+        /**
+         * Show or hide the staged target fields for the selected move action.
+         *
+         * @returns {void}
+         */
+        function updateTargetVisibility() {
+            if (existingFields instanceof HTMLElement) {
+                existingFields.hidden = moveAction !== 'move_existing';
+                existingFields.querySelectorAll('select, input, textarea').forEach((field) => {
+                    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+                        field.disabled = moveAction !== 'move_existing';
+                    }
+                });
+            }
+            if (newFields instanceof HTMLElement) {
+                newFields.hidden = moveAction !== 'move_new';
+                newFields.querySelectorAll('select, input, textarea').forEach((field) => {
+                    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+                        field.disabled = moveAction !== 'move_new';
+                    }
+                });
+            }
+            choiceButtons.forEach((button) => {
+                if (!(button instanceof HTMLElement)) {
+                    return;
+                }
+                const selected = button.dataset.adminImageMoveChoice === moveAction;
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+        }
+
+        /**
+         * Return the current target label for the confirmation summary.
+         *
+         * @returns {string} Human-readable target label.
+         */
+        function targetLabel() {
+            if (moveAction === 'move_existing' && destinationSelect instanceof HTMLSelectElement) {
+                const selectedOption = destinationSelect.selectedOptions && destinationSelect.selectedOptions[0] ? destinationSelect.selectedOptions[0] : null;
+                return selectedOption && destinationSelect.value !== '0' ? selectedOption.textContent.trim() : '';
+            }
+            if (moveAction === 'move_new' && newGalleryTitle instanceof HTMLInputElement) {
+                return newGalleryTitle.value.trim();
+            }
+            return '';
+        }
+
+        /**
+         * Update selected count, summary text, and submit availability.
+         *
+         * @returns {void}
+         */
+        function updateMoveState() {
+            const names = selectedImageNames();
+            const count = names.length;
+            const target = targetLabel();
+            const hasAction = moveAction === 'move_existing' || moveAction === 'move_new';
+            const hasTarget = target !== '';
+            const isReady = count > 0 && hasAction && hasTarget;
+
+            selectedCounts.forEach((selectedCount) => {
+                if (selectedCount instanceof HTMLElement) {
+                    selectedCount.textContent = count === 1 ? '1 photo selected' : `${count} photos selected`;
+                }
+            });
+
+            if (summary instanceof HTMLElement) {
+                if (count === 0) {
+                    summary.textContent = 'Select one or more photos first.';
+                } else if (!hasAction) {
+                    summary.textContent = `${count} selected. Choose one of the move actions above.`;
+                } else if (!hasTarget) {
+                    summary.textContent = moveAction === 'move_existing'
+                        ? `${count} selected. Choose the destination gallery.`
+                        : `${count} selected. Enter the new gallery title.`;
+                } else {
+                    const actionLabel = moveAction === 'move_existing' ? 'existing gallery' : 'new gallery';
+                    summary.textContent = `${count} selected. Move originals, thumbnails, and generated display files to the ${actionLabel}: ${target}.`;
+                }
+            }
+
+            if (submitButton instanceof HTMLButtonElement) {
+                submitButton.disabled = !isReady;
+            }
+
+            stepItems.forEach((step) => {
+                if (!(step instanceof HTMLElement)) {
+                    return;
+                }
+                const stepName = step.dataset.adminImageMoveStep || '';
+                const isTargetReady = hasAction;
+                const isConfirmReady = hasAction && hasTarget;
+                const active = (stepName === 'action' && !hasAction)
+                    || (stepName === 'target' && hasAction && !hasTarget)
+                    || (stepName === 'confirm' && isConfirmReady)
+                    || (stepName === 'complete' && false);
+                const complete = (stepName === 'action' && hasAction)
+                    || (stepName === 'target' && isTargetReady && hasTarget);
+                step.classList.toggle('is-active', active);
+                step.classList.toggle('is-complete', complete);
+            });
+
+            updateTargetVisibility();
+        }
+
+        /**
+         * Set the active move action and mirror it into the submitted select field.
+         *
+         * @param {string} value Submitted backend action value.
+         * @returns {void}
+         */
+        function chooseMoveAction(value) {
+            moveAction = value === 'move_existing' || value === 'move_new' ? value : '';
+            if (moveAction) {
+                actionSelect.value = moveAction;
+            }
+            updateMoveState();
+        }
+
+        openButton.addEventListener('click', () => {
+            panel.hidden = false;
+            updateMoveState();
+            const firstChoice = panel.querySelector('[data-admin-image-move-choice]');
+            if (firstChoice instanceof HTMLElement) {
+                firstChoice.focus({preventScroll: true});
+            }
+        });
+
+        cancelButtons.forEach((cancelButton) => {
+            if (!(cancelButton instanceof HTMLElement)) {
+                return;
+            }
+            cancelButton.addEventListener('click', () => {
+                panel.hidden = true;
+                if (actionSelect.value === 'move_existing' || actionSelect.value === 'move_new') {
+                    actionSelect.value = 'public';
+                }
+                moveAction = '';
+                updateMoveState();
+            });
+        });
+
+        choiceButtons.forEach((button) => {
+            if (!(button instanceof HTMLElement)) {
+                return;
+            }
+            button.addEventListener('click', () => {
+                chooseMoveAction(button.dataset.adminImageMoveChoice || '');
+            });
+        });
+
+        form.addEventListener('change', (event) => {
+            const target = event.target;
+            if (target instanceof HTMLSelectElement && target === actionSelect) {
+                if (target.value === 'move_existing' || target.value === 'move_new') {
+                    panel.hidden = false;
+                    chooseMoveAction(target.value);
+                    return;
+                }
+                moveAction = '';
+                panel.hidden = true;
+            }
+            updateMoveState();
+        });
+
+        form.addEventListener('input', updateMoveState);
+
+        if (submitButton instanceof HTMLButtonElement) {
+            submitButton.addEventListener('click', (event) => {
+                const count = selectedImageCheckboxes().length;
+                if (!moveAction) {
+                    event.preventDefault();
+                    window.alert('Choose whether to move to an existing gallery or a new gallery.');
+                    return;
+                }
+                if (count === 0) {
+                    event.preventDefault();
+                    window.alert('Select at least one photo to move.');
+                    return;
+                }
+                if (moveAction === 'move_existing' && (!(destinationSelect instanceof HTMLSelectElement) || destinationSelect.value === '0')) {
+                    event.preventDefault();
+                    window.alert('Choose the destination gallery.');
+                    return;
+                }
+                if (moveAction === 'move_new' && (!(newGalleryTitle instanceof HTMLInputElement) || newGalleryTitle.value.trim() === '')) {
+                    event.preventDefault();
+                    window.alert('Enter the new gallery title.');
+                    return;
+                }
+                actionSelect.value = moveAction;
+                form.dataset.adminImageMoveConfirmed = '1';
+            });
+        }
+
+        updateMoveState();
+    });
+}
+
 export function setupImageBulkDeleteConfirmation() {
-    // Confirm destructive photo deletes from the dedicated admin edit-gallery image table.
+    // Confirm destructive photo deletes and guard physical photo moves from the dedicated admin edit-gallery image table.
     document.addEventListener('submit', (event) => {
         // Variable `form` stores this steps working value.
         const form = event.target;
@@ -135,7 +396,9 @@ export function setupImageBulkDeleteConfirmation() {
         const isSingleDelete = submitter instanceof HTMLElement && submitter.matches('[data-admin-image-delete-single]');
         // Variable `isBulkDelete` stores whether the toolbar selected the delete operation.
         const isBulkDelete = action instanceof HTMLSelectElement && action.value === 'delete';
-        if (!isSingleDelete && !isBulkDelete) {
+        // Variable `isBulkMove` stores whether the staged toolbar selected a physical photo move operation.
+        const isBulkMove = action instanceof HTMLSelectElement && (action.value === 'move_existing' || action.value === 'move_new');
+        if (!isSingleDelete && !isBulkDelete && !isBulkMove) {
             return;
         }
 
@@ -152,7 +415,38 @@ export function setupImageBulkDeleteConfirmation() {
 
         if (!names.length) {
             event.preventDefault();
-            window.alert('Select at least one photo to delete.');
+            window.alert(isBulkMove ? 'Select at least one photo to move.' : 'Select at least one photo to delete.');
+            return;
+        }
+
+        if (isBulkMove) {
+            const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
+            const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
+            if (action.value === 'move_existing' && (!(destinationSelect instanceof HTMLSelectElement) || destinationSelect.value === '0')) {
+                event.preventDefault();
+                window.alert('Choose the destination gallery.');
+                return;
+            }
+            if (action.value === 'move_new' && (!(newGalleryTitle instanceof HTMLInputElement) || newGalleryTitle.value.trim() === '')) {
+                event.preventDefault();
+                window.alert('Enter the new gallery title.');
+                return;
+            }
+            if (form.dataset.adminImageMoveConfirmed === '1') {
+                delete form.dataset.adminImageMoveConfirmed;
+                return;
+            }
+            // Variable `moveMessage` stores fallback confirmation text when the staged button was not used.
+            const moveMessage = [
+                names.length === 1 ? 'Move this photo?' : 'Move these photos?',
+                '',
+                ...names.map((name) => `• ${name}`),
+                '',
+                'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.'
+            ].join('\n');
+            if (!window.confirm(moveMessage)) {
+                event.preventDefault();
+            }
             return;
         }
 

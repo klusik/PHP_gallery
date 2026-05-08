@@ -1262,7 +1262,7 @@ function cms_admin_edit_gallery(): void
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
-    echo '<div class="bulk-row admin-edit-image-toolbar"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option><option value="delete">Delete selected photos</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
+    render_admin_image_bulk_toolbar($gallery);
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
     echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
@@ -1277,6 +1277,53 @@ function cms_admin_edit_gallery(): void
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Render the admin image bulk toolbar and guided move workflow.
+ *
+ * The standard select keeps existing bulk behavior intact. Moving photos uses a
+ * staged panel so admins first choose whether the target is an existing gallery
+ * or a new child gallery, then confirm the exact physical move.
+ */
+function render_admin_image_bulk_toolbar(array $gallery): void
+{
+    // $galleryId stores the gallery currently being edited.
+    $galleryId = (int) $gallery['id'];
+    // $destinationOptions stores all galleries except the current source gallery.
+    $destinationOptions = gallery_options_for_select(0, $galleryId);
+
+    echo '<div class="bulk-row admin-edit-image-toolbar" data-admin-image-move-toolbar>';
+    echo '<div class="admin-image-bulk-primary">';
+    echo '<label class="admin-image-select-all"><input type="checkbox" data-select-all="image_ids[]"> Select all images</label>';
+    echo '<span class="admin-image-selection-count" data-admin-image-selected-count>0 selected</span>';
+    echo '<label>Bulk action<select name="action" data-admin-image-bulk-action><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option><option value="delete">Delete selected photos</option><option value="move_existing" hidden>Move to existing gallery</option><option value="move_new" hidden>Move to new gallery</option></select></label>';
+    echo '<button type="submit">Apply to selected</button>';
+    echo '<button type="button" class="secondary" data-admin-image-move-open>Move selected photos</button>';
+    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button>';
+    echo '</div>';
+
+    echo '<section class="admin-image-move-panel" data-admin-image-move-panel hidden aria-label="Move selected photos">';
+    echo '<div class="admin-image-move-panel-head"><div class="admin-image-move-title"><span class="admin-image-move-title-icon" aria-hidden="true">⇄</span><div><h3>Move selected photos</h3><span class="admin-image-move-count-pill" data-admin-image-selected-count>0 selected</span></div></div><button type="button" class="admin-image-move-close" data-admin-image-move-cancel aria-label="Close move photos panel">×</button></div>';
+    echo '<div class="admin-image-move-steps" aria-label="Move progress">';
+    echo '<div class="admin-image-move-step is-active" data-admin-image-move-step="action"><span>1</span><div><strong>Choose action</strong><p>Pick what you want to do</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="target"><span>2</span><div><strong>Target</strong><p>Choose or create gallery</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="confirm"><span>3</span><div><strong>Confirm</strong><p>Review and confirm</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="complete"><span>4</span><div><strong>Complete</strong><p>Move photos</p></div></div>';
+    echo '</div>';
+    echo '<p class="admin-image-move-lead">Choose where you want to move the selected photos.</p>';
+    echo '<div class="admin-image-move-choice-grid" role="group" aria-label="Move action">';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>Move to existing gallery</strong><small>Pick a gallery that already exists. Its title picture is kept unless it is missing or invalid.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>Move to new gallery</strong><small>Create a new child gallery here, then move only the selected photos into it.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '</div>';
+    echo '<div class="admin-image-move-targets">';
+    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>Destination gallery</span><select name="destination_gallery_id"><option value="0">Choose existing gallery</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> The selected photos, thumbnails, and generated display files will be moved into this gallery folder.</small></label>';
+    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>New gallery title</span><input type="text" name="new_gallery_title" placeholder="Example: Prague evening walk"></label><label><span>Optional folder/slug</span><input type="text" name="new_gallery_folder_name" placeholder="Leave empty to derive it from the title"></label><small><span aria-hidden="true">ⓘ</span> The new gallery is created as a child of the current gallery and receives only the selected photos.</small></div>';
+    echo '</div>';
+    echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>Cancel</button><div><strong>Move summary</strong><p data-admin-image-move-summary>Select photos and choose a target to continue.</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>Move selected photos now →</button></div>';
+    echo '</section>';
+    echo '</div>';
 }
 
 
@@ -1897,6 +1944,99 @@ function cms_admin_bulk_images(): void
     if (!$ownedIds) {
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
+    if ($action === 'move_existing' || $action === 'move_new') {
+        // $createdGalleryId stores a newly-created destination so it can be removed again when validation fails before any move.
+        $createdGalleryId = 0;
+        // $moveAttempted stores whether filesystem movement has already been delegated to the service.
+        $moveAttempted = false;
+        try {
+            // $destinationGalleryId stores the target gallery chosen directly or created from selected images.
+            $destinationGalleryId = 0;
+            if ($action === 'move_existing') {
+                $destinationGalleryId = (int) ($_POST['destination_gallery_id'] ?? 0);
+                if ($destinationGalleryId <= 0 || !find_gallery($destinationGalleryId)) {
+                    throw new RuntimeException('Choose an existing destination gallery.');
+                }
+            } else {
+                // $newGalleryTitle stores the title for the gallery created from selected photos.
+                $newGalleryTitle = trim((string) ($_POST['new_gallery_title'] ?? ''));
+                if ($newGalleryTitle === '') {
+                    throw new RuntimeException('Enter a title for the new gallery.');
+                }
+                // $newGallerySortOrder stores the next position among the current gallery's children.
+                $newGallerySortStmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
+                $newGallerySortStmt->execute([$galleryId]);
+                $newGallerySortOrder = (int) $newGallerySortStmt->fetchColumn();
+                // $newGallery stores the newly created child gallery under the current source gallery.
+                $newGallery = create_empty_gallery([
+                    'title' => $newGalleryTitle,
+                    'folder_name' => trim((string) ($_POST['new_gallery_folder_name'] ?? '')),
+                    'description' => '',
+                    'visibility' => gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished')),
+                    'parent_id' => $galleryId,
+                    'sort_order' => $newGallerySortOrder,
+                    'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
+                    'show_filenames' => gallery_shows_filenames($gallery),
+                ]);
+                $destinationGalleryId = (int) $newGallery['id'];
+                $createdGalleryId = $destinationGalleryId;
+            }
+
+            // $moved stores filesystem and database movement details.
+            $moveAttempted = true;
+            $moved = move_gallery_images($galleryId, $destinationGalleryId, $ownedIds);
+            if (!empty($moved['failures'])) {
+                if ($createdGalleryId > 0) {
+                    delete_gallery_subtrees([$createdGalleryId]);
+                }
+                admin_log_event('error', 'image.bulk_move_failed', 'Admin image move validation failed.', [
+                    'source_gallery_id' => $galleryId,
+                    'destination_gallery_id' => $destinationGalleryId,
+                    'image_ids' => $ownedIds,
+                    'failures' => $moved['failures'],
+                ], ['category' => 'other', 'severity' => 'error']);
+                flash_message('admin_notice', 'Image move failed: ' . implode(' ', array_slice($moved['failures'], 0, 5)));
+                redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+            }
+            admin_log_event('info', 'image.bulk_moved', 'Admin moved selected images between galleries.', [
+                'source_gallery_id' => $galleryId,
+                'destination_gallery_id' => $destinationGalleryId,
+                'requested' => (int) $moved['requested'],
+                'moved' => (int) $moved['moved'],
+                'originals_moved' => (int) $moved['originals_moved'],
+                'derivatives_moved' => (int) $moved['derivatives_moved'],
+                'created_gallery' => $action === 'move_new',
+                'source_cover_image_id' => $moved['source_cover_image_id'] ?? null,
+                'destination_cover_image_id' => $moved['destination_cover_image_id'] ?? null,
+            ], ['category' => 'other', 'severity' => 'info']);
+            flash_message('admin_notice', 'Moved ' . (int) $moved['moved'] . ' image(s), including ' . (int) $moved['originals_moved'] . ' original file(s) and ' . (int) $moved['derivatives_moved'] . ' derivative file(s).');
+        } catch (Throwable $exception) {
+            if ($createdGalleryId > 0) {
+                try {
+                    // $createdGalleryImageCount keeps a successfully populated new gallery from being deleted after a late non-critical failure.
+                    $createdGalleryImageCountStmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
+                    $createdGalleryImageCountStmt->execute([$createdGalleryId]);
+                    $createdGalleryImageCount = (int) $createdGalleryImageCountStmt->fetchColumn();
+                } catch (Throwable) {
+                    $createdGalleryImageCount = $moveAttempted ? 1 : 0;
+                }
+                if (!$moveAttempted || $createdGalleryImageCount === 0) {
+                    try {
+                        delete_gallery_subtrees([$createdGalleryId]);
+                    } catch (Throwable) {
+                    }
+                }
+            }
+            admin_log_event('error', 'image.bulk_move_failed', 'Admin image move failed.', [
+                'source_gallery_id' => $galleryId,
+                'image_ids' => $ownedIds,
+                'action' => $action,
+                'error' => $exception->getMessage(),
+            ], ['category' => 'other', 'severity' => 'error']);
+            flash_message('admin_notice', 'Image move failed: ' . $exception->getMessage());
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
     if ($action === 'delete') {
         try {
             // Variable $deleted stores the filesystem and database deletion result.
@@ -2269,16 +2409,31 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * Handles gallery options for select logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
-function gallery_options_for_select(int $selectedGalleryId = 0): string
+function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGalleryId = 0): string
 {
     // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
     // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
+        if ($excludedGalleryId > 0 && (int) $gallery['id'] === $excludedGalleryId) {
+            continue;
+        }
         // $selected stores the HTML selected marker for contextual upload links opened from a gallery page.
         $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
-        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+        // $folderPath stores the normalized public folder path used for hierarchy depth.
+        $folderPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+        // $depth stores how deeply nested the gallery is in the hierarchy.
+        $depth = $folderPath === '' ? 0 : max(0, substr_count($folderPath, '/'));
+        // $indent stores visible indentation that survives native select rendering better than CSS padding on options.
+        $indent = str_repeat(' ', $depth);
+        // $branch stores a compact hierarchy marker for nested galleries.
+        $branch = $depth > 0 ? '↳ ' : '';
+        // $pathSuffix stores the filesystem-style path hint without making the title hard to scan.
+        $pathSuffix = $folderPath !== '' ? '  ·  /' . $folderPath : '';
+        // $label stores the formatted select option label.
+        $label = $indent . $branch . (string) $gallery['title'] . $pathSuffix;
+        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($label) . '</option>';
     }
     return $html;
 }
