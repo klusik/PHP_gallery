@@ -226,6 +226,7 @@ function cms_admin_logs(): void
     echo '<section class="hero"><h1>Admin log</h1><p>Operational events, failures, maintenance actions, and workflow states.</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">Anonymous telemetry</a>';
+    echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">Export all logs ZIP</a>';
     echo '</nav></section>';
 
     echo '<section class="panel"><h2>Filters</h2><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '">';
@@ -354,4 +355,42 @@ function cms_admin_log_export(): void
     header('Content-Disposition: attachment; filename="' . $fileName . '"');
     header('X-Content-Type-Options: nosniff');
     echo admin_log_export_text($entry);
+}
+
+
+/**
+ * Export all admin logs as a ZIP containing matching CSV and JSON data files.
+ */
+function cms_admin_logs_export_zip(): void
+{
+    require_admin();
+    $filePath = '';
+    try {
+        // $rows stores the complete admin log set so CSV and JSON are built from one database read.
+        $rows = admin_log_export_rows();
+        $payload = admin_log_export_payload($rows);
+        $filePath = admin_log_export_temp_path();
+        admin_log_create_export_zip($filePath, $payload);
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        admin_log_send_export_zip($filePath, admin_log_export_zip_filename());
+    } catch (Throwable $exception) {
+        if ($filePath !== '' && is_file($filePath)) {
+            @unlink($filePath);
+        }
+        admin_log_event('error', 'admin_log.export_zip_failed', 'Admin log ZIP export failed.', [
+            'error' => $exception->getMessage(),
+        ], [
+            'severity' => 'error',
+            'category' => 'admin',
+        ]);
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        echo 'Unable to export admin logs.';
+    }
 }

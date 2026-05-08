@@ -194,6 +194,7 @@ function cms_run(): void
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
         'admin_log_export' => 'cms_admin_log_export',
+        'admin_logs_export_zip' => 'cms_admin_logs_export_zip',
         'admin_telemetry' => 'cms_admin_telemetry',
         'admin_telemetry_settings' => 'cms_admin_telemetry_settings',
         'admin_telemetry_maintenance' => 'cms_admin_telemetry_maintenance',
