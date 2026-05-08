@@ -335,6 +335,12 @@ function cms_gallery(): void
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
+    telemetry_append_public_script([
+        'route_name' => 'gallery',
+        'page_kind' => 'gallery',
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
+    ]);
     render_footer();
 }
 
@@ -692,6 +698,7 @@ function lightbox_image_data_attributes(array $image, array $gallery, string $me
     $mapPointAttribute = $imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '';
     return $sourceAttribute
         . ' data-image-id="' . (int) $image['id'] . '"'
+        . ' data-gallery-id="' . (int) $gallery['id'] . '"'
         . ' data-full-src="' . e($mediaUrl) . '"'
         . ' data-preview-src="' . e($previewUrl) . '"'
         . ' data-page-url="' . e($imagePageUrl) . '"'

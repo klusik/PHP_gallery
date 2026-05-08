@@ -75,7 +75,10 @@ function cms_thumb(): void
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery) || image_nsfw_restricted($image, $gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
-    header('Content-Length: ' . filesize($path));
+    // $bytes stores the response body size counted for anonymous media telemetry.
+    $bytes = (int) filesize($path);
+    telemetry_record_media_served_event($image, $gallery, 'media.thumbnail.served', $bytes, 'thumb_' . $size, 'miss');
+    header('Content-Length: ' . $bytes);
     readfile($path);
 }
 
@@ -123,7 +126,10 @@ function cms_public_thumb(): void
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery) || image_nsfw_restricted($image, $gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
-    header('Content-Length: ' . filesize($path));
+    // $bytes stores the response body size counted for anonymous media telemetry.
+    $bytes = (int) filesize($path);
+    telemetry_record_media_served_event($image, $gallery, 'media.thumbnail.served', $bytes, 'thumb_' . $size, 'miss');
+    header('Content-Length: ' . $bytes);
     readfile($path);
 }
 
@@ -171,7 +177,10 @@ function cms_public_media(): void
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery) || image_nsfw_restricted($image, $gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
-    header('Content-Length: ' . filesize($path));
+    // $bytes stores the response body size counted for anonymous media telemetry.
+    $bytes = (int) filesize($path);
+    telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, 'original', 'miss');
+    header('Content-Length: ' . $bytes);
     readfile($path);
 }
 

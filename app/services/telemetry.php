@@ -222,7 +222,7 @@ function telemetry_record_event(array $event): void
             telemetry_nullable_positive_int($event['value_ms'] ?? null),
             telemetry_value_bucket($event['value_bucket'] ?? null),
             telemetry_enum($event['cache_result'] ?? 'unknown', ['hit', 'miss', 'bypass', 'stale', 'evicted', 'discarded', 'unknown'], 'unknown'),
-            telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
+            telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1280', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
             telemetry_nullable_positive_int($event['http_status'] ?? null),
             telemetry_error_kind($event['error_kind'] ?? null),
             telemetry_sample_rate($event['sampled_rate'] ?? 1),
@@ -351,7 +351,7 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
         $viewportClass,
         '',
         $referrerCategory,
-        telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
+        telemetry_enum($event['media_variant'] ?? 'unknown', ['original', 'thumb_300', 'thumb_600', 'thumb_800', 'thumb_960', 'thumb_1200', 'thumb_1280', 'thumb_1600', 'webp', 'jpg', 'unknown'], 'unknown'),
         telemetry_enum($event['cache_result'] ?? 'unknown', ['hit', 'miss', 'bypass', 'stale', 'evicted', 'discarded', 'unknown'], 'unknown'),
         1,
         1,
@@ -360,6 +360,52 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
         $value,
         now_sql(),
     ]);
+}
+
+
+/**
+ * Record one served public media response for anonymous telemetry.
+ */
+function telemetry_record_media_served_event(array $image, array $gallery, string $eventName, int $bytes, string $mediaVariant, string $cacheResult = 'miss'): void
+{
+    if ($bytes <= 0 || telemetry_request_excluded()) {
+        return;
+    }
+    telemetry_record_event([
+        'event_name' => $eventName,
+        'source' => 'server',
+        'occurred_at' => gmdate('c'),
+        'route_name' => $_GET['page'] ?? 'media',
+        'page_kind' => 'media',
+        'gallery_id' => (int) $gallery['id'],
+        'image_id' => (int) $image['id'],
+        'referrer_category' => telemetry_referrer_category($_SERVER['HTTP_REFERER'] ?? null),
+        'value_bytes' => $bytes,
+        'media_variant' => $mediaVariant,
+        'cache_result' => $cacheResult,
+        'http_status' => http_response_code() ?: 200,
+    ]);
+}
+
+/**
+ * Format one byte count using 1024-based units.
+ *
+ * The telemetry dashboard uses binary units so large media totals stay readable
+ * without implying decimal SI scaling.
+ */
+function telemetry_format_bytes(int|float $bytes, int $precision = 1): string
+{
+    $bytes = (float) $bytes;
+    $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+    $index = 0;
+    while ($bytes >= 1024 && $index < count($units) - 1) {
+        $bytes /= 1024;
+        $index++;
+    }
+    if ($index === 0) {
+        return number_format($bytes, 0) . ' ' . $units[$index];
+    }
+    return number_format($bytes, $precision) . ' ' . $units[$index];
 }
 
 /**
@@ -372,10 +418,11 @@ function telemetry_public_config(array $context = []): array
     }
     return [
         'enabled' => true,
-        'endpoint' => url_for('telemetry_ingest'),
+        'endpoint' => url_for('usage_collect'),
         'sampleRate' => (float) telemetry_setting('telemetry_client_sample_rate', '1.0'),
         'performanceSampleRate' => (float) telemetry_setting('telemetry_performance_sample_rate', '0.25'),
         'maxPhotoViewSeconds' => (int) telemetry_setting('telemetry_max_photo_view_seconds', '900'),
+        'respectDnt' => telemetry_setting_enabled('telemetry_respect_dnt', '1'),
         'routeName' => telemetry_short_identifier($context['route_name'] ?? ($_GET['page'] ?? 'unknown'), 80) ?? 'unknown',
         'pageKind' => telemetry_enum($context['page_kind'] ?? 'unknown', ['home', 'gallery', 'subgallery', 'photo', 'media', 'admin', 'download', 'api', 'other', 'unknown'], 'unknown'),
         'galleryId' => telemetry_nullable_positive_int($context['gallery_id'] ?? null),
@@ -395,7 +442,7 @@ function telemetry_append_public_script(array $context = []): void
         return;
     }
     append_cms_footer_script('window.PHPGalleryTelemetry = ' . json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';');
-    // $scriptPath stores the telemetry asset path used for cache busting.
-    $scriptPath = dirname(__DIR__, 2) . '/public/assets/telemetry.js';
-    append_cms_footer_html('<script src="' . e(asset_url('assets/telemetry.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '" defer></script>');
+    // $scriptPath stores the anonymous usage asset path used for cache busting.
+    $scriptPath = dirname(__DIR__, 2) . '/public/assets/usage.js';
+    append_cms_footer_html('<script src="' . e(asset_url('assets/usage.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>');
 }

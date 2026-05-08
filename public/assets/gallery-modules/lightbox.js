@@ -1048,9 +1048,10 @@ export function setupGalleryLightbox() {
         if (!window.PHPGalleryTelemetryPhotoOpened || !card) {
             return;
         }
+        const telemetryConfig = window.PHPGalleryTelemetry || {};
         window.PHPGalleryTelemetryPhotoOpened(
             Number(card.dataset.imageId || 0),
-            Number(document.body.dataset.galleryId || 0),
+            Number(card.dataset.galleryId || telemetryConfig.galleryId || 0),
             document.fullscreenElement ? 'fullscreen' : 'normal'
         );
     }
