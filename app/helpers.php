@@ -1218,10 +1218,18 @@ function supported_image_extensions(): array
         $extensions[] = 'heic';
         $extensions[] = 'heif';
     }
-    if (function_exists('raw_conversion_supported') && raw_conversion_supported()) {
+    if (function_exists('dng_conversion_supported') && dng_conversion_supported()) {
         $extensions[] = 'dng';
     }
     return $extensions;
+}
+
+/**
+ * Return whether a filesystem path uses the Adobe Digital Negative extension.
+ */
+function is_dng_image_path(string $path): bool
+{
+    return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'dng';
 }
 
 /**

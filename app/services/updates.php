@@ -1254,6 +1254,9 @@ function application_update_path_is_protected(string $relativePath): bool
     if (in_array($relativePath, $protectedFiles, true)) {
         return true;
     }
+    if ($relativePath === 'galleries/.htaccess') {
+        return false;
+    }
     foreach (['.git', '.well-known', 'cache', 'galleries', 'custom_css', '_for_codex'] as $directory) {
         if ($relativePath === $directory || str_starts_with($relativePath, $directory . '/')) {
             return true;

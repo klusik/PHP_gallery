@@ -163,6 +163,7 @@ function cms_admin_telemetry(): void
     render_header('Telemetry');
     echo '<section class="hero"><h1>Anonymous telemetry</h1><p>Local, privacy-safe usage and performance statistics for tuning the gallery.</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin_logs')) . '">Operational logs</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry_export')) . '">Export HTML report</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Dashboard</a>';
     echo '</nav></section>';
 
@@ -175,6 +176,10 @@ function cms_admin_telemetry(): void
     echo '<section class="panel"><h2>Privacy status</h2><div class="telemetry-privacy-note">';
     echo '<p>This subsystem does not store raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.</p>';
     echo '<p>Public telemetry is ' . (telemetry_public_usage_enabled() ? '<strong>enabled</strong>' : '<strong>disabled</strong>') . '. Raw events are retained for ' . e((string) telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90)) . ' days.</p>';
+    if (current_user() && telemetry_setting_enabled('telemetry_admin_excluded', '1')) {
+        echo '<p><strong>Your current browser is logged in as admin, so your own gallery clicks are excluded.</strong> Open the public site in a private/incognito window, log out, use View as anonymous if enabled for the page, or temporarily disable "Exclude logged-in admins from public telemetry" while testing.</p>';
+    }
+    echo '<p>The public browser collector uses a neutral first-party endpoint to avoid false positives from privacy filters that block asset or route names containing telemetry.</p>';
     echo '</div></section>';
 
     echo '<section class="panel"><h2>Last 30 days</h2><div class="metric-grid">';
@@ -183,7 +188,7 @@ function cms_admin_telemetry(): void
     render_telemetry_metric_card('Photo opens', (string) telemetry_metric_events('photo.views', 30));
     render_telemetry_metric_card('Total capped photo time', number_format(telemetry_metric_sum('photo.view_seconds', 30), 0) . ' s');
     render_telemetry_metric_card('Client errors', (string) telemetry_metric_events('client.errors', 30));
-    render_telemetry_metric_card('Image bytes measured', number_format(telemetry_metric_sum('media.image.bytes', 30) + telemetry_metric_sum('media.thumbnail.bytes', 30), 0) . ' B');
+    render_telemetry_metric_card('Image bytes measured', telemetry_format_bytes(telemetry_metric_sum('media.image.bytes', 30) + telemetry_metric_sum('media.thumbnail.bytes', 30), 1));
     echo '</div></section>';
 
     echo '<section class="panel telemetry-settings-panel"><h2>Settings</h2>';
@@ -195,10 +200,10 @@ function cms_admin_telemetry(): void
     render_telemetry_checkbox('telemetry_database_enabled', 'Collect database health metrics', $settings);
     render_telemetry_checkbox('telemetry_respect_dnt', 'Respect Do Not Track', $settings);
     render_telemetry_checkbox('telemetry_admin_excluded', 'Exclude logged-in admins from public telemetry', $settings);
-    echo '<label>Maximum photo view time counted, seconds<input type="number" min="10" max="3600" name="telemetry_max_photo_view_seconds" value="' . e($settings['telemetry_max_photo_view_seconds'] ?? '900') . '"></label>';
-    echo '<label>Raw event retention, days<input type="number" min="1" max="90" name="telemetry_raw_retention_days" value="' . e($settings['telemetry_raw_retention_days'] ?? '7') . '"></label>';
-    echo '<label>Hourly aggregate retention, days<input type="number" min="7" max="730" name="telemetry_hourly_retention_days" value="' . e($settings['telemetry_hourly_retention_days'] ?? '90') . '"></label>';
-    echo '<label>Daily aggregate retention, days<input type="number" min="30" max="3650" name="telemetry_daily_retention_days" value="' . e($settings['telemetry_daily_retention_days'] ?? '730') . '"></label>';
+    echo '<label>Maximum photo view time counted, seconds<input type="number" min="10" max="3600" name="telemetry_max_photo_view_seconds" value="' . e($settings['telemetry_max_photo_view_seconds'] ?? '900') . '"><span class="muted">When someone opens a photo, we only count the first part of that session. If they leave the tab open for a long time, we stop counting after this limit so one forgotten tab does not make the numbers look bigger than real use.</span></label>';
+    echo '<label>Raw event retention, days<input type="number" min="1" max="90" name="telemetry_raw_retention_days" value="' . e($settings['telemetry_raw_retention_days'] ?? '7') . '"><span class="muted">These are the detailed, line-by-line records. They are useful when you want to inspect exactly what happened, but they take the most space. This setting decides how long we keep the full detail before older entries are removed or condensed.</span></label>';
+    echo '<label>Hourly aggregate retention, days<input type="number" min="7" max="730" name="telemetry_hourly_retention_days" value="' . e($settings['telemetry_hourly_retention_days'] ?? '90') . '"><span class="muted">These are the summary totals that say, for example, how many page views happened in each hour. They are much smaller than raw logs and are good for recent history, charts, and quick checks.</span></label>';
+    echo '<label>Daily aggregate retention, days<input type="number" min="30" max="3650" name="telemetry_daily_retention_days" value="' . e($settings['telemetry_daily_retention_days'] ?? '730') . '"><span class="muted">These are the broad day-by-day totals. They are the lightest records we keep and are meant for long-term trends, like comparing this month with last month or last year.</span></label>';
     echo '<div class="bulk-row"><button type="submit">Save telemetry settings</button><a class="button secondary" href="' . e(url_for('admin_telemetry_maintenance')) . '">Run rollup and purge now</a></div>';
     echo '</form></section>';
 
@@ -266,6 +271,86 @@ function render_telemetry_key_value_table(array $rows, string $keyColumn, string
         echo '<tr><td>' . e((string) $row[$keyColumn]) . '</td><td>' . e((string) $row[$valueColumn]) . '</td></tr>';
     }
     echo '</tbody></table>';
+}
+
+
+/**
+ * Render one telemetry report metric card for the standalone HTML export.
+ */
+function telemetry_export_metric_card(string $label, string $value): string
+{
+    return '<article class="metric"><strong>' . e($value) . '</strong><span>' . e($label) . '</span></article>';
+}
+
+/**
+ * Render one telemetry export key-value table.
+ */
+function telemetry_export_key_value_table(array $rows, string $keyColumn, string $valueColumn, string $keyLabel, string $valueLabel): string
+{
+    if (!$rows) {
+        return '<p class="muted">No telemetry data yet.</p>';
+    }
+    // $html stores the generated standalone table markup.
+    $html = '<table><thead><tr><th>' . e($keyLabel) . '</th><th>' . e($valueLabel) . '</th></tr></thead><tbody>';
+    foreach ($rows as $row) {
+        $html .= '<tr><td>' . e((string) $row[$keyColumn]) . '</td><td>' . e((string) $row[$valueColumn]) . '</td></tr>';
+    }
+    return $html . '</tbody></table>';
+}
+
+/**
+ * Render one telemetry export photo table.
+ */
+function telemetry_export_photo_table(array $rows, string $valueKey, string $valueLabel): string
+{
+    if (!$rows) {
+        return '<p class="muted">No telemetry data yet.</p>';
+    }
+    // $html stores the generated standalone photo table markup.
+    $html = '<table><thead><tr><th>Photo</th><th>Gallery</th><th>' . e($valueLabel) . '</th></tr></thead><tbody>';
+    foreach ($rows as $row) {
+        $html .= '<tr><td>' . e((string) $row['filename']) . '</td><td>' . e((string) $row['gallery_title']) . '</td><td>' . e(number_format((float) $row[$valueKey], 2)) . '</td></tr>';
+    }
+    return $html . '</tbody></table>';
+}
+
+/**
+ * Download a standalone anonymous telemetry HTML report.
+ */
+function cms_admin_telemetry_export(): void
+{
+    require_admin();
+    if (!telemetry_settings_schema_ready()) {
+        http_response_code(409);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Telemetry tables are not available yet. Run database migrations first.';
+        return;
+    }
+    // $generatedAt stores the report timestamp shown in the static export.
+    $generatedAt = date('Y-m-d H:i:s');
+    // $fileName stores a safe local filename for the browser download.
+    $fileName = 'php-gallery-telemetry-' . date('Ymd-His') . '.html';
+    // $html stores the full standalone report document.
+    $html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>PHP Gallery telemetry report</title><style>'
+        . ':root{color-scheme:light dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6fb;color:#172033;}body{margin:0;padding:32px;}main{max-width:1180px;margin:0 auto;}header,.panel{background:rgba(255,255,255,.92);border:1px solid rgba(90,108,140,.22);border-radius:24px;box-shadow:0 18px 55px rgba(28,43,70,.10);padding:24px;margin-bottom:22px;}h1{margin:0 0 8px;font-size:34px;}h2{margin:0 0 16px;font-size:22px}.muted,p{color:#5b667a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}.metric{border:1px solid rgba(90,108,140,.20);border-radius:18px;padding:16px;background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(246,248,252,.94));}.metric strong{display:block;font-size:28px;margin-bottom:4px}.metric span{color:#5b667a}.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}table{width:100%;border-collapse:collapse;border-radius:16px;overflow:hidden}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid rgba(90,108,140,.18)}th{background:rgba(77,105,165,.10)}tr:last-child td{border-bottom:0}.privacy{background:#eef7f0;border-color:#b7dfc1}@media (prefers-color-scheme:dark){:root{background:#101521;color:#eef2fb}header,.panel{background:#171e2d;border-color:#303a50}.metric{background:#1c2435;border-color:#303a50}.muted,p{color:#aeb8cc}th{background:#222d43}.privacy{background:#18291e;border-color:#31563c}}</style></head><body><main>'
+        . '<header><h1>Anonymous telemetry report</h1><p>Generated ' . e($generatedAt) . '. Local, privacy-safe usage and performance statistics for PHP Gallery.</p></header>'
+        . '<section class="panel privacy"><h2>Privacy status</h2><p>This export contains aggregated anonymous telemetry only. It does not include raw IP addresses, raw browser user-agent strings, raw referrer URLs, names, email addresses, account identifiers, request bodies, or exact locations.</p><p>Public telemetry is ' . (telemetry_public_usage_enabled() ? '<strong>enabled</strong>' : '<strong>disabled</strong>') . '. Raw events are retained for ' . e((string) telemetry_retention_days('telemetry_raw_retention_days', 7, 1, 90)) . ' days.</p></section>'
+        . '<section class="panel"><h2>Last 30 days</h2><div class="grid">'
+        . telemetry_export_metric_card('Anonymous sessions', (string) telemetry_metric_events('public.sessions', 30))
+        . telemetry_export_metric_card('Page views', (string) telemetry_metric_events('public.page_views', 30))
+        . telemetry_export_metric_card('Photo opens', (string) telemetry_metric_events('photo.views', 30))
+        . telemetry_export_metric_card('Total capped photo time', number_format(telemetry_metric_sum('photo.view_seconds', 30), 0) . ' s')
+        . telemetry_export_metric_card('Client errors', (string) telemetry_metric_events('client.errors', 30))
+        . telemetry_export_metric_card('Image bytes measured', telemetry_format_bytes(telemetry_metric_sum('media.image.bytes', 30) + telemetry_metric_sum('media.thumbnail.bytes', 30), 1))
+        . '</div></section>'
+        . '<section class="panel"><h2>Top viewed photos</h2>' . telemetry_export_photo_table(telemetry_top_photos(30, 25), 'photo_views', 'Views') . '</section>'
+        . '<section class="panel"><h2>Longest viewed photos</h2>' . telemetry_export_photo_table(telemetry_longest_viewed_photos(30, 25), 'avg_view_seconds', 'Average capped seconds') . '</section>'
+        . '<section class="panel split"><div><h2>Browser mix</h2>' . telemetry_export_key_value_table(telemetry_browser_mix(30), 'browser_family', 'sessions', 'Browser', 'Sessions') . '</div><div><h2>Cache events</h2>' . telemetry_export_key_value_table(telemetry_cache_mix(30), 'cache_result', 'events', 'Cache result', 'Events') . '</div></section>'
+        . '</main></body></html>';
+    header('Content-Type: text/html; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $fileName . '"');
+    echo $html;
 }
 
 /**

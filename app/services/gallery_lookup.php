@@ -88,14 +88,28 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
     while ($parentId) {
         // Variable $parent stores this steps working value.
         $parent = find_gallery((int) $parentId);
-        if (!$parent || ($publicOnly && !gallery_is_public_listed($parent))) {
+        if (!$parent) {
             break;
         }
-        array_unshift($ancestors, $parent);
+        if (!$publicOnly || gallery_is_public_listed($parent)) {
+            array_unshift($ancestors, $parent);
+        }
         // Variable $parentId stores this steps working value.
         $parentId = $parent['parent_id'] ?? null;
     }
     return $cache[$cacheKey] = $ancestors;
+}
+
+/**
+ * Walk from a gallery to its root ancestors for breadcrumb display.
+ *
+ * Breadcrumbs describe the structural gallery path. They intentionally include
+ * unpublished ancestors because those galleries can still be opened by direct
+ * URL and must not disappear from the path shown for a public child gallery.
+ */
+function gallery_breadcrumb_ancestors(array $gallery): array
+{
+    return gallery_ancestors($gallery, false);
 }
 
 /**

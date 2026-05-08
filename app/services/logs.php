@@ -349,8 +349,202 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
     return $stmt->fetchAll();
 }
 
+/**
+ * Return every admin log row available to the logs subsystem for full exports.
+ */
+function admin_log_export_rows(): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $stmt stores the complete admin log export query. No UI filters or display limits are applied here.
+    $stmt = db()->prepare('SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at ASC, l.id ASC');
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
 
+/**
+ * Return the stable admin log export column order used by CSV and JSON metadata.
+ */
+function admin_log_export_columns(): array
+{
+    return [
+        'id',
+        'created_at',
+        'status',
+        'status_label',
+        'status_updated_at',
+        'level',
+        'severity',
+        'category',
+        'event_key',
+        'message',
+        'user_id',
+        'username',
+        'subject_type',
+        'subject_id',
+        'request_id',
+        'route_name',
+        'resolved_at',
+        'resolution_note',
+        'context',
+        'context_json',
+    ];
+}
 
+/**
+ * Normalize one admin log database row for reusable export payloads.
+ */
+function admin_log_export_normalize_entry(array $entry): array
+{
+    // $context stores decoded structured data while context_json preserves the original serialized value.
+    $context = admin_log_context_array($entry);
+    return [
+        'id' => isset($entry['id']) ? (int) $entry['id'] : null,
+        'created_at' => (string) ($entry['created_at'] ?? ''),
+        'status' => (string) ($entry['status'] ?? 'todo'),
+        'status_label' => admin_log_status_label((string) ($entry['status'] ?? 'todo')),
+        'status_updated_at' => (string) ($entry['status_updated_at'] ?? ''),
+        'level' => (string) ($entry['level'] ?? ''),
+        'severity' => (string) ($entry['severity'] ?? ($entry['level'] ?? '')),
+        'category' => (string) ($entry['category'] ?? 'other'),
+        'event_key' => (string) ($entry['event_key'] ?? ''),
+        'message' => (string) ($entry['message'] ?? ''),
+        'user_id' => isset($entry['user_id']) && $entry['user_id'] !== null ? (int) $entry['user_id'] : null,
+        'username' => (string) ($entry['username'] ?? ''),
+        'subject_type' => (string) ($entry['subject_type'] ?? ''),
+        'subject_id' => isset($entry['subject_id']) && $entry['subject_id'] !== null ? (int) $entry['subject_id'] : null,
+        'request_id' => (string) ($entry['request_id'] ?? ''),
+        'route_name' => (string) ($entry['route_name'] ?? ''),
+        'resolved_at' => (string) ($entry['resolved_at'] ?? ''),
+        'resolution_note' => (string) ($entry['resolution_note'] ?? ''),
+        'context' => $context,
+        'context_json' => isset($entry['context_json']) && $entry['context_json'] !== null ? (string) $entry['context_json'] : '',
+    ];
+}
+
+/**
+ * Build the reusable JSON-ready admin log export payload.
+ */
+function admin_log_export_payload(?array $rows = null): array
+{
+    // $rows may be supplied by a ZIP export so the database is read only once.
+    $rows = $rows ?? admin_log_export_rows();
+    return [
+        'schema' => 'php-gallery-admin-logs-v1',
+        'generated_at' => now_sql(),
+        'row_count' => count($rows),
+        'columns' => admin_log_export_columns(),
+        'logs' => array_map('admin_log_export_normalize_entry', $rows),
+    ];
+}
+
+/**
+ * Encode the reusable admin log JSON export payload.
+ */
+function admin_log_export_json(?array $payload = null): string
+{
+    $payload = $payload ?? admin_log_export_payload();
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        throw new RuntimeException('Unable to encode admin log JSON export: ' . json_last_error_msg());
+    }
+    return $json . "\n";
+}
+
+/**
+ * Build a CSV export from the same normalized payload used for JSON.
+ */
+function admin_log_export_csv(array $payload): string
+{
+    // $handle stores CSV content in memory because the export is immediately inserted into a ZIP archive.
+    $handle = fopen('php://temp', 'w+');
+    if ($handle === false) {
+        throw new RuntimeException('Unable to open temporary CSV stream.');
+    }
+    $columns = admin_log_export_columns();
+    fputcsv($handle, $columns, ',', '"', '');
+    foreach (($payload['logs'] ?? []) as $entry) {
+        $row = [];
+        foreach ($columns as $column) {
+            $value = $entry[$column] ?? '';
+            if (is_array($value)) {
+                // CSV cannot hold nested arrays directly, so structured values are faithfully JSON-encoded in one cell.
+                $encoded = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $row[] = $encoded === false ? '' : $encoded;
+                continue;
+            }
+            $row[] = $value;
+        }
+        // Disable PHP's legacy CSV escape character so JSON backslashes remain RFC-4180-safe.
+        fputcsv($handle, $row, ',', '"', '');
+    }
+    rewind($handle);
+    $csv = stream_get_contents($handle);
+    fclose($handle);
+    if ($csv === false) {
+        throw new RuntimeException('Unable to read generated CSV export.');
+    }
+    return $csv;
+}
+
+/**
+ * Create a ZIP archive containing CSV and JSON exports of the same admin log payload.
+ */
+function admin_log_create_export_zip(string $filePath, array $payload): void
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('ZipArchive is not available.');
+    }
+    $zip = new ZipArchive();
+    if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Unable to create admin log ZIP export.');
+    }
+    $zip->addFromString('logs.csv', admin_log_export_csv($payload));
+    $zip->addFromString('logs.json', admin_log_export_json($payload));
+    $zip->close();
+    if (!is_file($filePath)) {
+        throw new RuntimeException('Unable to finalize admin log ZIP export.');
+    }
+}
+
+/**
+ * Stream a generated admin log ZIP export to the browser.
+ */
+function admin_log_send_export_zip(string $filePath, string $downloadName): never
+{
+    if (!is_file($filePath)) {
+        http_response_code(404);
+        exit('Admin log export not found.');
+    }
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');
+    header('Content-Length: ' . filesize($filePath));
+    header('X-Content-Type-Options: nosniff');
+    readfile($filePath);
+    @unlink($filePath);
+    exit;
+}
+
+/**
+ * Return a temporary path for an admin log ZIP export.
+ */
+function admin_log_export_temp_path(): string
+{
+    $filePath = tempnam(sys_get_temp_dir(), 'php-gallery-admin-logs-');
+    if ($filePath === false) {
+        throw new RuntimeException('Unable to allocate temporary admin log export file.');
+    }
+    return $filePath;
+}
+
+/**
+ * Return a safe downloadable filename for a complete admin log export.
+ */
+function admin_log_export_zip_filename(): string
+{
+    return 'php-gallery-admin-logs-' . date('Ymd-His') . '.zip';
+}
 /**
  * Return one admin log entry with user information for detail display or export.
  */

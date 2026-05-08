@@ -86,18 +86,47 @@ function cms_admin_upload(): void
 
             // $stored stores an intermediate value used by the surrounding gallery workflow.
             $stored = store_uploaded_gallery_images((int) $gallery['id'], $entries);
+            // $scanFailedFilenames stores uploaded files that were written to disk but not imported into image rows.
+            $scanFailedFilenames = array_values(array_filter(array_map('strval', (array) ($stored['scan_failed_filenames'] ?? []))));
             // $thumbnails stores an intermediate value used by the surrounding gallery workflow.
             $thumbnails = 0;
+            // $thumbnailFailed stores required thumbnail or DNG display derivatives that failed during non-JavaScript uploads.
+            $thumbnailFailed = 0;
+            // $thumbnailErrors stores concise diagnostics for failed thumbnail generation.
+            $thumbnailErrors = [];
             if (!$wantsJson && !empty($_POST['create_thumbnails'])) {
-                // $thumbnails stores an intermediate value used by the surrounding gallery workflow.
-                $thumbnails = create_gallery_thumbnails((int) $gallery['id']);
+                foreach ((array) ($stored['image_ids'] ?? []) as $imageId) {
+                    // $image stores the just-uploaded database image row.
+                    $image = find_image((int) $imageId);
+                    if (!$image) {
+                        continue;
+                    }
+                    // $thumbnailResult stores created/skipped/failure counts for this source image.
+                    $thumbnailResult = create_image_thumbnails_result($image, $gallery);
+                    $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
+                    $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
+                    foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
+                        $thumbnailErrors[] = (string) $thumbnailError;
+                    }
+                }
             }
             admin_log_event('info', 'gallery.images_uploaded', 'Admin uploaded images into a gallery folder.', [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
+                'thumbnails' => $thumbnails,
+                'thumbnail_failed' => $thumbnailFailed,
+                'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
+                'scan_failed_filenames' => $scanFailedFilenames,
             ]);
+            if ($scanFailedFilenames) {
+                admin_log_event('warning', 'gallery.upload_scan_incomplete', 'One or more uploaded files were stored on disk but not imported into image records.', [
+                    'gallery_id' => (int) $gallery['id'],
+                    'folder_path' => (string) $gallery['folder_path'],
+                    'filenames' => $scanFailedFilenames,
+                ]);
+            }
             // $response stores an intermediate value used by the surrounding gallery workflow.
             $response = [
                 'ok' => true,
@@ -108,7 +137,11 @@ function cms_admin_upload(): void
                 'uploaded' => (int) $stored['uploaded'],
                 'scanned' => (int) $stored['scanned'],
                 'thumbnails' => $thumbnails,
-                'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails]),
+                'thumbnail_failed' => $thumbnailFailed,
+                'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
+                'scan_failed' => count($scanFailedFilenames),
+                'scan_failed_filenames' => $scanFailedFilenames,
+                'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
             ];
             if ($wantsJson) {
                 if (ob_get_level() > 0) {

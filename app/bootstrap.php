@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.58';
+const CMS_VERSION = '0.59';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -194,10 +194,13 @@ function cms_run(): void
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',
         'admin_log_export' => 'cms_admin_log_export',
+        'admin_logs_export_zip' => 'cms_admin_logs_export_zip',
         'admin_telemetry' => 'cms_admin_telemetry',
         'admin_telemetry_settings' => 'cms_admin_telemetry_settings',
         'admin_telemetry_maintenance' => 'cms_admin_telemetry_maintenance',
+        'admin_telemetry_export' => 'cms_admin_telemetry_export',
         'telemetry_ingest' => 'cms_telemetry_ingest',
+        'usage_collect' => 'cms_telemetry_ingest',
         'admin_edit_gallery' => 'cms_admin_edit_gallery',
         'admin_bulk_images' => 'cms_admin_bulk_images',
         'admin_reorder_images' => 'cms_admin_reorder_images',

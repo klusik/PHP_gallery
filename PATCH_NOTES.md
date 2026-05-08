@@ -1,4 +1,108 @@
-# Patch Notes
+# Patch notes
+
+## Version 0.59
+
+This release focuses on telemetry reliability, upload workflow improvements, DNG image support groundwork, and breadcrumb correctness for nested unpublished galleries.
+
+### Highlights
+
+#### Telemetry is now more accurate and exportable
+
+The anonymous telemetry subsystem now tracks public activity more reliably and can generate standalone HTML reports for diagnostics and sharing.
+
+What changed:
+
+- added a downloadable HTML telemetry export report from the admin telemetry page
+- telemetry reports now include:
+  - anonymous sessions
+  - page views
+  - photo opens
+  - average viewing time
+  - browser mix
+  - cache-event statistics
+  - top viewed photos
+  - longest viewed photos
+- image transfer statistics now use human-readable byte formatting
+- telemetry collection was attached more consistently to public gallery rendering
+- added clearer admin guidance explaining why logged-in admins may not see their own telemetry events
+- public telemetry collection now uses a more neutral endpoint naming strategy to reduce blocking from privacy filters
+- telemetry schema support was expanded for the new `thumb_1280` thumbnail variant
+
+User impact:
+
+- telemetry statistics are more trustworthy during real browsing sessions
+- admins can export clean standalone telemetry reports for diagnostics or support
+- responsive thumbnail traffic is now represented more accurately in telemetry metrics
+
+#### Breadcrumbs now preserve unpublished gallery hierarchy
+
+Public gallery breadcrumbs now reflect the real gallery structure even when unpublished galleries exist in the parent chain.
+
+What changed:
+
+- breadcrumb generation now walks the true gallery ancestry instead of filtering unpublished ancestors
+- unpublished parent galleries remain visible inside the breadcrumb trail for public child galleries
+- breadcrumb logic was separated from public gallery-list visibility filtering
+
+User impact:
+
+- nested galleries no longer appear disconnected from their real hierarchy
+- direct-linked public galleries inside unpublished branches now show their full structural path
+- breadcrumb navigation is more predictable and easier to understand
+
+#### Upload workflow and admin editing were improved
+
+The admin upload flow now behaves more consistently after uploads and reports failed processing more clearly.
+
+What changed:
+
+- upload redirects now preserve the currently active `Media` tab after upload completion
+- upload redirects now jump directly to the image-management section
+- upload responses now report:
+  - failed thumbnail generations
+  - failed image scans
+  - filenames that could not be processed
+- upload-related admin logging was expanded with failed-scan diagnostics
+
+User impact:
+
+- admins stay in the correct editing context after uploads
+- failed uploads and processing issues are easier to diagnose
+- large upload sessions provide clearer operational feedback
+
+#### DNG support groundwork was added
+
+The gallery now includes safer handling and recognition for Adobe Digital Negative files.
+
+What changed:
+
+- added explicit DNG extension detection helpers
+- DNG support now uses dedicated conversion capability checks
+- direct public access to raw `.dng` files is blocked through gallery `.htaccess` rules
+
+User impact:
+
+- DNG handling is more explicit and safer
+- raw source negatives are less likely to be exposed directly
+- future RAW/DNG processing support is easier to extend safely
+
+### Technical Notes
+
+Files changed include:
+
+- `app/controllers/admin_telemetry.php`
+- `app/controllers/admin_uploads.php`
+- `app/controllers/public_gallery.php`
+- `app/services/gallery_lookup.php`
+- `app/helpers.php`
+- `database/migrations/202605080001_telemetry_thumbnail_variants.php`
+- `public/assets/gallery-modules/admin-bulk-actions.js`
+- `galleries/.htaccess`
+
+### Notes
+
+- This release continues the telemetry and responsive-thumbnail work introduced in previous versions.
+- DNG support currently focuses on safer detection and infrastructure preparation rather than full RAW rendering support.
 
 ## Version 0.58
 
@@ -282,9 +386,9 @@ The branch touches 33 files and introduces several new backend services, migrati
 
 This release is the largest public-facing and administrative step forward since 0.56. It adds richer public gallery presentation, NSFW access control, admin recovery email support, and a complete password reset workflow, while also tightening the generated theme asset pipeline and keeping release metadata in sync.
 
-## Highlights
+### Highlights
 
-### Public gallery presentation
+#### Public gallery presentation
 
 Public gallery pages now show more of the gallery story directly on the card and image surfaces instead of hiding all context behind the detail page.
 
@@ -297,7 +401,7 @@ The latest branch work adds:
 
 This makes galleries feel more alive at first glance, while also improving how search engines and social platforms understand the content.
 
-### NSFW Guard
+#### NSFW Guard
 
 A new NSFW Guard system was added for both galleries and individual photos.
 
@@ -315,7 +419,7 @@ For visitors, the public site now:
 
 This is not just a visual warning. The access rules now affect gallery rendering, image access, thumbnails, lightbox sources, and structured metadata.
 
-### Admin recovery email
+#### Admin recovery email
 
 Administrator accounts now support a recovery email address.
 
@@ -328,7 +432,7 @@ That email is used for:
 
 Existing admins are also prompted to add a recovery email in account settings so the new login and recovery flows are fully usable.
 
-### Password reset workflow
+#### Password reset workflow
 
 The branch now includes a full password reset flow for admin accounts.
 
@@ -346,7 +450,7 @@ The reset system also includes:
 - Automatic invalidation of older unused reset tokens for the same user
 - Mail diagnostics in the admin log without exposing the full token value
 
-### Email delivery settings
+#### Email delivery settings
 
 Password reset delivery is now configurable from the admin account area.
 
@@ -361,7 +465,7 @@ The new settings cover:
 
 This keeps the password reset flow flexible for both shared hosting and self-managed environments.
 
-### Theme asset and preview sync
+#### Theme asset and preview sync
 
 Generated theme assets are now tied more tightly to the implementation that produces them.
 
@@ -373,7 +477,7 @@ That means:
 
 This is the kind of low-level change that matters most when users customize theme styling heavily.
 
-### Social and SEO preview support
+#### Social and SEO preview support
 
 Gallery metadata output was upgraded for modern sharing behavior.
 
@@ -384,7 +488,7 @@ The new behavior includes:
 - Safer image selection for social previews
 - Cache-busted preview URLs so regenerated thumbnails refresh more predictably on crawlers
 
-### Runtime and schema resilience
+#### Runtime and schema resilience
 
 The branch also hardens several runtime paths so newer code can coexist more safely with older database state during upgrades.
 
@@ -395,9 +499,9 @@ Notable changes include:
 - Branch-aware routing for the new admin forgot-password and reset-password pages
 - New migrations for gallery NSFW flags, user email login, and password reset tokens
 
-## What Changed
+### What Changed
 
-### Public site rendering
+#### Public site rendering
 
 - Added public photo metadata overlays on gallery cards
 - Expanded gallery image cards so titles, descriptions, and tags can be shown inline
@@ -406,7 +510,7 @@ Notable changes include:
 - Public JSON-LD output now skips restricted content
 - Social preview metadata now prefers richer preview images and stronger card metadata
 
-### Admin authentication and recovery
+#### Admin authentication and recovery
 
 - Added username-or-email login resolution
 - Added admin recovery email storage and editing
@@ -415,14 +519,14 @@ Notable changes include:
 - Added a reset-password page with one-time token validation
 - Added delivery diagnostics for password reset requests and test emails
 
-### Admin account settings
+#### Admin account settings
 
 - Added a dedicated password reset settings panel
 - Added support for PHP mail and SMTP configuration
 - Added validation for sender address, SMTP host, port, encryption, and reset token lifetime
 - Added test-email sending from the account settings screen
 
-### Gallery access control
+#### Gallery access control
 
 - Added gallery-level NSFW inheritance
 - Added per-image NSFW flags
@@ -430,41 +534,41 @@ Notable changes include:
 - Tightened gallery access checks so restricted content is blocked before content, thumbnails, and lightbox sources are emitted
 - Kept password-protected gallery behavior working alongside the new NSFW gating
 
-### Database and migrations
+#### Database and migrations
 
 - Added a nullable `users.email` column and unique email index
 - Added a `password_reset_tokens` table for selector/token storage
 - Added `nsfw_enabled` columns for `galleries` and `images`
 - Added supporting indexes for NSFW filtering and reset-token expiry cleanup
 
-### Theme and assets
+#### Theme and assets
 
 - Adjusted generated theme cache keys to account for the theme asset controller revision
 - Updated public styling to support the new gallery card metadata overlays and age-gate UI
 - Refreshed generated asset references in the manifest
 
-### Technical notes
+#### Technical notes
 
 - `develop` currently contains 26 changed files relative to `main`
 - The branch is centered on feature expansion rather than a small maintenance patch
 - The release is suitable for a `v_0.57` tag once you are satisfied with runtime validation on your environment
 
-## User Impact
+### User Impact
 
-### For site visitors
+#### For site visitors
 
 - Gallery cards reveal more useful metadata immediately
 - Restricted 18+ content is handled consistently across the public site
 - Social sharing previews look richer and more accurate
 
-### For administrators
+#### For administrators
 
 - Account recovery is now practical instead of manual
 - Admin login is more forgiving because username or email can be used
 - Password reset delivery can be configured and tested from the UI
 - New schema-based content controls are available for mature content management
 
-## Notes
+### Notes
 
 - Password reset delivery is disabled by default in the example configuration and should only be enabled after the sender address and transport are verified.
 - The new recovery flow depends on the `users.email` migration and the `password_reset_tokens` table.
@@ -477,9 +581,9 @@ This changeset focuses on two user-facing improvements:
   - A new public page-width system for themes, including default, wide, custom, and full layouts
   - Faster admin workflow by adding contextual shortcuts from public gallery pages into create/upload screens
 
-  ## Highlights
+### Highlights
 
-  ### Theme layout controls
+#### Theme layout controls
 
   The Theme editor now supports selecting the public page container width separately from colors, fonts, and background
   settings.
@@ -494,7 +598,7 @@ This changeset focuses on two user-facing improvements:
   The live preview in the admin panel now reflects the selected layout mode, including custom width changes in real
   time.
 
-  ### Contextual gallery actions
+#### Contextual gallery actions
 
   Public gallery admin controls now include direct action links:
 
@@ -503,9 +607,9 @@ This changeset focuses on two user-facing improvements:
 
   This reduces navigation steps when managing nested gallery content.
 
-  ## What Changed
+### What Changed
 
-  ### Theme system
+#### Theme system
 
   - Added persistent theme settings for:
       - theme_page_width
@@ -514,7 +618,7 @@ This changeset focuses on two user-facing improvements:
   - Prevented unrelated Theme saves from re-copying the same preset CSS and unintentionally resetting visual overrides
   - Kept page width as a structural preference instead of treating it like a color/font override
 
-  ### Public site rendering
+#### Public site rendering
 
   - Public pages now receive a body class that reflects the active width mode
   - Theme-generated CSS now defines the final container widths for:
@@ -524,14 +628,14 @@ This changeset focuses on two user-facing improvements:
       - full width
   - The public header, main content, and footer all follow the selected layout mode
 
-  ### Admin Theme UI
+#### Admin Theme UI
 
   - Added a new Page width selector to the Theme settings screen
   - Added slider and numeric input controls for custom width
   - Added live preview support for the width controls
   - Preview UI now visually shows the selected width mode in the admin panel
 
-  ### Gallery admin workflow
+#### Gallery admin workflow
 
   - Public gallery action panel now links to:
       - Create gallery here
@@ -541,26 +645,26 @@ This changeset focuses on two user-facing improvements:
   - Helper notices now confirm which gallery was preselected
   - Gallery select helpers now support a selected option for contextual navigation
 
-  ### Frontend polish
+#### Frontend polish
 
   - Adjusted admin preview layout so the live theme panel behaves more reliably inside the page
   - Updated styles to support the new width presets and custom-width control block
   - Manifest hashes were refreshed to reflect the code changes
 
-  ## User Impact
+### User Impact
 
-  ### For site visitors
+#### For site visitors
 
   - Public galleries can now be displayed in narrower, wider, custom, or full-width layouts
   - Layout choice applies consistently across the main page structure
 
-  ### For administrators
+#### For administrators
 
   - Theme customization is more flexible
   - Live preview better matches the final public layout
   - Creating nested galleries and uploading into a specific gallery takes fewer clicks
 
-  ## Notes
+### Notes
 
   - Custom width is clamped server-side and client-side to keep values safe and consistent
   - Page width changes persist independently from color/font overrides
@@ -571,7 +675,7 @@ This changeset focuses on two user-facing improvements:
 This update is a broad admin workflow rebuild focused on three areas: gallery ordering, log tooling, and updater
   hardening. It also adds safer maintenance actions and a larger set of client-side admin behaviors.
 
-  ### Highlights
+### Highlights
 
   - Gallery ordering is now handled directly from the admin table, including drag-to-reorder and drag-to-nest
     subgalleries.
@@ -580,7 +684,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - The updater was made sturdier, with better cleanup of obsolete managed files and cleaner rollback/reinstall flows.
   - The admin UI got a noticeable polish pass for ordering, logs, warnings, and destructive actions.
 
-  ### Admin Dashboard
+### Admin Dashboard
 
   - Gallery rows are now rendered in a deterministic tree order that respects sibling sort_order plus title fallback.
   - A new gallery-order toolbar was added to the All Galleries table.
@@ -591,7 +695,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
       - Delete all thumbnails
       - Download all galleries
 
-  ### Gallery Reordering
+### Gallery Reordering
 
   - Added full gallery-tree reordering support in the admin UI.
   - Dragging a gallery now moves its descendants as a unit.
@@ -610,7 +714,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - Reordering now logs the operation with counts for total galleries and moved folders.
   - The gallery edit screen now includes quick links back to the gallery list and to the public gallery view.
 
-  ### Image Ordering
+### Image Ordering
 
   - The image-order toolbar copy now explicitly mentions that filename sorting is available.
   - The image table now has a clickable Name column that sorts photos alphabetically.
@@ -618,7 +722,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - The Name header updates its arrow direction and accessibility label based on the next action.
   - Image rows now carry explicit sortable name data for more reliable client-side ordering.
 
-  ### Admin Logs
+### Admin Logs
 
   - Logs now support live filtering without a full page reload.
   - Filter changes can be applied immediately with debounced search input.
@@ -635,7 +739,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
       - Long request values wrap safely
   - Log table scrolling and header link styling were improved for usability.
 
-  ### Thumbnail Maintenance
+### Thumbnail Maintenance
 
   - Added a new admin action to delete all generated thumbnails.
   - The delete flow includes a browser prompt with a randomly chosen confirmation word.
@@ -645,7 +749,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - A thumbnail inventory fingerprint was added so maintenance warning dismissal can be invalidated when the gallery
     content changes.
 
-  ### Updater Hardening
+### Updater Hardening
 
   - Update install paths now return richer diagnostics, not just a copied-file count.
   - The updater now tracks removed obsolete managed files during installation.
@@ -659,7 +763,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - Update and restore operations now provide better backup metadata and cleanup reporting.
   - The updater now distinguishes between normal managed paths and a stricter full-clean mode.
 
-  ### Client-Side Admin Boot
+### Client-Side Admin Boot
 
   - New admin actions were wired into the app bootstrap:
       - admin_delete_thumbnails
@@ -669,7 +773,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - The main gallery JavaScript now loads the new admin behavior modules.
   - Cache-busting query strings were added to the admin module imports.
 
-  ### UI and Styling
+### UI and Styling
 
   - Added styling for:
       - Thumbnail maintenance notices
@@ -682,7 +786,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - Gallery ordering mode disables text selection and changes the cursor for clearer drag feedback.
   - Image sorting and gallery reordering now have clearer keyboard focus states.
 
-  ### Technical Notes
+### Technical Notes
 
   - This change also updates the core manifest, reflecting the new file set and hashes.
   - The commit title matches the scope: “Update and log redone.”
@@ -988,7 +1092,7 @@ This significantly reduces the cognitive load during installation and makes the 
 
 ## Version 0.45 – Diagnostics, Stability & UX Refinement
 
-### 🔬 Dev Mode (Admin-only Diagnostics Overlay)
+### ?? Dev Mode (Admin-only Diagnostics Overlay)
 A new internal diagnostics system has been introduced to support performance tuning and preload optimization.
 
 - Added **Dev Mode toggle** in Admin settings (stored in `app_settings`)
@@ -1024,7 +1128,7 @@ This system is intentionally lightweight and runs only when enabled.
 
 ---
 
-### 🎛 Admin UI Adjustments
+### ?? Admin UI Adjustments
 
 - **Dev Mode control moved**:
  - Relocated to a less prominent position in Admin panel
@@ -1033,7 +1137,7 @@ This system is intentionally lightweight and runs only when enabled.
 
 ---
 
-### 🎨 Checkbox Styling Improvements
+### ?? Checkbox Styling Improvements
 
 Global checkbox redesign applied across Admin and Upload UI:
 
@@ -1048,7 +1152,7 @@ Global checkbox redesign applied across Admin and Upload UI:
 
 ---
 
-### 🧹 Minor UX Polishing
+### ?? Minor UX Polishing
 
 - Improved spacing in Admin panels
 - Reduced visual noise in configuration sections
@@ -1056,7 +1160,7 @@ Global checkbox redesign applied across Admin and Upload UI:
 
 ---
 
-### ⚙ Internal
+### ? Internal
 
 - Added dev-mode flag handling in bootstrap layer
 - Extended gallery runtime with instrumentation hooks
@@ -1065,7 +1169,7 @@ Global checkbox redesign applied across Admin and Upload UI:
 
 ---
 
-### ⚠ Notes
+### ? Notes
 
 - Dev Mode is intended strictly for diagnostics and tuning
 - Not optimized for production usage visibility
