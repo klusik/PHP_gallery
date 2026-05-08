@@ -155,31 +155,26 @@ function cms_public_media(): void
         return;
     }
 
+    // $displayFile stores the browser-displayable file selected for public viewing.
+    $displayFile = image_public_display_file($image, $gallery, true);
+    if ($displayFile === null) {
+        cms_not_found();
+        return;
+    }
     // $path stores an intermediate value used by the surrounding gallery workflow.
-    $path = image_abs_path($image, $gallery);
-    if (!is_file($path)) {
-        cms_not_found();
-        return;
-    }
-
-    // $finfo stores an intermediate value used by the surrounding gallery workflow.
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $path = (string) $displayFile['path'];
     // $mime stores an intermediate value used by the surrounding gallery workflow.
-    $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
-    if (!str_starts_with($mime, 'image/')) {
-        cms_not_found();
-        return;
-    }
+    $mime = (string) $displayFile['mime'];
 
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery) || image_nsfw_restricted($image, $gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
-    telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, 'original', 'miss');
+    telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
     header('Content-Length: ' . $bytes);
     readfile($path);
 }
@@ -324,23 +319,19 @@ function cms_media(): void
         cms_not_found();
         return;
     }
+    // Variable $displayFile stores the browser-displayable file selected for public viewing.
+    $displayFile = image_public_display_file($image, $gallery, true);
+    if ($displayFile === null) {
+        cms_not_found();
+        return;
+    }
     // Variable $path stores this steps working value.
-    $path = image_abs_path($image, $gallery);
-    if (!is_file($path)) {
-        cms_not_found();
-        return;
-    }
-    // Variable $finfo stores this steps working value.
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $path = (string) $displayFile['path'];
     // Variable $mime stores this steps working value.
-    $mime = (string) ($finfo->file($path) ?: mime_content_type($path));
-    if (!str_starts_with($mime, 'image/')) {
-        cms_not_found();
-        return;
-    }
+    $mime = (string) $displayFile['mime'];
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
-    header('Content-Disposition: inline; filename="' . basename((string) $image['filename']) . '"');
+    header('Content-Disposition: inline; filename="' . basename((string) $displayFile['filename']) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery) || image_nsfw_restricted($image, $gallery)) && (!current_user() || current_user_is_known_under_18()) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);

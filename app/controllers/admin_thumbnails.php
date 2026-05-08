@@ -217,8 +217,12 @@ function cms_admin_create_thumbnails(): void
  */
 function cms_admin_create_thumbnails_batch(): void
 {
-    // $scope stores the requested batch type so targeted repair can be logged separately.
-    $scope = (string) ($_POST['scope'] ?? '');
+    // $bufferLevel stores the output-buffer nesting level before JSON-safe processing starts.
+    $bufferLevel = ob_get_level();
+    ob_start();
+    try {
+        // $scope stores the requested batch type so targeted repair can be logged separately.
+        $scope = (string) ($_POST['scope'] ?? '');
     // Variable $imageIds stores this steps working value.
     $imageIds = thumbnail_request_image_ids($_POST);
     // Variable $total stores this steps working value.
@@ -248,6 +252,10 @@ function cms_admin_create_thumbnails_batch(): void
     $skipped = 0;
     // Variable $webpSkipped stores this steps working value.
     $webpSkipped = 0;
+    // $failed stores required thumbnail or DNG display derivatives that could not be generated.
+    $failed = 0;
+    // $errors stores concise thumbnail generation diagnostics for the JSON response.
+    $errors = [];
     // Variable $galleryCache stores this steps working value.
     $galleryCache = [];
     foreach ($batch as $imageId) {
@@ -269,9 +277,26 @@ function cms_admin_create_thumbnails_batch(): void
         $created += (int) $result['created'];
         $skipped += (int) $result['skipped'];
         $webpSkipped += (int) ($result['webp_skipped'] ?? 0);
+        $failed += (int) ($result['failed'] ?? 0);
+        foreach ((array) ($result['errors'] ?? []) as $error) {
+            $errors[] = (string) $error;
+        }
     }
     if ($created > 0 || $scope === 'missing') {
         thumbnail_maintenance_summary_cache_clear();
+    }
+    if ($failed > 0) {
+        admin_log_event('warning', 'thumbnail.generation_failed', 'One or more thumbnail or DNG display derivatives could not be generated.', [
+            'scope' => $scope,
+            'selected_image_count' => $total,
+            'selected_image_ids' => array_slice($imageIds, 0, 50),
+            'selected_image_ids_truncated' => count($imageIds) > 50,
+            'failed' => $failed,
+            'created' => $created,
+            'existing_skipped' => $skipped,
+            'webp_skipped' => $webpSkipped,
+            'errors' => array_values(array_unique(array_filter($errors))),
+        ], ['category' => 'other', 'severity' => 'warning']);
     }
     // Variable $processed stores this steps working value.
     $processed = min($total, $offset + count($batch));
@@ -293,6 +318,8 @@ function cms_admin_create_thumbnails_batch(): void
             'created' => $created,
             'existing_skipped' => $skipped,
             'webp_skipped' => $webpSkipped,
+            'failed' => $failed,
+            'errors' => array_values(array_unique(array_filter($errors))),
             'maintenance_before' => $maintenanceBefore,
             'maintenance_after' => $maintenanceAfter,
             'remaining_image_count' => count($remainingImageIds),
@@ -302,18 +329,56 @@ function cms_admin_create_thumbnails_batch(): void
         ]);
     }
 
-    header('Content-Type: application/json');
-    echo json_encode([
-        'total' => $total,
-        'processed' => $processed,
-        'next_offset' => $processed,
-        'webp_skipped' => $webpSkipped,
-        'created' => $created,
-        'skipped' => $skipped,
-        'done' => $done,
-        'maintenance_after' => $maintenanceAfter,
-        'remaining_image_count' => count($remainingImageIds),
-    ]);
+        // $response stores the JSON batch result returned to the browser.
+        $response = [
+            'ok' => true,
+            'total' => $total,
+            'processed' => $processed,
+            'next_offset' => $processed,
+            'webp_skipped' => $webpSkipped,
+            'failed' => $failed,
+            'errors' => array_values(array_unique(array_filter($errors))),
+            'created' => $created,
+            'skipped' => $skipped,
+            'done' => $done,
+            'maintenance_after' => $maintenanceAfter,
+            'remaining_image_count' => count($remainingImageIds),
+        ];
+        // $discardedOutput stores any incidental output such as PHP warnings that would otherwise corrupt JSON.
+        $discardedOutput = (string) ob_get_clean();
+        if (trim($discardedOutput) !== '') {
+            admin_log_event('warning', 'thumbnail.batch_response_output_discarded', 'Thumbnail generation produced output before its JSON response.', [
+                'scope' => $scope,
+                'selected_image_count' => $total,
+                'selected_image_ids' => array_slice($imageIds, 0, 50),
+                'selected_image_ids_truncated' => count($imageIds) > 50,
+                'discarded_output_preview' => mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        }
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        return;
+    } catch (Throwable $exception) {
+        // $discardedOutput stores any incidental output that should not leak into the JSON response body.
+        $discardedOutput = (string) ob_get_clean();
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_log_event('error', 'thumbnail.batch_failed', 'Thumbnail batch request failed before a JSON response could be completed.', [
+            'error' => $exception->getMessage(),
+            'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
+        ], ['category' => 'other', 'severity' => 'error']);
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'ok' => false,
+            'error' => 'Thumbnail request failed. Check the admin logs or PHP error log for details.',
+        ]);
+        return;
+    }
 }
 
 

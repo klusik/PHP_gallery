@@ -103,6 +103,11 @@ export function setupAdminTabs() {
                     window.history.pushState(null, '', nextHash);
                 }
             }
+            document.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
+                if (input instanceof HTMLInputElement) {
+                    input.value = targetPanel.id;
+                }
+            });
         };
 
         // activeHash stores the hash that should select the initial tab.
@@ -245,7 +250,9 @@ async function runGalleryUpload(form) {
         // result stores state or configuration for the gallery front-end flow.
         const result = await runGalleryUploadFiles(form, progress, createThumbnails);
         if (createThumbnails) {
-            updateThumbnailProgress(progress, result.uploaded || 0, result.total_files || 0, result.thumbnails || 0, result.thumbnail_skipped || 0, 'Upload and thumbnail job complete.');
+            const failed = Number(result.thumbnail_failed || 0);
+            const message = failed > 0 ? `Upload finished, but ${failed} thumbnail or DNG display derivative(s) failed.` : 'Upload and thumbnail job complete.';
+            updateThumbnailProgress(progress, result.uploaded || 0, result.total_files || 0, result.thumbnails || 0, result.thumbnail_skipped || 0, message);
         } else {
             updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
         }
@@ -339,6 +346,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let thumbnails = 0;
     // thumbnailSkipped stores state or configuration for the gallery front-end flow.
     let thumbnailSkipped = 0;
+    // thumbnailFailed stores required derivatives that could not be generated.
+    let thumbnailFailed = 0;
+    // thumbnailErrors stores concise diagnostics returned by the server.
+    const thumbnailErrors = [];
     // galleryId stores state or configuration for the gallery front-end flow.
     let galleryId = Number(form.querySelector('select[name="gallery_id"]')?.value || 0);
     // redirectUrl stores state or configuration for the gallery front-end flow.
@@ -382,6 +393,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             const thumbResult = await runUploadedImageThumbnailJob(form, progress, imageIds, humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
             thumbnails += Number(thumbResult.created || 0);
             thumbnailSkipped += Number(thumbResult.skipped || 0);
+            thumbnailFailed += Number(thumbResult.failed || 0);
+            if (Array.isArray(thumbResult.errors)) {
+                thumbResult.errors.forEach((message) => thumbnailErrors.push(String(message)));
+            }
         }
     }
 
@@ -393,8 +408,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         scanned,
         thumbnails,
         thumbnail_skipped: thumbnailSkipped,
+        thumbnail_failed: thumbnailFailed,
+        thumbnail_errors: Array.from(new Set(thumbnailErrors.filter(Boolean))),
         total_files: files.length,
-        redirect_url: appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails),
+        redirect_url: appendUploadResultParams(redirectUrl, uploaded, scanned, thumbnails, thumbnailFailed),
     };
 }
 
@@ -406,13 +423,43 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
  * @param {*} thumbnails Value supplied by the caller or event context.
  * @returns {*} Result of the UI operation, when a value is produced.
  */
-function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails) {
+function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumbnailFailed = 0) {
     // url stores state or configuration for the gallery front-end flow.
     const url = new URL(urlValue || window.location.href, window.location.href);
     url.searchParams.set('uploaded', String(uploaded));
     url.searchParams.set('scanned', String(scanned));
     url.searchParams.set('thumbnails', String(thumbnails));
+    if (thumbnailFailed > 0) {
+        url.searchParams.set('thumbnail_failed', String(thumbnailFailed));
+    }
     return url.toString();
+}
+
+/**
+ * Handles send gallery upload chunk behavior for the gallery UI.
+ * @param {*} form Value supplied by the caller or event context.
+ * @param {*} body Value supplied by the caller or event context.
+ * @param {*} progressHandler Value supplied by the caller or event context.
+ * @returns {*} Result of the UI operation, when a value is produced.
+ */
+async function readJsonResponseSafely(response, fallbackMessage) {
+    // contentType stores state or configuration for the gallery front-end flow.
+    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+    // responseText stores state or configuration for the gallery front-end flow.
+    const responseText = await response.text();
+    try {
+        return JSON.parse(responseText || '{}');
+    } catch (error) {
+        // snippet stores state or configuration for the gallery front-end flow.
+        const snippet = responseText.trim().slice(0, 180).replace(/\s+/g, ' ');
+        if (!contentType.includes('application/json') && snippet.includes('Maximum number of allowable file uploads exceeded')) {
+            throw new Error('The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.');
+        }
+        if (snippet.startsWith('<')) {
+            throw new Error(`${fallbackMessage} The server returned HTML instead of JSON. Check the admin logs or PHP error log for the exact warning.`);
+        }
+        throw new Error(snippet || fallbackMessage);
+    }
 }
 
 /**
@@ -429,22 +476,15 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
         xhr.open('POST', form.action || window.location.href);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.upload.addEventListener('progress', progressHandler);
-        xhr.addEventListener('load', () => {
+        xhr.addEventListener('load', async () => {
             try {
-                // contentType stores state or configuration for the gallery front-end flow.
-                const contentType = (xhr.getResponseHeader('Content-Type') || '').toLowerCase();
-                // responseText stores state or configuration for the gallery front-end flow.
-                const responseText = xhr.responseText || '';
-                if (!contentType.includes('application/json')) {
-                    // snippet stores state or configuration for the gallery front-end flow.
-                    const snippet = responseText.trim().slice(0, 180).replace(/\s+/g, ' ');
-                    if (snippet.includes('Maximum number of allowable file uploads exceeded')) {
-                        throw new Error('The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.');
-                    }
-                    throw new Error(snippet.startsWith('<') ? 'Server returned HTML instead of JSON. Check the PHP error log for the exact upload error.' : 'Server returned an unexpected response.');
-                }
+                // response stores state or configuration for the gallery front-end flow.
+                const response = new Response(xhr.responseText || '', {
+                    status: xhr.status,
+                    headers: {'Content-Type': xhr.getResponseHeader('Content-Type') || ''},
+                });
                 // result stores state or configuration for the gallery front-end flow.
-                const result = JSON.parse(responseText || '{}');
+                const result = await readJsonResponseSafely(response, 'Upload failed.');
                 if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
                     throw new Error(result.error || 'Upload failed.');
                 }
@@ -475,7 +515,7 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
 async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex, totalFiles, filename, createdBefore, skippedBefore) {
     if (!imageIds.length) {
         updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore, skippedBefore, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. No database image record was returned for thumbnails.`);
-        return {created: 0, skipped: 0};
+        return {created: 0, skipped: 0, failed: 0, errors: []};
     }
 
     // offset stores state or configuration for the gallery front-end flow.
@@ -486,6 +526,10 @@ async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex,
     let created = 0;
     // skipped stores state or configuration for the gallery front-end flow.
     let skipped = 0;
+    // failed stores required derivatives that could not be generated.
+    let failed = 0;
+    // errors stores concise server diagnostics for this image.
+    const errors = [];
     while (true) {
         // body stores state or configuration for the gallery front-end flow.
         const body = new FormData();
@@ -503,19 +547,31 @@ async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex,
             body,
             headers: {'Accept': 'application/json'},
         });
-        if (!response.ok) {
-            throw new Error('Thumbnail request failed.');
-        }
         // result stores state or configuration for the gallery front-end flow.
-        const result = await response.json();
+        const result = await readJsonResponseSafely(response, 'Thumbnail request failed.');
+        if (!response.ok || result.ok === false) {
+            // message stores state or configuration for the gallery front-end flow.
+            const message = result.error || 'Thumbnail request failed.';
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. ${message}`);
+            return {
+                created,
+                skipped,
+                failed: Math.max(1, failed),
+                errors: Array.from(new Set([...errors, message].filter(Boolean))),
+            };
+        }
         total = result.total || imageIds.length;
         offset = result.next_offset || 0;
         created += result.created || 0;
         skipped += result.skipped || 0;
+        failed += result.failed || 0;
+        if (Array.isArray(result.errors)) {
+            result.errors.forEach((message) => errors.push(String(message)));
+        }
         updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. Creating thumbnails ${Math.min(offset, total)} of ${total}...`);
         if (result.done) {
             updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Finished ${fileIndex} of ${totalFiles}: ${filename}`);
-            return {created, skipped};
+            return {created, skipped, failed, errors: Array.from(new Set(errors.filter(Boolean)))};
         }
     }
 }

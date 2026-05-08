@@ -189,6 +189,151 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
     }
 }
 
+
+/**
+ * Delete selected original image files, generated derivatives, and image rows from one gallery.
+ *
+ * The original media files are removed from disk because the gallery folder is
+ * the source of truth. Generated thumbnails and DNG display masters are cleaned
+ * at the same time so stale previews do not remain after rescans.
+ *
+ * @param int $galleryId Gallery that must own every selected image.
+ * @param array<int> $imageIds Image ids submitted by the admin UI.
+ * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int}
+ */
+function delete_gallery_images(int $galleryId, array $imageIds): array
+{
+    // $normalizedIds stores the unique positive image ids selected by the admin.
+    $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
+    if (!$normalizedIds) {
+        return ['requested' => 0, 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0];
+    }
+
+    // $gallery stores the parent gallery row used for path safety and sidecar updates.
+    $gallery = find_gallery($galleryId);
+    if (!$gallery) {
+        throw new RuntimeException('Gallery not found.');
+    }
+
+    // $images stores only rows owned by the requested gallery.
+    $images = [];
+    foreach ($normalizedIds as $imageId) {
+        // $image stores one selected database row.
+        $image = find_image($imageId);
+        if ($image && (int) $image['gallery_id'] === $galleryId) {
+            $images[] = $image;
+        }
+    }
+    if (!$images) {
+        return ['requested' => count($normalizedIds), 'deleted' => 0, 'files_deleted' => 0, 'derivatives_deleted' => 0, 'missing_files' => 0];
+    }
+
+    // $galleryRoot stores the allowed filesystem boundary for originals and derivatives.
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    if (!is_dir($galleryRoot)) {
+        throw new RuntimeException('Gallery folder does not exist on disk.');
+    }
+
+    // $originalPaths stores original files that should be removed after database validation.
+    $originalPaths = [];
+    // $derivativePaths stores generated files that should be removed with the selected originals.
+    $derivativePaths = [];
+    // $missingFiles stores how many selected original paths are already absent on disk.
+    $missingFiles = 0;
+
+    foreach ($images as $image) {
+        // $originalPath stores the absolute path for the image source file.
+        $originalPath = image_abs_path($image, $gallery);
+        if (!thumbnail_path_inside_existing_gallery($galleryRoot, $originalPath)) {
+            throw new RuntimeException('Refusing to delete an image outside its gallery.');
+        }
+        if (is_file($originalPath)) {
+            if (!is_writable($originalPath)) {
+                throw new RuntimeException('Image file is not writable: ' . basename($originalPath));
+            }
+            $originalPaths[] = $originalPath;
+        } else {
+            $missingFiles++;
+        }
+
+        foreach (thumbnail_sizes() as $size) {
+            foreach (['jpg', 'webp'] as $format) {
+                // $thumbnailPath stores one generated thumbnail variant.
+                $thumbnailPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                if (thumbnail_path_inside_existing_gallery($galleryRoot, $thumbnailPath) && is_file($thumbnailPath)) {
+                    $derivativePaths[] = $thumbnailPath;
+                }
+            }
+        }
+
+        if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+            // $displayMasterPath stores the full-size generated WebP used for public DNG display.
+            $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
+            if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
+                $derivativePaths[] = $displayMasterPath;
+            }
+        }
+    }
+
+    // $imageIdsToDelete stores the actual database rows that will be removed.
+    $imageIdsToDelete = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // $placeholders stores SQL placeholders for the selected image ids.
+    $placeholders = implode(',', array_fill(0, count($imageIdsToDelete), '?'));
+    // $pdo stores the active database connection used for the image row deletion.
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // $coverStmt clears gallery title-picture references before deleting image rows.
+        $coverStmt = $pdo->prepare('UPDATE galleries SET cover_image_id = NULL, updated_at = ? WHERE cover_image_id IN (' . $placeholders . ')');
+        $coverStmt->execute(array_merge([now_sql()], $imageIdsToDelete));
+        // $deleteStmt removes the selected image rows. Related rows are handled by existing foreign keys.
+        $deleteStmt = $pdo->prepare('DELETE FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
+        $deleteStmt->execute(array_merge([$galleryId], $imageIdsToDelete));
+        // $deletedRows stores the number of rows removed from images.
+        $deletedRows = $deleteStmt->rowCount();
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+
+    // $filesDeleted stores how many original source files were deleted from disk.
+    $filesDeleted = 0;
+    foreach (array_values(array_unique($originalPaths)) as $path) {
+        if (is_file($path) && @unlink($path)) {
+            $filesDeleted++;
+        }
+    }
+
+    // $derivativesDeleted stores how many generated derivative files were deleted from disk.
+    $derivativesDeleted = 0;
+    foreach (array_values(array_unique($derivativePaths)) as $path) {
+        if (is_file($path) && @unlink($path)) {
+            $derivativesDeleted++;
+        }
+    }
+
+    thumbnail_maintenance_summary_cache_clear();
+    if (public_path_schema_ready()) {
+        regenerate_public_paths();
+    }
+    // $updatedGallery stores the refreshed row after title-picture cleanup.
+    $updatedGallery = find_gallery($galleryId);
+    if ($updatedGallery) {
+        write_gallery_sidecar($updatedGallery);
+    }
+
+    return [
+        'requested' => count($normalizedIds),
+        'deleted' => (int) $deletedRows,
+        'files_deleted' => $filesDeleted,
+        'derivatives_deleted' => $derivativesDeleted,
+        'missing_files' => $missingFiles,
+    ];
+}
+
 /**
  * Handles move gallery folder to parent logic for the gallery application.
  * @param mixed $galleryId Input used by this operation.

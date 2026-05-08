@@ -40,6 +40,54 @@ declare(strict_types=1);
  * This module discovers image files on disk and reconciles them into database rows. It does not render public pages and does not modify theme or visual settings.
  */
 
+/**
+ * Read scan-safe metadata for one supported image file.
+ *
+ * DNG originals are accepted as source uploads, but PHP getimagesize() is not a
+ * reliable DNG decoder. The scanner records DNG dimensions through Imagick and
+ * stores an explicit DNG MIME value while leaving the original file untouched.
+ *
+ * @return array{width:int,height:int,mime:string}|null
+ */
+function scan_image_file_metadata(string $path, string $filename): ?array
+{
+    if (is_dng_image_path($filename)) {
+        // $metadata stores dimensions reported by the configured RAW decoder when available.
+        $metadata = function_exists('dng_image_metadata') ? dng_image_metadata($path) : null;
+        if (is_array($metadata)) {
+            return $metadata;
+        }
+
+        // Some hosting ImageMagick builds report DNG support but cannot reliably
+        // ping every camera model. Keep the original import visible in admin and
+        // let thumbnail generation report the concrete conversion failure.
+        if (function_exists('admin_log_event')) {
+            admin_log_event('warning', 'image_scan.dng_metadata_unreadable', 'A DNG file was imported with fallback metadata because the server could not read its dimensions.', [
+                'filename' => $filename,
+                'path' => $path,
+            ]);
+        }
+
+        return [
+            'width' => 1,
+            'height' => 1,
+            'mime' => 'image/x-adobe-dng',
+        ];
+    }
+
+    // $info stores metadata returned by PHP for browser-displayable images.
+    $info = @getimagesize($path);
+    if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+        return null;
+    }
+
+    return [
+        'width' => (int) $info[0],
+        'height' => (int) $info[1],
+        'mime' => (string) $info['mime'],
+    ];
+}
+
 function scan_gallery_images(int $galleryId): int
 {
     // Variable $gallery stores this steps working value.
@@ -71,8 +119,8 @@ function scan_gallery_images(int $galleryId): int
         // Variable $relative stores this steps working value.
         $relative = normalize_relative_path(substr($file->getPathname(), strlen($root)));
         // Variable $info stores this steps working value.
-        $info = @getimagesize($file->getPathname());
-        if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
+        $info = scan_image_file_metadata($file->getPathname(), $file->getFilename());
+        if ($info === null) {
             continue;
         }
         // Variable $modifiedAt stores this steps working value.
@@ -91,8 +139,8 @@ function scan_gallery_images(int $galleryId): int
                     hash('sha256', $relative),
                     $file->getFilename(),
                     pathinfo($file->getFilename(), PATHINFO_FILENAME),
-                    (int) $info[0],
-                    (int) $info[1],
+                    (int) $info['width'],
+                    (int) $info['height'],
                     (string) $info['mime'],
                     $file->getSize(),
                     $modifiedAt,
@@ -124,8 +172,8 @@ function scan_gallery_images(int $galleryId): int
                     hash('sha256', $relative),
                     $file->getFilename(),
                     pathinfo($file->getFilename(), PATHINFO_FILENAME),
-                    (int) $info[0],
-                    (int) $info[1],
+                    (int) $info['width'],
+                    (int) $info['height'],
                     (string) $info['mime'],
                     $file->getSize(),
                     $modifiedAt,
@@ -146,8 +194,8 @@ function scan_gallery_images(int $galleryId): int
                 $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, exif_taken_at = ?, exif_camera_make = ?, exif_camera_model = ?, exif_lens_model = ?, exif_focal_length = ?, exif_aperture = ?, exif_exposure_time = ?, exif_iso = ?, gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
                 $stmt->execute([
                     $file->getFilename(),
-                    (int) $info[0],
-                    (int) $info[1],
+                    (int) $info['width'],
+                    (int) $info['height'],
                     (string) $info['mime'],
                     $file->getSize(),
                     $modifiedAt,
@@ -172,8 +220,8 @@ function scan_gallery_images(int $galleryId): int
                 $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
                 $stmt->execute([
                     $file->getFilename(),
-                    (int) $info[0],
-                    (int) $info[1],
+                    (int) $info['width'],
+                    (int) $info['height'],
                     (string) $info['mime'],
                     $file->getSize(),
                     $modifiedAt,

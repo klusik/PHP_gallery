@@ -48,20 +48,34 @@ export function setupAdminBulkSelection() {
     // Table-level select-all checkboxes are scoped by input name and form. When
     // a table is filtered, hidden rows are left untouched so bulk operations
     // only apply to what the admin can currently see.
-    document.querySelectorAll('[data-select-all]').forEach((checkbox) => {
-        checkbox.addEventListener('change', () => {
-            // Variable `name` stores this steps working value.
-            const name = checkbox.dataset.selectAll;
-            // Variable `scope` stores this steps working value.
-            const scope = checkbox.closest('form') || document;
-            scope.querySelectorAll(`input[type="checkbox"][name="${name}"]`).forEach((item) => {
-                // Variable `row` stores this steps working value.
-                const row = item.closest('tr');
-                if (row && row.hidden) {
-                    return;
-                }
-                item.checked = checkbox.checked;
-            });
+    document.addEventListener('change', (event) => {
+        // Variable `checkbox` stores this steps working value.
+        const checkbox = event.target;
+        if (!(checkbox instanceof HTMLInputElement) || !checkbox.matches('[data-select-all]')) {
+            return;
+        }
+        // Variable `name` stores this steps working value.
+        const name = checkbox.getAttribute('data-select-all') || '';
+        if (!name) {
+            return;
+        }
+        // Variable `scope` stores this steps working value.
+        const scope = checkbox.closest('form') || document;
+        // Variable `targets` stores checkboxes with the exact submitted field name.
+        const targets = Array.from(scope.getElementsByTagName('input')).filter((item) => {
+            if (!(item instanceof HTMLInputElement) || item.type !== 'checkbox' || item === checkbox) {
+                return false;
+            }
+            return item.getAttribute('name') === name;
+        });
+        targets.forEach((item) => {
+            // Variable `row` stores this steps working value.
+            const row = item.closest('tr');
+            if (row && row.hidden) {
+                return;
+            }
+            item.checked = checkbox.checked;
+            item.dispatchEvent(new Event('change', {bubbles: true}));
         });
     });
 }
@@ -97,6 +111,58 @@ export function setupGalleryBulkDeleteConfirmation() {
             ...names.map((name) => `• ${name}`),
             '',
             'This removes the folders from disk and deletes their database records. This cannot be undone.'
+        ].join('\n');
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    });
+}
+
+
+export function setupImageBulkDeleteConfirmation() {
+    // Confirm destructive photo deletes from the dedicated admin edit-gallery image table.
+    document.addEventListener('submit', (event) => {
+        // Variable `form` stores this steps working value.
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-image-bulk-form]')) {
+            return;
+        }
+        // Variable `submitter` stores this steps working value.
+        const submitter = event.submitter;
+        // Variable `action` stores this steps working value.
+        const action = form.querySelector('select[name="action"]');
+        // Variable `isSingleDelete` stores whether a row-level delete button submitted the form.
+        const isSingleDelete = submitter instanceof HTMLElement && submitter.matches('[data-admin-image-delete-single]');
+        // Variable `isBulkDelete` stores whether the toolbar selected the delete operation.
+        const isBulkDelete = action instanceof HTMLSelectElement && action.value === 'delete';
+        if (!isSingleDelete && !isBulkDelete) {
+            return;
+        }
+
+        // Variable `names` stores the selected photo names shown in the confirmation prompt.
+        let names = [];
+        if (isSingleDelete && submitter instanceof HTMLElement) {
+            names = [submitter.dataset.imageName || 'Selected photo'];
+        } else {
+            names = Array.from(form.querySelectorAll('input[type="checkbox"][name="image_ids[]"]:checked'))
+                .map((checkbox) => checkbox.closest('[data-admin-image-order-row]'))
+                .filter((row) => row instanceof HTMLElement)
+                .map((row) => row.dataset.imageName || row.querySelector('[data-admin-image-name-cell]')?.textContent?.trim() || `Image ${row.dataset.imageId || ''}`.trim());
+        }
+
+        if (!names.length) {
+            event.preventDefault();
+            window.alert('Select at least one photo to delete.');
+            return;
+        }
+
+        // Variable `message` stores the destructive action confirmation text.
+        const message = [
+            names.length === 1 ? 'Delete this photo from the gallery?' : 'Delete these photos from the gallery?',
+            '',
+            ...names.map((name) => `• ${name}`),
+            '',
+            'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.'
         ].join('\n');
         if (!window.confirm(message)) {
             event.preventDefault();
