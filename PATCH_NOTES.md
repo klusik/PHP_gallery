@@ -1,5 +1,109 @@
 # Patch notes
 
+## Version 0.59
+
+This release focuses on telemetry reliability, upload workflow improvements, DNG image support groundwork, and breadcrumb correctness for nested unpublished galleries.
+
+### Highlights
+
+#### Telemetry is now more accurate and exportable
+
+The anonymous telemetry subsystem now tracks public activity more reliably and can generate standalone HTML reports for diagnostics and sharing.
+
+What changed:
+
+- added a downloadable HTML telemetry export report from the admin telemetry page
+- telemetry reports now include:
+  - anonymous sessions
+  - page views
+  - photo opens
+  - average viewing time
+  - browser mix
+  - cache-event statistics
+  - top viewed photos
+  - longest viewed photos
+- image transfer statistics now use human-readable byte formatting
+- telemetry collection was attached more consistently to public gallery rendering
+- added clearer admin guidance explaining why logged-in admins may not see their own telemetry events
+- public telemetry collection now uses a more neutral endpoint naming strategy to reduce blocking from privacy filters
+- telemetry schema support was expanded for the new `thumb_1280` thumbnail variant
+
+User impact:
+
+- telemetry statistics are more trustworthy during real browsing sessions
+- admins can export clean standalone telemetry reports for diagnostics or support
+- responsive thumbnail traffic is now represented more accurately in telemetry metrics
+
+#### Breadcrumbs now preserve unpublished gallery hierarchy
+
+Public gallery breadcrumbs now reflect the real gallery structure even when unpublished galleries exist in the parent chain.
+
+What changed:
+
+- breadcrumb generation now walks the true gallery ancestry instead of filtering unpublished ancestors
+- unpublished parent galleries remain visible inside the breadcrumb trail for public child galleries
+- breadcrumb logic was separated from public gallery-list visibility filtering
+
+User impact:
+
+- nested galleries no longer appear disconnected from their real hierarchy
+- direct-linked public galleries inside unpublished branches now show their full structural path
+- breadcrumb navigation is more predictable and easier to understand
+
+#### Upload workflow and admin editing were improved
+
+The admin upload flow now behaves more consistently after uploads and reports failed processing more clearly.
+
+What changed:
+
+- upload redirects now preserve the currently active `Media` tab after upload completion
+- upload redirects now jump directly to the image-management section
+- upload responses now report:
+  - failed thumbnail generations
+  - failed image scans
+  - filenames that could not be processed
+- upload-related admin logging was expanded with failed-scan diagnostics
+
+User impact:
+
+- admins stay in the correct editing context after uploads
+- failed uploads and processing issues are easier to diagnose
+- large upload sessions provide clearer operational feedback
+
+#### DNG support groundwork was added
+
+The gallery now includes safer handling and recognition for Adobe Digital Negative files.
+
+What changed:
+
+- added explicit DNG extension detection helpers
+- DNG support now uses dedicated conversion capability checks
+- direct public access to raw `.dng` files is blocked through gallery `.htaccess` rules
+
+User impact:
+
+- DNG handling is more explicit and safer
+- raw source negatives are less likely to be exposed directly
+- future RAW/DNG processing support is easier to extend safely
+
+### Technical Notes
+
+Files changed include:
+
+- `app/controllers/admin_telemetry.php`
+- `app/controllers/admin_uploads.php`
+- `app/controllers/public_gallery.php`
+- `app/services/gallery_lookup.php`
+- `app/helpers.php`
+- `database/migrations/202605080001_telemetry_thumbnail_variants.php`
+- `public/assets/gallery-modules/admin-bulk-actions.js`
+- `galleries/.htaccess`
+
+### Notes
+
+- This release continues the telemetry and responsive-thumbnail work introduced in previous versions.
+- DNG support currently focuses on safer detection and infrastructure preparation rather than full RAW rendering support.
+
 ## Version 0.58
 
 This release brings a broad admin and public-gallery update set:
@@ -576,7 +680,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - Gallery ordering is now handled directly from the admin table, including drag-to-reorder and drag-to-nest
     subgalleries.
   - Admin logs gained live filtering and better ordering controls.
-  - Thumbnail maintenance now includes a controlled ìdelete all thumbnailsî workflow with extra confirmation safeguards.
+  - Thumbnail maintenance now includes a controlled ‚Äúdelete all thumbnails‚Äù workflow with extra confirmation safeguards.
   - The updater was made sturdier, with better cleanup of obsolete managed files and cleaner rollback/reinstall flows.
   - The admin UI got a noticeable polish pass for ordering, logs, warnings, and destructive actions.
 
@@ -585,7 +689,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
   - Gallery rows are now rendered in a deterministic tree order that respects sibling sort_order plus title fallback.
   - A new gallery-order toolbar was added to the All Galleries table.
   - The gallery table now includes a move handle column for drag-based nesting and reordering.
-  - The old ìorderingî info panel was updated to reflect the new in-table workflow.
+  - The old ‚Äúordering‚Äù info panel was updated to reflect the new in-table workflow.
   - The media tools card now includes:
       - Create all thumbnails
       - Delete all thumbnails
@@ -685,7 +789,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
 ### Technical Notes
 
   - This change also updates the core manifest, reflecting the new file set and hashes.
-  - The commit title matches the scope: ìUpdate and log redone.î
+  - The commit title matches the scope: ‚ÄúUpdate and log redone.‚Äù
 
 ## Version 0.54
 
@@ -693,7 +797,7 @@ This update is a broad admin workflow rebuild focused on three areas: gallery or
     rollup tooling.
   - Expanded the admin log view with richer filtering by status, category, severity, and search, plus contextual log
     details and request IDs.
-  - Introduced a separate ìMain page gallery gridî configuration so the home page can use its own layout independent of
+  - Introduced a separate ‚ÄúMain page gallery grid‚Äù configuration so the home page can use its own layout independent of
     gallery pages.
   - Added support for resetting all per-gallery grid overrides, including cleanup of stale gallery.json sidecar data.
   - Updated the public home page and gallery rendering to use the new effective grid settings logic.
@@ -986,7 +1090,7 @@ Name the gallery, connect to database, create admin account, start using the app
 
 This significantly reduces the cognitive load during installation and makes the system usable without requiring technical knowledge of filesystem paths or URL configuration.
 
-## Version 0.45 ñ Diagnostics, Stability & UX Refinement
+## Version 0.45 ‚Äì Diagnostics, Stability & UX Refinement
 
 ### ?? Dev Mode (Admin-only Diagnostics Overlay)
 A new internal diagnostics system has been introduced to support performance tuning and preload optimization.
