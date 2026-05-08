@@ -434,7 +434,7 @@ function render_breadcrumbs(?array $gallery = null): void
     echo '<nav class="breadcrumbs" aria-label="Breadcrumbs">';
     echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
     if ($gallery) {
-        foreach (gallery_ancestors($gallery, true) as $ancestor) {
+        foreach (gallery_breadcrumb_ancestors($gallery) as $ancestor) {
             echo '<span aria-hidden="true">/</span><a href="' . e(gallery_public_url($ancestor)) . '">' . e($ancestor['title']) . '</a>';
         }
         echo '<span aria-hidden="true">/</span><span>' . e($gallery['title']) . '</span>';
