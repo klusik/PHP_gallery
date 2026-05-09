@@ -49,7 +49,13 @@ public/assets/custom.css and loads it after the built-in stylesheet.
     --field: #ffffff;
     --radius: 10px;
     --font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --type-body-size: 1rem;
+    --type-body-line-height: 1.5;
+    --type-heading-line-height: 1.12;
+    --type-tight-line-height: 1.05;
+    --type-tracking-tight: -0.025em;
 }
+
 
 /* Styles the body area of the gallery interface. */
 body {
@@ -79,8 +85,9 @@ a {
 .brand {
     color: #0f172a;
     font-size: clamp(1.45rem, 3vw, 2.4rem);
+    line-height: var(--type-tight-line-height, 1.05);
     font-weight: 800;
-    letter-spacing: 0;
+    letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 
 /* Styles the .nav area of the gallery interface. */
@@ -137,7 +144,8 @@ button.secondary {
 
 /* Styles the .hero h1 area of the gallery interface. */
 .hero h1 {
-    letter-spacing: 0;
+    line-height: var(--type-tight-line-height, 1.05);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 
 /* Styles the .grid area of the gallery interface. */
@@ -242,9 +250,9 @@ th {
 
 /* Styles the .inline-editor area of the gallery interface. */
 .inline-editor {
-    border-color: #bfdbfe;
-    background: #f8fbff;
-    border-radius: 10px;
+    border-color: var(--line, #bfdbfe);
+    background: var(--field, #f8fbff);
+    border-radius: var(--radius, 10px);
 }
 
 /* Styles the .lightbox area of the gallery interface. */

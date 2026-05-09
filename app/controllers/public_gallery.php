@@ -68,7 +68,7 @@ function cms_home(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
         echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
         foreach ($galleries as $gallery) {
-            render_gallery_card($gallery, true);
+            render_gallery_card($gallery, true, false, true);
         }
         echo '</section>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
@@ -226,12 +226,10 @@ function cms_gallery(): void
 
     render_header((string) $seo['title'], $gallery, $publicOnly);
     echo '<section class="hero">';
+    echo '<div class="hero-topbar">';
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
-    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
-    if ($children) {
-        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
-    }
-    echo '<div class="hero-actions">';
+    echo '<div class="hero-meta">';
+    echo '<div class="hero-actions" aria-label="Gallery actions">';
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a>';
     if ($galleryMapPoints) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
@@ -239,6 +237,14 @@ function cms_gallery(): void
     if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<a class="button secondary" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a>';
     }
+    echo '</div>';
+    echo '<div class="hero-tags" aria-label="Gallery tags">';
+    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
+    if ($children) {
+        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+    }
+    echo '</div>';
+    echo '</div>';
     echo '</div>';
     render_breadcrumbs($gallery);
     echo '</section>';
@@ -252,12 +258,12 @@ function cms_gallery(): void
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     if ($children) {
-        echo '<section class="panel" data-public-subgallery-section><h2>Subgalleries</h2>';
+        echo '<section class="panel public-subgallery-panel" data-public-subgallery-section aria-label="Subgalleries">';
         render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         foreach ($children as $child) {
-            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1);
+            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true);
         }
         echo '</div>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
@@ -625,7 +631,7 @@ function gallery_share_url(int $galleryId, string $token): string
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -633,11 +639,16 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    // Variable $branchImageCount stores this steps working value.
+    $branchImageCount = $isProtectedPublicCard ? 0 : gallery_branch_image_count((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="Drag subgallery to reorder visible subgalleries" title="Drag to reorder this visible subgallery"><span aria-hidden="true">↕</span><span>Move gallery</span></button>';
     }
-    echo '<a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
+    echo '<a class="gallery-card-media" href="' . e(gallery_public_url($gallery)) . '" aria-label="Open gallery ' . e((string) $gallery['title']) . '">';
+    if ($showSubgalleryBadge && !$isProtectedPublicCard) {
+        echo '<span class="subgallery-stack-badge" aria-label="Subgallery containing ' . (int) $branchImageCount . ' images"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . (int) $branchImageCount . '</span></span>';
+    }
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {
@@ -655,20 +666,17 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
             echo '</span>';
         }
     }
-    echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
-    echo '<p>' . e($gallery['description']) . '</p>';
-    if ($isProtectedPublicCard) {
-        echo '<p class="muted">Protected gallery</p></span>';
-    } else {
-        // Variable $branchImageCount stores this steps working value.
-        $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
-        echo '<p class="muted">' . $branchImageCount . ' images</p></span>';
-    }
     echo '</a>';
-    render_public_gallery_admin_form($gallery);
-    if (!$isProtectedPublicCard) {
+    echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
+    echo '<p class="gallery-card-description">' . e($gallery['description']) . '</p>';
+    if ($isProtectedPublicCard) {
+        echo '<p class="muted gallery-card-count">Protected gallery</p>';
+    } else {
+        echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . $branchImageCount . ' images</p>';
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
+    echo '</div>';
+    render_public_gallery_admin_form($gallery);
     echo '</article>';
 }
 
@@ -682,21 +690,25 @@ function render_public_gallery_admin_form(array $gallery): void
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid">' . csrf_field();
+    echo '<details class="inline-editor public-inline-editor gallery-inline-editor" data-admin-inline-editor><summary><span>Edit gallery</span><small>Quick public-page controls</small></summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid inline-editor-form">' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<label>Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
+    echo '<div class="inline-editor-fields">';
+    echo '<label class="inline-editor-title-field">Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
+    echo '</div>';
+    echo '<div class="inline-editor-options">';
     if (gallery_filename_display_schema_ready()) {
-        echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> <span>Show file names</span></label>';
     }
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
     }
-    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '</div>';
+    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
-    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a></div>';
@@ -713,18 +725,22 @@ function render_public_image_admin_form(array $image): void
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid">' . csrf_field();
+    echo '<details class="inline-editor public-inline-editor image-inline-editor" data-admin-inline-editor><summary><span>Edit photo</span><small>Quick public-page controls</small></summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid inline-editor-form">' . csrf_field();
     echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
+    echo '<div class="inline-editor-fields">';
+    echo '<label class="inline-editor-title-field">Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
     echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
+    echo '</div>';
+    echo '<div class="inline-editor-options">';
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
     }
-    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '</div>';
+    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
-    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Admin edit</a></div>';
     echo '</form></details>';
 }

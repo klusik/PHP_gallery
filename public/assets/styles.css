@@ -62,7 +62,13 @@
     --field: #fffdf8;
     /* `--radius` controls rounded corner size for reusable components. */
     --radius: 16px;
+    --type-body-size: 1rem;
+    --type-body-line-height: 1.5;
+    --type-heading-line-height: 1.12;
+    --type-tight-line-height: 1.05;
+    --type-tracking-tight: -0.025em;
 }
+
 
 /* Foundation */
 
@@ -76,14 +82,55 @@ body {
         radial-gradient(circle at top left, rgba(165, 72, 28, 0.15), transparent 28rem),
         linear-gradient(135deg, var(--paper) 0%, #efe4d0 100%);
     font-family: var(--font-family, Georgia, "Times New Roman", serif);
-    line-height: 1.55;
+    font-size: var(--type-body-size, 1rem);
+    line-height: var(--type-body-line-height, 1.5);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
+
 a {
     color: var(--accent-dark);
 }
 img {
     max-width: 100%;
     height: auto;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.brand,
+button,
+.button,
+input,
+select,
+textarea {
+    font-family: var(--font-family, Georgia, "Times New Roman", serif);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    line-height: var(--type-heading-line-height, 1.12);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+}
+
+p,
+li,
+dd,
+dt,
+label,
+input,
+select,
+textarea {
+    line-height: var(--type-body-line-height, 1.5);
 }
 
 /* Shared navigation and buttons */
@@ -122,9 +169,11 @@ img {
 }
 .brand {
     font-size: clamp(1.7rem, 4vw, 3rem);
+    line-height: var(--type-tight-line-height, 1.05);
     text-decoration: none;
     color: var(--ink);
-    letter-spacing: -0.04em;
+    font-weight: 800;
+    letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 .nav {
     display: flex;
@@ -187,6 +236,7 @@ button.is-update-pending {
 
 .gallery-card,
 .image-card {
+    position: relative;
     overflow: hidden;
     border-radius: var(--radius, 16px);
 }
@@ -344,6 +394,188 @@ button.is-update-pending {
 }
 .image-inline-editor textarea {
     min-height: 5rem;
+}
+
+/* Presents public inline edit forms as compact admin-style control cards. */
+.public-page .public-inline-editor {
+    position: relative;
+    margin: 0.65rem 0 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border-radius: var(--radius, 16px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.public-page .gallery-card .public-inline-editor,
+.public-page .image-card .public-inline-editor {
+    margin: 0.25rem clamp(0.65rem, 1.2vw, 0.9rem) clamp(0.65rem, 1.2vw, 0.9rem);
+}
+
+.public-page .public-inline-editor summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.45rem;
+    padding: 0.55rem 0.75rem;
+    cursor: pointer;
+    color: var(--ink);
+    font-weight: 800;
+    list-style: none;
+}
+
+.public-page .public-inline-editor summary::-webkit-details-marker {
+    display: none;
+}
+
+.public-page .public-inline-editor summary::after {
+    content: "Edit";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.75rem;
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--accent-dark);
+    background: transparent;
+    color: var(--accent-dark);
+    border-radius: var(--radius, 16px);
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.public-page .public-inline-editor[open] summary {
+    margin-bottom: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--field) 72%, transparent);
+}
+
+.public-page .public-inline-editor[open] summary::after {
+    content: "Close";
+    background: var(--accent);
+    color: #fffdf8;
+}
+
+.public-page .public-inline-editor summary small {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+.public-page .inline-editor-form {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(13rem, 0.45fr);
+    gap: 0.7rem;
+    padding: 0.75rem;
+}
+
+.public-page .inline-editor-fields {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.52fr) minmax(14rem, 1fr);
+    gap: 0.65rem;
+    align-items: end;
+}
+
+.public-page .inline-editor-fields label,
+.public-page .inline-editor-options label {
+    margin: 0;
+}
+
+.public-page .inline-editor-fields input,
+.public-page .inline-editor-fields textarea {
+    min-height: 2.25rem;
+    padding: 0.52rem 0.65rem;
+    font-size: 0.95rem;
+}
+
+.public-page .inline-editor-fields textarea {
+    min-height: 2.25rem;
+    max-height: 5.5rem;
+    resize: vertical;
+}
+
+.public-page .inline-editor-options {
+    display: flex;
+    align-items: end;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.public-page .inline-editor-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    border-radius: var(--radius, 16px);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.public-page .inline-editor-toggle input {
+    width: auto;
+    margin: 0;
+}
+
+.public-page .inline-editor-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    margin: 0;
+    padding-top: 0.65rem;
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.public-page .inline-editor-actions button,
+.public-page .inline-editor-actions .button {
+    min-height: 2.15rem;
+    padding: 0.42rem 0.7rem;
+    border-radius: var(--radius, 16px);
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.15;
+}
+
+.public-page .inline-editor-actions .danger {
+    border-color: color-mix(in srgb, #dc2626 55%, var(--accent-dark));
+    color: color-mix(in srgb, #dc2626 72%, var(--accent-dark));
+}
+
+@media (max-width: 920px) {
+    .public-page .inline-editor-form,
+    .public-page .inline-editor-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .public-page .inline-editor-options,
+    .public-page .inline-editor-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 620px) {
+    .public-page .public-inline-editor summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .public-page .public-inline-editor summary::after {
+        width: 100%;
+    }
+
+    .public-page .inline-editor-actions button,
+    .public-page .inline-editor-actions .button {
+        flex: 1 1 100%;
+        justify-content: center;
+        text-align: center;
+    }
 }
 .muted {
     color: var(--muted);
@@ -1382,31 +1614,156 @@ body.has-mobile-lightbox {
 /* Public design refinements */
 .public-page .hero {
     position: relative;
+    display: grid;
+    gap: 0.7rem;
     overflow: hidden;
-    border: 0;
+    padding: clamp(0.85rem, 1.8vw, 1.25rem);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
     background: var(--gallery-panel);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
+
+.public-page .hero-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.public-page .hero-meta {
+    display: grid;
+    justify-items: end;
+    gap: 0.45rem;
+    flex: 0 0 min(24rem, 42vw);
+    min-width: 14rem;
+}
+
+.public-page .hero .gallery-title-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.public-page .hero .gallery-title-bar .gallery-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .public-page .hero h1 {
     max-width: 100%;
-    margin: 0 0 0.35rem;
-    font-size: clamp(1.75rem, 3.4vw, 3.4rem);
-    line-height: 1.05;
-    letter-spacing: 0;
+    margin: 0;
+    font-size: clamp(2.05rem, 3.6vw, 3.2rem);
+    font-weight: 800;
+    line-height: var(--type-tight-line-height, 1.05);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
     overflow-wrap: normal;
     word-break: normal;
 }
+
 .public-page .hero p {
-    max-width: 68ch;
+    max-width: 72ch;
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    line-height: var(--type-body-line-height, 1.5);
+    opacity: 0.88;
 }
+
 .public-page .hero-actions {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.65rem;
+    justify-content: flex-end;
+    gap: 0.45rem;
     align-items: center;
-    margin-top: 0.85rem;
 }
+
+.public-page .hero-actions .button,
+.public-page .hero-actions button {
+    min-height: 0;
+    padding: 0.48rem 0.75rem;
+    border-radius: var(--radius, 16px);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.public-page .hero .tag-list,
 .public-page .hero .breadcrumbs {
-    margin-top: 1rem;
+    margin: 0;
+}
+
+.public-page .hero-tags {
+    display: grid;
+    justify-items: end;
+    gap: 0.25rem;
+    max-width: 100%;
+}
+
+.public-page .hero .tag-list {
+    justify-content: flex-end;
+    gap: 0.25rem;
+    opacity: 0.92;
+}
+
+.public-page .hero .tag-list-label {
+    font-size: 0.72rem;
+}
+
+.public-page .hero .tag {
+    padding: 0.1rem 0.42rem;
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.public-page .hero .breadcrumbs {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.public-page .hero .gallery-branding-logo {
+    flex: 0 0 auto;
+    max-width: min(9rem, 24vw);
+    max-height: 4.25rem;
+    object-fit: contain;
+}
+
+.public-page .hero .gallery-branding-banner {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 5rem;
+    object-fit: contain;
+}
+
+@media (max-width: 760px) {
+    .public-page .hero-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .public-page .hero-meta {
+        justify-items: start;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .public-page .hero-actions,
+    .public-page .hero .tag-list {
+        justify-content: flex-start;
+    }
+
+    .public-page .hero-tags {
+        justify-items: start;
+    }
+
+    .public-page .hero h1 {
+        font-size: clamp(1.8rem, 9vw, 2.5rem);
+    }
 }
 .public-page .gallery-card {
     transition: transform 0.16s ease, box-shadow 0.16s ease;
@@ -4361,6 +4718,20 @@ button.gallery-row-action.secondary {
         width: 100%;
         max-height: 8rem;
     }
+
+    .public-page .hero .gallery-title-bar {
+        gap: 0.45rem;
+    }
+
+    .public-page .hero .gallery-branding-logo {
+        max-width: min(6rem, 32vw);
+        max-height: 2.75rem;
+    }
+
+    .public-page .hero .gallery-branding-banner {
+        width: 100%;
+        max-height: 3.75rem;
+    }
 }
 
 
@@ -5679,5 +6050,232 @@ body.public-reorder-active {
 
     .public-reorder-handle span:last-child {
         display: none;
+    }
+}
+
+/* Compacts public gallery listing panels and subgallery cards without changing the configured theme palette. */
+.public-page .panel[data-public-subgallery-section] {
+    padding: clamp(0.85rem, 2vw, 1.25rem);
+    margin-bottom: 0.85rem;
+}
+
+.public-page .panel[data-public-subgallery-section] > h2 {
+    margin: 0 0 0.85rem;
+    font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+    line-height: var(--type-heading-line-height, 1.12);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+}
+
+.public-page .panel[data-public-subgallery-section] .grid {
+    gap: clamp(0.7rem, 1.4vw, 1rem);
+}
+
+.public-page .gallery-card {
+    display: grid;
+    grid-template-columns: minmax(12rem, 42%) minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 11rem;
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.public-page .gallery-card-media {
+    display: block;
+    min-height: 100%;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
+}
+
+.public-page .gallery-card-link {
+    min-height: 0;
+}
+
+.public-page .gallery-card-media img,
+.public-page .gallery-card-media picture,
+.public-page .gallery-card-media picture img,
+.public-page .gallery-card-media .gallery-collage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 11rem;
+    object-fit: cover;
+}
+
+.public-page .gallery-card-media .gallery-collage {
+    display: grid;
+}
+
+.public-page .gallery-card-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: clamp(0.75rem, 1.6vw, 1rem);
+}
+
+.public-page .gallery-card-title-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.public-page .gallery-card-title-link:hover,
+.public-page .gallery-card-title-link:focus {
+    color: var(--accent-dark);
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+}
+
+.public-page .gallery-card-description {
+    margin: 0.2rem 0 0;
+    line-height: 1.45;
+}
+
+.public-page .gallery-card-count {
+    margin: auto 0 0;
+    padding-top: 0.65rem;
+}
+
+
+.public-page .gallery-card-count-visual-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.public-page .gallery-card-body .tag-list {
+    margin: 0.6rem 0 0;
+    gap: 0.28rem;
+}
+
+.public-page .gallery-card-body .tag {
+    padding: 0.1rem 0.42rem;
+    border-color: var(--accent);
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.public-page .gallery-card-body .tag-list-label {
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.public-page .public-reorder-handle,
+.public-page .public-page-reorder-toolbar .button,
+.public-page .public-page-reorder-toolbar button {
+    border-radius: var(--radius, 16px);
+}
+
+@media (max-width: 720px) {
+    .public-page .gallery-card {
+        grid-template-columns: 1fr;
+    }
+
+    .public-page .gallery-card-media img,
+    .public-page .gallery-card-media picture,
+    .public-page .gallery-card-media picture img,
+    .public-page .gallery-card-media .gallery-collage {
+        height: 10rem;
+        min-height: 10rem;
+    }
+
+    .public-page .gallery-card-count {
+        margin-top: 0.55rem;
+        padding-top: 0;
+    }
+}
+
+/* Compact public subgallery section and collection badge */
+.public-page .public-subgallery-panel {
+    padding-top: clamp(0.75rem, 1.3vw, 1rem);
+}
+
+.public-page .public-subgallery-panel > h2 {
+    display: none;
+}
+
+.public-page .gallery-card-media {
+    position: relative;
+    overflow: hidden;
+}
+
+.public-page .subgallery-stack-badge {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 2rem;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 44%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--ink) 28%, transparent);
+    color: var(--panel);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    font-size: 0.86rem;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+}
+
+.public-page .subgallery-stack-icon {
+    position: relative;
+    display: inline-grid;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+}
+
+.public-page .subgallery-stack-icon span {
+    position: absolute;
+    display: block;
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 2px solid currentColor;
+    border-radius: calc(var(--radius, 16px) * 0.22);
+    background: transparent;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(1) {
+    top: 0;
+    right: 0;
+    opacity: 0.72;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(2) {
+    top: 0.2rem;
+    right: 0.2rem;
+    opacity: 0.86;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(3) {
+    top: 0.4rem;
+    right: 0.4rem;
+}
+
+.public-page .subgallery-stack-count {
+    min-width: 1.25rem;
+    text-align: right;
+}
+
+@media (max-width: 720px) {
+    .public-page .subgallery-stack-badge {
+        top: 0.45rem;
+        right: 0.45rem;
+        min-height: 1.85rem;
+        padding: 0.24rem 0.48rem;
+        font-size: 0.8rem;
     }
 }
