@@ -103,7 +103,7 @@ export function setupGalleryLightbox() {
     // lightboxSourceCards stores the complete gallery order used by fullscreen navigation.
     const lightboxSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
     // cards stores the authoritative image order for the viewer.
-    const cards = lightboxSourceCards.length > 0 ? lightboxSourceCards : visibleLightboxCards;
+    let cards = lightboxSourceCards.length > 0 ? lightboxSourceCards : visibleLightboxCards;
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
 
@@ -114,6 +114,23 @@ export function setupGalleryLightbox() {
     if (!overlay || cards.length === 0) {
         return;
     }
+
+    /**
+     * Refreshes the lightbox order after an admin reorders visible photo cards.
+     *
+     * The clickable handlers stay attached to the same DOM nodes, but navigation
+     * must read the new DOM order so Next and Previous match the saved gallery
+     * order without requiring a page reload.
+     *
+     * @returns {void}
+     */
+    function refreshLightboxOrderFromDom() {
+        const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
+        const nextSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
+        cards = nextSourceCards.length > 0 ? nextSourceCards : nextVisibleCards;
+    }
+
+    document.addEventListener('publicGalleryPhotoOrderChanged', refreshLightboxOrderFromDom);
 
     // Variable `image` stores this steps working value.
     const image = overlay.querySelector('[data-lightbox-img]');

@@ -3598,6 +3598,568 @@ export function setupAdminGalleryReordering() {
     setStatus('Gallery ordering ready.', 'idle');
 }
 
+
+/**
+ * Enables public gallery page card reordering for logged-in admins.
+ *
+ * The controller is scoped by toolbar. Subgallery cards and photo cards are
+ * handled as separate lists, so the page keeps its existing galleries-first and
+ * photos-underneath structure. The server receives only the visible page ids
+ * plus the pagination offset/count rendered by PHP, then validates that exact
+ * slice before saving.
+ *
+ * @returns {void}
+ */
+export function setupPublicGalleryPageReordering() {
+    document.querySelectorAll('[data-public-reorder-toolbar]').forEach((toolbar) => {
+        if (!(toolbar instanceof HTMLElement) || toolbar.dataset.publicReorderBound === '1') {
+            return;
+        }
+        toolbar.dataset.publicReorderBound = '1';
+
+        const kind = toolbar.dataset.reorderKind || '';
+        const listSelector = `[data-public-reorder-list="${kind}"]`;
+        const itemSelector = kind === 'gallery' ? '[data-public-gallery-order-item]' : '[data-public-photo-order-item]';
+        const scope = toolbar.parentElement || document;
+        const list = scope.querySelector(listSelector) || document.querySelector(listSelector);
+        const status = toolbar.querySelector('[data-public-reorder-status]');
+        const reorderUrl = toolbar.dataset.reorderUrl || '';
+        const galleryId = toolbar.dataset.galleryId || '';
+        const csrfToken = toolbar.dataset.csrfToken || '';
+        const visibleOffset = toolbar.dataset.visibleOffset || '0';
+        const visibleCount = toolbar.dataset.visibleCount || '0';
+
+        if (!(list instanceof HTMLElement) || !reorderUrl || !galleryId || !csrfToken) {
+            return;
+        }
+
+        let draggedItem = null;
+        let draggedHandle = null;
+        let placeholderItem = null;
+        let ghostItem = null;
+        let pointerOffsetX = 0;
+        let pointerOffsetY = 0;
+        let originalSignature = '';
+        let originalItems = [];
+        let activePointerId = null;
+        let activeMouseFallback = false;
+
+        /**
+         * Updates the compact save status for one public reorder list.
+         *
+         * @param {string} message Text shown to the admin.
+         * @param {string} state Visual state token used by CSS.
+         * @returns {void}
+         */
+        function setStatus(message, state) {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.dataset.state = state;
+        }
+
+        /**
+         * Returns direct sortable items for the current list.
+         *
+         * @returns {HTMLElement[]} Sortable cards in current DOM order.
+         */
+        function sortableItems() {
+            return Array.from(list.querySelectorAll(itemSelector))
+                .filter((item) => item instanceof HTMLElement && item.parentElement === list);
+        }
+
+        /**
+         * Returns direct sortable items that are still visible during dragging.
+         *
+         * @returns {HTMLElement[]} Cards available as insertion targets.
+         */
+        function availableItems() {
+            return sortableItems().filter((item) => !item.classList.contains('is-public-reorder-hidden'));
+        }
+
+        /**
+         * Returns the current visible id order as strings.
+         *
+         * @returns {string[]} Ordered ids from the current DOM.
+         */
+        function currentOrder() {
+            return sortableItems().map((item) => item.dataset.publicOrderId || '').filter((id) => id !== '');
+        }
+
+        /**
+         * Returns a compact id signature for change detection.
+         *
+         * @returns {string} Ordered id signature.
+         */
+        function currentSignature() {
+            return currentOrder().join('|');
+        }
+
+        /**
+         * Builds the fixed drag preview from the original card.
+         *
+         * @param {HTMLElement} sourceItem Card being moved.
+         * @returns {HTMLElement} Fixed-position clone appended to the body.
+         */
+        function buildGhost(sourceItem) {
+            const box = sourceItem.getBoundingClientRect();
+            const ghost = sourceItem.cloneNode(true);
+            ghost.classList.add('public-reorder-ghost');
+            ghost.classList.remove('is-public-reorder-hidden');
+            ghost.removeAttribute('data-public-gallery-order-item');
+            ghost.removeAttribute('data-public-photo-order-item');
+            ghost.removeAttribute('data-lightbox-image');
+            ghost.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+            ghost.style.left = `${box.left}px`;
+            ghost.style.top = `${box.top}px`;
+            ghost.style.width = `${box.width}px`;
+            ghost.style.height = `${box.height}px`;
+            document.body.appendChild(ghost);
+            return ghost;
+        }
+
+        /**
+         * Builds the card-shaped placeholder used as the drop marker.
+         *
+         * @param {HTMLElement} sourceItem Card being moved.
+         * @returns {HTMLElement} Placeholder inserted into the list.
+         */
+        function buildPlaceholder(sourceItem) {
+            const box = sourceItem.getBoundingClientRect();
+            const placeholder = document.createElement(sourceItem.tagName.toLowerCase());
+            placeholder.className = `public-reorder-placeholder ${kind === 'gallery' ? 'gallery-card' : 'image-card'}`;
+            placeholder.setAttribute('aria-hidden', 'true');
+            placeholder.style.minHeight = `${Math.max(96, box.height)}px`;
+            placeholder.innerHTML = `<span>${kind === 'gallery' ? 'Drop gallery here' : 'Drop photo here'}</span>`;
+            return placeholder;
+        }
+
+        /**
+         * Returns the next real item after a target, skipping temporary nodes.
+         *
+         * @param {HTMLElement} target Current target card.
+         * @returns {HTMLElement|null} Next insertion reference, or null to append.
+         */
+        function nextRealItem(target) {
+            let next = target.nextElementSibling;
+            while (next) {
+                if (next instanceof HTMLElement && next.matches(itemSelector) && !next.classList.contains('is-public-reorder-hidden')) {
+                    return next;
+                }
+                next = next.nextElementSibling;
+            }
+            return null;
+        }
+
+        /**
+         * Returns the card closest to the pointer when the pointer is over a gap.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {HTMLElement|null} Nearest sortable card.
+         */
+        function nearestItem(clientX, clientY) {
+            let closestItem = null;
+            let closestDistance = Number.POSITIVE_INFINITY;
+            availableItems().forEach((item) => {
+                const box = item.getBoundingClientRect();
+                const centerX = box.left + (box.width / 2);
+                const centerY = box.top + (box.height / 2);
+                const distance = Math.hypot(clientX - centerX, clientY - centerY);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestItem = item;
+                }
+            });
+            return closestItem;
+        }
+
+        /**
+         * Returns the best insertion target for the current pointer position.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {{target: HTMLElement|null, after: boolean}} Target card and side.
+         */
+        function insertionTarget(clientX, clientY) {
+            const directTarget = document.elementFromPoint(clientX, clientY)?.closest(itemSelector);
+            const target = directTarget instanceof HTMLElement && directTarget.parentElement === list && !directTarget.classList.contains('is-public-reorder-hidden')
+                ? directTarget
+                : nearestItem(clientX, clientY);
+            if (!target) {
+                return {target: null, after: false};
+            }
+            const box = target.getBoundingClientRect();
+            const pointerWithinRow = clientY >= box.top && clientY <= box.bottom;
+            const after = pointerWithinRow ? clientX > box.left + (box.width / 2) : clientY > box.top + (box.height / 2);
+            return {target, after};
+        }
+
+        /**
+         * Moves the placeholder to the candidate drop position.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {void}
+         */
+        function movePlaceholder(clientX, clientY) {
+            if (!placeholderItem) {
+                return;
+            }
+            const insertion = insertionTarget(clientX, clientY);
+            if (!insertion.target) {
+                list.appendChild(placeholderItem);
+                return;
+            }
+            const reference = insertion.after ? nextRealItem(insertion.target) : insertion.target;
+            list.insertBefore(placeholderItem, reference);
+        }
+
+        /**
+         * Moves the fixed ghost to follow the pointer.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {void}
+         */
+        function moveGhost(clientX, clientY) {
+            if (!ghostItem) {
+                return;
+            }
+            ghostItem.style.left = `${clientX - pointerOffsetX}px`;
+            ghostItem.style.top = `${clientY - pointerOffsetY}px`;
+        }
+
+        /**
+         * Restores DOM order when the server rejects a save.
+         *
+         * @returns {void}
+         */
+        function restoreOriginalOrder() {
+            originalItems.forEach((item) => {
+                list.appendChild(item);
+            });
+        }
+
+        /**
+         * Keeps hidden lightbox source metadata aligned with a visible photo reorder.
+         *
+         * @param {string[]} orderedIds Visible photo ids after the drop.
+         * @returns {void}
+         */
+        function syncLightboxSourceOrder(orderedIds) {
+            if (kind !== 'photo') {
+                return;
+            }
+            const sourceList = document.querySelector('.lightbox-source-list');
+            if (!(sourceList instanceof HTMLElement)) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const sourceNodes = Array.from(sourceList.querySelectorAll('[data-lightbox-source]'));
+            const sourceById = new Map(sourceNodes.map((node) => [node.dataset.imageId || '', node]));
+            const indexes = orderedIds.map((id) => sourceNodes.findIndex((node) => (node.dataset.imageId || '') === id));
+            if (indexes.some((index) => index < 0)) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const sortedIndexes = indexes.slice().sort((left, right) => left - right);
+            const startIndex = sortedIndexes[0];
+            const isContiguous = sortedIndexes.every((index, offset) => index === startIndex + offset);
+            if (!isContiguous) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const nextNodes = sourceNodes.slice();
+            orderedIds.forEach((id, offset) => {
+                const node = sourceById.get(id);
+                if (node) {
+                    nextNodes[startIndex + offset] = node;
+                }
+            });
+            nextNodes.forEach((node) => sourceList.appendChild(node));
+            document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+        }
+
+        /**
+         * Persists the current visible order to the matching PHP endpoint.
+         *
+         * @param {string[]} orderedIds Current visible ids after the drop.
+         * @returns {Promise<void>} Resolves after save handling completes.
+         */
+        async function saveOrder(orderedIds) {
+            const body = new FormData();
+            body.set('csrf_token', csrfToken);
+            body.set('gallery_id', galleryId);
+            body.set('visible_offset', visibleOffset);
+            body.set('visible_count', visibleCount);
+            body.set('ajax', '1');
+            if (kind === 'gallery') {
+                body.set('gallery_order', JSON.stringify(orderedIds));
+            } else {
+                body.set('image_order', JSON.stringify(orderedIds));
+                body.set('reorder_scope', 'visible_page');
+            }
+
+            setStatus('Saving visible page order...', 'saving');
+            try {
+                const response = await fetch(reorderUrl, {
+                    method: 'POST',
+                    body,
+                    headers: {'Accept': 'application/json'},
+                });
+                const text = await response.text();
+                let result = null;
+                try {
+                    result = JSON.parse(text);
+                } catch (parseError) {
+                    throw new Error('The server returned HTML or text instead of JSON. Check the admin logs or PHP error log.');
+                }
+                if (!response.ok || !result.ok) {
+                    throw new Error(result.message || 'Visible page order could not be saved.');
+                }
+                setStatus(result.message || 'Visible page order saved.', 'saved');
+                syncLightboxSourceOrder(orderedIds);
+            } catch (error) {
+                restoreOriginalOrder();
+                setStatus(error.message || 'Visible page order could not be saved.', 'error');
+            }
+        }
+
+        /**
+         * Removes temporary drag state.
+         *
+         * @param {boolean} commit Whether to insert the moved item at the placeholder.
+         * @returns {void}
+         */
+        function cleanupDrag(commit) {
+            document.removeEventListener('pointermove', handlePointerMove, true);
+            document.removeEventListener('pointerup', handlePointerEnd, true);
+            document.removeEventListener('pointercancel', handlePointerCancel, true);
+            document.removeEventListener('mousemove', handleMouseMove, true);
+            document.removeEventListener('mouseup', handleMouseEnd, true);
+            document.removeEventListener('keydown', handleKeydown, true);
+
+            if (commit && draggedItem && placeholderItem?.parentElement === list) {
+                list.insertBefore(draggedItem, placeholderItem);
+            }
+            draggedItem?.classList.remove('is-public-reorder-hidden');
+            draggedHandle?.classList.remove('is-dragging');
+            placeholderItem?.remove();
+            ghostItem?.remove();
+            document.body.classList.remove('public-reorder-active');
+            draggedItem = null;
+            draggedHandle = null;
+            placeholderItem = null;
+            ghostItem = null;
+            activePointerId = null;
+            activeMouseFallback = false;
+        }
+
+        /**
+         * Handles pointer or mouse movement during an active drag.
+         *
+         * @param {MouseEvent|PointerEvent} event Movement event.
+         * @returns {void}
+         */
+        function handleMove(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            moveGhost(event.clientX, event.clientY);
+            movePlaceholder(event.clientX, event.clientY);
+        }
+
+        /**
+         * Handles the end of a pointer or mouse drag.
+         *
+         * @param {MouseEvent|PointerEvent} event Release event.
+         * @returns {void}
+         */
+        function finishDrag(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            cleanupDrag(true);
+            const nextSignature = currentSignature();
+            if (nextSignature === originalSignature) {
+                setStatus('Order unchanged.', 'idle');
+                return;
+            }
+            saveOrder(currentOrder());
+        }
+
+        /**
+         * Cancels the active drag and leaves the DOM unchanged.
+         *
+         * @param {Event} event Cancellation event.
+         * @returns {void}
+         */
+        function cancelDrag(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            cleanupDrag(false);
+            setStatus('Order unchanged.', 'idle');
+        }
+
+        /**
+         * Handles pointer movement for the active drag.
+         *
+         * @param {PointerEvent} event Pointer movement event.
+         * @returns {void}
+         */
+        function handlePointerMove(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            handleMove(event);
+        }
+
+        /**
+         * Handles pointer release for the active drag.
+         *
+         * @param {PointerEvent} event Pointer release event.
+         * @returns {void}
+         */
+        function handlePointerEnd(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            finishDrag(event);
+        }
+
+        /**
+         * Handles pointer cancellation for the active drag.
+         *
+         * @param {PointerEvent} event Pointer cancellation event.
+         * @returns {void}
+         */
+        function handlePointerCancel(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            cancelDrag(event);
+        }
+
+        /**
+         * Handles mouse movement for browsers without PointerEvent support.
+         *
+         * @param {MouseEvent} event Mouse movement event.
+         * @returns {void}
+         */
+        function handleMouseMove(event) {
+            if (!activeMouseFallback) {
+                return;
+            }
+            handleMove(event);
+        }
+
+        /**
+         * Handles mouse release for browsers without PointerEvent support.
+         *
+         * @param {MouseEvent} event Mouse release event.
+         * @returns {void}
+         */
+        function handleMouseEnd(event) {
+            if (!activeMouseFallback) {
+                return;
+            }
+            finishDrag(event);
+        }
+
+        /**
+         * Lets the admin cancel a drag with Escape.
+         *
+         * @param {KeyboardEvent} event Keyboard event.
+         * @returns {void}
+         */
+        function handleKeydown(event) {
+            if (event.key === 'Escape') {
+                cancelDrag(event);
+            }
+        }
+
+        /**
+         * Starts card movement from a dedicated handle.
+         *
+         * @param {MouseEvent|PointerEvent} event Initial press event.
+         * @param {boolean} mouseFallback Whether classic mouse events own this drag.
+         * @returns {void}
+         */
+        function startDrag(event, mouseFallback) {
+            const handle = event.target instanceof Element ? event.target.closest('[data-public-reorder-handle]') : null;
+            const item = handle instanceof HTMLElement ? handle.closest(itemSelector) : null;
+            if (!(handle instanceof HTMLElement) || !(item instanceof HTMLElement) || item.parentElement !== list || event.button !== 0 || draggedItem) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            const itemBox = item.getBoundingClientRect();
+            draggedItem = item;
+            draggedHandle = handle;
+            originalSignature = currentSignature();
+            originalItems = sortableItems();
+            pointerOffsetX = event.clientX - itemBox.left;
+            pointerOffsetY = event.clientY - itemBox.top;
+            activePointerId = mouseFallback ? null : event.pointerId;
+            activeMouseFallback = mouseFallback;
+            placeholderItem = buildPlaceholder(item);
+            ghostItem = buildGhost(item);
+
+            list.insertBefore(placeholderItem, item.nextElementSibling);
+            item.classList.add('is-public-reorder-hidden');
+            handle.classList.add('is-dragging');
+            document.body.classList.add('public-reorder-active');
+            setStatus(`Dragging visible ${kind === 'gallery' ? 'gallery' : 'photo'}...`, 'dragging');
+            moveGhost(event.clientX, event.clientY);
+            movePlaceholder(event.clientX, event.clientY);
+
+            if (mouseFallback) {
+                document.addEventListener('mousemove', handleMouseMove, true);
+                document.addEventListener('mouseup', handleMouseEnd, true);
+            } else {
+                document.addEventListener('pointermove', handlePointerMove, true);
+                document.addEventListener('pointerup', handlePointerEnd, true);
+                document.addEventListener('pointercancel', handlePointerCancel, true);
+            }
+            document.addEventListener('keydown', handleKeydown, true);
+        }
+
+        list.querySelectorAll('[data-public-reorder-handle]').forEach((handle) => {
+            handle.setAttribute('draggable', 'false');
+            handle.addEventListener('dragstart', (event) => event.preventDefault());
+            handle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            handle.addEventListener('pointerdown', (event) => {
+                if (event.isPrimary === false) {
+                    return;
+                }
+                startDrag(event, false);
+            });
+            handle.addEventListener('mousedown', (event) => {
+                if (window.PointerEvent) {
+                    return;
+                }
+                startDrag(event, true);
+            });
+        });
+
+        setStatus('Drag handles ready.', 'idle');
+    });
+}
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
  *

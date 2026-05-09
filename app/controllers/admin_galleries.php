@@ -801,6 +801,168 @@ function admin_reorder_galleries_response(bool $ok, string $message, bool $clean
 }
 
 
+
+/**
+ * Calculates a full order after replacing exactly one visible pagination slice.
+ *
+ * Public gallery page reordering intentionally submits only the cards that are
+ * visible on the current pagination page. The server verifies that the posted
+ * ids still match the same offset and count in the current database order, then
+ * returns the complete sibling order with only that slice rearranged.
+ *
+ * @param array<int> $currentIds Complete current sibling order from the database.
+ * @param array<int> $submittedIds Reordered ids submitted by the browser.
+ * @param int $visibleOffset Zero-based offset of the visible pagination page.
+ * @param int $visibleCount Number of ids rendered on the visible page.
+ * @return array<int>|null Complete order after the visible slice is replaced, or null when validation fails.
+ */
+function admin_visible_page_reordered_ids(array $currentIds, array $submittedIds, int $visibleOffset, int $visibleCount): ?array
+{
+    if ($visibleOffset < 0 || $visibleCount < 1 || count($submittedIds) !== $visibleCount) {
+        return null;
+    }
+
+    // $visibleSlice stores the database ids that belong to this exact pagination page.
+    $visibleSlice = array_slice($currentIds, $visibleOffset, $visibleCount);
+    if (count($visibleSlice) !== $visibleCount) {
+        return null;
+    }
+
+    // $expectedIds stores the visible ids sorted for set comparison.
+    $expectedIds = $visibleSlice;
+    // $actualIds stores the submitted ids sorted for set comparison.
+    $actualIds = $submittedIds;
+    sort($expectedIds);
+    sort($actualIds);
+    if ($expectedIds !== $actualIds) {
+        return null;
+    }
+
+    // $nextIds stores the full order with only the current visible page changed.
+    $nextIds = array_values($currentIds);
+    foreach ($submittedIds as $index => $submittedId) {
+        $nextIds[$visibleOffset + $index] = $submittedId;
+    }
+
+    return $nextIds;
+}
+
+/**
+ * Decodes and validates a JSON id order submitted by JavaScript.
+ *
+ * @param string $rawOrder JSON encoded id list.
+ * @return array<int>|null Positive unique integer ids, or null when malformed.
+ */
+function admin_decode_reorder_id_list(string $rawOrder): ?array
+{
+    // $decodedOrder stores the decoded list before integer normalization.
+    $decodedOrder = json_decode($rawOrder, true);
+    if (!is_array($decodedOrder)) {
+        return null;
+    }
+
+    // $submittedIds stores the positive ids in their submitted order.
+    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $id): bool => $id > 0));
+    if (!$submittedIds || count($submittedIds) !== count(array_unique($submittedIds))) {
+        return null;
+    }
+
+    return $submittedIds;
+}
+
+/**
+ * Handles public gallery page subgallery reordering for logged-in admins.
+ *
+ * This endpoint is intentionally narrower than the Admin dashboard tree reorder.
+ * It never changes parent_id values and never nests galleries. It only reshuffles
+ * the direct children of the gallery currently being viewed, and only when the
+ * submitted ids match the visible pagination slice rendered into the page.
+ *
+ * @return mixed Result produced by this operation.
+ */
+function cms_admin_reorder_public_galleries(): void
+{
+    require_admin();
+    verify_csrf();
+
+    // $parentGalleryId stores the gallery whose direct child order is being changed.
+    $parentGalleryId = (int) ($_POST['gallery_id'] ?? 0);
+    // $parentGallery stores the parent gallery row used for ownership validation.
+    $parentGallery = find_gallery($parentGalleryId);
+    if (!$parentGallery) {
+        cms_not_found();
+        return;
+    }
+
+    // $submittedIds stores the visible subgallery ids in their new browser order.
+    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['gallery_order'] ?? '[]'));
+    if ($submittedIds === null) {
+        admin_reorder_public_page_response(false, 'The submitted subgallery order was not valid.');
+        return;
+    }
+
+    // $visibleOffset stores the first item position rendered on the current pagination page.
+    $visibleOffset = (int) ($_POST['visible_offset'] ?? -1);
+    // $visibleCount stores the number of items rendered on the current pagination page.
+    $visibleCount = (int) ($_POST['visible_count'] ?? 0);
+    // $currentRows stores every direct child currently owned by this parent gallery.
+    $currentRows = child_galleries($parentGalleryId, false);
+    // $currentIds stores the complete direct-child order before the requested change.
+    $currentIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $currentRows);
+    // $nextIds stores the full direct-child order with only the current visible page rearranged.
+    $nextIds = admin_visible_page_reordered_ids($currentIds, $submittedIds, $visibleOffset, $visibleCount);
+    if ($nextIds === null) {
+        admin_reorder_public_page_response(false, 'The visible subgallery page changed while you were reordering. Reload the page and try again.');
+        return;
+    }
+
+    // $pdo stores the active database connection used for the atomic order update.
+    $pdo = db();
+    // $now stores one timestamp shared by all rows touched by this reorder operation.
+    $now = now_sql();
+    try {
+        $pdo->beginTransaction();
+        // $stmt stores the prepared update reused for each direct child gallery.
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
+        foreach ($nextIds as $index => $galleryId) {
+            // $sortOrder stores a normalized sibling position while preserving every non-visible sibling position.
+            $sortOrder = ($index + 1) * 10;
+            $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);
+        }
+        $pdo->commit();
+
+        admin_log_event('info', 'gallery.public_page_reordered', 'Admin reordered visible public-page subgalleries.', [
+            'parent_gallery_id' => $parentGalleryId,
+            'visible_offset' => $visibleOffset,
+            'visible_count' => $visibleCount,
+            'submitted_gallery_ids' => $submittedIds,
+        ]);
+        admin_reorder_public_page_response(true, 'Visible subgallery order saved.');
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'gallery.public_page_reorder_failed', 'Public-page subgallery reorder failed.', [
+            'parent_gallery_id' => $parentGalleryId,
+            'error' => $exception->getMessage(),
+        ]);
+        admin_reorder_public_page_response(false, 'Subgallery order could not be saved: ' . $exception->getMessage());
+    }
+}
+
+/**
+ * Returns a JSON payload for public gallery page ordering requests.
+ *
+ * @param bool $ok Whether the operation completed successfully.
+ * @param string $message Human-readable result for the inline toolbar.
+ * @return void
+ */
+function admin_reorder_public_page_response(bool $ok, string $message): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+}
+
 /**
  * Handles cms admin scan images logic for the gallery application.
  * @return mixed Result produced by this operation.
@@ -2024,26 +2186,47 @@ function cms_admin_reorder_images(): void
         cms_not_found();
         return;
     }
-    // Variable $rawOrder stores the JSON payload submitted by the JavaScript drag-and-drop handler.
-    $rawOrder = (string) ($_POST['image_order'] ?? '[]');
-    // Variable $decodedOrder stores the decoded image-id list before it is normalized to integers.
-    $decodedOrder = json_decode($rawOrder, true);
-    if (!is_array($decodedOrder)) {
-        admin_reorder_images_response(false, 'The submitted image order was not valid JSON.', $galleryId);
+
+    // $submittedIds stores the ordered image ids exactly as submitted by the browser.
+    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['image_order'] ?? '[]'));
+    if ($submittedIds === null) {
+        admin_reorder_images_response(false, 'The submitted image order was not valid JSON or contained duplicate images.', $galleryId);
         return;
     }
-    // Variable $submittedIds stores the ordered ids exactly as integers, with invalid zero values removed.
-    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $imageId): bool => $imageId > 0));
-    if (!$submittedIds) {
-        admin_reorder_images_response(false, 'No images were submitted for reordering.', $galleryId);
+
+    // $currentRows stores every direct image currently owned by this gallery.
+    $currentRows = gallery_images($galleryId, false);
+    // $currentOrderedIds stores the complete direct-image order before the requested change.
+    $currentOrderedIds = array_map(static fn (array $image): int => (int) $image['id'], $currentRows);
+    // $reorderScope stores whether this request is the full Admin table or the public visible-page path.
+    $reorderScope = (string) ($_POST['reorder_scope'] ?? 'full');
+
+    if ($reorderScope === 'visible_page') {
+        // $visibleOffset stores the first image position rendered on the current pagination page.
+        $visibleOffset = (int) ($_POST['visible_offset'] ?? -1);
+        // $visibleCount stores the number of images rendered on the current pagination page.
+        $visibleCount = (int) ($_POST['visible_count'] ?? 0);
+        // $nextIds stores the full gallery image order with only the current visible page rearranged.
+        $nextIds = admin_visible_page_reordered_ids($currentOrderedIds, $submittedIds, $visibleOffset, $visibleCount);
+        if ($nextIds === null) {
+            admin_reorder_images_response(false, 'The visible photo page changed while you were reordering. Reload the page and try again.', $galleryId);
+            return;
+        }
+        try {
+            admin_save_image_order($galleryId, $nextIds, 'image.public_page_reordered', 'Admin reordered visible public-page photos.', [
+                'visible_offset' => $visibleOffset,
+                'visible_count' => $visibleCount,
+                'submitted_image_ids' => $submittedIds,
+            ]);
+            admin_reorder_images_response(true, 'Visible photo order saved.', $galleryId);
+        } catch (Throwable $exception) {
+            admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+        }
         return;
     }
-    if (count($submittedIds) !== count(array_unique($submittedIds))) {
-        admin_reorder_images_response(false, 'The submitted image order contained duplicate images.', $galleryId);
-        return;
-    }
-    // Variable $currentIds stores the complete direct-image set currently visible in the edit-gallery table.
-    $currentIds = array_map(static fn (array $image): int => (int) $image['id'], gallery_images($galleryId, false));
+
+    // $currentIds stores the complete direct-image set currently visible in the edit-gallery table.
+    $currentIds = $currentOrderedIds;
     sort($currentIds);
     // Variable $sortedSubmittedIds stores the submitted id set for exact set comparison with the database state.
     $sortedSubmittedIds = $submittedIds;
@@ -2052,6 +2235,29 @@ function cms_admin_reorder_images(): void
         admin_reorder_images_response(false, 'The image list changed while you were reordering. Reload the page and try again.', $galleryId);
         return;
     }
+
+    try {
+        admin_save_image_order($galleryId, $submittedIds, 'image.reordered', 'Admin reordered gallery images.', [
+            'images' => count($submittedIds),
+        ]);
+        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+    } catch (Throwable $exception) {
+        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+    }
+}
+
+/**
+ * Persists a complete image order for one gallery.
+ *
+ * @param int $galleryId Gallery whose direct image order is being saved.
+ * @param array<int> $orderedIds Complete ordered image ids for this gallery.
+ * @param string $eventKey Admin log event key.
+ * @param string $eventMessage Admin log event message.
+ * @param array<string,mixed> $context Additional event context.
+ * @return void
+ */
+function admin_save_image_order(int $galleryId, array $orderedIds, string $eventKey, string $eventMessage, array $context = []): void
+{
     // Variable $pdo stores the active database connection used for the atomic sort_order update.
     $pdo = db();
     // Variable $now stores one timestamp shared by all rows touched by this reorder operation.
@@ -2060,17 +2266,16 @@ function cms_admin_reorder_images(): void
         $pdo->beginTransaction();
         // Variable $stmt stores the prepared update reused for each reordered image row.
         $stmt = $pdo->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
-        foreach ($submittedIds as $index => $imageId) {
+        foreach ($orderedIds as $index => $imageId) {
             // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
             $sortOrder = ($index + 1) * 10;
             $stmt->execute([$sortOrder, $now, $imageId, $galleryId]);
         }
         $pdo->commit();
-        admin_log_event('info', 'image.reordered', 'Admin reordered gallery images.', [
+        admin_log_event('info', $eventKey, $eventMessage, array_merge([
             'gallery_id' => $galleryId,
-            'images' => count($submittedIds),
-        ]);
-        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+            'images' => count($orderedIds),
+        ], $context));
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -2078,8 +2283,9 @@ function cms_admin_reorder_images(): void
         admin_log_event('error', 'image.reorder_failed', 'Admin image reorder failed.', [
             'gallery_id' => $galleryId,
             'error' => $exception->getMessage(),
+            'event_key' => $eventKey,
         ]);
-        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+        throw $exception;
     }
 }
 

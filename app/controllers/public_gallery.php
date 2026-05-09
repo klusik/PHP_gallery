@@ -167,6 +167,8 @@ function cms_gallery(): void
     $votesById = current_votes_for_images($imageIds);
     // Variable $children stores this steps working value.
     $children = child_galleries((int) $gallery['id'], $publicOnly);
+    // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
+    $allChildren = $children;
     // Variable $mapsAllowed stores this steps working value.
     $mapsAllowed = gallery_allows_gps_maps($gallery);
     // Variable $galleryMapPoints stores this steps working value.
@@ -243,24 +245,30 @@ function cms_gallery(): void
     render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_preview_toolbar($gallery);
     render_public_gallery_admin_form($gallery);
+    // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
+    $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     if ($children) {
         echo '<section class="panel" data-public-subgallery-section><h2>Subgalleries</h2>';
+        render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
-        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-subgallery-grid>';
+        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         foreach ($children as $child) {
-            render_gallery_card($child, true);
+            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1);
         }
         echo '</div>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
         echo '</section>';
     }
+    // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
+    $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     if ($images) {
+        render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), count($allImages));
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], 'Photo pages');
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-gallery-image-list>';
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list>';
     }
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
@@ -291,7 +299,10 @@ function cms_gallery(): void
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
-        echo '<article class="image-card" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        echo '<article class="image-card" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        if ($publicPhotoReorderEnabled) {
+            echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="Drag photo to reorder visible photos" title="Drag to reorder this visible photo"><span aria-hidden="true">↕</span><span>Move photo</span></button>';
+        }
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
         $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
@@ -349,6 +360,34 @@ function cms_gallery(): void
 /**
  * Render the anonymous preview control for logged-in admins viewing a public gallery page.
  */
+
+/**
+ * Render the small public-page reorder toolbar used by logged-in admins.
+ *
+ * The toolbar is deliberately scoped to the visible pagination page. PHP sends
+ * the current slice offset and item count to the save endpoint, and the server
+ * verifies that the submitted ids still match that exact slice before writing
+ * any sort_order values.
+ */
+function render_public_page_reorder_toolbar(string $kind, array $gallery, array $pagination, int $visibleCount, int $totalCount): void
+{
+    if (!current_user() || admin_anonymous_preview_active() || $visibleCount < 2) {
+        return;
+    }
+
+    // $offset stores the first zero-based position represented by this visible page.
+    $offset = (int) ($pagination['offset'] ?? 0);
+    // $label stores the item type shown in the compact admin-only toolbar.
+    $label = $kind === 'gallery' ? 'subgalleries' : 'photos';
+    // $endpoint stores the existing backend route or a small public-page wrapper around it.
+    $endpoint = $kind === 'gallery' ? url_for('admin_reorder_public_galleries') : url_for('admin_reorder_images');
+
+    echo '<div class="public-reorder-toolbar" data-public-reorder-toolbar data-reorder-kind="' . e($kind) . '" data-reorder-url="' . e($endpoint) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-visible-offset="' . $offset . '" data-visible-count="' . $visibleCount . '" data-total-count="' . $totalCount . '" data-csrf-token="' . e(csrf_token()) . '">';
+    echo '<div><strong>Move visible ' . e($label) . '</strong><p>Drag only the cards shown on this page. Other pagination pages are not touched.</p></div>';
+    echo '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">Ready.</span>';
+    echo '</div>';
+}
+
 function render_public_gallery_preview_toolbar(array $gallery): void
 {
     if (!current_user()) {
@@ -586,7 +625,7 @@ function gallery_share_url(int $galleryId, string $token): string
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_gallery_card(array $gallery, bool $publicOnly): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -594,7 +633,11 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
+    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
+    if ($showPublicReorderHandle) {
+        echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="Drag subgallery to reorder visible subgalleries" title="Drag to reorder this visible subgallery"><span aria-hidden="true">↕</span><span>Move gallery</span></button>';
+    }
+    echo '<a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {

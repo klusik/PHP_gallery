@@ -189,6 +189,7 @@ function cms_run(): void
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
         'admin_save_gallery_collapse' => 'cms_admin_save_gallery_collapse',
         'admin_reorder_galleries' => 'cms_admin_reorder_galleries',
+        'admin_reorder_public_galleries' => 'cms_admin_reorder_public_galleries',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
