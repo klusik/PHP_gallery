@@ -68,7 +68,7 @@ function cms_home(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
         echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
         foreach ($galleries as $gallery) {
-            render_gallery_card($gallery, true);
+            render_gallery_card($gallery, true, false, true);
         }
         echo '</section>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
@@ -258,12 +258,12 @@ function cms_gallery(): void
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     if ($children) {
-        echo '<section class="panel" data-public-subgallery-section><h2>Subgalleries</h2>';
+        echo '<section class="panel public-subgallery-panel" data-public-subgallery-section aria-label="Subgalleries">';
         render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         foreach ($children as $child) {
-            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1);
+            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true);
         }
         echo '</div>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
@@ -631,7 +631,7 @@ function gallery_share_url(int $galleryId, string $token): string
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -639,11 +639,16 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    // Variable $branchImageCount stores this steps working value.
+    $branchImageCount = $isProtectedPublicCard ? 0 : gallery_branch_image_count((int) $gallery['id'], $publicOnly);
     echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="Drag subgallery to reorder visible subgalleries" title="Drag to reorder this visible subgallery"><span aria-hidden="true">↕</span><span>Move gallery</span></button>';
     }
     echo '<a class="gallery-card-media" href="' . e(gallery_public_url($gallery)) . '" aria-label="Open gallery ' . e((string) $gallery['title']) . '">';
+    if ($showSubgalleryBadge && !$isProtectedPublicCard) {
+        echo '<span class="subgallery-stack-badge" aria-label="Subgallery containing ' . (int) $branchImageCount . ' images"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . (int) $branchImageCount . '</span></span>';
+    }
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {
@@ -667,9 +672,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     if ($isProtectedPublicCard) {
         echo '<p class="muted gallery-card-count">Protected gallery</p>';
     } else {
-        // Variable $branchImageCount stores this steps working value.
-        $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
-        echo '<p class="muted gallery-card-count">' . $branchImageCount . ' images</p>';
+        echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . $branchImageCount . ' images</p>';
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
     echo '</div>';

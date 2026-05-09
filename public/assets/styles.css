@@ -6134,6 +6134,20 @@ body.public-reorder-active {
     padding-top: 0.65rem;
 }
 
+
+.public-page .gallery-card-count-visual-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
 .public-page .gallery-card-body .tag-list {
     margin: 0.6rem 0 0;
     gap: 0.28rem;
@@ -6176,5 +6190,92 @@ body.public-reorder-active {
     .public-page .gallery-card-count {
         margin-top: 0.55rem;
         padding-top: 0;
+    }
+}
+
+/* Compact public subgallery section and collection badge */
+.public-page .public-subgallery-panel {
+    padding-top: clamp(0.75rem, 1.3vw, 1rem);
+}
+
+.public-page .public-subgallery-panel > h2 {
+    display: none;
+}
+
+.public-page .gallery-card-media {
+    position: relative;
+    overflow: hidden;
+}
+
+.public-page .subgallery-stack-badge {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 2rem;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 44%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--ink) 28%, transparent);
+    color: var(--panel);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    font-size: 0.86rem;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+}
+
+.public-page .subgallery-stack-icon {
+    position: relative;
+    display: inline-grid;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+}
+
+.public-page .subgallery-stack-icon span {
+    position: absolute;
+    display: block;
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 2px solid currentColor;
+    border-radius: calc(var(--radius, 16px) * 0.22);
+    background: transparent;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(1) {
+    top: 0;
+    right: 0;
+    opacity: 0.72;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(2) {
+    top: 0.2rem;
+    right: 0.2rem;
+    opacity: 0.86;
+}
+
+.public-page .subgallery-stack-icon span:nth-child(3) {
+    top: 0.4rem;
+    right: 0.4rem;
+}
+
+.public-page .subgallery-stack-count {
+    min-width: 1.25rem;
+    text-align: right;
+}
+
+@media (max-width: 720px) {
+    .public-page .subgallery-stack-badge {
+        top: 0.45rem;
+        right: 0.45rem;
+        min-height: 1.85rem;
+        padding: 0.24rem 0.48rem;
+        font-size: 0.8rem;
     }
 }
