@@ -30,7 +30,16 @@
  *   2026-05-04
  */
 
-/* Styles the :root area of the gallery interface. */
+/* Section index
+   1. Foundation and shared public layout
+   2. Navigation, forms, tables, cards, and gallery grids
+   3. Public gallery polish, voting, pagination, branding, and media overlays
+   4. Lightbox and fullscreen viewer states
+   5. Leaflet and EXIF GPS map hardening
+   6. Admin base styling, dashboard, navigation, logs, telemetry, and account screens
+   7. Admin gallery ordering, edit-gallery panels, image move workflow, and theme preview
+   8. Responsive overrides near the features they affect
+*/
 :root {
     /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
     /* `--ink` defines the base foreground text color used across the UI. */
@@ -55,13 +64,11 @@
     --radius: 16px;
 }
 
-/* Global page frame ------------------------------------------------------- */
+/* Foundation */
 
 * {
     box-sizing: border-box;
 }
-
-/* Styles the body area of the gallery interface. */
 body {
     margin: 0;
     color: var(--ink);
@@ -71,13 +78,9 @@ body {
     font-family: var(--font-family, Georgia, "Times New Roman", serif);
     line-height: 1.55;
 }
-
-/* Styles the a area of the gallery interface. */
 a {
     color: var(--accent-dark);
 }
-
-/* Styles the img area of the gallery interface. */
 img {
     max-width: 100%;
     height: auto;
@@ -87,7 +90,6 @@ img {
 
 .site-header,
 .site-main,
-/* Styles the .site-footer area of the gallery interface. */
 .site-footer {
     width: min(var(--page-width-default, 1120px), calc(100% - 2rem));
     margin: 0 auto;
@@ -111,8 +113,6 @@ img {
 .public-page.page-width-full .site-footer {
     width: calc(100% - clamp(1rem, 3vw, 3rem));
 }
-
-/* Styles the .site-header area of the gallery interface. */
 .site-header {
     display: flex;
     align-items: center;
@@ -120,16 +120,12 @@ img {
     gap: 1rem;
     padding: 1.5rem 0;
 }
-
-/* Styles the .brand area of the gallery interface. */
 .brand {
     font-size: clamp(1.7rem, 4vw, 3rem);
     text-decoration: none;
     color: var(--ink);
     letter-spacing: -0.04em;
 }
-
-/* Styles the .nav area of the gallery interface. */
 .nav {
     display: flex;
     flex-wrap: wrap;
@@ -139,7 +135,6 @@ img {
 .nav a,
 .button,
 button,
-/* Styles the input[type="submit"] area of the gallery interface. */
 input[type="submit"] {
     border: 1px solid var(--accent-dark);
     background: var(--accent);
@@ -152,7 +147,6 @@ input[type="submit"] {
 }
 
 .button.secondary,
-/* Styles the button.secondary area of the gallery interface. */
 button.secondary {
     background: transparent;
     color: var(--accent-dark);
@@ -160,7 +154,6 @@ button.secondary {
 
 .nav a.is-update-pending,
 .button.is-update-pending,
-/* Styles the button.is-update-pending area of the gallery interface. */
 button.is-update-pending {
     border-color: #7f1d1d !important;
     background: repeating-linear-gradient(135deg, #b91c1c 0 0.55rem, #f59e0b 0.55rem 1.1rem) !important;
@@ -174,7 +167,6 @@ button.is-update-pending {
 .hero,
 .panel,
 .gallery-card,
-/* Styles the .image-card area of the gallery interface. */
 .image-card {
     background: rgba(255, 250, 240, 0.88);
     border: 1px solid var(--line);
@@ -182,14 +174,11 @@ button.is-update-pending {
 }
 
 .hero,
-/* Styles the .panel area of the gallery interface. */
 .panel {
     padding: clamp(1rem, 3vw, 2rem);
     margin-bottom: 1rem;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .grid area of the gallery interface. */
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -197,13 +186,10 @@ button.is-update-pending {
 }
 
 .gallery-card,
-/* Styles the .image-card area of the gallery interface. */
 .image-card {
     overflow: hidden;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .gallery-card-link area of the gallery interface. */
 .gallery-card-link {
     display: grid;
     min-height: 12rem;
@@ -211,30 +197,22 @@ button.is-update-pending {
     text-decoration: none;
     background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
 }
-
-/* Styles the .gallery-card img area of the gallery interface. */
 .gallery-card img {
     display: block;
     width: 100%;
     height: 8rem;
     object-fit: cover;
 }
-
-/* Styles the .gallery-collage area of the gallery interface. */
 .gallery-collage {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     height: 8rem;
     overflow: hidden;
 }
-
-/* Styles the .gallery-collage img area of the gallery interface. */
 .gallery-collage img {
     height: 100%;
     aspect-ratio: auto;
 }
-
-/* Styles the .gallery-locked-preview area of the gallery interface. */
 .gallery-locked-preview {
     display: flex;
     align-items: center;
@@ -244,31 +222,21 @@ button.is-update-pending {
     color: #ffffff;
     font-weight: 700;
 }
-
-/* Styles the .gallery-collage.collage-count-1 area of the gallery interface. */
 .gallery-collage.collage-count-1 {
     grid-template-columns: 1fr;
 }
-
-/* Styles the .gallery-collage.collage-count-3 img:first-child area of the gallery interface. */
 .gallery-collage.collage-count-3 img:first-child {
     grid-row: span 2;
 }
-
-/* Styles the .gallery-card-body area of the gallery interface. */
 .gallery-card-body {
     display: grid;
     align-content: end;
     min-height: 10rem;
     padding: 1rem;
 }
-
-/* Styles the .image-card area of the gallery interface. */
 .image-card {
     position: relative;
 }
-
-/* Styles the .image-card img area of the gallery interface. */
 .image-card img {
     display: block;
     width: 100%;
@@ -276,12 +244,9 @@ button.is-update-pending {
     object-fit: cover;
     cursor: zoom-in;
 }
-
-/* Styles the .image-meta area of the gallery interface. */
 .image-meta {
     padding: 0.75rem;
 }
-
 
 /* Keeps the anonymous preview entry and exit control visible without mixing it into editable admin forms. */
 .anonymous-preview-toolbar {
@@ -310,8 +275,6 @@ button.is-update-pending {
         text-align: center;
     }
 }
-
-/* Styles the .inline-editor area of the gallery interface. */
 .inline-editor {
     margin: 0.75rem;
     padding: 0.75rem;
@@ -319,48 +282,32 @@ button.is-update-pending {
     background: rgba(255, 253, 248, 0.78);
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .hero + .inline-editor area of the gallery interface. */
 .hero + .inline-editor {
     margin: 0 0 1rem;
 }
-
-/* Styles the .inline-editor summary area of the gallery interface. */
 .inline-editor summary {
     cursor: pointer;
     color: var(--accent-dark);
     font-weight: 700;
 }
-
-/* Styles the .inline-editor[open] summary area of the gallery interface. */
 .inline-editor[open] summary {
     margin-bottom: 0.75rem;
 }
-
-/* Styles the .game-entry area of the gallery interface. */
 .game-entry {
     margin: -0.25rem 0 1rem;
 }
-
-/* Styles the .picture-game area of the gallery interface. */
 .picture-game {
     margin-bottom: 1rem;
 }
-
-/* Styles the .picture-game form area of the gallery interface. */
 .picture-game form {
     margin: 0;
 }
-
-/* Styles the .picture-game-pair area of the gallery interface. */
 .picture-game-pair {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
     align-items: stretch;
 }
-
-/* Styles the .picture-game-choice area of the gallery interface. */
 .picture-game-choice {
     display: grid;
     grid-template-rows: minmax(18rem, 58vh) auto;
@@ -376,13 +323,10 @@ button.is-update-pending {
 }
 
 .picture-game-choice:hover,
-/* Styles the .picture-game-choice:focus area of the gallery interface. */
 .picture-game-choice:focus {
     border-color: var(--accent);
     background: var(--field);
 }
-
-/* Styles the .picture-game-choice img area of the gallery interface. */
 .picture-game-choice img {
     width: 100%;
     height: 100%;
@@ -391,24 +335,16 @@ button.is-update-pending {
     background: rgba(0, 0, 0, 0.04);
     border-radius: calc(var(--radius, 16px) * 0.75);
 }
-
-/* Styles the .picture-game-choice span area of the gallery interface. */
 .picture-game-choice span {
     display: grid;
     gap: 0.15rem;
 }
-
-/* Styles the .picture-game-choice small area of the gallery interface. */
 .picture-game-choice small {
     color: var(--muted);
 }
-
-/* Styles the .image-inline-editor textarea area of the gallery interface. */
 .image-inline-editor textarea {
     min-height: 5rem;
 }
-
-/* Styles the .muted area of the gallery interface. */
 .muted {
     color: var(--muted);
 }
@@ -419,13 +355,9 @@ button.is-update-pending {
     display: grid;
     gap: 0.8rem;
 }
-
-/* Styles the .form-grid-spaced area of the gallery interface. */
 .form-grid-spaced {
     margin-top: 1rem;
 }
-
-/* Styles the .bulk-row area of the gallery interface. */
 .bulk-row {
     display: flex;
     align-items: end;
@@ -433,13 +365,9 @@ button.is-update-pending {
     flex-wrap: wrap;
     margin-bottom: 1rem;
 }
-
-/* Styles the .bulk-row label area of the gallery interface. */
 .bulk-row label {
     min-width: min(18rem, 100%);
 }
-
-/* Styles the .inline-action-form area of the gallery interface. */
 .inline-action-form {
     display: flex;
     align-items: center;
@@ -447,8 +375,6 @@ button.is-update-pending {
     gap: 0.75rem;
     margin: 0;
 }
-
-/* Styles the .breadcrumbs area of the gallery interface. */
 .breadcrumbs {
     display: flex;
     align-items: center;
@@ -457,13 +383,9 @@ button.is-update-pending {
     margin: 0 0 1rem;
     color: var(--muted);
 }
-
-/* Styles the .breadcrumbs a area of the gallery interface. */
 .breadcrumbs a {
     color: var(--accent-dark);
 }
-
-/* Styles the .tree-title area of the gallery interface. */
 .tree-title {
     display: inline-flex;
     align-items: center;
@@ -478,19 +400,13 @@ button.is-update-pending {
 .tree-depth-6 { padding-left: 8.4rem; }
 .tree-depth-7 { padding-left: 9.8rem; }
 .tree-depth-8 { padding-left: 11.2rem; }
-
-/* Styles the .tree-branch::before area of the gallery interface. */
 .tree-branch::before {
     content: "\21B3";
     color: var(--muted);
 }
-
-/* Styles the tr.is-subgallery td area of the gallery interface. */
 tr.is-subgallery td {
     background: rgba(165, 72, 28, 0.05);
 }
-
-/* Styles the label area of the gallery interface. */
 label {
     display: grid;
     gap: 0.25rem;
@@ -499,7 +415,6 @@ label {
 
 input,
 textarea,
-/* Styles the select area of the gallery interface. */
 select {
     width: 100%;
     padding: 0.6rem;
@@ -509,13 +424,9 @@ select {
     font: inherit;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the textarea area of the gallery interface. */
 textarea {
     min-height: 8rem;
 }
-
-/* Styles the input[type="checkbox"] area of the gallery interface. */
 input[type="checkbox"] {
     width: 1rem;
     height: 1rem;
@@ -535,20 +446,14 @@ input[type="checkbox"] {
     gap: 0.35rem;
     margin: 0.5rem 0;
 }
-
-/* Styles the .gallery-card > .tag-list area of the gallery interface. */
 .gallery-card > .tag-list {
     padding: 0 1rem 1rem;
 }
-
-/* Styles the .tag-list-label area of the gallery interface. */
 .tag-list-label {
     color: var(--muted);
     font-size: 0.9rem;
     font-weight: 700;
 }
-
-/* Styles the .tag area of the gallery interface. */
 .tag {
     color: var(--accent-dark);
     border: 1px solid var(--line);
@@ -560,20 +465,15 @@ input[type="checkbox"] {
 }
 
 .tag:hover,
-/* Styles the .tag:focus area of the gallery interface. */
 .tag:focus {
     border-color: var(--accent-dark);
     background: var(--panel);
 }
-
-/* Styles the .tag-suggestions area of the gallery interface. */
 .tag-suggestions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
 }
-
-/* Styles the .tag-suggestions button area of the gallery interface. */
 .tag-suggestions button {
     padding: 0.2rem 0.5rem;
     background: transparent;
@@ -591,15 +491,12 @@ table {
 }
 
 th,
-/* Styles the td area of the gallery interface. */
 td {
     padding: 0.6rem;
     border-bottom: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
 }
-
-/* Styles the .admin-thumb area of the gallery interface. */
 .admin-thumb {
     display: block;
     width: 5rem;
@@ -607,8 +504,6 @@ td {
     object-fit: cover;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .notice area of the gallery interface. */
 .notice {
     padding: 0.75rem 1rem;
     background: #fff3cd;
@@ -616,22 +511,16 @@ td {
     margin-bottom: 1rem;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .notice.is-alert area of the gallery interface. */
 .notice.is-alert {
     border-color: #b45309;
     background: #fff4e6;
     box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.18) inset;
 }
-
-/* Styles the .notice.is-alert .inline-action-form button area of the gallery interface. */
 .notice.is-alert .inline-action-form button {
     border-color: #9a3412;
     background: #d97706;
     color: #fffdf8;
 }
-
-
 
 /* Keeps the thumbnail maintenance warning readable while giving the admin a small temporary-dismiss action. */
 .admin-thumbnail-maintenance-notice {
@@ -662,19 +551,13 @@ td {
         margin-top: 0.75rem;
     }
 }
-
-/* Styles the .compact-support area of the gallery interface. */
 .compact-support {
     padding: 0.75rem 1rem;
 }
-
-/* Styles the .compact-support h2 area of the gallery interface. */
 .compact-support h2 {
     margin: 0 0 0.5rem;
     font-size: 1rem;
 }
-
-/* Styles the .support-matrix area of the gallery interface. */
 .support-matrix {
     width: auto;
     border-collapse: collapse;
@@ -682,46 +565,33 @@ td {
 }
 
 .support-matrix th,
-/* Styles the .support-matrix td area of the gallery interface. */
 .support-matrix td {
     padding: 0.35rem 0.55rem;
     border-bottom: 1px solid var(--line);
     text-align: center;
 }
-
-/* Styles the .support-matrix th[scope="row"] area of the gallery interface. */
 .support-matrix th[scope="row"] {
     text-align: left;
     font-weight: 700;
 }
-
-/* Styles the .support-yes area of the gallery interface. */
 .support-yes {
     color: #166534;
     font-weight: 700;
 }
-
-/* Styles the .support-no area of the gallery interface. */
 .support-no {
     color: #b91c1c;
     font-weight: 700;
 }
-
-/* Styles the .inline-form area of the gallery interface. */
 .inline-form {
     display: inline-flex;
     flex-wrap: wrap;
     gap: 0.5rem;
     margin: 0;
 }
-
-/* Styles the .thumbnail-progress area of the gallery interface. */
 .thumbnail-progress {
     width: 100%;
     margin: 0 0 1rem;
 }
-
-/* Styles the .thumbnail-progress-bar area of the gallery interface. */
 .thumbnail-progress-bar {
     display: block;
     width: 100%;
@@ -732,38 +602,27 @@ td {
     border-radius: var(--radius, 16px);
     appearance: none;
 }
-
-/* Styles the .thumbnail-progress-bar::-webkit-progress-bar area of the gallery interface. */
 .thumbnail-progress-bar::-webkit-progress-bar {
     background: var(--field);
 }
-
-/* Styles the .thumbnail-progress-bar::-webkit-progress-value area of the gallery interface. */
 .thumbnail-progress-bar::-webkit-progress-value {
     background: var(--accent);
     transition: inline-size 0.2s ease;
 }
-
-/* Styles the .thumbnail-progress-bar::-moz-progress-bar area of the gallery interface. */
 .thumbnail-progress-bar::-moz-progress-bar {
     background: var(--accent);
 }
-
-/* Styles the .thumbnail-progress p area of the gallery interface. */
 .thumbnail-progress p {
     margin: 0.35rem 0 0;
 }
 
 .tree-toggle,
-/* Styles the .tree-spacer area of the gallery interface. */
 .tree-spacer {
     display: inline-grid;
     place-items: center;
     width: 1.8rem;
     height: 1.8rem;
 }
-
-/* Styles the .tree-toggle area of the gallery interface. */
 .tree-toggle {
     padding: 0;
     background: transparent;
@@ -777,19 +636,13 @@ td {
     align-items: center;
     gap: 0.4rem;
 }
-
-/* Styles the .vote-row button area of the gallery interface. */
 .vote-row button {
     padding: 0.2rem 0.55rem;
 }
-
-/* Styles the .vote-row button.is-active area of the gallery interface. */
 .vote-row button.is-active {
     background: var(--accent-dark);
     box-shadow: 0 0 0 3px rgba(165, 72, 28, 0.18);
 }
-
-/* Styles the .lightbox area of the gallery interface. */
 .lightbox {
     position: fixed;
     inset: 0;
@@ -802,13 +655,9 @@ td {
     padding: 1rem;
     background: rgba(20, 15, 10, 0.88);
 }
-
-/* Styles the .lightbox[hidden] area of the gallery interface. */
 .lightbox[hidden] {
     display: none;
 }
-
-/* Styles the .lightbox.is-fullscreen area of the gallery interface. */
 .lightbox.is-fullscreen {
     padding: 0;
     gap: 0;
@@ -816,8 +665,6 @@ td {
     grid-template-columns: 1fr;
     grid-template-areas: "stage";
 }
-
-/* Styles the .lightbox.is-mobile-fullscreen area of the gallery interface. */
 .lightbox.is-mobile-fullscreen {
     width: 100vw;
     height: 100vh;
@@ -836,14 +683,12 @@ td {
 }
 
 .lightbox.is-fullscreen figure,
-/* Styles the .lightbox.is-mobile-fullscreen figure area of the gallery interface. */
 .lightbox.is-mobile-fullscreen figure {
     width: 100%;
     height: 100%;
 }
 
 .lightbox.is-fullscreen img,
-/* Styles the .lightbox.is-mobile-fullscreen img area of the gallery interface. */
 .lightbox.is-mobile-fullscreen img {
     width: 100%;
     height: 100%;
@@ -854,7 +699,6 @@ td {
 }
 
 .lightbox.is-fullscreen .lightbox-meta,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-meta area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-meta {
     position: absolute;
     inset: auto 1rem 1rem;
@@ -866,7 +710,6 @@ td {
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     display: inline-flex;
     align-items: center;
@@ -885,19 +728,13 @@ td {
     text-decoration: none;
     cursor: pointer;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button[hidden] area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button[hidden] {
     display: none !important;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-meta area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-meta {
     max-width: min(42rem, calc(100% - 2rem));
     padding: 0.45rem 0.6rem;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar {
     display: inline-flex;
     flex-wrap: nowrap;
@@ -906,23 +743,18 @@ td {
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     width: auto;
     min-width: 0;
     padding: 0.25rem 0.55rem;
     font-size: 0.9rem;
 }
-
-/* Styles the .lightbox-fullscreen-button area of the gallery interface. */
 .lightbox-fullscreen-button {
     position: absolute;
     top: 1rem;
     left: 1rem;
     min-width: 2.6rem;
 }
-
-/* Styles the .lightbox-mobile-fullscreen-button area of the gallery interface. */
 .lightbox-mobile-fullscreen-button {
     display: none;
     place-items: center;
@@ -936,18 +768,12 @@ td {
     line-height: 1;
     vertical-align: middle;
 }
-
-/* Styles the .lightbox.is-mobile-device .lightbox-fullscreen-button area of the gallery interface. */
 .lightbox.is-mobile-device .lightbox-fullscreen-button {
     display: none;
 }
-
-/* Styles the .lightbox.is-mobile-device .lightbox-mobile-fullscreen-button area of the gallery interface. */
 .lightbox.is-mobile-device .lightbox-mobile-fullscreen-button {
     display: inline-grid;
 }
-
-/* Styles the .lightbox figure area of the gallery interface. */
 .lightbox figure {
     grid-area: stage;
     display: grid;
@@ -957,8 +783,6 @@ td {
     width: 100%;
     min-width: 0;
 }
-
-/* Styles the .lightbox img area of the gallery interface. */
 .lightbox img {
     display: block;
     margin: 0 auto;
@@ -967,23 +791,17 @@ td {
     object-fit: contain;
     border-radius: var(--radius, 16px);
 }
-
-/* Styles the .lightbox-meta area of the gallery interface. */
 .lightbox-meta {
     display: grid;
     gap: 0.45rem;
     justify-items: center;
     max-width: min(58rem, 100%);
 }
-
-/* Styles the .lightbox figure area of the gallery interface. */
 .lightbox figure {
     margin: 0;
     color: #fffdf8;
     text-align: center;
 }
-
-/* Styles the .lightbox-stage-link area of the gallery interface. */
 .lightbox-stage-link {
     position: relative;
     display: grid;
@@ -1000,38 +818,28 @@ td {
 .lightbox-stage-link:hover,
 .lightbox-stage-link:focus,
 .lightbox-stage-link:focus-visible,
-/* Styles the .lightbox-stage-link:active area of the gallery interface. */
 .lightbox-stage-link:active {
     border: 0 !important;
     outline: 0 !important;
     box-shadow: none !important;
 }
-
-/* Styles the .lightbox-stage-link::-moz-focus-inner area of the gallery interface. */
 .lightbox-stage-link::-moz-focus-inner {
     border: 0 !important;
 }
 
 .lightbox.is-fullscreen .lightbox-stage-link,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-stage-link area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-stage-link {
     width: 100%;
     height: 100%;
     cursor: zoom-out;
 }
-
-/* Styles the .lightbox-stage-link > img area of the gallery interface. */
 .lightbox-stage-link > img {
     grid-area: 1 / 1;
 }
-
-/* Styles the .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link area of the gallery interface. */
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {
     width: var(--lightbox-stage-width, auto);
     height: var(--lightbox-stage-height, auto);
 }
-
-/* Styles the .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link > img area of the gallery interface. */
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link > img {
     width: 100%;
     height: 100%;
@@ -1039,39 +847,27 @@ td {
     max-height: none;
     object-fit: contain;
 }
-
-/* Styles the .lightbox-transition-image area of the gallery interface. */
 .lightbox-transition-image {
     opacity: 0;
     pointer-events: none;
     transition: opacity 80ms ease;
 }
-
-/* Styles the .lightbox-transition-image.is-visible area of the gallery interface. */
 .lightbox-transition-image.is-visible {
     opacity: 1;
 }
-
-/* Styles the .lightbox button area of the gallery interface. */
 .lightbox button {
     border-color: #fffdf8;
 }
-
-/* Styles the .lightbox-vote area of the gallery interface. */
 .lightbox-vote {
     justify-content: center;
     margin: 0;
     padding: 0;
 }
-
-/* Styles the .lightbox-vote-label area of the gallery interface. */
 .lightbox-vote-label {
     min-width: auto;
     color: #2a2118;
     font-weight: 700;
 }
-
-/* Styles the .lightbox-vote-panel area of the gallery interface. */
 .lightbox-vote-panel {
     width: min(34rem, 100%);
     padding: 0.7rem;
@@ -1081,8 +877,6 @@ td {
     border-radius: var(--radius, 16px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
 }
-
-/* Styles the .lightbox-score-badge area of the gallery interface. */
 .lightbox-score-badge {
     display: inline-flex;
     align-items: baseline;
@@ -1097,32 +891,22 @@ td {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
     font-weight: 800;
 }
-
-/* Styles the .lightbox-score-badge strong area of the gallery interface. */
 .lightbox-score-badge strong {
     color: var(--accent-dark);
     font-size: 1.45rem;
     line-height: 1;
 }
-
-/* Styles the .lightbox-vote-panel .vote-row area of the gallery interface. */
 .lightbox-vote-panel .vote-row {
     flex-wrap: wrap;
 }
-
-/* Styles the .lightbox-vote-panel .vote-row span area of the gallery interface. */
 .lightbox-vote-panel .vote-row span {
     min-width: auto;
 }
-
-/* Styles the .lightbox-vote-panel button area of the gallery interface. */
 .lightbox-vote-panel button {
     border-color: var(--accent-dark);
     background: var(--accent);
     color: #fffdf8;
 }
-
-/* Styles the .lightbox-vote-indicator area of the gallery interface. */
 .lightbox-vote-indicator {
     min-width: 6.75rem;
     padding: 0.15rem 0.5rem;
@@ -1131,14 +915,10 @@ td {
     border-radius: var(--radius, 16px);
     font-weight: 700;
 }
-
-/* Styles the .lightbox-vote-indicator.is-up area of the gallery interface. */
 .lightbox-vote-indicator.is-up {
     border-color: #1d7f39;
     color: #1d7f39;
 }
-
-/* Styles the .lightbox-nav area of the gallery interface. */
 .lightbox-nav {
     min-width: 3rem;
     min-height: 3rem;
@@ -1146,32 +926,23 @@ td {
     font-size: 1.5rem;
     justify-self: center;
 }
-
-/* Styles the .lightbox-previous area of the gallery interface. */
 .lightbox-previous {
     grid-area: previous;
 }
-
-/* Styles the .lightbox-next area of the gallery interface. */
 .lightbox-next {
     grid-area: next;
 }
-
-/* Styles the .lightbox-close area of the gallery interface. */
 .lightbox-close {
     position: absolute;
     top: 1rem;
     right: 1rem;
 }
-
-/* Styles the .lightbox.is-mobile-device .lightbox-close area of the gallery interface. */
 .lightbox.is-mobile-device .lightbox-close {
     top: max(1rem, env(safe-area-inset-top));
     right: max(1rem, env(safe-area-inset-right));
 }
 
 .lightbox-hud,
-/* Styles the .lightbox-meta area of the gallery interface. */
 .lightbox-meta {
     transition: opacity 0.18s ease, transform 0.18s ease;
 }
@@ -1179,7 +950,6 @@ td {
 .lightbox.is-fullscreen .lightbox-hud,
 .lightbox.is-fullscreen .lightbox-meta,
 .lightbox.is-mobile-fullscreen .lightbox-hud,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-meta area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-meta {
     opacity: 0;
     pointer-events: none;
@@ -1189,14 +959,11 @@ td {
 .lightbox.is-fullscreen.is-ui-visible .lightbox-hud,
 .lightbox.is-fullscreen.is-ui-visible .lightbox-meta,
 .lightbox.is-mobile-fullscreen.is-ui-visible .lightbox-hud,
-/* Styles the .lightbox.is-mobile-fullscreen.is-ui-visible .lightbox-meta area of the gallery interface. */
 .lightbox.is-mobile-fullscreen.is-ui-visible .lightbox-meta {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split figure area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split figure {
     display: grid;
     grid-template-columns: minmax(0, 1.25fr) minmax(560px, 38vw);
@@ -1207,8 +974,6 @@ td {
     height: 100%;
     min-height: 0;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link {
     grid-column: 1;
     grid-row: 1;
@@ -1217,8 +982,6 @@ td {
     min-height: 0;
     align-self: stretch;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link img area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-stage-link img {
     width: 100%;
     height: 100%;
@@ -1226,8 +989,6 @@ td {
     max-height: 100%;
     object-fit: contain;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-meta area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-meta {
     position: static;
     inset: auto;
@@ -1236,8 +997,6 @@ td {
     width: 100%;
     justify-self: center;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split {
     grid-column: 2;
     grid-row: 1 / span 2;
@@ -1252,20 +1011,14 @@ td {
     border-left: 1px solid rgba(255, 253, 248, 0.18);
     background: rgba(10, 10, 10, 0.24);
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split[hidden] area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split[hidden] {
     display: none !important;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-title area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-title {
     color: #fffdf8;
     font-size: 0.95rem;
     font-weight: 700;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas {
     min-height: 0;
     width: 100%;
@@ -1273,15 +1026,12 @@ td {
     border-radius: 0.75rem;
     overflow: hidden;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container {
     width: 100%;
     height: 100%;
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container img,
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container .leaflet-tile area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-container .leaflet-tile {
     border: 0;
     border-radius: 0;
@@ -1292,20 +1042,15 @@ td {
     object-fit: initial;
     opacity: 1;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-tile-loaded area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-canvas .leaflet-tile-loaded {
     opacity: 1 !important;
 }
-
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-close area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-close {
     justify-self: end;
     margin-top: 2.75rem;
 }
 
 .lightbox.is-fullscreen .lightbox-nav,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-nav area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-nav {
     position: absolute;
     top: 50%;
@@ -1313,30 +1058,23 @@ td {
 }
 
 .lightbox.is-fullscreen .lightbox-previous,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-previous area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-previous {
     left: 1rem;
 }
 
 .lightbox.is-fullscreen .lightbox-next,
-/* Styles the .lightbox.is-mobile-fullscreen .lightbox-next area of the gallery interface. */
 .lightbox.is-mobile-fullscreen .lightbox-next {
     right: 1rem;
 }
 
 .lightbox.is-fullscreen figure a,
-/* Styles the .lightbox.is-mobile-fullscreen figure a area of the gallery interface. */
 .lightbox.is-mobile-fullscreen figure a {
     width: 100%;
     height: 100%;
 }
-
-/* Styles the body.has-mobile-lightbox area of the gallery interface. */
 body.has-mobile-lightbox {
     overflow: hidden;
 }
-
-/* Styles the .has-lightbox area of the gallery interface. */
 .has-lightbox {
     overflow: hidden;
 }
@@ -1347,8 +1085,6 @@ body.has-mobile-lightbox {
     padding: 2rem 0;
     text-align: center;
 }
-
-/* Styles the .site-footer-link area of the gallery interface. */
 .site-footer-link {
     color: inherit;
     font-weight: 600;
@@ -1356,7 +1092,6 @@ body.has-mobile-lightbox {
 }
 
 .site-footer-link:hover,
-/* Styles the .site-footer-link:focus area of the gallery interface. */
 .site-footer-link:focus {
     color: var(--accent);
     text-decoration: underline;
@@ -1375,24 +1110,18 @@ body.has-mobile-lightbox {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 14px;
 }
-
-/* Styles the .admin-page .site-header area of the gallery interface. */
 .admin-page .site-header {
     width: 100%;
     padding: 0.55rem 1rem;
     background: #1d2327;
     color: #f0f0f1;
 }
-
-/* Styles the .admin-page .brand area of the gallery interface. */
 .admin-page .brand {
     color: #f0f0f1;
     font-size: 1rem;
     font-weight: 700;
     letter-spacing: 0;
 }
-
-/* Styles the .admin-page .nav area of the gallery interface. */
 .admin-page .nav {
     gap: 0.35rem;
 }
@@ -1400,7 +1129,6 @@ body.has-mobile-lightbox {
 .admin-page .nav a,
 .admin-page .button,
 .admin-page button,
-/* Styles the .admin-page input[type="submit"] area of the gallery interface. */
 .admin-page input[type="submit"] {
     padding: 0.35rem 0.6rem;
     border-color: #2271b1;
@@ -1413,18 +1141,13 @@ body.has-mobile-lightbox {
 
 .admin-page .button.secondary,
 .admin-page button.secondary,
-/* Styles the .admin-page .tree-toggle area of the gallery interface. */
 .admin-page .tree-toggle {
     background: #fff;
     color: #2271b1;
 }
-
-/* Styles the .admin-page .gallery-row-actions area of the gallery interface. */
 .admin-page .gallery-row-actions {
     white-space: nowrap;
 }
-
-/* Styles the .admin-page .gallery-row-actions .gallery-row-action area of the gallery interface. */
 .admin-page .gallery-row-actions .gallery-row-action {
     padding: 0;
     font-size: 0.95rem;
@@ -1432,13 +1155,11 @@ body.has-mobile-lightbox {
 }
 
 .admin-page .site-main,
-/* Styles the .admin-page .site-footer area of the gallery interface. */
 .admin-page .site-footer {
     width: min(1280px, calc(100% - 2rem));
 }
 
 .admin-page .hero,
-/* Styles the .admin-page .panel area of the gallery interface. */
 .admin-page .panel {
     padding: 1rem;
     border-color: #c3c4c7;
@@ -1449,14 +1170,11 @@ body.has-mobile-lightbox {
 
 .admin-page .hero h1,
 .admin-page .panel h1,
-/* Styles the .admin-page .panel h2 area of the gallery interface. */
 .admin-page .panel h2 {
     margin: 0 0 0.75rem;
     font-size: 1.35rem;
     line-height: 1.25;
 }
-
-/* Styles the .admin-page .bulk-row area of the gallery interface. */
 .admin-page .bulk-row {
     align-items: center;
     gap: 0.5rem;
@@ -1465,8 +1183,6 @@ body.has-mobile-lightbox {
     border: 1px solid #dcdcde;
     border-radius: 4px;
 }
-
-/* Styles the .admin-page .bulk-row label area of the gallery interface. */
 .admin-page .bulk-row label {
     display: inline-flex;
     align-items: center;
@@ -1477,15 +1193,12 @@ body.has-mobile-lightbox {
 
 .admin-page input,
 .admin-page textarea,
-/* Styles the .admin-page select area of the gallery interface. */
 .admin-page select {
     min-height: 2rem;
     padding: 0.35rem 0.5rem;
     border-color: #8c8f94;
     border-radius: 3px;
 }
-
-/* Styles the .admin-page input[type="checkbox"] area of the gallery interface. */
 .admin-page input[type="checkbox"] {
     width: 0.95rem;
     height: 0.95rem;
@@ -1494,13 +1207,9 @@ body.has-mobile-lightbox {
     margin: 0;
     vertical-align: middle;
 }
-
-/* Styles the .admin-page label:has(input[type="checkbox"]) area of the gallery interface. */
 .admin-page label:has(input[type="checkbox"]) {
     align-items: center;
 }
-
-/* Styles the .admin-page .admin-checkbox-row area of the gallery interface. */
 .admin-page .admin-checkbox-row {
     display: inline-flex;
     align-items: center;
@@ -1508,28 +1217,20 @@ body.has-mobile-lightbox {
     width: fit-content;
     font-weight: 600;
 }
-
-/* Styles the .admin-devmode-panel--secondary area of the gallery interface. */
 .admin-devmode-panel--secondary {
     margin-top: 1rem;
     border-style: dashed;
     opacity: 0.92;
 }
-
-/* Styles the .admin-devmode-panel--secondary h2 area of the gallery interface. */
 .admin-devmode-panel--secondary h2 {
     font-size: 1.05rem;
 }
-
-/* Styles the .admin-page table area of the gallery interface. */
 .admin-page table {
     border: 1px solid #c3c4c7;
     border-radius: 4px;
     font-size: 12px;
     line-height: 1.25;
 }
-
-/* Styles the .admin-page th area of the gallery interface. */
 .admin-page th {
     background: #f6f7f7;
     color: #1d2327;
@@ -1537,37 +1238,26 @@ body.has-mobile-lightbox {
 }
 
 .admin-page th,
-/* Styles the .admin-page td area of the gallery interface. */
 .admin-page td {
     padding: 0.22rem 0.45rem;
     vertical-align: middle;
 }
-
-/* Styles the .admin-page td input[type="checkbox"] area of the gallery interface. */
 .admin-page td input[type="checkbox"] {
     width: 0.9rem;
     height: 0.9rem;
 }
-
-/* Styles the .admin-flag.is-enabled area of the gallery interface. */
 .admin-flag.is-enabled {
     color: #1f8a3b;
     font-weight: 800;
     display: inline-block;
     min-width: 1ch;
 }
-
-/* Styles the .admin-page tr:hover td area of the gallery interface. */
 .admin-page tr:hover td {
     background: #f6f7f7;
 }
-
-/* Styles the .admin-page tr.is-subgallery td area of the gallery interface. */
 .admin-page tr.is-subgallery td {
     background: #fbfbfc;
 }
-
-/* Styles the .admin-page .admin-thumb area of the gallery interface. */
 .admin-page .admin-thumb {
     width: 4rem;
     height: 3rem;
@@ -1575,7 +1265,6 @@ body.has-mobile-lightbox {
 }
 
 .admin-page .tree-toggle,
-/* Styles the .admin-page .tree-spacer area of the gallery interface. */
 .admin-page .tree-spacer {
     width: 1.05rem;
     height: 1.05rem;
@@ -1584,68 +1273,43 @@ body.has-mobile-lightbox {
     font-size: 11px;
     line-height: 1;
 }
-
-/* Styles the .admin-page .tree-title area of the gallery interface. */
 .admin-page .tree-title {
     gap: 0.18rem;
 }
-
-/* Styles the .admin-page .thumbnail-progress-bar area of the gallery interface. */
 .admin-page .thumbnail-progress-bar {
     height: 0.55rem;
     border-radius: 3px;
 }
-
-/* Applies responsive adjustments for this viewport range. */
 @media (max-width: 680px) {
-/* Styles the .site-header area of the gallery interface. */
-    .site-header {
+.site-header {
         align-items: flex-start;
         flex-direction: column;
     }
-
-/* Styles the .lightbox area of the gallery interface. */
-    .lightbox {
+.lightbox {
         grid-template-columns: 1fr;
         grid-template-areas: "stage";
     }
-
-/* Styles the .lightbox img area of the gallery interface. */
-    .lightbox img {
+.lightbox img {
         max-width: calc(100vw - 2rem);
     }
-
-/* Styles the .lightbox-nav area of the gallery interface. */
-    .lightbox-nav {
+.lightbox-nav {
         position: absolute;
         top: 50%;
         transform: translateY(-50%);
     }
-
-/* Styles the .lightbox-previous area of the gallery interface. */
-    .lightbox-previous {
+.lightbox-previous {
         left: 0.5rem;
     }
-
-/* Styles the .lightbox-next area of the gallery interface. */
-    .lightbox-next {
+.lightbox-next {
         right: 0.5rem;
     }
-
-/* Styles the .picture-game-pair area of the gallery interface. */
-    .picture-game-pair {
+.picture-game-pair {
         grid-template-columns: 1fr;
     }
-
-/* Styles the .picture-game-choice area of the gallery interface. */
-    .picture-game-choice {
+.picture-game-choice {
         grid-template-rows: minmax(15rem, 48vh) auto;
     }
 }
-
-
-
-/* Styles the .gallery-list-frame area of the gallery interface. */
 .gallery-list-frame {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 0;
@@ -1653,18 +1317,12 @@ body.has-mobile-lightbox {
     align-items: start;
     overflow: visible;
 }
-
-/* Styles the .gallery-list-content area of the gallery interface. */
 .gallery-list-content {
     min-width: 0;
 }
-
-/* Styles the .gallery-image-grid area of the gallery interface. */
 .gallery-image-grid {
     min-width: 0;
 }
-
-/* Styles the .back-to-top-button area of the gallery interface. */
 .back-to-top-button {
     position: sticky;
     top: calc(100dvh - 5.25rem);
@@ -1686,26 +1344,19 @@ body.has-mobile-lightbox {
     transform: translateY(0.75rem);
     transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
-
-/* Styles the .back-to-top-button[hidden] area of the gallery interface. */
 .back-to-top-button[hidden] {
     display: none;
 }
-
-/* Styles the .back-to-top-button.is-visible area of the gallery interface. */
 .back-to-top-button.is-visible {
     opacity: 1;
     transform: translateY(0);
 }
 
 .back-to-top-button:hover,
-/* Styles the .back-to-top-button:focus-visible area of the gallery interface. */
 .back-to-top-button:focus-visible {
     box-shadow: 0 18px 44px rgba(54, 38, 20, 0.32);
     transform: translateY(-2px);
 }
-
-/* Styles the .back-to-top-button span:first-child area of the gallery interface. */
 .back-to-top-button span:first-child {
     display: inline-grid;
     place-items: center;
@@ -1715,16 +1366,11 @@ body.has-mobile-lightbox {
     background: rgba(255, 253, 248, 0.18);
     font-size: 1.05rem;
 }
-
-/* Applies responsive adjustments for this viewport range. */
 @media (max-width: 980px) {
-/* Styles the .gallery-list-frame area of the gallery interface. */
-    .gallery-list-frame {
+.gallery-list-frame {
         display: block;
     }
-
-/* Styles the .back-to-top-button area of the gallery interface. */
-    .back-to-top-button {
+.back-to-top-button {
         position: fixed;
         right: 0.85rem;
         bottom: 0.85rem;
@@ -1733,7 +1379,6 @@ body.has-mobile-lightbox {
     }
 }
 
-
 /* Public design refinements */
 .public-page .hero {
     position: relative;
@@ -1741,8 +1386,6 @@ body.has-mobile-lightbox {
     border: 0;
     background: var(--gallery-panel);
 }
-
-/* Styles the .public-page .hero h1 area of the gallery interface. */
 .public-page .hero h1 {
     max-width: 100%;
     margin: 0 0 0.35rem;
@@ -1752,70 +1395,9 @@ body.has-mobile-lightbox {
     overflow-wrap: normal;
     word-break: normal;
 }
-
-/* Styles the .public-page .hero p area of the gallery interface. */
 .public-page .hero p {
     max-width: 68ch;
 }
-
-
-/* Styles the public gallery title area when branding assets are present. */
-.gallery-title-bar {
-    display: flex;
-    align-items: center;
-    gap: clamp(0.75rem, 2vw, 1.5rem);
-    flex-wrap: wrap;
-    min-width: 0;
-}
-
-/* Keeps the gallery title flexible beside optional logo artwork. */
-.gallery-title-bar .gallery-title {
-    flex: 1 1 min(28rem, 100%);
-    min-width: 0;
-}
-
-/* Constrains the optional gallery logo on desktop and mobile. */
-.gallery-branding-logo {
-    display: block;
-    flex: 0 0 auto;
-    max-width: min(14rem, 38vw);
-    max-height: clamp(3.25rem, 9vw, 7rem);
-    object-fit: contain;
-}
-
-/* Makes a banner act as the visible gallery title replacement. */
-.gallery-title-with-banner {
-    display: flex;
-    align-items: center;
-    margin: 0;
-}
-
-/* Prevents large uploaded banners from stretching the hero panel. */
-.gallery-branding-banner {
-    display: block;
-    width: auto;
-    max-width: 100%;
-    max-height: clamp(5rem, 18vw, 12rem);
-    object-fit: contain;
-}
-
-/* Keeps the optional separator independent from gallery lists and cards. */
-.gallery-branding-separator {
-    display: flex;
-    justify-content: center;
-    margin: -0.25rem 0 1rem;
-    pointer-events: none;
-}
-
-/* Constrains uploaded divider artwork without forcing a fixed height. */
-.gallery-branding-separator img {
-    display: block;
-    width: 100%;
-    max-height: clamp(1.5rem, 8vw, 5rem);
-    object-fit: contain;
-}
-
-/* Styles the .public-page .hero-actions area of the gallery interface. */
 .public-page .hero-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1823,69 +1405,46 @@ body.has-mobile-lightbox {
     align-items: center;
     margin-top: 0.85rem;
 }
-
-/* Styles the .public-page .hero .breadcrumbs area of the gallery interface. */
 .public-page .hero .breadcrumbs {
     margin-top: 1rem;
 }
-
-/* Styles the .public-page .gallery-card area of the gallery interface. */
 .public-page .gallery-card {
     transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .public-page .gallery-card:hover,
-/* Styles the .public-page .gallery-card:focus-within area of the gallery interface. */
 .public-page .gallery-card:focus-within {
     transform: translateY(-2px);
     box-shadow: 0 18px 42px rgba(54, 38, 20, 0.14);
 }
 
 .public-page .gallery-card img,
-/* Styles the .public-page .gallery-collage area of the gallery interface. */
 .public-page .gallery-collage {
     height: 12rem;
 }
-
-/* Styles the .public-page .gallery-card-body area of the gallery interface. */
 .public-page .gallery-card-body {
     min-height: 8rem;
 }
 
 .public-page .gallery-card-body h2,
-/* Styles the .public-page .image-meta h2 area of the gallery interface. */
 .public-page .image-meta h2 {
     margin: 0 0 0.25rem;
     line-height: 1.15;
 }
-
-/* Styles the .public-page .image-card area of the gallery interface. */
 .public-page .image-card {
     background: rgba(255, 250, 240, 0.94);
 }
-
-/* Styles the .public-page .image-meta p area of the gallery interface. */
 .public-page .image-meta p {
     margin-top: 0.25rem;
 }
 
 .gallery-card > .tag-list .tag-list-label,
-/* Styles the .hero .tag-list .tag-list-label area of the gallery interface. */
 .hero .tag-list .tag-list-label {
     opacity: 0.7;
 }
-
-/* Styles the .vote-row area of the gallery interface. */
 .vote-row {
     margin-top: 0.6rem;
 }
-
-/* Styles the .image-card area of the gallery interface. */
-.image-card {
-    position: relative;
-}
-
-/* Styles the .image-stage area of the gallery interface. */
 .image-stage {
     position: relative;
     overflow: hidden;
@@ -1898,8 +1457,6 @@ body.has-mobile-lightbox {
     display: block;
     line-height: 0;
 }
-
-/* Styles the .image-vote-overlay area of the gallery interface. */
 .image-vote-overlay {
     position: absolute;
     left: 0;
@@ -1925,8 +1482,6 @@ body.has-mobile-lightbox {
     bottom: 0.25rem;
     left: 0.25rem;
 }
-
-/* Styles the .vote-score-badge area of the gallery interface. */
 .vote-score-badge {
     display: inline-flex;
     align-items: baseline;
@@ -1957,8 +1512,6 @@ body.has-mobile-lightbox {
     padding: 0;
     text-align: left;
 }
-
-/* Styles the .vote-action-group area of the gallery interface. */
 .vote-action-group {
     display: inline-flex;
     align-items: center;
@@ -1996,13 +1549,9 @@ body.has-mobile-lightbox {
     background: rgba(255, 253, 248, 0.95);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-
-/* Styles the .vote-row span area of the gallery interface. */
 .vote-row span {
     min-width: 5.25rem;
 }
-
-/* Styles the .vote-row button area of the gallery interface. */
 .vote-row button {
     min-width: 2.1rem;
     font-weight: 800;
@@ -2014,31 +1563,12 @@ body.has-mobile-lightbox {
     min-width: 1.9rem;
     padding: 0.15rem 0.35rem;
 }
-
-/* Styles the .lightbox figure area of the gallery interface. */
-.lightbox figure {
-    display: grid;
-    gap: 0.75rem;
-    justify-items: center;
-}
-
-/* Styles the .lightbox-meta area of the gallery interface. */
-.lightbox-meta {
-    display: grid;
-    gap: 0.45rem;
-    justify-items: center;
-    max-width: min(58rem, 100%);
-}
-
-/* Styles the .lightbox-description area of the gallery interface. */
 .lightbox-description {
     max-width: min(52rem, 100%);
     margin: 0;
     color: rgba(255, 253, 248, 0.9);
     overflow-wrap: anywhere;
 }
-
-/* Styles the .lightbox-toolbar area of the gallery interface. */
 .lightbox-toolbar {
     display: flex;
     gap: 0.5rem;
@@ -2046,8 +1576,6 @@ body.has-mobile-lightbox {
     justify-content: center;
     flex-wrap: wrap;
 }
-
-/* Styles the .lightbox-fullscreen-link area of the gallery interface. */
 .lightbox-fullscreen-link {
     padding: 0.3rem 0.7rem;
     border: 1px solid #fffdf8;
@@ -2060,13 +1588,10 @@ body.has-mobile-lightbox {
 }
 
 .lightbox-counter,
-/* Styles the .lightbox-help area of the gallery interface. */
 .lightbox-help {
     color: rgba(255, 253, 248, 0.78);
     font-size: 0.9rem;
 }
-
-/* Styles the .lightbox-original-button area of the gallery interface. */
 .lightbox-original-button {
     display: inline-flex;
     align-items: center;
@@ -2078,7 +1603,6 @@ body.has-mobile-lightbox {
     padding: 0.35rem 0.65rem;
     text-decoration: none;
 }
-
 
 /* Leaflet base layout for EXIF GPS maps.
    The map library is loaded only when a visitor opens a map, but these rules
@@ -2096,110 +1620,75 @@ body.has-mobile-lightbox {
 .leaflet-pane > canvas,
 .leaflet-zoom-box,
 .leaflet-image-layer,
-/* Styles the .leaflet-layer area of the gallery interface. */
 .leaflet-layer {
     left: 0;
     position: absolute;
     top: 0;
 }
-
-/* Styles the .leaflet-container area of the gallery interface. */
 .leaflet-container {
     background: #ddd;
     font-family: Arial, Helvetica, sans-serif;
     overflow: hidden;
     touch-action: pan-x pan-y;
 }
-
-/* Styles the .leaflet-tile-pane area of the gallery interface. */
 .leaflet-tile-pane {
     z-index: 200;
 }
-
-/* Styles the .leaflet-overlay-pane area of the gallery interface. */
 .leaflet-overlay-pane {
     z-index: 400;
 }
-
-/* Styles the .leaflet-shadow-pane area of the gallery interface. */
 .leaflet-shadow-pane {
     z-index: 500;
 }
-
-/* Styles the .leaflet-marker-pane area of the gallery interface. */
 .leaflet-marker-pane {
     z-index: 600;
 }
-
-/* Styles the .leaflet-tooltip-pane area of the gallery interface. */
 .leaflet-tooltip-pane {
     z-index: 650;
 }
-
-/* Styles the .leaflet-popup-pane area of the gallery interface. */
 .leaflet-popup-pane {
     z-index: 700;
 }
 
 .leaflet-tile,
 .leaflet-marker-icon,
-/* Styles the .leaflet-marker-shadow area of the gallery interface. */
 .leaflet-marker-shadow {
     user-select: none;
 }
-
-/* Styles the .leaflet-tile area of the gallery interface. */
 .leaflet-tile {
     filter: inherit;
     visibility: hidden;
 }
-
-/* Styles the .leaflet-tile-loaded area of the gallery interface. */
 .leaflet-tile-loaded {
     opacity: 1;
     visibility: inherit;
 }
-
-/* Styles the .leaflet-fade-anim .leaflet-tile area of the gallery interface. */
 .leaflet-fade-anim .leaflet-tile {
     opacity: 0;
     transition: opacity 0.2s linear;
     will-change: opacity;
 }
-
-/* Styles the .leaflet-fade-anim .leaflet-tile-loaded area of the gallery interface. */
 .leaflet-fade-anim .leaflet-tile-loaded {
     opacity: 1;
 }
-
-/* Styles the .leaflet-zoom-animated area of the gallery interface. */
 .leaflet-zoom-animated {
     transform-origin: 0 0;
 }
-
-/* Styles the .leaflet-zoom-hide area of the gallery interface. */
 .leaflet-zoom-hide {
     visibility: hidden;
 }
-
-/* Styles the .leaflet-interactive area of the gallery interface. */
 .leaflet-interactive {
     cursor: pointer;
 }
-
-/* Styles the .leaflet-grab area of the gallery interface. */
 .leaflet-grab {
     cursor: grab;
 }
 
 .leaflet-dragging .leaflet-grab,
 .leaflet-dragging .leaflet-grab .leaflet-interactive,
-/* Styles the .leaflet-dragging .leaflet-marker-draggable area of the gallery interface. */
 .leaflet-dragging .leaflet-marker-draggable {
     cursor: grabbing;
 }
-
-/* Styles the .leaflet-control area of the gallery interface. */
 .leaflet-control {
     pointer-events: auto;
     position: relative;
@@ -2207,65 +1696,42 @@ body.has-mobile-lightbox {
 }
 
 .leaflet-top,
-/* Styles the .leaflet-bottom area of the gallery interface. */
 .leaflet-bottom {
     pointer-events: none;
     position: absolute;
     z-index: 1000;
 }
-
-/* Styles the .leaflet-top area of the gallery interface. */
 .leaflet-top {
     top: 0;
 }
-
-/* Styles the .leaflet-right area of the gallery interface. */
 .leaflet-right {
     right: 0;
 }
-
-/* Styles the .leaflet-bottom area of the gallery interface. */
 .leaflet-bottom {
     bottom: 0;
 }
-
-/* Styles the .leaflet-left area of the gallery interface. */
 .leaflet-left {
     left: 0;
 }
-
-/* Styles the .leaflet-control area of the gallery interface. */
 .leaflet-control {
     clear: both;
     float: left;
 }
-
-/* Styles the .leaflet-right .leaflet-control area of the gallery interface. */
 .leaflet-right .leaflet-control {
     float: right;
 }
-
-/* Styles the .leaflet-top .leaflet-control area of the gallery interface. */
 .leaflet-top .leaflet-control {
     margin-top: 10px;
 }
-
-/* Styles the .leaflet-bottom .leaflet-control area of the gallery interface. */
 .leaflet-bottom .leaflet-control {
     margin-bottom: 10px;
 }
-
-/* Styles the .leaflet-left .leaflet-control area of the gallery interface. */
 .leaflet-left .leaflet-control {
     margin-left: 10px;
 }
-
-/* Styles the .leaflet-right .leaflet-control area of the gallery interface. */
 .leaflet-right .leaflet-control {
     margin-right: 10px;
 }
-
-/* Styles the .leaflet-control-zoom a area of the gallery interface. */
 .leaflet-control-zoom a {
     background: #fff;
     border-bottom: 1px solid #ccc;
@@ -2279,38 +1745,27 @@ body.has-mobile-lightbox {
 }
 
 .leaflet-control-zoom a:hover,
-/* Styles the .leaflet-control-zoom a:focus area of the gallery interface. */
 .leaflet-control-zoom a:focus {
     background: #f4f4f4;
 }
-
-/* Styles the .leaflet-control-zoom-in area of the gallery interface. */
 .leaflet-control-zoom-in {
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
 }
-
-/* Styles the .leaflet-control-zoom-out area of the gallery interface. */
 .leaflet-control-zoom-out {
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
     border-bottom: 0;
 }
-
-/* Styles the .leaflet-bar area of the gallery interface. */
 .leaflet-bar {
     border-radius: 4px;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65);
 }
-
-/* Styles the .leaflet-popup area of the gallery interface. */
 .leaflet-popup {
     margin-bottom: 20px;
     position: absolute;
     text-align: center;
 }
-
-/* Styles the .leaflet-popup-content-wrapper area of the gallery interface. */
 .leaflet-popup-content-wrapper {
     background: #fff;
     border-radius: 12px;
@@ -2318,15 +1773,11 @@ body.has-mobile-lightbox {
     padding: 1px;
     text-align: left;
 }
-
-/* Styles the .leaflet-popup-content area of the gallery interface. */
 .leaflet-popup-content {
     line-height: 1.3;
     margin: 13px 24px 13px 20px;
     min-height: 1px;
 }
-
-/* Styles the .leaflet-popup-tip-container area of the gallery interface. */
 .leaflet-popup-tip-container {
     height: 20px;
     left: 50%;
@@ -2336,8 +1787,6 @@ body.has-mobile-lightbox {
     position: absolute;
     width: 40px;
 }
-
-/* Styles the .leaflet-popup-tip area of the gallery interface. */
 .leaflet-popup-tip {
     background: #fff;
     box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
@@ -2347,8 +1796,6 @@ body.has-mobile-lightbox {
     transform: rotate(45deg);
     width: 17px;
 }
-
-/* Styles the .leaflet-popup-close-button area of the gallery interface. */
 .leaflet-popup-close-button {
     color: #757575;
     font: 16px/24px Tahoma, Verdana, sans-serif;
@@ -2362,12 +1809,9 @@ body.has-mobile-lightbox {
 }
 
 .leaflet-container a.leaflet-popup-close-button:hover,
-/* Styles the .leaflet-container a.leaflet-popup-close-button:focus area of the gallery interface. */
 .leaflet-container a.leaflet-popup-close-button:focus {
     color: #111;
 }
-
-/* Styles the .leaflet-control-attribution area of the gallery interface. */
 .leaflet-control-attribution {
     background: rgba(255, 255, 255, 0.8);
     color: #333;
@@ -2379,14 +1823,12 @@ body.has-mobile-lightbox {
 .leaflet-marker-icon.leaflet-interactive,
 .leaflet-image-layer.leaflet-interactive,
 .leaflet-pane > svg path.leaflet-interactive,
-/* Styles the svg.leaflet-image-layer.leaflet-interactive path area of the gallery interface. */
 svg.leaflet-image-layer.leaflet-interactive path {
     pointer-events: auto;
 }
 
 .leaflet-container img.leaflet-tile,
 .leaflet-container img.leaflet-marker-icon,
-/* Styles the .leaflet-container img.leaflet-marker-shadow area of the gallery interface. */
 .leaflet-container img.leaflet-marker-shadow {
     max-height: none;
     max-width: none;
@@ -2395,33 +1837,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .leaflet-container .leaflet-marker-pane img,
 .leaflet-container .leaflet-shadow-pane img,
 .leaflet-container .leaflet-tile-pane img,
-/* Styles the .leaflet-container img.leaflet-image-layer area of the gallery interface. */
 .leaflet-container img.leaflet-image-layer {
     border: 0;
     padding: 0;
 }
-
-/* Styles the .leaflet-container .leaflet-control-attribution a area of the gallery interface. */
 .leaflet-container .leaflet-control-attribution a {
     color: #0078a8;
 }
-
-/* Styles the .leaflet-default-icon-path area of the gallery interface. */
 .leaflet-default-icon-path {
     background-image: url("https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png");
 }
 
 /* GPS map controls for EXIF photo locations. */
-.image-card {
-    position: relative;
-}
-
-/* Styles the .image-preview-link area of the gallery interface. */
 .image-preview-link {
     display: block;
 }
-
-/* Styles the .photo-map-pin area of the gallery interface. */
 .photo-map-pin {
     align-items: center;
     --gps-pin-size: 26;
@@ -2491,17 +1921,12 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .photo-map-pin:hover,
 .photo-map-pin:focus-visible,
 .lightbox-map-button:hover,
-/* Styles the .lightbox-map-button:focus-visible area of the gallery interface. */
 .lightbox-map-button:focus-visible {
     transform: translateY(-1px);
 }
-
-/* Styles the .lightbox-map-button area of the gallery interface. */
 .lightbox-map-button {
     padding: 0.35rem 0.7rem;
 }
-
-/* Styles the .map-overlay area of the gallery interface. */
 .map-overlay {
     align-items: center;
     background: rgba(2, 6, 23, 0.82);
@@ -2512,13 +1937,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     position: fixed;
     z-index: 1200;
 }
-
-/* Styles the .map-overlay[hidden] area of the gallery interface. */
 .map-overlay[hidden] {
     display: none;
 }
-
-/* Styles the .map-dialog area of the gallery interface. */
 .map-dialog {
     background: var(--panel-bg, #fff);
     border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
@@ -2530,20 +1951,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
     position: relative;
     width: min(96vw, 1120px);
 }
-
-/* Styles the .map-dialog h2 area of the gallery interface. */
 .map-dialog h2 {
     margin: 0 4.5rem 0.75rem 0;
 }
-
-/* Styles the .map-close area of the gallery interface. */
 .map-close {
     position: absolute;
     right: 1rem;
     top: 1rem;
 }
-
-/* Styles the .map-canvas area of the gallery interface. */
 .map-canvas {
     border-radius: 0.75rem;
     height: min(70vh, 720px);
@@ -2551,13 +1966,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
     overflow: hidden;
     width: 100%;
 }
-
-/* Styles the .map-popup area of the gallery interface. */
 .map-popup {
     max-width: 240px;
 }
-
-/* Styles the .map-popup img area of the gallery interface. */
 .map-popup img {
     border-radius: 0.45rem;
     display: block;
@@ -2566,41 +1977,27 @@ svg.leaflet-image-layer.leaflet-interactive path {
     max-width: 220px;
     width: 100%;
 }
-
-/* Styles the .map-popup h3 area of the gallery interface. */
 .map-popup h3 {
     font-size: 1rem;
     margin: 0 0 0.35rem;
 }
-
-/* Styles the .map-popup p area of the gallery interface. */
 .map-popup p {
     margin: 0.35rem 0;
 }
-
-/* Styles the .map-attribution-note area of the gallery interface. */
 .map-attribution-note {
     margin: 0.65rem 0 0;
 }
-
-/* Styles the body.has-map-overlay area of the gallery interface. */
 body.has-map-overlay {
     overflow: hidden;
 }
-
-/* Styles the .exif-admin-summary dl area of the gallery interface. */
 .exif-admin-summary dl {
     display: grid;
     gap: 0.35rem 1rem;
     grid-template-columns: max-content minmax(0, 1fr);
 }
-
-/* Styles the .exif-admin-summary dt area of the gallery interface. */
 .exif-admin-summary dt {
     font-weight: 700;
 }
-
-/* Styles the .exif-admin-summary dd area of the gallery interface. */
 .exif-admin-summary dd {
     margin: 0;
 }
@@ -2612,7 +2009,6 @@ body.has-map-overlay {
    map tiles so the split map cannot inherit photo sizing, filters, radius or
    transitions from the fullscreen viewer. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container img.leaflet-tile,
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container .leaflet-tile-pane img area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container .leaflet-tile-pane img {
     border: 0 !important;
     border-radius: 0 !important;
@@ -2632,12 +2028,10 @@ body.has-map-overlay {
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-container,
-/* Styles the .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-pane area of the gallery interface. */
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-pane {
     filter: none !important;
     opacity: 1 !important;
 }
-
 
 /* Leaflet marker icon hardening.
    Keep the GPS pin dimensions independent from gallery image and fullscreen
@@ -2660,8 +2054,6 @@ body.has-map-overlay {
     width: 25px !important;
     z-index: auto;
 }
-
-/* Styles the .leaflet-container img.leaflet-marker-shadow area of the gallery interface. */
 .leaflet-container img.leaflet-marker-shadow {
     border: 0 !important;
     border-radius: 0 !important;
@@ -2679,13 +2071,9 @@ body.has-map-overlay {
     visibility: visible !important;
     width: 41px !important;
 }
-
-/* Styles the .leaflet-container .leaflet-marker-pane area of the gallery interface. */
 .leaflet-container .leaflet-marker-pane {
     z-index: 600;
 }
-
-/* Styles the .leaflet-container .leaflet-shadow-pane area of the gallery interface. */
 .leaflet-container .leaflet-shadow-pane {
     z-index: 500;
 }
@@ -2705,8 +2093,6 @@ body.has-map-overlay {
     visibility: visible !important;
     width: 26px !important;
 }
-
-/* Styles the .leaflet-container .gallery-leaflet-marker-pin area of the gallery interface. */
 .leaflet-container .gallery-leaflet-marker-pin {
     background: #2f80d1;
     border: 2px solid #ffffff;
@@ -2721,8 +2107,6 @@ body.has-map-overlay {
     transform: rotate(-45deg);
     width: 26px;
 }
-
-/* Styles the .leaflet-container .gallery-leaflet-marker-pin::after area of the gallery interface. */
 .leaflet-container .gallery-leaflet-marker-pin::after {
     background: #ffffff;
     border-radius: 50%;
@@ -2734,8 +2118,6 @@ body.has-map-overlay {
     top: 7px;
     width: 8px;
 }
-
-/* Styles the .leaflet-container .gallery-leaflet-marker-shadow area of the gallery interface. */
 .leaflet-container .gallery-leaflet-marker-shadow {
     background: rgba(0, 0, 0, 0.22);
     border-radius: 50%;
@@ -2747,13 +2129,9 @@ body.has-map-overlay {
     transform: rotate(-12deg);
     width: 22px;
 }
-
-/* Styles the .image-detail-panel area of the gallery interface. */
 .image-detail-panel {
     text-align: center;
 }
-
-/* Styles the .image-detail-photo area of the gallery interface. */
 .image-detail-photo {
     display: block;
     width: 100%;
@@ -2761,8 +2139,6 @@ body.has-map-overlay {
     object-fit: contain;
     border-radius: var(--radius-lg);
 }
-
-/* Styles the .favicon-current area of the gallery interface. */
 .favicon-current {
     display: flex;
     align-items: center;
@@ -2770,7 +2146,6 @@ body.has-map-overlay {
 }
 
 .favicon-current img,
-/* Styles the .favicon-preview-row canvas area of the gallery interface. */
 .favicon-preview-row canvas {
     width: 48px;
     height: 48px;
@@ -2779,15 +2154,11 @@ body.has-map-overlay {
     background: #fff;
     image-rendering: auto;
 }
-
-/* Styles the .favicon-cropper area of the gallery interface. */
 .favicon-cropper {
     display: grid;
     gap: 0.8rem;
     max-width: 360px;
 }
-
-/* Styles the .favicon-crop-stage area of the gallery interface. */
 .favicon-crop-stage {
     width: 256px;
     height: 256px;
@@ -2797,21 +2168,15 @@ body.has-map-overlay {
     background: #fff;
     touch-action: none;
 }
-
-/* Styles the .favicon-crop-stage canvas area of the gallery interface. */
 .favicon-crop-stage canvas {
     display: block;
     width: 256px;
     height: 256px;
     cursor: grab;
 }
-
-/* Styles the .favicon-crop-stage canvas:active area of the gallery interface. */
 .favicon-crop-stage canvas:active {
     cursor: grabbing;
 }
-
-/* Styles the .favicon-preview-row area of the gallery interface. */
 .favicon-preview-row {
     display: flex;
     align-items: center;
@@ -2820,13 +2185,9 @@ body.has-map-overlay {
 
 .lightbox.is-fullscreen,
 .lightbox.is-mobile-fullscreen,
-/* Styles the .lightbox:fullscreen area of the gallery interface. */
 .lightbox:fullscreen {
     background: #050505 !important;
 }
-
-
-/* Styles the .gallery-dev-overlay area of the gallery interface. */
 .gallery-dev-overlay {
     position: fixed;
     right: 0.75rem;
@@ -2849,7 +2210,6 @@ body.has-map-overlay {
 }
 
 .gallery-dev-overlay header,
-/* Styles the .gallery-dev-overlay footer area of the gallery interface. */
 .gallery-dev-overlay footer {
     display: flex;
     align-items: center;
@@ -2861,15 +2221,11 @@ body.has-map-overlay {
     letter-spacing: 0.03em;
     text-transform: uppercase;
 }
-
-/* Styles the .gallery-dev-overlay footer area of the gallery interface. */
 .gallery-dev-overlay footer {
     border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-bottom: 0;
     opacity: 0.72;
 }
-
-/* Styles the .gallery-dev-overlay strong area of the gallery interface. */
 .gallery-dev-overlay strong {
     display: inline-grid;
     place-items: center;
@@ -2878,16 +2234,12 @@ body.has-map-overlay {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.16);
 }
-
-/* Styles the .gallery-dev-overlay pre area of the gallery interface. */
 .gallery-dev-overlay pre {
     margin: 0;
     padding: 0.45rem 0.55rem;
     white-space: pre-wrap;
     word-break: break-word;
 }
-
-/* Styles the .gallery-dev-overlay canvas area of the gallery interface. */
 .gallery-dev-overlay canvas {
     display: block;
     width: 100%;
@@ -2897,16 +2249,12 @@ body.has-map-overlay {
 
 .lightbox.is-fullscreen .gallery-dev-overlay,
 .lightbox.is-mobile-fullscreen .gallery-dev-overlay,
-/* Styles the .lightbox:fullscreen .gallery-dev-overlay area of the gallery interface. */
 .lightbox:fullscreen .gallery-dev-overlay {
     right: 0.75rem;
     bottom: 0.75rem;
 }
-
-/* Applies responsive adjustments for this viewport range. */
 @media (max-width: 720px) {
-/* Styles the .gallery-dev-overlay area of the gallery interface. */
-    .gallery-dev-overlay {
+.gallery-dev-overlay {
         right: 0.5rem;
         bottom: 0.5rem;
         width: calc(100vw - 1rem);
@@ -3811,7 +3159,6 @@ body.admin-image-order-active {
     font-family: var(--preview-font-family);
     box-shadow: 0 16px 45px rgba(15, 23, 42, 0.10);
 }
-
 
 /* Shows the selected public page width in the compact admin preview. */
 .theme-preview-page[data-preview-width="default"] {
@@ -4720,7 +4067,6 @@ button.danger {
     gap: 0.8rem;
 }
 
-
 /* Uses the visual gallery record itself as the drag affordance, avoiding a separate move column. */
 .admin-gallery-summary[data-admin-gallery-drag-zone] {
     cursor: default;
@@ -4946,7 +4292,6 @@ button.gallery-row-action.secondary {
     transform: translateY(-0.02rem);
 }
 
-
 /* Keeps Admin branding asset controls readable inside the edit-gallery form. */
 .admin-branding-assets {
     padding: 1rem;
@@ -5016,6 +4361,283 @@ button.gallery-row-action.secondary {
         width: 100%;
         max-height: 8rem;
     }
+}
+
+
+/* Add gallery side panel */
+.admin-side-panel {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483000 !important;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+}
+.admin-side-panel[hidden] {
+    display: none !important;
+}
+.admin-side-panel.is-open {
+    pointer-events: auto;
+}
+.admin-side-panel-scrim {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    cursor: pointer;
+    background: rgba(15, 23, 42, 0.38);
+    backdrop-filter: blur(2px);
+}
+.admin-side-panel-dialog {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    z-index: 1;
+    width: min(58rem, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0;
+    background: #f6f8fb;
+    border-left: 1px solid rgba(148, 163, 184, 0.45);
+    box-shadow: -24px 0 64px rgba(15, 23, 42, 0.24);
+}
+.admin-side-panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+    backdrop-filter: blur(16px);
+}
+.admin-side-panel-header h2,
+.admin-side-panel-copy h2 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+}
+.admin-side-panel .admin-kicker {
+    margin-bottom: 0.2rem;
+    color: var(--admin-accent, var(--accent-dark, #1d4ed8));
+}
+.admin-side-panel-status {
+    margin: 1rem 1.25rem 0;
+}
+.admin-side-panel-body {
+    padding: 1.1rem 1.25rem 1.35rem;
+}
+.admin-side-panel-stack {
+    display: grid;
+    gap: 1rem;
+}
+.admin-side-panel-copy p {
+    margin-bottom: 0;
+}
+.admin-side-panel-section {
+    margin-bottom: 0;
+}
+.admin-side-panel-section h3 {
+    margin-top: 0;
+}
+.admin-side-panel-loading {
+    padding: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+.admin-side-panel-workflow {
+    display: grid;
+    gap: 0.9rem;
+}
+.admin-side-panel-form {
+    display: grid;
+    gap: 0.9rem;
+}
+.admin-side-panel-progress-anchor {
+    position: sticky;
+    top: 4.55rem;
+    z-index: 4;
+}
+.admin-side-panel-progress-anchor:empty {
+    display: none;
+}
+.admin-side-panel-progress-anchor .thumbnail-progress {
+    margin: 0 0 0.9rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(37, 99, 235, 0.24);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(14px);
+}
+.admin-side-panel-progress-anchor .thumbnail-progress-bar {
+    width: 100%;
+    height: 0.8rem;
+}
+.admin-side-panel-progress-anchor .thumbnail-progress p {
+    margin: 0.45rem 0 0;
+    color: #334155;
+    font-weight: 700;
+}
+.admin-side-panel-card {
+    padding: 1.05rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+.admin-side-panel-primary-card {
+    padding-bottom: 1rem;
+}
+.admin-side-panel-card-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.admin-side-panel-card-heading h3 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.08rem;
+    letter-spacing: -0.02em;
+}
+.admin-side-panel-card-heading p {
+    max-width: 24rem;
+    margin: 0;
+    text-align: right;
+}
+.admin-side-panel-field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+.admin-side-panel-field {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    color: #1f2937;
+    font-weight: 800;
+}
+.admin-side-panel-field-wide {
+    grid-column: 1 / -1;
+}
+.admin-side-panel-field span,
+.admin-side-panel-file-title {
+    color: #1f2937;
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+.admin-side-panel-field input,
+.admin-side-panel-field select,
+.admin-side-panel-field textarea,
+.admin-side-panel-file-drop input[type="file"] {
+    width: 100%;
+    min-height: 2.55rem;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    border-radius: 12px;
+    background: #fff;
+    color: #111827;
+    box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+.admin-side-panel-field textarea {
+    min-height: 5.6rem;
+    resize: vertical;
+}
+.admin-side-panel-field small {
+    color: #64748b;
+    font-weight: 600;
+}
+.admin-side-panel-toggle-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin-top: 0.9rem;
+}
+.admin-side-panel-toggle-row label,
+.admin-side-panel-thumbnail-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.35rem;
+    margin: 0;
+    padding: 0.48rem 0.7rem;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 750;
+}
+.admin-side-panel-upload-card {
+    display: grid;
+    gap: 0.75rem;
+}
+.admin-side-panel-file-drop {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0.9rem;
+    border: 1px dashed rgba(37, 99, 235, 0.42);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(239, 246, 255, 0.85), rgba(255, 255, 255, 0.96));
+}
+.admin-side-panel-file-drop .muted {
+    margin: 0;
+}
+.admin-side-panel-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 -1.25rem -1.35rem;
+    padding: 0.9rem 1.25rem;
+    background: rgba(255, 255, 255, 0.92);
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+    backdrop-filter: blur(16px);
+}
+.admin-side-panel-actions p {
+    margin: 0;
+    text-align: right;
+}
+.admin-side-panel-actions .button.primary {
+    min-width: 11rem;
+}
+.admin-side-panel-form.is-uploading .admin-side-panel-actions .button.primary,
+.admin-side-panel-form.is-uploading [type="submit"] {
+    cursor: progress;
+    opacity: 0.72;
+}
+body.has-admin-side-panel {
+    overflow: visible;
+}
+.admin-page .admin-side-panel-dialog,
+.admin-page .admin-side-panel-header {
+    background-color: #f6f8fb;
+}
+.admin-page .admin-side-panel-header,
+.admin-page .admin-side-panel-actions {
+    background-color: rgba(255, 255, 255, 0.92);
 }
 
 .visually-hidden,
@@ -5304,8 +4926,6 @@ button.gallery-row-action.secondary {
     gap: 0.75rem;
 }
 
-
-
 .admin-thumbnail-bound-control {
     display: grid;
     gap: 0.75rem;
@@ -5382,6 +5002,403 @@ button.gallery-row-action.secondary {
     background: #fbfcfd;
 }
 
+.admin-image-bulk-primary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.admin-image-select-all {
+    min-width: auto;
+}
+
+.admin-image-selection-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.35rem;
+    padding: 0.2rem 0.7rem;
+    border: 1px solid #d8e2ec;
+    border-radius: 999px;
+    background: #fff;
+    color: #435363;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.admin-image-move-panel {
+    display: grid;
+    gap: 1.15rem;
+    margin-top: 1rem;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #d7e1ec;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.11);
+}
+
+.admin-image-move-panel[hidden] {
+    display: none;
+}
+
+.admin-image-move-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.45rem 1rem;
+    border-bottom: 1px solid #e5edf5;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.admin-image-move-title {
+    display: flex;
+    align-items: center;
+    gap: 0.95rem;
+}
+
+.admin-image-move-title-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 16px;
+    color: #1f6ed4;
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.admin-image-move-panel-head h3 {
+    margin: 0;
+    color: #101827;
+    font-size: 1.45rem;
+    line-height: 1.15;
+}
+
+.admin-image-move-count-pill {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid #cfe0f7;
+    border-radius: 999px;
+    background: #f5f9ff;
+    color: #1d62bd;
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.admin-image-move-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: #f0f3f7;
+    color: #526070;
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.admin-image-move-close:hover,
+.admin-image-move-close:focus-visible {
+    background: #e6ebf1;
+    color: #17212b;
+}
+
+.admin-image-move-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.25rem;
+    padding: 1rem 1.45rem 0;
+}
+
+.admin-image-move-step {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.admin-image-move-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 1rem;
+    right: -0.75rem;
+    width: 1.4rem;
+    height: 2px;
+    background: #dce3eb;
+}
+
+.admin-image-move-step span {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 50%;
+    background: #e8ecf1;
+    color: #4e5d6c;
+    font-size: 0.92rem;
+    font-weight: 900;
+}
+
+.admin-image-move-step.is-active span,
+.admin-image-move-step.is-complete span {
+    background: linear-gradient(180deg, #2b7ced 0%, #155fc6 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(29, 103, 211, 0.24);
+}
+
+.admin-image-move-step strong {
+    display: block;
+    color: #536171;
+    font-size: 0.95rem;
+}
+
+.admin-image-move-step.is-active strong,
+.admin-image-move-step.is-complete strong {
+    color: #1d62bd;
+}
+
+.admin-image-move-step p {
+    margin: 0.2rem 0 0;
+    color: #637383;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.admin-image-move-lead {
+    margin: 0;
+    padding: 0 1.45rem;
+    color: #17212b;
+    font-size: 1rem;
+}
+
+.admin-image-move-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    padding: 0 1.45rem;
+}
+
+.admin-image-move-choice {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1.05rem;
+    min-height: 8rem;
+    width: 100%;
+    padding: 1.2rem 1.45rem;
+    border: 1px solid #d6dee8;
+    border-radius: 18px;
+    background: #ffffff;
+    color: #152033;
+    text-align: left;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.admin-image-move-choice:hover,
+.admin-image-move-choice:focus-visible {
+    border-color: #8eb2dd;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.admin-image-move-choice[aria-pressed="true"] {
+    border-color: #1d72f3;
+    background: linear-gradient(145deg, #2b82f3 0%, #115dc8 100%);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72), 0 16px 34px rgba(29, 103, 211, 0.28);
+}
+
+.admin-image-move-choice-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border: 1px solid #e2e9f1;
+    border-radius: 50%;
+    background: #f9fbfd;
+    color: #1f6ed4;
+    font-size: 1.65rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.admin-image-move-choice[aria-pressed="true"] .admin-image-move-choice-icon {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+}
+
+.admin-image-move-choice-copy {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.admin-image-move-choice strong {
+    color: #152033;
+    font-size: 1.1rem;
+    line-height: 1.25;
+}
+
+.admin-image-move-choice small {
+    color: #627284;
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.55;
+}
+
+.admin-image-move-choice[aria-pressed="true"] strong,
+.admin-image-move-choice[aria-pressed="true"] small {
+    color: #ffffff;
+}
+
+.admin-image-move-choice-radio {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border: 2px solid #b7c2cf;
+    border-radius: 50%;
+    background: #ffffff;
+}
+
+.admin-image-move-choice[aria-pressed="true"] .admin-image-move-choice-radio {
+    border: 0.45rem solid #ffffff;
+    background: transparent;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"] {
+    border-color: #d6dee8 !important;
+    background: #ffffff !important;
+    color: #152033 !important;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04) !important;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"] .admin-image-move-choice-icon {
+    border-color: #e2e9f1 !important;
+    background: #ffffff !important;
+    color: #1f6ed4 !important;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"] strong {
+    color: #152033 !important;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"] small {
+    color: #627284 !important;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"] .admin-image-move-choice-radio {
+    border-color: #b7c2cf !important;
+    background: #ffffff !important;
+}
+
+.admin-page .admin-image-move-choice[aria-pressed="false"]:hover,
+.admin-page .admin-image-move-choice[aria-pressed="false"]:focus-visible {
+    border-color: #8eb2dd !important;
+    background: #ffffff !important;
+}
+
+.admin-image-move-targets {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0 1.45rem;
+}
+
+.admin-image-move-target[hidden],
+.admin-image-move-new[hidden] {
+    display: none !important;
+}
+
+.admin-image-move-target {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.22fr) minmax(14rem, 0.78fr) minmax(14rem, 0.45fr);
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.25rem;
+    border: 1px solid #dce6ef;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.admin-image-move-new {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(14rem, 0.8fr);
+}
+
+.admin-image-move-target label {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.admin-image-move-target > span,
+.admin-image-move-target label span {
+    color: #1e2a3a;
+    font-weight: 900;
+}
+
+.admin-image-move-target select,
+.admin-image-move-target input {
+    width: 100%;
+    min-height: 2.85rem;
+    border-color: #cad5e0;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.admin-image-move-target small,
+.admin-image-move-new small {
+    color: #1d62bd;
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.admin-image-move-new small {
+    align-self: end;
+}
+
+.admin-image-move-confirm {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.45rem;
+    border-top: 1px solid #e5edf5;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.admin-image-move-confirm strong {
+    color: #17212b;
+}
+
+.admin-image-move-confirm p {
+    margin: 0.25rem 0 0;
+    color: #586879;
+}
+
+.admin-image-move-confirm button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.admin-image-move-cancel-bottom {
+    min-width: 7rem;
+}
+
 .admin-edit-card .admin-branding-assets {
     margin: 0;
     padding: 0;
@@ -5396,6 +5413,17 @@ button.gallery-row-action.secondary {
 }
 
 @media (max-width: 1000px) {
+    .admin-image-move-steps,
+    .admin-image-move-choice-grid,
+    .admin-image-move-new {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-image-move-confirm {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
     .admin-edit-gallery-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -5411,65 +5439,12 @@ button.gallery-row-action.secondary {
         grid-template-columns: 1fr;
     }
 
-    
-
-.admin-thumbnail-bound-control {
-    display: grid;
-    gap: 0.75rem;
-}
-
-.admin-thumbnail-bound-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.admin-thumbnail-bound-header p {
-    margin: 0.25rem 0 0;
-}
-
-.admin-thumbnail-bound-header strong {
-    white-space: nowrap;
-    color: #16202a;
-}
-
-.admin-thumbnail-bound-slider {
-    position: relative;
-    min-height: 2.25rem;
-}
-
-.admin-thumbnail-bound-slider input[type="range"] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    margin: 0;
-    background: transparent;
-    pointer-events: none;
-}
-
-.admin-thumbnail-bound-slider input[type="range"]::-webkit-slider-thumb {
-    pointer-events: auto;
-}
-
-.admin-thumbnail-bound-slider input[type="range"]::-moz-range-thumb {
-    pointer-events: auto;
-}
-
-.admin-thumbnail-bound-scale {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.35rem;
-    color: var(--admin-muted);
-    font-size: 0.78rem;
-}
-
-.admin-edit-gallery-savebar {
+    .admin-edit-gallery-savebar {
         align-items: stretch;
         flex-direction: column;
     }
 
-.admin-edit-gallery-savebar .muted {
+    .admin-edit-gallery-savebar .muted {
         order: -1;
     }
 }
@@ -5478,4 +5453,231 @@ button.gallery-row-action.secondary {
 .admin-gallery-order-placeholder[data-drag-direction="right"] td::after,
 .admin-gallery-order-placeholder[data-drag-direction="left"] td::after {
     content: attr(data-drag-hint);
+}
+
+/* Admin edit side-panel reuse */
+.admin-side-panel.is-edit-panel .admin-side-panel-dialog {
+    width: min(72rem, calc(100vw - 3rem));
+}
+.admin-side-panel-edit-workspace {
+    gap: 1rem;
+}
+.admin-side-panel .admin-dashboard-hero,
+.admin-side-panel .admin-edit-gallery-hero {
+    margin: 0;
+    padding: 1.1rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+.admin-side-panel .admin-dashboard-hero h1,
+.admin-side-panel .admin-edit-gallery-hero h1 {
+    font-size: clamp(1.45rem, 2.2vw, 2rem);
+}
+.admin-side-panel .admin-hero-actions {
+    gap: 0.55rem;
+}
+.admin-side-panel .admin-metric-grid {
+    margin: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.admin-side-panel .admin-metric-card {
+    min-height: auto;
+    padding: 0.8rem;
+}
+.admin-side-panel .admin-metric-card strong {
+    font-size: 1rem;
+}
+.admin-side-panel .admin-tabs {
+    position: sticky;
+    top: 4.65rem;
+    z-index: 3;
+    margin: 0;
+    padding: 0.45rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 18px;
+    background: rgba(246, 248, 251, 0.94);
+    backdrop-filter: blur(14px);
+}
+.admin-side-panel .admin-tab-panel {
+    margin: 0;
+}
+.admin-side-panel .admin-edit-gallery-form,
+.admin-side-panel section.panel form.form-grid {
+    margin: 0;
+}
+.admin-side-panel .admin-edit-card-grid {
+    gap: 0.8rem;
+}
+.admin-side-panel .admin-edit-card {
+    padding: 0.95rem;
+    border-radius: 18px;
+}
+.admin-side-panel .admin-edit-gallery-savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    margin: 1rem -1.25rem -1.35rem;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px);
+}
+.admin-side-panel .admin-image-order-table {
+    min-width: 56rem;
+}
+.admin-side-panel .admin-side-panel-edit-workspace > .panel {
+    margin: 0;
+}
+.admin-side-panel .admin-side-panel-edit-workspace > .notice {
+    margin: 0;
+}
+
+/* Public admin-only card reordering for visible pagination pages. */
+.public-reorder-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    margin: 0.65rem 0 0.85rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid rgba(92, 64, 51, 0.16);
+    border-radius: 16px;
+    background: rgba(255, 253, 248, 0.92);
+    box-shadow: 0 10px 28px rgba(78, 48, 34, 0.08);
+}
+
+.public-reorder-toolbar strong {
+    display: block;
+    color: var(--text);
+    font-size: 0.92rem;
+}
+
+.public-reorder-toolbar p {
+    margin: 0.15rem 0 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+}
+
+.public-reorder-status {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(92, 64, 51, 0.08);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.public-reorder-status[data-state="dragging"],
+.public-reorder-status[data-state="saving"] {
+    background: rgba(180, 83, 9, 0.12);
+    color: #92400e;
+}
+
+.public-reorder-status[data-state="saved"] {
+    background: rgba(22, 101, 52, 0.12);
+    color: #166534;
+}
+
+.public-reorder-status[data-state="error"] {
+    background: rgba(185, 28, 28, 0.12);
+    color: #991b1b;
+}
+
+.public-reorder-handle {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.55rem;
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: calc(100% - 1.1rem);
+    min-height: 2rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid rgba(255, 253, 248, 0.82);
+    border-radius: 999px;
+    background: rgba(32, 27, 23, 0.74);
+    color: #fffdf8;
+    box-shadow: 0 10px 22px rgba(32, 27, 23, 0.22);
+    cursor: grab;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+    touch-action: none;
+    user-select: none;
+}
+
+.public-reorder-handle:hover,
+.public-reorder-handle:focus-visible,
+.public-reorder-handle.is-dragging {
+    background: var(--accent);
+    color: #fffdf8;
+    outline: 0;
+}
+
+.public-reorder-handle:active,
+body.public-reorder-active {
+    cursor: grabbing;
+}
+
+body.public-reorder-active {
+    user-select: none;
+}
+
+.is-public-reorder-hidden {
+    display: none !important;
+}
+
+.public-reorder-placeholder {
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--accent);
+    background: rgba(165, 72, 28, 0.08);
+    box-shadow: none;
+}
+
+.public-reorder-placeholder span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.92);
+    color: var(--accent-dark);
+    font-size: 0.78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.public-reorder-ghost {
+    position: fixed !important;
+    z-index: 100000;
+    pointer-events: none;
+    opacity: 0.9;
+    box-shadow: 0 18px 44px rgba(32, 27, 23, 0.28);
+    transform: rotate(0.4deg);
+}
+
+.public-reorder-ghost .inline-editor,
+.public-reorder-ghost .public-reorder-handle {
+    display: none;
+}
+
+@media (max-width: 720px) {
+    .public-reorder-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .public-reorder-status {
+        white-space: normal;
+    }
+
+    .public-reorder-handle span:last-child {
+        display: none;
+    }
 }

@@ -59,8 +59,22 @@ function normalizedAdminTabHash(hash) {
 }
 
 // Function `setupAdminTabs` executes this focused behavior.
-export function setupAdminTabs() {
-    document.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+export function setupAdminTabs(root = document) {
+    setupAdminTabsInRoot(root);
+}
+
+/**
+ * Attach admin tab behavior inside one document area.
+ *
+ * @param {ParentNode} root DOM root that contains admin tab controls.
+ * @returns {void}
+ */
+function setupAdminTabsInRoot(root) {
+    root.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+        if (!(tabsRoot instanceof HTMLElement) || tabsRoot.dataset.adminTabsBound === '1') {
+            return;
+        }
+        tabsRoot.dataset.adminTabsBound = '1';
         // tabs stores state or configuration for the admin tab flow.
         const tabs = Array.from(tabsRoot.querySelectorAll('[role="tab"][data-admin-tab-target]'));
         if (!tabs.length) {
@@ -73,6 +87,8 @@ export function setupAdminTabs() {
         if (!panels.length) {
             return;
         }
+        // shouldManageHash stores whether this tab group owns the browser URL hash.
+        const shouldManageHash = !tabsRoot.closest('[data-admin-side-panel]');
 
         // activateTab stores behavior for selecting one tab and hiding the other panels.
         const activateTab = (targetId, options = {}) => {
@@ -97,13 +113,13 @@ export function setupAdminTabs() {
             if (options.focusTab) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
             }
-            if (options.updateHash) {
+            if (options.updateHash && shouldManageHash) {
                 const nextHash = `#${targetPanel.id}`;
                 if (window.location.hash !== nextHash) {
                     window.history.pushState(null, '', nextHash);
                 }
             }
-            document.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
+            tabsRoot.closest('form, [data-admin-side-panel-body], main')?.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
                 if (input instanceof HTMLInputElement) {
                     input.value = targetPanel.id;
                 }
@@ -111,7 +127,7 @@ export function setupAdminTabs() {
         };
 
         // activeHash stores the hash that should select the initial tab.
-        const activeHash = normalizedAdminTabHash(window.location.hash);
+        const activeHash = shouldManageHash ? normalizedAdminTabHash(window.location.hash) : '';
         if (activeHash && activeHash !== window.location.hash) {
             window.history.replaceState(null, '', activeHash);
         }
@@ -154,6 +170,10 @@ export function setupAdminTabs() {
                 activateTab(tabs[nextIndex].dataset.adminTabTarget || '', {updateHash: true, focusTab: true});
             });
         });
+
+        if (!shouldManageHash) {
+            return;
+        }
 
         // handleHashNavigation stores behavior shared by hashchange and history traversal.
         const handleHashNavigation = () => {
@@ -225,9 +245,10 @@ function ensureGalleryRefreshProgress(form) {
 // Function `setupGalleryUploadProgress` executes this focused behavior.
 export function setupGalleryUploadProgress() {
     document.querySelectorAll('[data-gallery-upload-form]').forEach((form) => {
-        if (!(form instanceof HTMLFormElement)) {
+        if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;
         }
+        form.dataset.galleryUploadProgressBound = '1';
         form.addEventListener('submit', (event) => {
             event.preventDefault();
             runGalleryUpload(form);
@@ -239,10 +260,16 @@ export function setupGalleryUploadProgress() {
 async function runGalleryUpload(form) {
     // progress stores state or configuration for the gallery front-end flow.
     const progress = ensureThumbnailProgress(form);
+    revealPanelUploadProgress(form, progress);
+    form.classList.add('is-uploading');
     // buttons stores state or configuration for the gallery front-end flow.
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     buttons.forEach((button) => {
         button.disabled = true;
+        if (button instanceof HTMLButtonElement) {
+            button.dataset.originalText = button.dataset.originalText || button.textContent || '';
+            button.textContent = 'Working...';
+        }
     });
     try {
         // createThumbnails stores state or configuration for the gallery front-end flow.
@@ -256,14 +283,1051 @@ async function runGalleryUpload(form) {
         } else {
             updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
         }
+        if (galleryUploadShouldClosePanel(form)) {
+            dispatchAdminSidePanelSuccess(form, result);
+            return;
+        }
         window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
     } catch (error) {
         updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+    } finally {
+        form.classList.remove('is-uploading');
+        buttons.forEach((button) => {
+            button.disabled = false;
+            if (button instanceof HTMLButtonElement && button.dataset.originalText) {
+                button.textContent = button.dataset.originalText;
+            }
+        });
+    }
+}
+
+
+/**
+ * Move side-panel upload progress into view before network work starts.
+ *
+ * @param {HTMLFormElement} form Upload form currently being submitted.
+ * @param {HTMLElement} progress Progress element used by the upload workflow.
+ * @returns {void}
+ */
+function revealPanelUploadProgress(form, progress) {
+    const dialog = form.closest('.admin-side-panel-dialog');
+    if (!(dialog instanceof HTMLElement)) {
+        return;
+    }
+    progress.classList.add('is-panel-upload-progress');
+    dialog.scrollTo({top: 0, behavior: 'smooth'});
+    progress.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+/**
+ * Return whether an upload form should complete inside the side-panel workflow.
+ *
+ * @param {HTMLFormElement} form Upload form submitted by the admin.
+ * @returns {boolean} True when the side panel owns the completion behavior.
+ */
+function galleryUploadShouldClosePanel(form) {
+    return form.dataset.galleryPanelCloseOnSuccess === '1' && Boolean(form.closest('[data-admin-side-panel]'));
+}
+
+/**
+ * Notify the side-panel controller that an embedded workflow finished.
+ *
+ * @param {HTMLFormElement} form Completed form.
+ * @param {Record<string, *>} result Server response plus client-side aggregate upload data.
+ * @returns {void}
+ */
+function dispatchAdminSidePanelSuccess(form, result) {
+    form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+        bubbles: true,
+        detail: {
+            source: 'upload',
+            result,
+        },
+    }));
+}
+
+/**
+ * Attach the progressive Add gallery here side-panel behavior.
+ *
+ * Direct links remain unchanged for browsers without JavaScript. The enhanced path
+ * fetches the existing create-gallery page as a fragment and lets the existing
+ * create/upload endpoints handle all mutations.
+ *
+ * @returns {void}
+ */
+export function setupAdminGallerySidePanel() {
+    if (document.body?.dataset.adminGallerySidePanelBound === '1') {
+        return;
+    }
+    if (document.body) {
+        document.body.dataset.adminGallerySidePanelBound = '1';
+    }
+
+    document.addEventListener('click', async (event) => {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+        const link = event.target.closest('[data-gallery-side-panel-link]');
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        if (!window.fetch || !window.DOMParser) {
+            return;
+        }
+        event.preventDefault();
+        await openAdminGallerySidePanel(link);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+        const closeButton = event.target.closest('[data-admin-side-panel-close], [data-admin-side-panel-scrim]');
+        if (!closeButton) {
+            return;
+        }
+        const panel = event.target.closest('[data-admin-side-panel]') || document.querySelector('[data-admin-side-panel]');
+        if (panel instanceof HTMLElement) {
+            closeAdminGallerySidePanel(panel);
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
+        if (panel instanceof HTMLElement) {
+            closeAdminGallerySidePanel(panel);
+        }
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-gallery-panel-create-form]')) {
+            return;
+        }
+        event.preventDefault();
+        await submitAdminGalleryPanelCreateForm(form);
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-edit-form]')) {
+            return;
+        }
+        event.preventDefault();
+        await submitAdminPanelEditForm(form);
+    });
+
+    document.addEventListener('click', (event) => {
+        const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
+        if (!(submitter instanceof HTMLElement)) {
+            return;
+        }
+        const form = submitter.closest('form[data-admin-panel-bulk-form]');
+        if (form instanceof HTMLFormElement) {
+            form.__adminPanelSubmitter = submitter;
+        }
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-bulk-form]')) {
+            return;
+        }
+        const submitter = event.submitter || form.__adminPanelSubmitter || null;
+        if (isThumbnailSubmission(form, submitter)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitAdminPanelImageBulkForm(form, submitter);
+    }, true);
+
+    document.addEventListener('php-gallery:side-panel-success', (event) => {
+        const panel = event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : document.querySelector('[data-admin-side-panel]');
+        const source = String(event.detail?.source || '');
+        const result = event.detail?.result || {};
+        const shouldKeepPanelOpen = source === 'gallery-image-bulk' && String(result.bulk_action || '') === 'cover';
+        if (panel instanceof HTMLElement && !shouldKeepPanelOpen) {
+            closeAdminGallerySidePanel(panel);
+        }
+        if (source === 'gallery-image-bulk') {
+            reflectGalleryImageBulkInCurrentView(result);
+            if (panel instanceof HTMLElement && shouldKeepPanelOpen) {
+                writeAdminGallerySidePanelStatus(panel, String(result.message || 'Gallery title picture saved.'), false);
+            }
+            return;
+        }
+        if (source === 'gallery-edit') {
+            reflectSavedGalleryInCurrentView(result);
+            return;
+        }
+        if (source === 'image-edit') {
+            reflectSavedImageInCurrentView(result);
+            return;
+        }
+        reflectCreatedGalleryInCurrentView(result);
+    });
+}
+
+/**
+ * Open the reusable side panel and fill it from an admin workflow.
+ *
+ * @param {HTMLAnchorElement} link Enhanced admin workflow link.
+ * @returns {Promise<void>} Resolves after content is loaded or fallback navigation starts.
+ */
+async function openAdminGallerySidePanel(link) {
+    const panel = ensureAdminGallerySidePanel();
+    const body = panel.querySelector('[data-admin-side-panel-body]');
+    if (!(body instanceof HTMLElement)) {
+        window.location.href = link.href;
+        return;
+    }
+    const workflow = sidePanelWorkflowFromLink(link);
+    setAdminGallerySidePanelHeading(panel, workflow.kicker, workflow.title);
+    panel.dataset.adminSidePanelWorkflow = workflow.name;
+    panel.classList.toggle('is-edit-panel', workflow.name !== 'create');
+    openAdminGallerySidePanelShell(panel);
+    writeAdminGallerySidePanelStatus(panel, workflow.loadingMessage, false);
+    body.innerHTML = `<div class="admin-side-panel-loading" role="status">${escapeHtmlText(workflow.loadingMessage)}</div>`;
+
+    try {
+        const url = new URL(link.dataset.gallerySidePanelUrl || link.href, window.location.href);
+        url.searchParams.set('panel', '1');
+        const response = await fetch(url.toString(), {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const html = await response.text();
+        if (!response.ok || html.trim() === '') {
+            throw new Error(workflow.loadErrorMessage);
+        }
+        body.innerHTML = sidePanelContentFromHtml(html, workflow);
+        prepareAdminSidePanelLoadedContent(body, workflow, response.url || url.toString());
+        writeAdminGallerySidePanelStatus(panel, '', false);
+        const firstField = body.querySelector('input:not([type="hidden"]), select, textarea, button');
+        if (firstField instanceof HTMLElement) {
+            firstField.focus({preventScroll: true});
+        }
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || workflow.loadErrorMessage, true);
+        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} Use the normal admin page instead: <a href="${escapeHtmlAttribute(link.href)}">open directly</a>.</div>`;
+    }
+}
+
+/**
+ * Read side-panel workflow metadata from an enhanced link.
+ *
+ * @param {HTMLAnchorElement} link Enhanced admin workflow link.
+ * @returns {{name: string, kicker: string, title: string, loadingMessage: string, loadErrorMessage: string}} Workflow configuration.
+ */
+function sidePanelWorkflowFromLink(link) {
+    const name = String(link.dataset.adminSidePanelWorkflow || 'create');
+    if (name === 'gallery-edit') {
+        return {
+            name,
+            kicker: link.dataset.adminSidePanelKicker || 'Gallery editor',
+            title: link.dataset.adminSidePanelTitle || 'Edit gallery',
+            loadingMessage: 'Loading gallery editor...',
+            loadErrorMessage: 'The gallery editor could not be loaded.',
+        };
+    }
+    if (name === 'image-edit') {
+        return {
+            name,
+            kicker: link.dataset.adminSidePanelKicker || 'Photo editor',
+            title: link.dataset.adminSidePanelTitle || 'Edit photo',
+            loadingMessage: 'Loading photo editor...',
+            loadErrorMessage: 'The photo editor could not be loaded.',
+        };
+    }
+    return {
+        name: 'create',
+        kicker: link.dataset.adminSidePanelKicker || 'Admin shortcut',
+        title: link.dataset.adminSidePanelTitle || 'Add gallery here',
+        loadingMessage: 'Loading gallery workflow...',
+        loadErrorMessage: 'The gallery workflow could not be loaded.',
+    };
+}
+
+/**
+ * Update the reusable side-panel heading for the current workflow.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @param {string} kicker Small heading label.
+ * @param {string} title Main heading text.
+ * @returns {void}
+ */
+function setAdminGallerySidePanelHeading(panel, kicker, title) {
+    const kickerNode = panel.querySelector('[data-admin-side-panel-kicker]');
+    const titleNode = panel.querySelector('[data-admin-side-panel-title]');
+    if (kickerNode instanceof HTMLElement) {
+        kickerNode.textContent = kicker;
+    }
+    if (titleNode instanceof HTMLElement) {
+        titleNode.textContent = title;
+    }
+}
+
+/**
+ * Extract usable panel content from either a fragment response or a full admin page.
+ *
+ * @param {string} html Server-rendered HTML.
+ * @param {{name: string}} workflow Active side-panel workflow.
+ * @returns {string} HTML safe to inject into the panel body.
+ */
+function sidePanelContentFromHtml(html, workflow) {
+    const trimmed = html.trim();
+    if (trimmed.startsWith('<div') || trimmed.startsWith('<section')) {
+        return trimmed;
+    }
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const directFragment = parsed.querySelector('[data-gallery-create-panel]');
+    if (directFragment instanceof HTMLElement) {
+        return directFragment.outerHTML;
+    }
+    const main = parsed.querySelector('main.site-main') || parsed.querySelector('main');
+    if (main instanceof HTMLElement) {
+        const devModePanel = main.querySelector('.admin-devmode-panel');
+        if (devModePanel instanceof HTMLElement) {
+            devModePanel.remove();
+        }
+        return `<div class="admin-side-panel-stack admin-side-panel-edit-workspace" data-admin-edit-panel-workspace="${escapeHtmlAttribute(workflow.name)}">${main.innerHTML}</div>`;
+    }
+    return trimmed;
+}
+
+/**
+ * Prepare forms and dynamic controls after admin content is injected into the panel.
+ *
+ * @param {HTMLElement} body Side-panel body element.
+ * @param {{name: string}} workflow Active side-panel workflow.
+ * @param {string} sourceUrl URL that produced the loaded content.
+ * @returns {void}
+ */
+function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
+    setupGalleryUploadProgress();
+    setupAdminTabsInRoot(body);
+    setupAdminPanelRangeDisplays(body);
+    setupAdminPanelThumbnailBoundControls(body);
+    if (workflow.name === 'gallery-edit') {
+        prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
+        prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
+        setupAdminImageReordering();
+    } else if (workflow.name === 'image-edit') {
+        const imageForm = body.querySelector('section.panel form.form-grid, form.form-grid');
+        prepareAdminPanelEditForm(imageForm, workflow.name, sourceUrl);
+    }
+}
+
+/**
+ * Mark one loaded admin form as side-panel owned and fix its action URL.
+ *
+ * @param {Element|null} formCandidate Loaded form candidate.
+ * @param {string} workflowName Active workflow name.
+ * @param {string} sourceUrl URL that should receive the POST.
+ * @returns {void}
+ */
+function prepareAdminPanelEditForm(formCandidate, workflowName, sourceUrl) {
+    if (!(formCandidate instanceof HTMLFormElement)) {
+        return;
+    }
+    formCandidate.dataset.adminPanelEditForm = 'true';
+    formCandidate.dataset.adminPanelWorkflow = workflowName;
+    formCandidate.dataset.adminPanelAction = sourceUrl;
+    formCandidate.action = sourceUrl;
+}
+
+
+/**
+ * Mark the gallery image bulk form as side-panel owned while keeping its original action route.
+ *
+ * @param {Element|null} formCandidate Loaded bulk form candidate.
+ * @returns {void}
+ */
+function prepareAdminPanelBulkForm(formCandidate) {
+    if (!(formCandidate instanceof HTMLFormElement)) {
+        return;
+    }
+    formCandidate.dataset.adminPanelBulkForm = 'true';
+    formCandidate.dataset.adminPanelWorkflow = 'gallery-edit';
+    const actionAttribute = formCandidate.getAttribute('action') || '';
+    formCandidate.dataset.adminPanelAction = actionAttribute ? new URL(actionAttribute, window.location.href).toString() : (formCandidate.action || window.location.href);
+}
+
+/**
+ * Keep gallery grid range labels synchronized inside dynamically loaded panel content.
+ *
+ * @param {HTMLElement} root Side-panel body element.
+ * @returns {void}
+ */
+function setupAdminPanelRangeDisplays(root) {
+    const pairs = [
+        ['[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]'],
+        ['[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]'],
+    ];
+    pairs.forEach(([controlSelector, displaySelector]) => {
+        const control = root.querySelector(controlSelector);
+        const display = root.querySelector(displaySelector);
+        if (!(control instanceof HTMLInputElement) || !(display instanceof HTMLElement) || control.dataset.adminPanelRangeBound === '1') {
+            return;
+        }
+        control.dataset.adminPanelRangeBound = '1';
+        const override = root.querySelector('[data-gallery-grid-override-enabled]');
+        const sync = () => {
+            display.textContent = control.value;
+        };
+        const markCustom = () => {
+            if (override instanceof HTMLInputElement) {
+                override.checked = true;
+            }
+            sync();
+        };
+        control.addEventListener('input', markCustom);
+        control.addEventListener('change', markCustom);
+        sync();
+    });
+}
+
+/**
+ * Keep thumbnail-bound slider pairs synchronized inside dynamically loaded panel content.
+ *
+ * @param {HTMLElement} root Side-panel body element.
+ * @returns {void}
+ */
+function setupAdminPanelThumbnailBoundControls(root) {
+    root.querySelectorAll('[data-thumbnail-bound-control]').forEach((controlRoot) => {
+        if (!(controlRoot instanceof HTMLElement) || controlRoot.dataset.adminPanelThumbnailBound === '1') {
+            return;
+        }
+        controlRoot.dataset.adminPanelThumbnailBound = '1';
+        const values = String(controlRoot.getAttribute('data-thumbnail-bound-values') || '0')
+            .split(',')
+            .map((value) => parseInt(value, 10))
+            .filter((value) => Number.isFinite(value));
+        const minIndexControl = controlRoot.querySelector('[data-thumbnail-bound-min-index]');
+        const maxIndexControl = controlRoot.querySelector('[data-thumbnail-bound-max-index]');
+        const minValueControl = controlRoot.querySelector('[data-thumbnail-bound-min-value]');
+        const maxValueControl = controlRoot.querySelector('[data-thumbnail-bound-max-value]');
+        const summary = controlRoot.querySelector('[data-thumbnail-bound-summary]');
+        if (values.length < 2 || !(minIndexControl instanceof HTMLInputElement) || !(maxIndexControl instanceof HTMLInputElement) || !(minValueControl instanceof HTMLInputElement) || !(maxValueControl instanceof HTMLInputElement) || !(summary instanceof HTMLElement)) {
+            return;
+        }
+        const formatSize = (value, side) => value === 0 ? (side === 'min' ? 'Auto min' : 'Auto max') : `${value}px`;
+        const sync = (changedControl = null) => {
+            let minIndex = parseInt(minIndexControl.value, 10) || 0;
+            let maxIndex = parseInt(maxIndexControl.value, 10) || 0;
+            const highestIndex = values.length - 1;
+            minIndex = Math.max(0, Math.min(highestIndex, minIndex));
+            maxIndex = Math.max(0, Math.min(highestIndex, maxIndex));
+            if (minIndex > maxIndex) {
+                if (changedControl === minIndexControl) {
+                    maxIndex = minIndex;
+                } else {
+                    minIndex = maxIndex;
+                }
+            }
+            minIndexControl.value = String(minIndex);
+            maxIndexControl.value = String(maxIndex);
+            const minValue = values[minIndex] || 0;
+            const maxValue = values[maxIndex] || 0;
+            minValueControl.value = String(minValue);
+            maxValueControl.value = String(maxValue);
+            summary.textContent = `${formatSize(minValue, 'min')} to ${formatSize(maxValue, 'max')}`;
+        };
+        minIndexControl.addEventListener('input', () => sync(minIndexControl));
+        minIndexControl.addEventListener('change', () => sync(minIndexControl));
+        maxIndexControl.addEventListener('input', () => sync(maxIndexControl));
+        maxIndexControl.addEventListener('change', () => sync(maxIndexControl));
+        sync();
+    });
+}
+
+/**
+ * Create the side-panel shell once and reuse it for later gallery actions.
+ *
+ * @returns {HTMLElement} Side-panel root.
+ */
+function ensureAdminGallerySidePanel() {
+    let panel = document.querySelector('[data-admin-side-panel]');
+    if (panel instanceof HTMLElement) {
+        return panel;
+    }
+    panel = document.createElement('div');
+    panel.className = 'admin-side-panel';
+    panel.hidden = true;
+    panel.dataset.adminSidePanel = 'true';
+    panel.setAttribute('aria-hidden', 'true');
+    panel.innerHTML = `
+        <div class="admin-side-panel-scrim" data-admin-side-panel-scrim></div>
+        <aside class="admin-side-panel-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-side-panel-title">
+            <header class="admin-side-panel-header">
+                <div>
+                    <p class="admin-kicker" data-admin-side-panel-kicker>Admin shortcut</p>
+                    <h2 id="admin-side-panel-title" data-admin-side-panel-title>Add gallery here</h2>
+                </div>
+                <button type="button" class="button secondary" data-admin-side-panel-close>Close</button>
+            </header>
+            <div class="admin-side-panel-status visually-hidden" data-admin-side-panel-status aria-live="polite"></div>
+            <div class="admin-side-panel-body" data-admin-side-panel-body></div>
+        </aside>`;
+    document.body.append(panel);
+    return panel;
+}
+
+/**
+ * Make the side panel visible while keeping the current page in place.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @returns {void}
+ */
+function openAdminGallerySidePanelShell(panel) {
+    panel.hidden = false;
+    panel.classList.add('is-open');
+    panel.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('has-admin-side-panel');
+}
+
+/**
+ * Hide the side panel and clear its transient status.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @returns {void}
+ */
+function closeAdminGallerySidePanel(panel) {
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    panel.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('has-admin-side-panel');
+    writeAdminGallerySidePanelStatus(panel, '', false);
+}
+
+/**
+ * Write a visible or screen-reader-only side-panel status message.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @param {string} message Status text.
+ * @param {boolean} isError Whether the message should be styled as an error.
+ * @returns {void}
+ */
+function writeAdminGallerySidePanelStatus(panel, message, isError) {
+    const status = panel.querySelector('[data-admin-side-panel-status]');
+    if (!(status instanceof HTMLElement)) {
+        return;
+    }
+    status.textContent = message;
+    status.classList.toggle('visually-hidden', message === '');
+    status.classList.toggle('notice', message !== '');
+    status.classList.toggle('is-alert', isError);
+}
+
+/**
+ * Submit the empty-gallery side-panel form to the existing create endpoint.
+ *
+ * @param {HTMLFormElement} form Side-panel create form.
+ * @returns {Promise<void>} Resolves after success handling or error reporting.
+ */
+async function submitAdminGalleryPanelCreateForm(form) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, 'Creating gallery...', false);
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+        const response = await fetch(form.action || window.location.href, {
+            method: 'POST',
+            body,
+            headers: {'Accept': 'application/json'},
+        });
+        const result = await readJsonResponseSafely(response, 'Gallery creation failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || 'Gallery creation failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: 'create',
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Gallery creation failed.', true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
         });
     }
+}
+
+/**
+ * Submit an existing admin edit form through the side-panel JSON path.
+ *
+ * @param {HTMLFormElement} form Side-panel edit form.
+ * @returns {Promise<void>} Resolves after success handling or error reporting.
+ */
+async function submitAdminPanelEditForm(form) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const workflowName = String(form.dataset.adminPanelWorkflow || 'edit');
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? 'Saving photo...' : 'Saving gallery...', false);
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+        const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? 'Photo save failed.' : 'Gallery save failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || 'Save failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: workflowName,
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Save failed.', true);
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+
+/**
+ * Submit the gallery image bulk form from a side panel without relying on browser submitter routing.
+ *
+ * @param {HTMLFormElement} form Loaded gallery image bulk form.
+ * @param {HTMLElement|null} submitter Button or control that triggered the submit.
+ * @returns {Promise<void>} Resolves after the bulk action response is handled.
+ */
+async function submitAdminPanelImageBulkForm(form, submitter) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const selectedInputs = Array.from(form.querySelectorAll('input[name="image_ids[]"]:checked'));
+    const actionControl = form.querySelector('[name="action"]');
+    let action = actionControl instanceof HTMLSelectElement || actionControl instanceof HTMLInputElement ? String(actionControl.value || '') : '';
+    if (submitter instanceof HTMLButtonElement && submitter.name === 'action' && submitter.value !== '') {
+        action = submitter.value;
+    }
+    if (selectedInputs.length === 0) {
+        writeAdminGallerySidePanelStatus(panel, 'Select at least one photo first.', true);
+        return;
+    }
+    if (action === '') {
+        writeAdminGallerySidePanelStatus(panel, 'Choose a photo action first.', true);
+        return;
+    }
+
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, action === 'cover' ? 'Saving title picture...' : 'Applying photo action...', false);
+    try {
+        const body = new FormData();
+        const csrfInput = form.querySelector('input[name="csrf_token"]');
+        const galleryInput = form.querySelector('input[name="gallery_id"]');
+        const returnTabInput = form.querySelector('input[name="return_tab"]');
+        if (csrfInput instanceof HTMLInputElement) {
+            body.set('csrf_token', csrfInput.value);
+        }
+        if (galleryInput instanceof HTMLInputElement) {
+            body.set('gallery_id', galleryInput.value);
+            body.set('id', galleryInput.value);
+        }
+        if (returnTabInput instanceof HTMLInputElement) {
+            body.set('return_tab', returnTabInput.value);
+        }
+        selectedInputs.forEach((input) => {
+            if (input instanceof HTMLInputElement) {
+                body.append('image_ids[]', input.value);
+            }
+        });
+        body.set('action', action);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+
+        const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, 'Photo action failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || 'Photo action failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: 'gallery-image-bulk',
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Photo action failed.', true);
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+/**
+ * Reflect a completed gallery image bulk action in the visible edit table and public context.
+ *
+ * @param {Record<string, *>} result Server response for the image bulk action.
+ * @returns {void}
+ */
+async function reflectGalleryImageBulkInCurrentView(result) {
+    const coverImageId = String(result.cover_image_id || '');
+    if (String(result.bulk_action || '') === 'cover' && coverImageId !== '') {
+        document.querySelectorAll('[data-admin-image-order-row]').forEach((row) => {
+            if (!(row instanceof HTMLElement)) {
+                return;
+            }
+            const coverCell = row.querySelector('[data-admin-image-cover-cell]');
+            if (coverCell instanceof HTMLElement) {
+                coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? 'Title picture' : '';
+            }
+        });
+        await refreshPublicSubgallerySectionFromServer(String(result.gallery_id || ''));
+    }
+    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo action completed.'), String(result.gallery_url || ''));
+}
+
+/**
+ * Reflect a saved gallery in the current page without forcing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the saved gallery.
+ * @returns {void}
+ */
+async function reflectSavedGalleryInCurrentView(result) {
+    const galleryId = String(result.gallery_id || '');
+    const galleryTitle = String(result.gallery_title || 'Gallery');
+    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
+    if (refreshed) {
+        showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
+        return;
+    }
+    const heading = document.querySelector('.hero h1, .gallery-branding-title');
+    if (heading instanceof HTMLElement && galleryTitle) {
+        heading.textContent = galleryTitle;
+    }
+    showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
+}
+
+/**
+ * Reflect a saved image in the current page without forcing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function reflectSavedImageInCurrentView(result) {
+    const imageId = String(result.image_id || '');
+    if (!imageId) {
+        showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+        return;
+    }
+    updateAdminImageRowsFromResult(imageId, result);
+    updatePublicImageCardsFromResult(imageId, result);
+    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+}
+
+/**
+ * Update admin image table rows that are already visible behind the panel.
+ *
+ * @param {string} imageId Saved image id.
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function updateAdminImageRowsFromResult(imageId, result) {
+    document.querySelectorAll(`[data-admin-image-order-row][data-image-id="${CSS.escape(imageId)}"]`).forEach((row) => {
+        if (!(row instanceof HTMLElement)) {
+            return;
+        }
+        const statusCell = row.querySelector('td:nth-child(6)');
+        if (statusCell instanceof HTMLElement && result.image_visibility) {
+            statusCell.textContent = String(result.image_visibility);
+        }
+        const sortOrder = Number(result.image_sort_order || 0);
+        if (Number.isFinite(sortOrder)) {
+            row.dataset.imageSortOrder = String(sortOrder);
+        }
+    });
+}
+
+/**
+ * Update public image cards that are already visible behind the panel.
+ *
+ * @param {string} imageId Saved image id.
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function updatePublicImageCardsFromResult(imageId, result) {
+    document.querySelectorAll(`[data-lightbox-image][data-image-id="${CSS.escape(imageId)}"]`).forEach((card) => {
+        if (!(card instanceof HTMLElement)) {
+            return;
+        }
+        const title = String(result.image_title || '');
+        const description = String(result.image_description || '');
+        card.dataset.title = title;
+        card.dataset.description = description;
+        let meta = card.querySelector('.image-meta');
+        if ((title !== '' || description !== '') && !(meta instanceof HTMLElement)) {
+            const stage = card.querySelector('.image-stage');
+            if (stage instanceof HTMLElement) {
+                meta = document.createElement('div');
+                meta.className = 'image-meta image-meta-overlay';
+                stage.append(meta);
+            }
+        }
+        if (!(meta instanceof HTMLElement)) {
+            return;
+        }
+        meta.innerHTML = '';
+        if (title !== '') {
+            const titleNode = document.createElement('h2');
+            titleNode.textContent = title;
+            meta.append(titleNode);
+        }
+        if (description !== '') {
+            const descriptionNode = document.createElement('p');
+            descriptionNode.textContent = description;
+            meta.append(descriptionNode);
+        }
+        if (title === '' && description === '') {
+            meta.remove();
+        }
+    });
+}
+
+/**
+ * Reflect the created child gallery in the currently visible public page.
+ *
+ * The persisted server render is the source of truth for ordering, covers, image
+ * counts, admin controls, and pagination. After the panel workflow succeeds, the
+ * current gallery page is fetched in the background and only the subgallery area
+ * is replaced. This keeps the page in context without doing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the created gallery.
+ * @returns {void}
+ */
+async function reflectCreatedGalleryInCurrentView(result) {
+    const galleryUrl = String(result.gallery_url || '');
+    const galleryTitle = String(result.gallery_title || 'New gallery');
+    const galleryId = String(result.gallery_id || '');
+    if (!galleryUrl) {
+        showAdminGallerySidePanelResultNotice(galleryTitle, '');
+        return;
+    }
+
+    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
+    if (refreshed) {
+        return;
+    }
+
+    let grid = document.querySelector('[data-public-subgallery-grid]');
+    if (!(grid instanceof HTMLElement)) {
+        grid = createPublicSubgallerySection();
+    }
+    if (!(grid instanceof HTMLElement)) {
+        showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
+        return;
+    }
+
+    const card = document.createElement('article');
+    card.className = 'gallery-card';
+    card.dataset.galleryId = galleryId;
+    card.dataset.sidePanelCreatedGallery = 'true';
+    card.innerHTML = `
+        <a class="gallery-card-link" href="${escapeHtmlAttribute(galleryUrl)}">
+            <span class="gallery-card-body">
+                <h2>${escapeHtmlText(galleryTitle)}</h2>
+                <p class="muted">Created just now</p>
+            </span>
+        </a>`;
+    grid.prepend(card);
+    card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+/**
+ * Refresh the visible subgallery area from the current server-rendered page.
+ *
+ * @param {string} galleryId Newly created gallery id used for scroll targeting.
+ * @returns {Promise<boolean>} True when the page fragment was refreshed.
+ */
+async function refreshPublicSubgallerySectionFromServer(galleryId) {
+    try {
+        const response = await fetch(window.location.href, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const html = await response.text();
+        if (!response.ok || html.trim() === '') {
+            return false;
+        }
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        const freshSection = parsed.querySelector('[data-public-subgallery-section]');
+        const currentSection = document.querySelector('[data-public-subgallery-section]');
+        if (freshSection instanceof HTMLElement) {
+            if (currentSection instanceof HTMLElement) {
+                currentSection.replaceWith(freshSection);
+            } else {
+                const grid = document.querySelector('[data-public-subgallery-grid]');
+                const transientSection = grid instanceof HTMLElement ? grid.closest('[data-public-subgallery-section], .panel') : null;
+                if (transientSection instanceof HTMLElement) {
+                    transientSection.replaceWith(freshSection);
+                } else {
+                    const createdSection = createPublicSubgallerySection();
+                    const createdWrapper = createdSection instanceof HTMLElement ? createdSection.closest('[data-public-subgallery-section], .panel') : null;
+                    if (createdWrapper instanceof HTMLElement) {
+                        createdWrapper.replaceWith(freshSection);
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            focusCreatedGalleryCard(galleryId);
+            return true;
+        }
+        if (currentSection instanceof HTMLElement) {
+            currentSection.remove();
+            return true;
+        }
+        return false;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Scroll the newly created gallery card into view after fragment replacement.
+ *
+ * @param {string} galleryId Newly created gallery id.
+ * @returns {void}
+ */
+function focusCreatedGalleryCard(galleryId) {
+    if (!galleryId) {
+        return;
+    }
+    const card = document.querySelector(`[data-gallery-id="${CSS.escape(galleryId)}"]`);
+    if (card instanceof HTMLElement) {
+        card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+}
+
+/**
+ * Create a subgallery section when the current gallery did not have children yet.
+ *
+ * @returns {HTMLElement|null} New or existing subgallery grid.
+ */
+function createPublicSubgallerySection() {
+    const main = document.querySelector('main.site-main');
+    if (!(main instanceof HTMLElement)) {
+        return null;
+    }
+    const section = document.createElement('section');
+    section.className = 'panel';
+    section.dataset.publicSubgallerySection = 'true';
+    section.innerHTML = '<h2>Subgalleries</h2><div class="grid" data-public-subgallery-grid></div>';
+
+    const insertionPoint = main.querySelector('.gallery-list-frame, [data-gallery-image-list], [data-lightbox]');
+    if (insertionPoint instanceof HTMLElement) {
+        insertionPoint.insertAdjacentElement('beforebegin', section);
+    } else {
+        main.append(section);
+    }
+    return section.querySelector('[data-public-subgallery-grid]');
+}
+
+/**
+ * Show a compact success notice when a card cannot be inserted safely.
+ *
+ * @param {string} galleryTitle Created gallery title.
+ * @param {string} galleryUrl Public gallery URL.
+ * @returns {void}
+ */
+function showAdminGallerySidePanelResultNotice(message, targetUrl) {
+    const main = document.querySelector('main.site-main');
+    if (!(main instanceof HTMLElement)) {
+        return;
+    }
+    const notice = document.createElement('div');
+    notice.className = 'notice';
+    notice.innerHTML = targetUrl
+        ? `${escapeHtmlText(message)} <a href="${escapeHtmlAttribute(targetUrl)}">Open</a>.`
+        : `${escapeHtmlText(message)}.`;
+    main.prepend(notice);
+}
+
+/**
+ * Escape HTML text before inserting generated success markup.
+ *
+ * @param {string} value Raw value.
+ * @returns {string} Escaped text.
+ */
+function escapeHtmlText(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    })[character] || character);
+}
+
+/**
+ * Escape an attribute value before inserting generated success markup.
+ *
+ * @param {string} value Raw value.
+ * @returns {string} Escaped attribute value.
+ */
+function escapeHtmlAttribute(value) {
+    return escapeHtmlText(value).replace(/`/g, '&#096;');
 }
 
 /**
@@ -334,8 +1398,31 @@ function cloneGalleryUploadBody(form, files, galleryId) {
 async function runGalleryUploadFiles(form, progress, createThumbnails) {
     // files stores state or configuration for the gallery front-end flow.
     const files = selectedGalleryUploadFiles(form);
-    if (files.length === 0) {
+    const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
+    if (files.length === 0 && !allowEmptyPanelGallery) {
         throw new Error('Choose at least one image to upload.');
+    }
+
+    if (files.length === 0 && allowEmptyPanelGallery) {
+        updateBasicProgress(progress, 20, 'Creating gallery...');
+        const emptyResult = await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {});
+        updateBasicProgress(progress, 100, 'Gallery created.');
+        return {
+            ok: true,
+            gallery_id: Number(emptyResult.gallery_id || 0),
+            gallery_ids: emptyResult.gallery_id ? [Number(emptyResult.gallery_id)] : [],
+            gallery_title: String(emptyResult.gallery_title || ''),
+            gallery_url: String(emptyResult.gallery_url || ''),
+            edit_url: String(emptyResult.edit_url || ''),
+            uploaded: 0,
+            scanned: 0,
+            thumbnails: 0,
+            thumbnail_skipped: 0,
+            thumbnail_failed: 0,
+            thumbnail_errors: [],
+            total_files: 0,
+            redirect_url: String(emptyResult.redirect_url || ''),
+        };
     }
 
     // uploaded stores state or configuration for the gallery front-end flow.
@@ -356,6 +1443,12 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let redirectUrl = '';
     // galleryIds stores state or configuration for the gallery front-end flow.
     const galleryIds = [];
+    // galleryTitle stores the created or selected gallery title reported by the first upload response.
+    let galleryTitle = '';
+    // galleryUrl stores the public gallery URL reported by the first upload response.
+    let galleryUrl = '';
+    // editUrl stores the admin edit URL reported by the first upload response.
+    let editUrl = '';
 
     for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         // file stores state or configuration for the gallery front-end flow.
@@ -385,6 +1478,9 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         uploaded += Number(uploadResult.uploaded || 0);
         scanned += Number(uploadResult.scanned || 0);
         redirectUrl = uploadResult.redirect_url || redirectUrl;
+        galleryTitle = galleryTitle || String(uploadResult.gallery_title || '');
+        galleryUrl = galleryUrl || String(uploadResult.gallery_url || '');
+        editUrl = editUrl || String(uploadResult.edit_url || '');
 
         if (createThumbnails) {
             // imageIds stores state or configuration for the gallery front-end flow.
@@ -404,6 +1500,9 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         ok: true,
         gallery_id: galleryId,
         gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
+        gallery_title: galleryTitle,
+        gallery_url: galleryUrl,
+        edit_url: editUrl,
         uploaded,
         scanned,
         thumbnails,
@@ -1078,6 +2177,18 @@ function ensureThumbnailProgress(form) {
             return progress;
         }
     }
+
+    const panelAnchor = form.closest('[data-gallery-panel-workflow]')?.querySelector('[data-gallery-panel-progress-anchor]');
+    if (panelAnchor instanceof HTMLElement) {
+        let progress = panelAnchor.querySelector('[data-thumbnail-progress]');
+        if (!progress) {
+            progress = createThumbnailProgress();
+            panelAnchor.append(progress);
+        }
+        progress.hidden = false;
+        return progress;
+    }
+
     // Variable `progress` stores this steps working value.
     let progress = form.classList.contains('inline-form')
         ? form.nextElementSibling?.matches('[data-thumbnail-progress]') ? form.nextElementSibling : null
@@ -2043,6 +3154,70 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
+    }
+
+    /**
      * Removes document-level movement listeners for any active input path.
      *
      * @returns {void}
@@ -2423,6 +3598,568 @@ export function setupAdminGalleryReordering() {
     setStatus('Gallery ordering ready.', 'idle');
 }
 
+
+/**
+ * Enables public gallery page card reordering for logged-in admins.
+ *
+ * The controller is scoped by toolbar. Subgallery cards and photo cards are
+ * handled as separate lists, so the page keeps its existing galleries-first and
+ * photos-underneath structure. The server receives only the visible page ids
+ * plus the pagination offset/count rendered by PHP, then validates that exact
+ * slice before saving.
+ *
+ * @returns {void}
+ */
+export function setupPublicGalleryPageReordering() {
+    document.querySelectorAll('[data-public-reorder-toolbar]').forEach((toolbar) => {
+        if (!(toolbar instanceof HTMLElement) || toolbar.dataset.publicReorderBound === '1') {
+            return;
+        }
+        toolbar.dataset.publicReorderBound = '1';
+
+        const kind = toolbar.dataset.reorderKind || '';
+        const listSelector = `[data-public-reorder-list="${kind}"]`;
+        const itemSelector = kind === 'gallery' ? '[data-public-gallery-order-item]' : '[data-public-photo-order-item]';
+        const scope = toolbar.parentElement || document;
+        const list = scope.querySelector(listSelector) || document.querySelector(listSelector);
+        const status = toolbar.querySelector('[data-public-reorder-status]');
+        const reorderUrl = toolbar.dataset.reorderUrl || '';
+        const galleryId = toolbar.dataset.galleryId || '';
+        const csrfToken = toolbar.dataset.csrfToken || '';
+        const visibleOffset = toolbar.dataset.visibleOffset || '0';
+        const visibleCount = toolbar.dataset.visibleCount || '0';
+
+        if (!(list instanceof HTMLElement) || !reorderUrl || !galleryId || !csrfToken) {
+            return;
+        }
+
+        let draggedItem = null;
+        let draggedHandle = null;
+        let placeholderItem = null;
+        let ghostItem = null;
+        let pointerOffsetX = 0;
+        let pointerOffsetY = 0;
+        let originalSignature = '';
+        let originalItems = [];
+        let activePointerId = null;
+        let activeMouseFallback = false;
+
+        /**
+         * Updates the compact save status for one public reorder list.
+         *
+         * @param {string} message Text shown to the admin.
+         * @param {string} state Visual state token used by CSS.
+         * @returns {void}
+         */
+        function setStatus(message, state) {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.dataset.state = state;
+        }
+
+        /**
+         * Returns direct sortable items for the current list.
+         *
+         * @returns {HTMLElement[]} Sortable cards in current DOM order.
+         */
+        function sortableItems() {
+            return Array.from(list.querySelectorAll(itemSelector))
+                .filter((item) => item instanceof HTMLElement && item.parentElement === list);
+        }
+
+        /**
+         * Returns direct sortable items that are still visible during dragging.
+         *
+         * @returns {HTMLElement[]} Cards available as insertion targets.
+         */
+        function availableItems() {
+            return sortableItems().filter((item) => !item.classList.contains('is-public-reorder-hidden'));
+        }
+
+        /**
+         * Returns the current visible id order as strings.
+         *
+         * @returns {string[]} Ordered ids from the current DOM.
+         */
+        function currentOrder() {
+            return sortableItems().map((item) => item.dataset.publicOrderId || '').filter((id) => id !== '');
+        }
+
+        /**
+         * Returns a compact id signature for change detection.
+         *
+         * @returns {string} Ordered id signature.
+         */
+        function currentSignature() {
+            return currentOrder().join('|');
+        }
+
+        /**
+         * Builds the fixed drag preview from the original card.
+         *
+         * @param {HTMLElement} sourceItem Card being moved.
+         * @returns {HTMLElement} Fixed-position clone appended to the body.
+         */
+        function buildGhost(sourceItem) {
+            const box = sourceItem.getBoundingClientRect();
+            const ghost = sourceItem.cloneNode(true);
+            ghost.classList.add('public-reorder-ghost');
+            ghost.classList.remove('is-public-reorder-hidden');
+            ghost.removeAttribute('data-public-gallery-order-item');
+            ghost.removeAttribute('data-public-photo-order-item');
+            ghost.removeAttribute('data-lightbox-image');
+            ghost.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+            ghost.style.left = `${box.left}px`;
+            ghost.style.top = `${box.top}px`;
+            ghost.style.width = `${box.width}px`;
+            ghost.style.height = `${box.height}px`;
+            document.body.appendChild(ghost);
+            return ghost;
+        }
+
+        /**
+         * Builds the card-shaped placeholder used as the drop marker.
+         *
+         * @param {HTMLElement} sourceItem Card being moved.
+         * @returns {HTMLElement} Placeholder inserted into the list.
+         */
+        function buildPlaceholder(sourceItem) {
+            const box = sourceItem.getBoundingClientRect();
+            const placeholder = document.createElement(sourceItem.tagName.toLowerCase());
+            placeholder.className = `public-reorder-placeholder ${kind === 'gallery' ? 'gallery-card' : 'image-card'}`;
+            placeholder.setAttribute('aria-hidden', 'true');
+            placeholder.style.minHeight = `${Math.max(96, box.height)}px`;
+            placeholder.innerHTML = `<span>${kind === 'gallery' ? 'Drop gallery here' : 'Drop photo here'}</span>`;
+            return placeholder;
+        }
+
+        /**
+         * Returns the next real item after a target, skipping temporary nodes.
+         *
+         * @param {HTMLElement} target Current target card.
+         * @returns {HTMLElement|null} Next insertion reference, or null to append.
+         */
+        function nextRealItem(target) {
+            let next = target.nextElementSibling;
+            while (next) {
+                if (next instanceof HTMLElement && next.matches(itemSelector) && !next.classList.contains('is-public-reorder-hidden')) {
+                    return next;
+                }
+                next = next.nextElementSibling;
+            }
+            return null;
+        }
+
+        /**
+         * Returns the card closest to the pointer when the pointer is over a gap.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {HTMLElement|null} Nearest sortable card.
+         */
+        function nearestItem(clientX, clientY) {
+            let closestItem = null;
+            let closestDistance = Number.POSITIVE_INFINITY;
+            availableItems().forEach((item) => {
+                const box = item.getBoundingClientRect();
+                const centerX = box.left + (box.width / 2);
+                const centerY = box.top + (box.height / 2);
+                const distance = Math.hypot(clientX - centerX, clientY - centerY);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestItem = item;
+                }
+            });
+            return closestItem;
+        }
+
+        /**
+         * Returns the best insertion target for the current pointer position.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {{target: HTMLElement|null, after: boolean}} Target card and side.
+         */
+        function insertionTarget(clientX, clientY) {
+            const directTarget = document.elementFromPoint(clientX, clientY)?.closest(itemSelector);
+            const target = directTarget instanceof HTMLElement && directTarget.parentElement === list && !directTarget.classList.contains('is-public-reorder-hidden')
+                ? directTarget
+                : nearestItem(clientX, clientY);
+            if (!target) {
+                return {target: null, after: false};
+            }
+            const box = target.getBoundingClientRect();
+            const pointerWithinRow = clientY >= box.top && clientY <= box.bottom;
+            const after = pointerWithinRow ? clientX > box.left + (box.width / 2) : clientY > box.top + (box.height / 2);
+            return {target, after};
+        }
+
+        /**
+         * Moves the placeholder to the candidate drop position.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {void}
+         */
+        function movePlaceholder(clientX, clientY) {
+            if (!placeholderItem) {
+                return;
+            }
+            const insertion = insertionTarget(clientX, clientY);
+            if (!insertion.target) {
+                list.appendChild(placeholderItem);
+                return;
+            }
+            const reference = insertion.after ? nextRealItem(insertion.target) : insertion.target;
+            list.insertBefore(placeholderItem, reference);
+        }
+
+        /**
+         * Moves the fixed ghost to follow the pointer.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {void}
+         */
+        function moveGhost(clientX, clientY) {
+            if (!ghostItem) {
+                return;
+            }
+            ghostItem.style.left = `${clientX - pointerOffsetX}px`;
+            ghostItem.style.top = `${clientY - pointerOffsetY}px`;
+        }
+
+        /**
+         * Restores DOM order when the server rejects a save.
+         *
+         * @returns {void}
+         */
+        function restoreOriginalOrder() {
+            originalItems.forEach((item) => {
+                list.appendChild(item);
+            });
+        }
+
+        /**
+         * Keeps hidden lightbox source metadata aligned with a visible photo reorder.
+         *
+         * @param {string[]} orderedIds Visible photo ids after the drop.
+         * @returns {void}
+         */
+        function syncLightboxSourceOrder(orderedIds) {
+            if (kind !== 'photo') {
+                return;
+            }
+            const sourceList = document.querySelector('.lightbox-source-list');
+            if (!(sourceList instanceof HTMLElement)) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const sourceNodes = Array.from(sourceList.querySelectorAll('[data-lightbox-source]'));
+            const sourceById = new Map(sourceNodes.map((node) => [node.dataset.imageId || '', node]));
+            const indexes = orderedIds.map((id) => sourceNodes.findIndex((node) => (node.dataset.imageId || '') === id));
+            if (indexes.some((index) => index < 0)) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const sortedIndexes = indexes.slice().sort((left, right) => left - right);
+            const startIndex = sortedIndexes[0];
+            const isContiguous = sortedIndexes.every((index, offset) => index === startIndex + offset);
+            if (!isContiguous) {
+                document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+                return;
+            }
+            const nextNodes = sourceNodes.slice();
+            orderedIds.forEach((id, offset) => {
+                const node = sourceById.get(id);
+                if (node) {
+                    nextNodes[startIndex + offset] = node;
+                }
+            });
+            nextNodes.forEach((node) => sourceList.appendChild(node));
+            document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
+        }
+
+        /**
+         * Persists the current visible order to the matching PHP endpoint.
+         *
+         * @param {string[]} orderedIds Current visible ids after the drop.
+         * @returns {Promise<void>} Resolves after save handling completes.
+         */
+        async function saveOrder(orderedIds) {
+            const body = new FormData();
+            body.set('csrf_token', csrfToken);
+            body.set('gallery_id', galleryId);
+            body.set('visible_offset', visibleOffset);
+            body.set('visible_count', visibleCount);
+            body.set('ajax', '1');
+            if (kind === 'gallery') {
+                body.set('gallery_order', JSON.stringify(orderedIds));
+            } else {
+                body.set('image_order', JSON.stringify(orderedIds));
+                body.set('reorder_scope', 'visible_page');
+            }
+
+            setStatus('Saving visible page order...', 'saving');
+            try {
+                const response = await fetch(reorderUrl, {
+                    method: 'POST',
+                    body,
+                    headers: {'Accept': 'application/json'},
+                });
+                const text = await response.text();
+                let result = null;
+                try {
+                    result = JSON.parse(text);
+                } catch (parseError) {
+                    throw new Error('The server returned HTML or text instead of JSON. Check the admin logs or PHP error log.');
+                }
+                if (!response.ok || !result.ok) {
+                    throw new Error(result.message || 'Visible page order could not be saved.');
+                }
+                setStatus(result.message || 'Visible page order saved.', 'saved');
+                syncLightboxSourceOrder(orderedIds);
+            } catch (error) {
+                restoreOriginalOrder();
+                setStatus(error.message || 'Visible page order could not be saved.', 'error');
+            }
+        }
+
+        /**
+         * Removes temporary drag state.
+         *
+         * @param {boolean} commit Whether to insert the moved item at the placeholder.
+         * @returns {void}
+         */
+        function cleanupDrag(commit) {
+            document.removeEventListener('pointermove', handlePointerMove, true);
+            document.removeEventListener('pointerup', handlePointerEnd, true);
+            document.removeEventListener('pointercancel', handlePointerCancel, true);
+            document.removeEventListener('mousemove', handleMouseMove, true);
+            document.removeEventListener('mouseup', handleMouseEnd, true);
+            document.removeEventListener('keydown', handleKeydown, true);
+
+            if (commit && draggedItem && placeholderItem?.parentElement === list) {
+                list.insertBefore(draggedItem, placeholderItem);
+            }
+            draggedItem?.classList.remove('is-public-reorder-hidden');
+            draggedHandle?.classList.remove('is-dragging');
+            placeholderItem?.remove();
+            ghostItem?.remove();
+            document.body.classList.remove('public-reorder-active');
+            draggedItem = null;
+            draggedHandle = null;
+            placeholderItem = null;
+            ghostItem = null;
+            activePointerId = null;
+            activeMouseFallback = false;
+        }
+
+        /**
+         * Handles pointer or mouse movement during an active drag.
+         *
+         * @param {MouseEvent|PointerEvent} event Movement event.
+         * @returns {void}
+         */
+        function handleMove(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            moveGhost(event.clientX, event.clientY);
+            movePlaceholder(event.clientX, event.clientY);
+        }
+
+        /**
+         * Handles the end of a pointer or mouse drag.
+         *
+         * @param {MouseEvent|PointerEvent} event Release event.
+         * @returns {void}
+         */
+        function finishDrag(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            cleanupDrag(true);
+            const nextSignature = currentSignature();
+            if (nextSignature === originalSignature) {
+                setStatus('Order unchanged.', 'idle');
+                return;
+            }
+            saveOrder(currentOrder());
+        }
+
+        /**
+         * Cancels the active drag and leaves the DOM unchanged.
+         *
+         * @param {Event} event Cancellation event.
+         * @returns {void}
+         */
+        function cancelDrag(event) {
+            if (!draggedItem) {
+                return;
+            }
+            event.preventDefault();
+            cleanupDrag(false);
+            setStatus('Order unchanged.', 'idle');
+        }
+
+        /**
+         * Handles pointer movement for the active drag.
+         *
+         * @param {PointerEvent} event Pointer movement event.
+         * @returns {void}
+         */
+        function handlePointerMove(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            handleMove(event);
+        }
+
+        /**
+         * Handles pointer release for the active drag.
+         *
+         * @param {PointerEvent} event Pointer release event.
+         * @returns {void}
+         */
+        function handlePointerEnd(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            finishDrag(event);
+        }
+
+        /**
+         * Handles pointer cancellation for the active drag.
+         *
+         * @param {PointerEvent} event Pointer cancellation event.
+         * @returns {void}
+         */
+        function handlePointerCancel(event) {
+            if (activePointerId !== null && event.pointerId !== activePointerId) {
+                return;
+            }
+            cancelDrag(event);
+        }
+
+        /**
+         * Handles mouse movement for browsers without PointerEvent support.
+         *
+         * @param {MouseEvent} event Mouse movement event.
+         * @returns {void}
+         */
+        function handleMouseMove(event) {
+            if (!activeMouseFallback) {
+                return;
+            }
+            handleMove(event);
+        }
+
+        /**
+         * Handles mouse release for browsers without PointerEvent support.
+         *
+         * @param {MouseEvent} event Mouse release event.
+         * @returns {void}
+         */
+        function handleMouseEnd(event) {
+            if (!activeMouseFallback) {
+                return;
+            }
+            finishDrag(event);
+        }
+
+        /**
+         * Lets the admin cancel a drag with Escape.
+         *
+         * @param {KeyboardEvent} event Keyboard event.
+         * @returns {void}
+         */
+        function handleKeydown(event) {
+            if (event.key === 'Escape') {
+                cancelDrag(event);
+            }
+        }
+
+        /**
+         * Starts card movement from a dedicated handle.
+         *
+         * @param {MouseEvent|PointerEvent} event Initial press event.
+         * @param {boolean} mouseFallback Whether classic mouse events own this drag.
+         * @returns {void}
+         */
+        function startDrag(event, mouseFallback) {
+            const handle = event.target instanceof Element ? event.target.closest('[data-public-reorder-handle]') : null;
+            const item = handle instanceof HTMLElement ? handle.closest(itemSelector) : null;
+            if (!(handle instanceof HTMLElement) || !(item instanceof HTMLElement) || item.parentElement !== list || event.button !== 0 || draggedItem) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            const itemBox = item.getBoundingClientRect();
+            draggedItem = item;
+            draggedHandle = handle;
+            originalSignature = currentSignature();
+            originalItems = sortableItems();
+            pointerOffsetX = event.clientX - itemBox.left;
+            pointerOffsetY = event.clientY - itemBox.top;
+            activePointerId = mouseFallback ? null : event.pointerId;
+            activeMouseFallback = mouseFallback;
+            placeholderItem = buildPlaceholder(item);
+            ghostItem = buildGhost(item);
+
+            list.insertBefore(placeholderItem, item.nextElementSibling);
+            item.classList.add('is-public-reorder-hidden');
+            handle.classList.add('is-dragging');
+            document.body.classList.add('public-reorder-active');
+            setStatus(`Dragging visible ${kind === 'gallery' ? 'gallery' : 'photo'}...`, 'dragging');
+            moveGhost(event.clientX, event.clientY);
+            movePlaceholder(event.clientX, event.clientY);
+
+            if (mouseFallback) {
+                document.addEventListener('mousemove', handleMouseMove, true);
+                document.addEventListener('mouseup', handleMouseEnd, true);
+            } else {
+                document.addEventListener('pointermove', handlePointerMove, true);
+                document.addEventListener('pointerup', handlePointerEnd, true);
+                document.addEventListener('pointercancel', handlePointerCancel, true);
+            }
+            document.addEventListener('keydown', handleKeydown, true);
+        }
+
+        list.querySelectorAll('[data-public-reorder-handle]').forEach((handle) => {
+            handle.setAttribute('draggable', 'false');
+            handle.addEventListener('dragstart', (event) => event.preventDefault());
+            handle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            handle.addEventListener('pointerdown', (event) => {
+                if (event.isPrimary === false) {
+                    return;
+                }
+                startDrag(event, false);
+            });
+            handle.addEventListener('mousedown', (event) => {
+                if (window.PointerEvent) {
+                    return;
+                }
+                startDrag(event, true);
+            });
+        });
+
+        setStatus('Drag handles ready.', 'idle');
+    });
+}
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
  *
@@ -2441,15 +4178,22 @@ export function setupAdminGalleryReordering() {
  * @returns {void}
  */
 export function setupAdminImageReordering() {
+    // root stores the currently active panel body when the edit table was loaded dynamically.
+    const panelBody = document.querySelector('[data-admin-side-panel]:not([hidden]) [data-admin-side-panel-body]');
+    const root = panelBody instanceof HTMLElement ? panelBody : document;
     // table stores the reorder-enabled image table on the edit-gallery screen.
-    const table = document.querySelector('[data-admin-image-order-table]');
+    const table = root.querySelector('[data-admin-image-order-table]');
     // toolbar stores endpoint metadata and status UI for the reorder feature.
-    const toolbar = document.querySelector('[data-admin-image-order-toolbar]');
+    const toolbar = root.querySelector('[data-admin-image-order-toolbar]');
     // form stores the existing image bulk form, reused only for gallery id and CSRF values.
-    const form = document.querySelector('[data-admin-image-bulk-form]');
+    const form = root.querySelector('[data-admin-image-bulk-form]');
     if (!table || !toolbar || !form) {
         return;
     }
+    if (table.dataset.adminImageReorderBound === '1') {
+        return;
+    }
+    table.dataset.adminImageReorderBound = '1';
 
     // body stores the table body containing movable image rows.
     const body = table.querySelector('tbody');
@@ -2522,6 +4266,78 @@ export function setupAdminImageReordering() {
      */
     function rowIndex(row) {
         return Array.from(body.querySelectorAll('[data-admin-image-order-row]')).indexOf(row);
+    }
+
+    /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * Automatic name sorting intentionally reuses the same save endpoint as
+     * manual dragging. Server-side validation, CSRF checks, exact image-list
+     * comparison, transactional sort_order updates, and admin logging therefore
+     * stay identical for both ordering methods.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
     }
 
     /**

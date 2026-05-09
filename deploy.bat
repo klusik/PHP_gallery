@@ -1,3 +1,5 @@
+@echo off
+
 rem Project: PHP Gallery
 rem Repository: https://github.com/klusik/PHP_gallery
 rem
@@ -28,6 +30,5 @@ rem
 rem Last Updated:
 rem   2026-05-04
 
-@echo off
 rem This wrapper forwards command-line deployment flags to the PowerShell deploy script.
 powershell -ExecutionPolicy Bypass -File "%~dp0scripts\deploy.ps1" %*

@@ -106,32 +106,43 @@ function cms_admin_new_gallery(): void
     $prefillParentId = selected_gallery_id_from_query('parent_id');
     // $prefillParentGallery stores the validated parent gallery record used for contextual helper text.
     $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+    // $isPanelRequest stores whether the create form should render as a reusable side-panel fragment.
+    $isPanelRequest = admin_gallery_create_panel_request();
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = '';
     if (request_method() === 'POST') {
         verify_csrf();
         try {
             // $gallery stores an intermediate value used by the surrounding gallery workflow.
-            $gallery = create_empty_gallery([
-                'title' => $_POST['title'] ?? '',
-                'folder_name' => $_POST['folder_name'] ?? '',
-                'description' => $_POST['description'] ?? '',
-                'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
-                'parent_id' => $_POST['parent_id'] ?? 0,
-                'voting_enabled' => $_POST['voting_enabled'] ?? 0,
-                'show_filenames' => $_POST['show_filenames'] ?? 0,
-            ]);
+            $gallery = create_empty_gallery(admin_new_gallery_input_from_post());
             admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
             ]);
+            if (admin_wants_json()) {
+                header('Content-Type: application/json');
+                echo json_encode(admin_new_gallery_success_response($gallery));
+                return;
+            }
             flash_message('admin_notice', 'Gallery folder created.');
             redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
         } catch (Throwable $exception) {
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
             admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
+            if (admin_wants_json()) {
+                http_response_code(422);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => $error]);
+                return;
+            }
         }
+    }
+
+    if ($isPanelRequest) {
+        header('Content-Type: text/html; charset=UTF-8');
+        render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
+        return;
     }
 
     render_header('Create empty gallery');
@@ -142,7 +153,67 @@ function cms_admin_new_gallery(): void
     if ($error !== '') {
         echo '<div class="notice">Create failed: ' . e($error) . '</div>';
     }
-    echo '<section class="panel"><form method="post" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="form-grid">' . csrf_field();
+    render_admin_new_gallery_fields($prefillParentId, false);
+    echo '<button type="submit">Create gallery folder</button></form></section>';
+    render_footer();
+}
+
+/**
+ * Return whether the create-gallery page is being requested as side-panel content.
+ */
+function admin_gallery_create_panel_request(): bool
+{
+    return admin_side_panel_request();
+}
+
+/**
+ * Return whether the current admin route is being requested for side-panel use.
+ */
+function admin_side_panel_request(): bool
+{
+    return !empty($_GET['panel']) || !empty($_POST['panel']);
+}
+
+/**
+ * Read create-gallery POST values through the same input contract used by the direct admin page.
+ */
+function admin_new_gallery_input_from_post(): array
+{
+    return [
+        'title' => $_POST['title'] ?? '',
+        'folder_name' => $_POST['folder_name'] ?? '',
+        'description' => $_POST['description'] ?? '',
+        'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
+        'parent_id' => $_POST['parent_id'] ?? 0,
+        'voting_enabled' => $_POST['voting_enabled'] ?? 0,
+        'show_filenames' => $_POST['show_filenames'] ?? 0,
+    ];
+}
+
+/**
+ * Build the JSON payload consumed by the progressive side-panel workflow.
+ */
+function admin_new_gallery_success_response(array $gallery): array
+{
+    return [
+        'ok' => true,
+        'message' => 'Gallery folder created.',
+        'gallery_id' => (int) $gallery['id'],
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => gallery_public_url($gallery),
+        'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]),
+    ];
+}
+
+/**
+ * Render create-gallery fields shared by the full admin page and the side-panel fragment.
+ */
+function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode): void
+{
+    if ($panelMode) {
+        echo '<input type="hidden" name="panel" value="1">';
+    }
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
@@ -150,8 +221,23 @@ function cms_admin_new_gallery(): void
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
-    echo '<button type="submit">Create gallery folder</button></form></section>';
-    render_footer();
+}
+
+/**
+ * Render the focused side-panel create workflow without the normal admin shell.
+ */
+function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
+{
+    echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Add gallery here</h2><p class="muted">Create a child gallery here. Photos are optional, so leaving the file picker empty creates an empty gallery.</p></div>';
+    if ($prefillParentGallery) {
+        echo '<div class="notice">Target parent: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+    }
+    if ($error !== '') {
+        echo '<div class="notice">Create failed: ' . e($error) . '</div>';
+    }
+    render_admin_upload_new_gallery_panel_form($prefillParentId);
+    echo '</div>';
 }
 
 /**
@@ -715,6 +801,168 @@ function admin_reorder_galleries_response(bool $ok, string $message, bool $clean
 }
 
 
+
+/**
+ * Calculates a full order after replacing exactly one visible pagination slice.
+ *
+ * Public gallery page reordering intentionally submits only the cards that are
+ * visible on the current pagination page. The server verifies that the posted
+ * ids still match the same offset and count in the current database order, then
+ * returns the complete sibling order with only that slice rearranged.
+ *
+ * @param array<int> $currentIds Complete current sibling order from the database.
+ * @param array<int> $submittedIds Reordered ids submitted by the browser.
+ * @param int $visibleOffset Zero-based offset of the visible pagination page.
+ * @param int $visibleCount Number of ids rendered on the visible page.
+ * @return array<int>|null Complete order after the visible slice is replaced, or null when validation fails.
+ */
+function admin_visible_page_reordered_ids(array $currentIds, array $submittedIds, int $visibleOffset, int $visibleCount): ?array
+{
+    if ($visibleOffset < 0 || $visibleCount < 1 || count($submittedIds) !== $visibleCount) {
+        return null;
+    }
+
+    // $visibleSlice stores the database ids that belong to this exact pagination page.
+    $visibleSlice = array_slice($currentIds, $visibleOffset, $visibleCount);
+    if (count($visibleSlice) !== $visibleCount) {
+        return null;
+    }
+
+    // $expectedIds stores the visible ids sorted for set comparison.
+    $expectedIds = $visibleSlice;
+    // $actualIds stores the submitted ids sorted for set comparison.
+    $actualIds = $submittedIds;
+    sort($expectedIds);
+    sort($actualIds);
+    if ($expectedIds !== $actualIds) {
+        return null;
+    }
+
+    // $nextIds stores the full order with only the current visible page changed.
+    $nextIds = array_values($currentIds);
+    foreach ($submittedIds as $index => $submittedId) {
+        $nextIds[$visibleOffset + $index] = $submittedId;
+    }
+
+    return $nextIds;
+}
+
+/**
+ * Decodes and validates a JSON id order submitted by JavaScript.
+ *
+ * @param string $rawOrder JSON encoded id list.
+ * @return array<int>|null Positive unique integer ids, or null when malformed.
+ */
+function admin_decode_reorder_id_list(string $rawOrder): ?array
+{
+    // $decodedOrder stores the decoded list before integer normalization.
+    $decodedOrder = json_decode($rawOrder, true);
+    if (!is_array($decodedOrder)) {
+        return null;
+    }
+
+    // $submittedIds stores the positive ids in their submitted order.
+    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $id): bool => $id > 0));
+    if (!$submittedIds || count($submittedIds) !== count(array_unique($submittedIds))) {
+        return null;
+    }
+
+    return $submittedIds;
+}
+
+/**
+ * Handles public gallery page subgallery reordering for logged-in admins.
+ *
+ * This endpoint is intentionally narrower than the Admin dashboard tree reorder.
+ * It never changes parent_id values and never nests galleries. It only reshuffles
+ * the direct children of the gallery currently being viewed, and only when the
+ * submitted ids match the visible pagination slice rendered into the page.
+ *
+ * @return mixed Result produced by this operation.
+ */
+function cms_admin_reorder_public_galleries(): void
+{
+    require_admin();
+    verify_csrf();
+
+    // $parentGalleryId stores the gallery whose direct child order is being changed.
+    $parentGalleryId = (int) ($_POST['gallery_id'] ?? 0);
+    // $parentGallery stores the parent gallery row used for ownership validation.
+    $parentGallery = find_gallery($parentGalleryId);
+    if (!$parentGallery) {
+        cms_not_found();
+        return;
+    }
+
+    // $submittedIds stores the visible subgallery ids in their new browser order.
+    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['gallery_order'] ?? '[]'));
+    if ($submittedIds === null) {
+        admin_reorder_public_page_response(false, 'The submitted subgallery order was not valid.');
+        return;
+    }
+
+    // $visibleOffset stores the first item position rendered on the current pagination page.
+    $visibleOffset = (int) ($_POST['visible_offset'] ?? -1);
+    // $visibleCount stores the number of items rendered on the current pagination page.
+    $visibleCount = (int) ($_POST['visible_count'] ?? 0);
+    // $currentRows stores every direct child currently owned by this parent gallery.
+    $currentRows = child_galleries($parentGalleryId, false);
+    // $currentIds stores the complete direct-child order before the requested change.
+    $currentIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $currentRows);
+    // $nextIds stores the full direct-child order with only the current visible page rearranged.
+    $nextIds = admin_visible_page_reordered_ids($currentIds, $submittedIds, $visibleOffset, $visibleCount);
+    if ($nextIds === null) {
+        admin_reorder_public_page_response(false, 'The visible subgallery page changed while you were reordering. Reload the page and try again.');
+        return;
+    }
+
+    // $pdo stores the active database connection used for the atomic order update.
+    $pdo = db();
+    // $now stores one timestamp shared by all rows touched by this reorder operation.
+    $now = now_sql();
+    try {
+        $pdo->beginTransaction();
+        // $stmt stores the prepared update reused for each direct child gallery.
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
+        foreach ($nextIds as $index => $galleryId) {
+            // $sortOrder stores a normalized sibling position while preserving every non-visible sibling position.
+            $sortOrder = ($index + 1) * 10;
+            $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);
+        }
+        $pdo->commit();
+
+        admin_log_event('info', 'gallery.public_page_reordered', 'Admin reordered visible public-page subgalleries.', [
+            'parent_gallery_id' => $parentGalleryId,
+            'visible_offset' => $visibleOffset,
+            'visible_count' => $visibleCount,
+            'submitted_gallery_ids' => $submittedIds,
+        ]);
+        admin_reorder_public_page_response(true, 'Visible subgallery order saved.');
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'gallery.public_page_reorder_failed', 'Public-page subgallery reorder failed.', [
+            'parent_gallery_id' => $parentGalleryId,
+            'error' => $exception->getMessage(),
+        ]);
+        admin_reorder_public_page_response(false, 'Subgallery order could not be saved: ' . $exception->getMessage());
+    }
+}
+
+/**
+ * Returns a JSON payload for public gallery page ordering requests.
+ *
+ * @param bool $ok Whether the operation completed successfully.
+ * @param string $message Human-readable result for the inline toolbar.
+ * @return void
+ */
+function admin_reorder_public_page_response(bool $ok, string $message): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => $ok, 'message' => $message], JSON_THROW_ON_ERROR);
+}
+
 /**
  * Handles cms admin scan images logic for the gallery application.
  * @return mixed Result produced by this operation.
@@ -775,6 +1023,115 @@ function admin_return_tab_from_post(string $fallback = ''): string
 }
 
 /**
+ * Build the JSON payload consumed after a gallery is saved in side-panel mode.
+ */
+function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab): array
+{
+    return [
+        'ok' => true,
+        'type' => 'gallery',
+        'message' => $notice,
+        'gallery_id' => (int) $gallery['id'],
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => gallery_public_url($gallery),
+        'edit_url' => admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab),
+        'refresh_url' => gallery_public_url($gallery),
+    ];
+}
+
+
+/**
+ * Build the JSON payload consumed after a gallery image bulk action runs in side-panel mode.
+ */
+function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = []): array
+{
+    $payload = admin_edit_gallery_success_response($gallery, $notice, $returnTab);
+    $payload['type'] = 'gallery_image_bulk';
+    $payload['bulk_action'] = $action;
+    $payload['image_ids'] = array_values(array_map('intval', $imageIds));
+    $payload['cover_image_id'] = (int) ($gallery['cover_image_id'] ?? 0);
+    return $payload;
+}
+
+/**
+ * Persist a gallery title picture from either the bulk image route or a panel-routed edit request.
+ */
+function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab): void
+{
+    // $galleryId stores the gallery being updated by the title-picture action.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    // $ownedIds stores selected images that still belong to this gallery.
+    $ownedIds = [];
+    foreach ($imageIds as $imageId) {
+        // $image stores the selected image record used for gallery ownership validation.
+        $image = find_image((int) $imageId);
+        if ($image && (int) ($image['gallery_id'] ?? 0) === $galleryId) {
+            $ownedIds[] = (int) $imageId;
+        }
+    }
+    if (!$ownedIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            return;
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
+
+    // $coverImageId stores the first selected image because only one title picture can be saved.
+    $coverImageId = (int) $ownedIds[0];
+    // $stmt stores the database update for the gallery title picture.
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$coverImageId, now_sql(), $galleryId]);
+    // $updated stores the reloaded gallery row so JSON reflects the persisted database state.
+    $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+    if ($updated) {
+        write_gallery_sidecar($updated);
+    }
+    // $notice stores the message returned to the direct page or side-panel workflow.
+    $notice = 'Gallery title picture saved.';
+    if (admin_wants_json()) {
+        header('Content-Type: application/json');
+        echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds));
+        return;
+    }
+    flash_message('admin_notice', $notice);
+    redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+}
+
+/**
+ * Build the JSON payload consumed after an image is saved in side-panel mode.
+ */
+function admin_edit_image_success_response(array $image): array
+{
+    // $gallery stores the image gallery used to rebuild public context URLs after saving.
+    $gallery = find_gallery((int) ($image['gallery_id'] ?? 0));
+    return [
+        'ok' => true,
+        'type' => 'image',
+        'message' => 'Image saved.',
+        'image_id' => (int) $image['id'],
+        'gallery_id' => (int) ($image['gallery_id'] ?? 0),
+        'image_title' => (string) ($image['title'] ?? ''),
+        'image_description' => (string) ($image['description'] ?? ''),
+        'image_visibility' => (string) ($image['visibility'] ?? ''),
+        'image_sort_order' => (int) ($image['sort_order'] ?? 0),
+        'image_url' => $gallery ? image_public_url($image, $gallery) : '',
+        'gallery_url' => $gallery ? gallery_public_url($gallery) : '',
+        'edit_url' => url_for('admin_edit_image', ['id' => (int) $image['id'], 'saved' => 1]),
+    ];
+}
+
+/**
+ * Sends a JSON error response for side-panel save failures.
+ */
+function admin_panel_error_response(string $message, int $statusCode = 422): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => $message]);
+}
+
+/**
  * Handles cms admin edit gallery logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
@@ -782,7 +1139,7 @@ function cms_admin_edit_gallery(): void
 {
     require_admin();
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? 0));
+    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0));
     if (!$gallery) {
         cms_not_found();
         return;
@@ -798,6 +1155,10 @@ function cms_admin_edit_gallery(): void
         verify_csrf();
         // $returnTab stores the tab fragment used after saving the gallery editor form.
         $returnTab = admin_return_tab_from_post('admin-edit-identity');
+        if ((string) ($_POST['action'] ?? '') === 'cover' && isset($_POST['image_ids'])) {
+            admin_save_gallery_title_picture($gallery, array_map('intval', $_POST['image_ids'] ?? []), $returnTab);
+            return;
+        }
         // Variable $title stores this steps working value.
         $title = trim((string) $_POST['title']);
         // Variable $slug stores this steps working value.
@@ -881,6 +1242,10 @@ function cms_admin_edit_gallery(): void
                     'gallery_id' => (int) $gallery['id'],
                     'error' => $exception->getMessage(),
                 ]);
+                if (admin_wants_json()) {
+                    admin_panel_error_response('Gallery folder move failed: ' . $exception->getMessage());
+                    return;
+                }
                 $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
                 flash_message('admin_notice', 'Gallery folder move failed: ' . $exception->getMessage());
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
@@ -948,6 +1313,10 @@ function cms_admin_edit_gallery(): void
                     }
                 }
             } catch (RuntimeException $exception) {
+                if (admin_wants_json()) {
+                    admin_panel_error_response('Gallery branding update failed: ' . $exception->getMessage());
+                    return;
+                }
                 flash_message('admin_notice', 'Gallery branding update failed: ' . $exception->getMessage());
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
             }
@@ -1059,6 +1428,11 @@ function cms_admin_edit_gallery(): void
         if (!empty($moveResult['moved'])) {
             // $notice stores an intermediate value used by the surrounding gallery workflow.
             $notice = 'Gallery saved and folder moved.';
+        }
+        if (admin_wants_json()) {
+            header('Content-Type: application/json');
+            echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab));
+            return;
         }
         flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
@@ -1262,7 +1636,7 @@ function cms_admin_edit_gallery(): void
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
-    echo '<div class="bulk-row admin-edit-image-toolbar"><label><input type="checkbox" data-select-all="image_ids[]"> Select all images</label><label>Bulk action<select name="action"><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option><option value="delete">Delete selected photos</option></select></label><button type="submit">Apply to selected</button><button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . (int) $gallery['id'] . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button></div>';
+    render_admin_image_bulk_toolbar($gallery);
     echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
     echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
     foreach ($images as $image) {
@@ -1270,13 +1644,60 @@ function cms_admin_edit_gallery(): void
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">Delete</button></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Edit</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">Delete</button></td></tr>';
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Render the admin image bulk toolbar and guided move workflow.
+ *
+ * The standard select keeps existing bulk behavior intact. Moving photos uses a
+ * staged panel so admins first choose whether the target is an existing gallery
+ * or a new child gallery, then confirm the exact physical move.
+ */
+function render_admin_image_bulk_toolbar(array $gallery): void
+{
+    // $galleryId stores the gallery currently being edited.
+    $galleryId = (int) $gallery['id'];
+    // $destinationOptions stores all galleries except the current source gallery.
+    $destinationOptions = gallery_options_for_select(0, $galleryId);
+
+    echo '<div class="bulk-row admin-edit-image-toolbar" data-admin-image-move-toolbar>';
+    echo '<div class="admin-image-bulk-primary">';
+    echo '<label class="admin-image-select-all"><input type="checkbox" data-select-all="image_ids[]"> Select all images</label>';
+    echo '<span class="admin-image-selection-count" data-admin-image-selected-count>0 selected</span>';
+    echo '<label>Bulk action<select name="action" data-admin-image-bulk-action><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option><option value="delete">Delete selected photos</option><option value="move_existing" hidden>Move to existing gallery</option><option value="move_new" hidden>Move to new gallery</option></select></label>';
+    echo '<button type="submit">Apply to selected</button>';
+    echo '<button type="button" class="secondary" data-admin-image-move-open>Move selected photos</button>';
+    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button>';
+    echo '</div>';
+
+    echo '<section class="admin-image-move-panel" data-admin-image-move-panel hidden aria-label="Move selected photos">';
+    echo '<div class="admin-image-move-panel-head"><div class="admin-image-move-title"><span class="admin-image-move-title-icon" aria-hidden="true">⇄</span><div><h3>Move selected photos</h3><span class="admin-image-move-count-pill" data-admin-image-selected-count>0 selected</span></div></div><button type="button" class="admin-image-move-close" data-admin-image-move-cancel aria-label="Close move photos panel">×</button></div>';
+    echo '<div class="admin-image-move-steps" aria-label="Move progress">';
+    echo '<div class="admin-image-move-step is-active" data-admin-image-move-step="action"><span>1</span><div><strong>Choose action</strong><p>Pick what you want to do</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="target"><span>2</span><div><strong>Target</strong><p>Choose or create gallery</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="confirm"><span>3</span><div><strong>Confirm</strong><p>Review and confirm</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="complete"><span>4</span><div><strong>Complete</strong><p>Move photos</p></div></div>';
+    echo '</div>';
+    echo '<p class="admin-image-move-lead">Choose where you want to move the selected photos.</p>';
+    echo '<div class="admin-image-move-choice-grid" role="group" aria-label="Move action">';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>Move to existing gallery</strong><small>Pick a gallery that already exists. Its title picture is kept unless it is missing or invalid.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>Move to new gallery</strong><small>Create a new child gallery here, then move only the selected photos into it.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '</div>';
+    echo '<div class="admin-image-move-targets">';
+    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>Destination gallery</span><select name="destination_gallery_id"><option value="0">Choose existing gallery</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> The selected photos, thumbnails, and generated display files will be moved into this gallery folder.</small></label>';
+    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>New gallery title</span><input type="text" name="new_gallery_title" placeholder="Example: Prague evening walk"></label><label><span>Optional folder/slug</span><input type="text" name="new_gallery_folder_name" placeholder="Leave empty to derive it from the title"></label><small><span aria-hidden="true">ⓘ</span> The new gallery is created as a child of the current gallery and receives only the selected photos.</small></div>';
+    echo '</div>';
+    echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>Cancel</button><div><strong>Move summary</strong><p data-admin-image-move-summary>Select photos and choose a target to continue.</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>Move selected photos now →</button></div>';
+    echo '</section>';
+    echo '</div>';
 }
 
 
@@ -1765,26 +2186,47 @@ function cms_admin_reorder_images(): void
         cms_not_found();
         return;
     }
-    // Variable $rawOrder stores the JSON payload submitted by the JavaScript drag-and-drop handler.
-    $rawOrder = (string) ($_POST['image_order'] ?? '[]');
-    // Variable $decodedOrder stores the decoded image-id list before it is normalized to integers.
-    $decodedOrder = json_decode($rawOrder, true);
-    if (!is_array($decodedOrder)) {
-        admin_reorder_images_response(false, 'The submitted image order was not valid JSON.', $galleryId);
+
+    // $submittedIds stores the ordered image ids exactly as submitted by the browser.
+    $submittedIds = admin_decode_reorder_id_list((string) ($_POST['image_order'] ?? '[]'));
+    if ($submittedIds === null) {
+        admin_reorder_images_response(false, 'The submitted image order was not valid JSON or contained duplicate images.', $galleryId);
         return;
     }
-    // Variable $submittedIds stores the ordered ids exactly as integers, with invalid zero values removed.
-    $submittedIds = array_values(array_filter(array_map('intval', $decodedOrder), static fn (int $imageId): bool => $imageId > 0));
-    if (!$submittedIds) {
-        admin_reorder_images_response(false, 'No images were submitted for reordering.', $galleryId);
+
+    // $currentRows stores every direct image currently owned by this gallery.
+    $currentRows = gallery_images($galleryId, false);
+    // $currentOrderedIds stores the complete direct-image order before the requested change.
+    $currentOrderedIds = array_map(static fn (array $image): int => (int) $image['id'], $currentRows);
+    // $reorderScope stores whether this request is the full Admin table or the public visible-page path.
+    $reorderScope = (string) ($_POST['reorder_scope'] ?? 'full');
+
+    if ($reorderScope === 'visible_page') {
+        // $visibleOffset stores the first image position rendered on the current pagination page.
+        $visibleOffset = (int) ($_POST['visible_offset'] ?? -1);
+        // $visibleCount stores the number of images rendered on the current pagination page.
+        $visibleCount = (int) ($_POST['visible_count'] ?? 0);
+        // $nextIds stores the full gallery image order with only the current visible page rearranged.
+        $nextIds = admin_visible_page_reordered_ids($currentOrderedIds, $submittedIds, $visibleOffset, $visibleCount);
+        if ($nextIds === null) {
+            admin_reorder_images_response(false, 'The visible photo page changed while you were reordering. Reload the page and try again.', $galleryId);
+            return;
+        }
+        try {
+            admin_save_image_order($galleryId, $nextIds, 'image.public_page_reordered', 'Admin reordered visible public-page photos.', [
+                'visible_offset' => $visibleOffset,
+                'visible_count' => $visibleCount,
+                'submitted_image_ids' => $submittedIds,
+            ]);
+            admin_reorder_images_response(true, 'Visible photo order saved.', $galleryId);
+        } catch (Throwable $exception) {
+            admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+        }
         return;
     }
-    if (count($submittedIds) !== count(array_unique($submittedIds))) {
-        admin_reorder_images_response(false, 'The submitted image order contained duplicate images.', $galleryId);
-        return;
-    }
-    // Variable $currentIds stores the complete direct-image set currently visible in the edit-gallery table.
-    $currentIds = array_map(static fn (array $image): int => (int) $image['id'], gallery_images($galleryId, false));
+
+    // $currentIds stores the complete direct-image set currently visible in the edit-gallery table.
+    $currentIds = $currentOrderedIds;
     sort($currentIds);
     // Variable $sortedSubmittedIds stores the submitted id set for exact set comparison with the database state.
     $sortedSubmittedIds = $submittedIds;
@@ -1793,6 +2235,29 @@ function cms_admin_reorder_images(): void
         admin_reorder_images_response(false, 'The image list changed while you were reordering. Reload the page and try again.', $galleryId);
         return;
     }
+
+    try {
+        admin_save_image_order($galleryId, $submittedIds, 'image.reordered', 'Admin reordered gallery images.', [
+            'images' => count($submittedIds),
+        ]);
+        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+    } catch (Throwable $exception) {
+        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+    }
+}
+
+/**
+ * Persists a complete image order for one gallery.
+ *
+ * @param int $galleryId Gallery whose direct image order is being saved.
+ * @param array<int> $orderedIds Complete ordered image ids for this gallery.
+ * @param string $eventKey Admin log event key.
+ * @param string $eventMessage Admin log event message.
+ * @param array<string,mixed> $context Additional event context.
+ * @return void
+ */
+function admin_save_image_order(int $galleryId, array $orderedIds, string $eventKey, string $eventMessage, array $context = []): void
+{
     // Variable $pdo stores the active database connection used for the atomic sort_order update.
     $pdo = db();
     // Variable $now stores one timestamp shared by all rows touched by this reorder operation.
@@ -1801,17 +2266,16 @@ function cms_admin_reorder_images(): void
         $pdo->beginTransaction();
         // Variable $stmt stores the prepared update reused for each reordered image row.
         $stmt = $pdo->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
-        foreach ($submittedIds as $index => $imageId) {
+        foreach ($orderedIds as $index => $imageId) {
             // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
             $sortOrder = ($index + 1) * 10;
             $stmt->execute([$sortOrder, $now, $imageId, $galleryId]);
         }
         $pdo->commit();
-        admin_log_event('info', 'image.reordered', 'Admin reordered gallery images.', [
+        admin_log_event('info', $eventKey, $eventMessage, array_merge([
             'gallery_id' => $galleryId,
-            'images' => count($submittedIds),
-        ]);
-        admin_reorder_images_response(true, 'Image order saved.', $galleryId);
+            'images' => count($orderedIds),
+        ], $context));
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -1819,8 +2283,9 @@ function cms_admin_reorder_images(): void
         admin_log_event('error', 'image.reorder_failed', 'Admin image reorder failed.', [
             'gallery_id' => $galleryId,
             'error' => $exception->getMessage(),
+            'event_key' => $eventKey,
         ]);
-        admin_reorder_images_response(false, 'Image order could not be saved: ' . $exception->getMessage(), $galleryId);
+        throw $exception;
     }
 }
 
@@ -1872,6 +2337,13 @@ function cms_admin_bulk_images(): void
     $submittedImageIds = array_map('intval', $_POST['image_ids'] ?? []);
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? '');
+    if ($action === '') {
+        if (admin_wants_json()) {
+            admin_panel_error_response('Choose a photo action first.');
+            return;
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
     // Variable $singleDeleteImageId stores the row-level delete button value, when used.
     $singleDeleteImageId = 0;
     if (preg_match('/^delete:(\d+)$/', $action, $deleteMatch) === 1) {
@@ -1883,6 +2355,10 @@ function cms_admin_bulk_images(): void
     // Variable $count stores this steps working value.
     $count = 0;
     if (!$imageIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('Select at least one photo first.');
+            return;
+        }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     // Variable $ownedIds stores this steps working value.
@@ -1895,6 +2371,103 @@ function cms_admin_bulk_images(): void
         }
     }
     if (!$ownedIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            return;
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
+    if ($action === 'move_existing' || $action === 'move_new') {
+        // $createdGalleryId stores a newly-created destination so it can be removed again when validation fails before any move.
+        $createdGalleryId = 0;
+        // $moveAttempted stores whether filesystem movement has already been delegated to the service.
+        $moveAttempted = false;
+        try {
+            // $destinationGalleryId stores the target gallery chosen directly or created from selected images.
+            $destinationGalleryId = 0;
+            if ($action === 'move_existing') {
+                $destinationGalleryId = (int) ($_POST['destination_gallery_id'] ?? 0);
+                if ($destinationGalleryId <= 0 || !find_gallery($destinationGalleryId)) {
+                    throw new RuntimeException('Choose an existing destination gallery.');
+                }
+            } else {
+                // $newGalleryTitle stores the title for the gallery created from selected photos.
+                $newGalleryTitle = trim((string) ($_POST['new_gallery_title'] ?? ''));
+                if ($newGalleryTitle === '') {
+                    throw new RuntimeException('Enter a title for the new gallery.');
+                }
+                // $newGallerySortOrder stores the next position among the current gallery's children.
+                $newGallerySortStmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
+                $newGallerySortStmt->execute([$galleryId]);
+                $newGallerySortOrder = (int) $newGallerySortStmt->fetchColumn();
+                // $newGallery stores the newly created child gallery under the current source gallery.
+                $newGallery = create_empty_gallery([
+                    'title' => $newGalleryTitle,
+                    'folder_name' => trim((string) ($_POST['new_gallery_folder_name'] ?? '')),
+                    'description' => '',
+                    'visibility' => gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished')),
+                    'parent_id' => $galleryId,
+                    'sort_order' => $newGallerySortOrder,
+                    'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
+                    'show_filenames' => gallery_shows_filenames($gallery),
+                ]);
+                $destinationGalleryId = (int) $newGallery['id'];
+                $createdGalleryId = $destinationGalleryId;
+            }
+
+            // $moved stores filesystem and database movement details.
+            $moveAttempted = true;
+            $moved = move_gallery_images($galleryId, $destinationGalleryId, $ownedIds);
+            if (!empty($moved['failures'])) {
+                if ($createdGalleryId > 0) {
+                    delete_gallery_subtrees([$createdGalleryId]);
+                }
+                admin_log_event('error', 'image.bulk_move_failed', 'Admin image move validation failed.', [
+                    'source_gallery_id' => $galleryId,
+                    'destination_gallery_id' => $destinationGalleryId,
+                    'image_ids' => $ownedIds,
+                    'failures' => $moved['failures'],
+                ], ['category' => 'other', 'severity' => 'error']);
+                flash_message('admin_notice', 'Image move failed: ' . implode(' ', array_slice($moved['failures'], 0, 5)));
+                redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+            }
+            admin_log_event('info', 'image.bulk_moved', 'Admin moved selected images between galleries.', [
+                'source_gallery_id' => $galleryId,
+                'destination_gallery_id' => $destinationGalleryId,
+                'requested' => (int) $moved['requested'],
+                'moved' => (int) $moved['moved'],
+                'originals_moved' => (int) $moved['originals_moved'],
+                'derivatives_moved' => (int) $moved['derivatives_moved'],
+                'created_gallery' => $action === 'move_new',
+                'source_cover_image_id' => $moved['source_cover_image_id'] ?? null,
+                'destination_cover_image_id' => $moved['destination_cover_image_id'] ?? null,
+            ], ['category' => 'other', 'severity' => 'info']);
+            flash_message('admin_notice', 'Moved ' . (int) $moved['moved'] . ' image(s), including ' . (int) $moved['originals_moved'] . ' original file(s) and ' . (int) $moved['derivatives_moved'] . ' derivative file(s).');
+        } catch (Throwable $exception) {
+            if ($createdGalleryId > 0) {
+                try {
+                    // $createdGalleryImageCount keeps a successfully populated new gallery from being deleted after a late non-critical failure.
+                    $createdGalleryImageCountStmt = db()->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
+                    $createdGalleryImageCountStmt->execute([$createdGalleryId]);
+                    $createdGalleryImageCount = (int) $createdGalleryImageCountStmt->fetchColumn();
+                } catch (Throwable) {
+                    $createdGalleryImageCount = $moveAttempted ? 1 : 0;
+                }
+                if (!$moveAttempted || $createdGalleryImageCount === 0) {
+                    try {
+                        delete_gallery_subtrees([$createdGalleryId]);
+                    } catch (Throwable) {
+                    }
+                }
+            }
+            admin_log_event('error', 'image.bulk_move_failed', 'Admin image move failed.', [
+                'source_gallery_id' => $galleryId,
+                'image_ids' => $ownedIds,
+                'action' => $action,
+                'error' => $exception->getMessage(),
+            ], ['category' => 'other', 'severity' => 'error']);
+            flash_message('admin_notice', 'Image move failed: ' . $exception->getMessage());
+        }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if ($action === 'delete') {
@@ -1921,16 +2494,8 @@ function cms_admin_bulk_images(): void
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if ($action === 'cover') {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$ownedIds[0], now_sql(), $galleryId]);
-        // Variable $updated stores this steps working value.
-        $updated = find_gallery($galleryId);
-        if ($updated) {
-            write_gallery_sidecar($updated);
-        }
-        flash_message('admin_notice', 'Gallery saved.');
-        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+        admin_save_gallery_title_picture($gallery, $ownedIds, $returnTab);
+        return;
     }
     if (in_array($action, ['draft', 'public', 'private'], true)) {
         // Variable $placeholders stores this steps working value.
@@ -2139,6 +2704,13 @@ function cms_admin_edit_image(): void
         if (public_path_schema_ready()) {
             regenerate_public_paths();
         }
+        // $image stores the freshly saved image metadata returned to side-panel saves.
+        $image = find_image((int) $image['id']) ?: $image;
+        if (admin_wants_json()) {
+            header('Content-Type: application/json');
+            echo json_encode(admin_edit_image_success_response($image));
+            return;
+        }
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
     render_header('Edit image');
@@ -2269,16 +2841,31 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * Handles gallery options for select logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
-function gallery_options_for_select(int $selectedGalleryId = 0): string
+function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGalleryId = 0): string
 {
     // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '';
     // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
     foreach ($galleries as $gallery) {
+        if ($excludedGalleryId > 0 && (int) $gallery['id'] === $excludedGalleryId) {
+            continue;
+        }
         // $selected stores the HTML selected marker for contextual upload links opened from a gallery page.
         $selected = (int) $gallery['id'] === $selectedGalleryId ? ' selected' : '';
-        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($gallery['title'] . ' (' . $gallery['folder_path'] . ')') . '</option>';
+        // $folderPath stores the normalized public folder path used for hierarchy depth.
+        $folderPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+        // $depth stores how deeply nested the gallery is in the hierarchy.
+        $depth = $folderPath === '' ? 0 : max(0, substr_count($folderPath, '/'));
+        // $indent stores visible indentation that survives native select rendering better than CSS padding on options.
+        $indent = str_repeat(' ', $depth);
+        // $branch stores a compact hierarchy marker for nested galleries.
+        $branch = $depth > 0 ? '↳ ' : '';
+        // $pathSuffix stores the filesystem-style path hint without making the title hard to scan.
+        $pathSuffix = $folderPath !== '' ? '  ·  /' . $folderPath : '';
+        // $label stores the formatted select option label.
+        $label = $indent . $branch . (string) $gallery['title'] . $pathSuffix;
+        $html .= '<option value="' . (int) $gallery['id'] . '"' . $selected . '>' . e($label) . '</option>';
     }
     return $html;
 }
