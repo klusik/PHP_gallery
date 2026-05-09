@@ -643,7 +643,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="Drag subgallery to reorder visible subgalleries" title="Drag to reorder this visible subgallery"><span aria-hidden="true">↕</span><span>Move gallery</span></button>';
     }
-    echo '<a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
+    echo '<a class="gallery-card-media" href="' . e(gallery_public_url($gallery)) . '" aria-label="Open gallery ' . e((string) $gallery['title']) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {
@@ -661,20 +661,19 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
             echo '</span>';
         }
     }
-    echo '<span class="gallery-card-body"><h2>' . e($gallery['title']) . '</h2>';
-    echo '<p>' . e($gallery['description']) . '</p>';
+    echo '</a>';
+    echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
+    echo '<p class="gallery-card-description">' . e($gallery['description']) . '</p>';
     if ($isProtectedPublicCard) {
-        echo '<p class="muted">Protected gallery</p></span>';
+        echo '<p class="muted gallery-card-count">Protected gallery</p>';
     } else {
         // Variable $branchImageCount stores this steps working value.
         $branchImageCount = gallery_branch_image_count((int) $gallery['id'], $publicOnly);
-        echo '<p class="muted">' . $branchImageCount . ' images</p></span>';
-    }
-    echo '</a>';
-    render_public_gallery_admin_form($gallery);
-    if (!$isProtectedPublicCard) {
+        echo '<p class="muted gallery-card-count">' . $branchImageCount . ' images</p>';
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
+    echo '</div>';
+    render_public_gallery_admin_form($gallery);
     echo '</article>';
 }
 

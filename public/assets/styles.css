@@ -5820,3 +5820,128 @@ body.public-reorder-active {
         display: none;
     }
 }
+
+/* Compacts public gallery listing panels and subgallery cards without changing the configured theme palette. */
+.public-page .panel[data-public-subgallery-section] {
+    padding: clamp(0.85rem, 2vw, 1.25rem);
+    margin-bottom: 0.85rem;
+}
+
+.public-page .panel[data-public-subgallery-section] > h2 {
+    margin: 0 0 0.85rem;
+    font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+    line-height: 1.1;
+}
+
+.public-page .panel[data-public-subgallery-section] .grid {
+    gap: clamp(0.7rem, 1.4vw, 1rem);
+}
+
+.public-page .gallery-card {
+    display: grid;
+    grid-template-columns: minmax(12rem, 42%) minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 11rem;
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.public-page .gallery-card-media {
+    display: block;
+    min-height: 100%;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
+}
+
+.public-page .gallery-card-link {
+    min-height: 0;
+}
+
+.public-page .gallery-card-media img,
+.public-page .gallery-card-media picture,
+.public-page .gallery-card-media picture img,
+.public-page .gallery-card-media .gallery-collage {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 11rem;
+    object-fit: cover;
+}
+
+.public-page .gallery-card-media .gallery-collage {
+    display: grid;
+}
+
+.public-page .gallery-card-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: clamp(0.75rem, 1.6vw, 1rem);
+}
+
+.public-page .gallery-card-title-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.public-page .gallery-card-title-link:hover,
+.public-page .gallery-card-title-link:focus {
+    color: var(--accent-dark);
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+}
+
+.public-page .gallery-card-description {
+    margin: 0.2rem 0 0;
+    line-height: 1.35;
+}
+
+.public-page .gallery-card-count {
+    margin: auto 0 0;
+    padding-top: 0.65rem;
+}
+
+.public-page .gallery-card-body .tag-list {
+    margin: 0.6rem 0 0;
+    gap: 0.28rem;
+}
+
+.public-page .gallery-card-body .tag {
+    padding: 0.1rem 0.42rem;
+    border-color: var(--accent);
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.public-page .gallery-card-body .tag-list-label {
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.public-page .public-reorder-handle,
+.public-page .public-page-reorder-toolbar .button,
+.public-page .public-page-reorder-toolbar button {
+    border-radius: var(--radius, 16px);
+}
+
+@media (max-width: 720px) {
+    .public-page .gallery-card {
+        grid-template-columns: 1fr;
+    }
+
+    .public-page .gallery-card-media img,
+    .public-page .gallery-card-media picture,
+    .public-page .gallery-card-media picture img,
+    .public-page .gallery-card-media .gallery-collage {
+        height: 10rem;
+        min-height: 10rem;
+    }
+
+    .public-page .gallery-card-count {
+        margin-top: 0.55rem;
+        padding-top: 0;
+    }
+}
