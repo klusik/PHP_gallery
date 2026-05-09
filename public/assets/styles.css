@@ -187,6 +187,7 @@ button.is-update-pending {
 
 .gallery-card,
 .image-card {
+    position: relative;
     overflow: hidden;
     border-radius: var(--radius, 16px);
 }
@@ -1382,31 +1383,155 @@ body.has-mobile-lightbox {
 /* Public design refinements */
 .public-page .hero {
     position: relative;
+    display: grid;
+    gap: 0.7rem;
     overflow: hidden;
-    border: 0;
+    padding: clamp(0.85rem, 1.8vw, 1.25rem);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
     background: var(--gallery-panel);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
+
+.public-page .hero-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.public-page .hero-meta {
+    display: grid;
+    justify-items: end;
+    gap: 0.45rem;
+    flex: 0 0 min(24rem, 42vw);
+    min-width: 14rem;
+}
+
+.public-page .hero .gallery-title-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.public-page .hero .gallery-title-bar .gallery-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .public-page .hero h1 {
     max-width: 100%;
-    margin: 0 0 0.35rem;
-    font-size: clamp(1.75rem, 3.4vw, 3.4rem);
-    line-height: 1.05;
-    letter-spacing: 0;
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
     overflow-wrap: normal;
     word-break: normal;
 }
+
 .public-page .hero p {
-    max-width: 68ch;
+    max-width: 72ch;
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    opacity: 0.88;
 }
+
 .public-page .hero-actions {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.65rem;
+    justify-content: flex-end;
+    gap: 0.45rem;
     align-items: center;
-    margin-top: 0.85rem;
 }
+
+.public-page .hero-actions .button,
+.public-page .hero-actions button {
+    min-height: 0;
+    padding: 0.48rem 0.75rem;
+    border-radius: var(--radius, 16px);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.public-page .hero .tag-list,
 .public-page .hero .breadcrumbs {
-    margin-top: 1rem;
+    margin: 0;
+}
+
+.public-page .hero-tags {
+    display: grid;
+    justify-items: end;
+    gap: 0.25rem;
+    max-width: 100%;
+}
+
+.public-page .hero .tag-list {
+    justify-content: flex-end;
+    gap: 0.25rem;
+    opacity: 0.92;
+}
+
+.public-page .hero .tag-list-label {
+    font-size: 0.72rem;
+}
+
+.public-page .hero .tag {
+    padding: 0.1rem 0.42rem;
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.public-page .hero .breadcrumbs {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.public-page .hero .gallery-branding-logo {
+    flex: 0 0 auto;
+    max-width: min(9rem, 24vw);
+    max-height: 4.25rem;
+    object-fit: contain;
+}
+
+.public-page .hero .gallery-branding-banner {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 5rem;
+    object-fit: contain;
+}
+
+@media (max-width: 760px) {
+    .public-page .hero-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .public-page .hero-meta {
+        justify-items: start;
+        min-width: 0;
+        width: 100%;
+    }
+
+    .public-page .hero-actions,
+    .public-page .hero .tag-list {
+        justify-content: flex-start;
+    }
+
+    .public-page .hero-tags {
+        justify-items: start;
+    }
+
+    .public-page .hero h1 {
+        font-size: clamp(1.8rem, 9vw, 2.5rem);
+    }
 }
 .public-page .gallery-card {
     transition: transform 0.16s ease, box-shadow 0.16s ease;
@@ -4360,6 +4485,20 @@ button.gallery-row-action.secondary {
     .gallery-branding-banner {
         width: 100%;
         max-height: 8rem;
+    }
+
+    .public-page .hero .gallery-title-bar {
+        gap: 0.45rem;
+    }
+
+    .public-page .hero .gallery-branding-logo {
+        max-width: min(6rem, 32vw);
+        max-height: 2.75rem;
+    }
+
+    .public-page .hero .gallery-branding-banner {
+        width: 100%;
+        max-height: 3.75rem;
     }
 }
 

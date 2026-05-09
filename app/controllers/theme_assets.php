@@ -196,7 +196,7 @@ function cms_theme_css(): void
     echo '.lightbox .lightbox-stage-link::-moz-focus-inner{border:0!important;}';
     echo '.button.secondary,button.secondary{border-color:var(--accent-dark);background:transparent;color:var(--accent-dark);}';
     echo '.hero,.panel,.gallery-card,.image-card,.admin-page .hero,.admin-page .panel{background:var(--panel);border-color:var(--line);border-radius:var(--radius);}';
-    echo '.public-page .hero{background:rgba(255,255,255,0.18);backdrop-filter:blur(10px) saturate(1.06);-webkit-backdrop-filter:blur(10px) saturate(1.06);position:relative;overflow:hidden;border-color:rgba(255,255,255,0.28);}';
+    echo '.public-page .hero{background:rgba(255,255,255,0.18);backdrop-filter:blur(10px) saturate(1.06);-webkit-backdrop-filter:blur(10px) saturate(1.06);position:relative;overflow:hidden;border-color:rgba(255,255,255,0.28);padding:clamp(.75rem,1.7vw,1.2rem) clamp(.9rem,2.2vw,1.45rem);margin-bottom:.75rem;}';
     echo '.public-page .hero > *{position:relative;z-index:1;}';
     echo '.public-page .hero::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,.16) 52%,rgba(255,255,255,.22) 100%);pointer-events:none;}';
     echo '.public-page .hero h1,.public-page .hero p,.public-page .hero .tag-list-label{color:var(--hero-text, var(--ink));}';

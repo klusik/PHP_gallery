@@ -226,12 +226,10 @@ function cms_gallery(): void
 
     render_header((string) $seo['title'], $gallery, $publicOnly);
     echo '<section class="hero">';
+    echo '<div class="hero-topbar">';
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
-    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
-    if ($children) {
-        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
-    }
-    echo '<div class="hero-actions">';
+    echo '<div class="hero-meta">';
+    echo '<div class="hero-actions" aria-label="Gallery actions">';
     echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a>';
     if ($galleryMapPoints) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
@@ -239,6 +237,14 @@ function cms_gallery(): void
     if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<a class="button secondary" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a>';
     }
+    echo '</div>';
+    echo '<div class="hero-tags" aria-label="Gallery tags">';
+    render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
+    if ($children) {
+        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+    }
+    echo '</div>';
+    echo '</div>';
     echo '</div>';
     render_breadcrumbs($gallery);
     echo '</section>';
