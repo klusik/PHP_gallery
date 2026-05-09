@@ -1,5 +1,9 @@
 # Patch notes
 
+## Version 0.62
+
+- Fixed the version number
+
 ## Version 0.61B
 
 - Fixed gallery inline editor overflow so the public gallery edit form stays inside the card layout instead of
