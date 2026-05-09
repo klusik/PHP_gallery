@@ -1,5 +1,179 @@
 # Patch notes
 
+## Version 0.61
+
+Version 0.61 is a major public UI and UX refinement release focused on modernizing the gallery presentation layer, reducing visual clutter, improving typography consistency, and making public gallery management dramatically more compact and efficient for both visitors and logged-in admins.
+
+This release introduces a redesigned hero layout, modernized gallery cards, compact inline editors, glass-style collection badges for subgalleries, and a broad typography unification pass across the entire public interface.
+
+### Highlights
+
+#### Public gallery hero was completely redesigned
+
+The public gallery hero panel was rebuilt to reduce vertical space usage while preserving visual hierarchy and gallery identity.
+
+What changed:
+
+- redesigned the hero into a compact horizontal layout
+- moved gallery actions into a compact top-right action cluster
+- reduced oversized stacked button layouts
+- reduced vertical whitespace and dead padding
+- improved spacing between title, actions, tags, and breadcrumbs
+- preserved large visual gallery titles while making the overall panel much smaller
+- reorganized hero metadata into:
+  - title area
+  - actions area
+  - tag area
+  - breadcrumbs
+- improved mobile responsiveness for smaller screens
+- added more compact action button sizing
+- refined hero spacing and glass-panel rendering
+- improved hero typography consistency and heading rhythm
+
+User impact:
+
+- gallery pages feel significantly more modern
+- the hero no longer dominates the page vertically
+- visitors reach gallery content faster
+- actions remain accessible without overwhelming the layout
+
+#### Modernized subgallery card layout
+
+The subgallery section was redesigned into a more modern, compact media-card presentation inspired by contemporary gallery and social-media layouts.
+
+What changed:
+
+- removed the visible `Subgalleries` section heading from public rendering
+- redesigned gallery cards into horizontal split layouts
+- gallery thumbnails now act as dedicated media surfaces
+- gallery metadata was reorganized into cleaner visual blocks
+- reduced vertical spacing inside gallery cards
+- improved spacing and density for gallery descriptions and tags
+- compacted gallery panels and pagination spacing
+- refined responsive behavior for mobile gallery cards
+- gallery cards now visually align more closely with the admin dashboard styling direction
+
+User impact:
+
+- more galleries fit on screen at once
+- gallery browsing feels faster and cleaner
+- visual scanning of subgalleries is easier
+- the public gallery UI now feels significantly more premium and modern
+
+#### Added glass-style stacked-image collection badges
+
+Subgallery thumbnails now include a modern stacked-image indicator inspired by social-media multi-image overlays.
+
+What changed:
+
+- added a stacked-image collection icon overlay in the top-right corner of subgallery thumbnails
+- added live image counts directly into the overlay badge
+- implemented glass-style translucent rendering with backdrop blur
+- added semi-transparent layered rendering for the stack icon
+- integrated the same collection-badge system onto the homepage gallery listing
+- removed redundant visible image-count text from gallery cards while preserving it invisibly for SEO and accessibility
+- ensured badges honor theme corner-radius settings
+- refined badge spacing and compact sizing for mobile layouts
+
+User impact:
+
+- visitors immediately understand which cards contain nested galleries
+- the UI feels more visual and less text-heavy
+- gallery cards gained clearer visual hierarchy
+- repeated "X images" labels no longer clutter the layout
+
+#### Inline public admin editors were redesigned
+
+The logged-in inline editing experience on public pages was modernized and heavily compacted.
+
+What changed:
+
+- redesigned `inline-editor` layouts into compact dashboard-style control cards
+- reduced vertical spacing and oversized form layouts
+- reorganized edit forms into:
+  - content fields
+  - option toggles
+  - compact action bars
+- improved action button hierarchy
+- added dedicated destructive-action styling
+- refined responsive stacking behavior
+- improved edit summaries and contextual helper labels
+- aligned inline-editor styling with the newer admin dashboard design language
+- improved compact toggle rendering
+- improved inline form spacing and typography consistency
+
+User impact:
+
+- public-page editing is significantly faster
+- admins can edit content inline without large visual interruptions
+- editing tools now feel integrated into the page instead of bolted on
+
+#### Typography was unified across the entire public interface
+
+The public UI received a broad typography consistency pass focused on readability, spacing rhythm, and modern UI alignment.
+
+What changed:
+
+- standardized body typography variables
+- standardized heading line-height behavior
+- standardized tracking and letter spacing
+- unified heading rendering across:
+  - hero titles
+  - gallery titles
+  - buttons
+  - forms
+  - inline editors
+- switched default sans-serif rendering to:
+  - Inter
+  - system UI fallback stack
+- improved text rendering quality using:
+  - optimized legibility
+  - antialiasing
+  - grayscale smoothing
+- refined hero heading proportions
+- refined brand-title typography
+- reduced inconsistent font-height behavior across sections
+
+User impact:
+
+- the interface feels visually coherent
+- typography now matches modern application UI expectations
+- headings feel cleaner and more balanced
+- readability is improved across desktop and mobile layouts
+
+### Public UI Refinements
+
+Additional visual and layout refinements include:
+
+- theme radius settings are now consistently honored by:
+  - hero buttons
+  - tag pills
+  - gallery badges
+  - inline editors
+  - reorder controls
+- tags were redesigned into smaller compact pills
+- tag placement was moved into cleaner right-side metadata areas
+- public hero buttons now inherit theme colors and styling correctly
+- reorder handles were visually corrected and repositioned
+- gallery-card positioning behavior was hardened for overlays and floating controls
+- hero panel spacing was optimized further after initial redesign feedback
+
+### Technical Notes
+
+Files heavily updated in this release include:
+
+- `app/controllers/public_gallery.php`
+- `app/controllers/theme_assets.php`
+- `public/assets/styles.css`
+- `public/assets/custom.css`
+- `custom_css/modern.css`
+
+### Notes
+
+- This release focuses primarily on UX/UI modernization and public-page editing ergonomics.
+- The visual redesign intentionally reduces vertical page expansion without removing functionality.
+- Existing theme settings and custom CSS compatibility were preserved.
+
 ## Version 0.60
 
 This release focuses on major admin workflow improvements, direct public-gallery management, gallery editing UX modernization, and front-end maintainability improvements.
