@@ -62,7 +62,13 @@
     --field: #fffdf8;
     /* `--radius` controls rounded corner size for reusable components. */
     --radius: 16px;
+    --type-body-size: 1rem;
+    --type-body-line-height: 1.5;
+    --type-heading-line-height: 1.12;
+    --type-tight-line-height: 1.05;
+    --type-tracking-tight: -0.025em;
 }
+
 
 /* Foundation */
 
@@ -76,14 +82,55 @@ body {
         radial-gradient(circle at top left, rgba(165, 72, 28, 0.15), transparent 28rem),
         linear-gradient(135deg, var(--paper) 0%, #efe4d0 100%);
     font-family: var(--font-family, Georgia, "Times New Roman", serif);
-    line-height: 1.55;
+    font-size: var(--type-body-size, 1rem);
+    line-height: var(--type-body-line-height, 1.5);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
+
 a {
     color: var(--accent-dark);
 }
 img {
     max-width: 100%;
     height: auto;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.brand,
+button,
+.button,
+input,
+select,
+textarea {
+    font-family: var(--font-family, Georgia, "Times New Roman", serif);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    line-height: var(--type-heading-line-height, 1.12);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+}
+
+p,
+li,
+dd,
+dt,
+label,
+input,
+select,
+textarea {
+    line-height: var(--type-body-line-height, 1.5);
 }
 
 /* Shared navigation and buttons */
@@ -122,9 +169,11 @@ img {
 }
 .brand {
     font-size: clamp(1.7rem, 4vw, 3rem);
+    line-height: var(--type-tight-line-height, 1.05);
     text-decoration: none;
     color: var(--ink);
-    letter-spacing: -0.04em;
+    font-weight: 800;
+    letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 .nav {
     display: flex;
@@ -1606,9 +1655,10 @@ body.has-mobile-lightbox {
 .public-page .hero h1 {
     max-width: 100%;
     margin: 0;
-    font-size: clamp(2rem, 4vw, 3.2rem);
-    line-height: 0.96;
-    letter-spacing: -0.04em;
+    font-size: clamp(2.05rem, 3.6vw, 3.2rem);
+    font-weight: 800;
+    line-height: var(--type-tight-line-height, 1.05);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
     overflow-wrap: normal;
     word-break: normal;
 }
@@ -1617,7 +1667,7 @@ body.has-mobile-lightbox {
     max-width: 72ch;
     margin: 0.35rem 0 0;
     font-size: 0.95rem;
-    line-height: 1.45;
+    line-height: var(--type-body-line-height, 1.5);
     opacity: 0.88;
 }
 
@@ -6012,7 +6062,8 @@ body.public-reorder-active {
 .public-page .panel[data-public-subgallery-section] > h2 {
     margin: 0 0 0.85rem;
     font-size: clamp(1.25rem, 2.2vw, 1.6rem);
-    line-height: 1.1;
+    line-height: var(--type-heading-line-height, 1.12);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
 }
 
 .public-page .panel[data-public-subgallery-section] .grid {
@@ -6075,7 +6126,7 @@ body.public-reorder-active {
 
 .public-page .gallery-card-description {
     margin: 0.2rem 0 0;
-    line-height: 1.35;
+    line-height: 1.45;
 }
 
 .public-page .gallery-card-count {

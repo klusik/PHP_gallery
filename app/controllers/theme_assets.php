@@ -139,7 +139,7 @@ function cms_theme_css(): void
     // $theme stores an intermediate value used by the surrounding gallery workflow.
     $theme = theme_settings();
     // $fontFamily stores an intermediate value used by the surrounding gallery workflow.
-    $fontFamily = $theme['font'] === 'sans' ? 'Arial, Helvetica, sans-serif' : 'Georgia, Times New Roman, serif';
+    $fontFamily = $theme['font'] === 'sans' ? 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' : 'Georgia, Times New Roman, serif';
     // $backgroundOpacity stores an intermediate value used by the surrounding gallery workflow.
     $backgroundOpacity = max(0, min(100, (int) ($theme['background_opacity'] ?? 65)));
     // $gpsPinEnabled stores whether the EXIF GPS pin is visible on public cards.
@@ -162,6 +162,11 @@ function cms_theme_css(): void
     echo '--hero-text:' . css_value((string) $theme['hero_text']) . ';';
     echo '--radius:' . (int) $theme['radius'] . 'px;';
     echo '--font-family:' . css_value($fontFamily) . ';';
+    echo '--type-body-size:1rem;';
+    echo '--type-body-line-height:1.5;';
+    echo '--type-heading-line-height:1.12;';
+    echo '--type-tight-line-height:1.05;';
+    echo '--type-tracking-tight:-0.025em;';
     echo '--page-width-default:1120px;';
     echo '--page-width-wide:1440px;';
     echo '--page-width-custom:' . $customPageWidth . 'px;';
@@ -170,8 +175,8 @@ function cms_theme_css(): void
     echo '--gps-pin-size:' . $gpsPinSize . ';';
     echo '--gps-pin-background-size:' . $gpsPinBackgroundSize . ';';
     echo '}';
-    echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);}';
-    echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);position:relative;}';
+    echo 'body,.admin-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);font-size:var(--type-body-size);line-height:var(--type-body-line-height);text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}';
+    echo '.public-page{color:var(--ink);background:var(--paper);font-family:var(--font-family);font-size:var(--type-body-size);line-height:var(--type-body-line-height);position:relative;}';
     // These layout rules are emitted by the generated theme stylesheet because it is loaded after
     // built-in skins and uploaded custom CSS. Keeping the final page-width decision here makes the
     // admin select effective even when a preset stylesheet defines its own .site-main width.
@@ -187,7 +192,7 @@ function cms_theme_css(): void
     echo 'a{color:var(--accent-dark);}';
     echo '.site-header{background:rgba(255,255,255,0.10);backdrop-filter:blur(12px) saturate(1.08);-webkit-backdrop-filter:blur(12px) saturate(1.08);border-color:rgba(255,255,255,0.22);padding:clamp(1rem,3vw,2rem);margin-bottom:1rem;border-radius:var(--radius);}';
     echo '.admin-page .site-header{background:var(--paper);border-color:var(--line);}';
-    echo '.brand{color:var(--header-text, var(--ink));font-family:var(--font-family);}';
+    echo '.brand{color:var(--header-text, var(--ink));font-family:var(--font-family);line-height:var(--type-tight-line-height);letter-spacing:var(--type-tracking-tight);}';
     echo '.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
     echo '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
     echo '.pagination-link{border-radius:var(--radius)!important;}';
@@ -200,6 +205,7 @@ function cms_theme_css(): void
     echo '.public-page .hero > *{position:relative;z-index:1;}';
     echo '.public-page .hero::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,.16) 52%,rgba(255,255,255,.22) 100%);pointer-events:none;}';
     echo '.public-page .hero h1,.public-page .hero p,.public-page .hero .tag-list-label{color:var(--hero-text, var(--ink));}';
+    echo '.public-page .hero h1{line-height:var(--type-tight-line-height);letter-spacing:var(--type-tracking-tight);}';
     echo '.gallery-card-link{background:var(--panel);color:inherit;}';
     echo '.gallery-card-body h2,.image-meta h2{color:var(--ink);}';
     echo '.inline-editor{border-color:var(--line);background:var(--field);border-radius:var(--radius);}';
