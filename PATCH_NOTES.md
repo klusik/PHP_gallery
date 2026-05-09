@@ -1,5 +1,111 @@
 # Patch notes
 
+## Version 0.60
+
+This release focuses on major admin workflow improvements, direct public-gallery management, gallery editing UX modernization, and front-end maintainability improvements.
+
+### Highlights
+
+#### Public gallery pages now support direct admin reordering
+
+Logged-in admins can now manage gallery ordering directly from the public gallery view without switching back to the dedicated admin dashboard.
+
+What changed:
+
+- added direct drag-and-drop reordering for subgalleries on public gallery pages
+- added direct drag-and-drop reordering for pictures on public gallery pages
+- gallery and picture ordering now reuse the existing backend ordering infrastructure
+- public gallery reordering respects the existing layout structure:
+  - subgalleries remain grouped first
+  - pictures remain grouped underneath
+- pagination-aware move handling was added so reordering only affects the currently visible page
+- public gallery reorder behavior was integrated into the modular front-end gallery operations system
+
+User impact:
+
+- admins can reorganize galleries much faster during normal browsing
+- gallery maintenance now feels more natural and less disconnected from the public presentation
+- moving galleries and pictures requires fewer page transitions and less context switching
+
+#### Admin gallery editing was redesigned
+
+The gallery editing experience received a broad UI and workflow overhaul focused on clearer structure, faster media management, and modernized interaction patterns.
+
+What changed:
+
+- added a new side-panel editing workflow for gallery administration
+- gallery editing panels now preserve active tabs and editing context more reliably
+- upload workflows now dynamically refresh edited content without unnecessary full-page reloads
+- image management panels now keep their previous state after operations complete
+- improved upload progress visibility and automatic viewport positioning during uploads
+- upload and media-management interactions were visually reorganized into cleaner grouped layouts
+- added direct upload entry points inside gallery editing flows
+- improved admin image selection handling and bulk-selection feedback
+- added dedicated bulk image move workflows with integrated destination handling
+- gallery edit actions now provide clearer visual hierarchy and spacing
+- improved gallery move and image move controls with more readable visual states
+- refined selected and unselected button states for better accessibility and contrast
+
+User impact:
+
+- media management workflows are faster and easier to understand
+- admins spend less time navigating between separate administration screens
+- large upload sessions are easier to monitor visually
+- gallery editing feels more responsive and modern
+
+#### Admin dashboard and gallery tree interactions were improved
+
+The admin dashboard gained additional structural and interaction refinements for large gallery trees.
+
+What changed:
+
+- gallery tree movement behavior was refined for better nesting clarity
+- gallery movement feedback now updates more consistently during drag operations
+- public gallery links refresh more reliably after gallery moves
+- dashboard interaction states were visually softened and cleaned up
+- admin-side panels now use more structured layouts and consistent spacing
+- gallery ordering interactions received additional styling and usability refinements
+
+User impact:
+
+- large gallery hierarchies are easier to reorganize
+- drag-and-drop workflows feel more predictable
+- visual clutter during gallery management was reduced
+
+#### Front-end assets and CSS structure were reorganized
+
+The public and admin front-end assets were cleaned up and reorganized to improve maintainability.
+
+What changed:
+
+- reorganized the main stylesheet into clearly indexed sections
+- grouped related UI styles into dedicated structural areas
+- improved separation between:
+  - public layout styling
+  - lightbox styling
+  - admin dashboard styling
+  - telemetry and maintenance styling
+  - gallery ordering styling
+  - theme preview styling
+- removed older fragmented styling comments and redundant layout markers
+- expanded modular JavaScript bootstrapping for new admin and public-gallery features
+
+User impact:
+
+- future UI development is easier to maintain
+- styling consistency across admin and public pages is improved
+- front-end behavior initialization is more modular and easier to extend
+
+### Technical Notes
+
+Files changed include:
+
+- `public/assets/gallery.js`
+- `public/assets/styles.css`
+- `public/assets/gallery-modules/admin-bulk-actions.js`
+- `public/assets/gallery-modules/admin-operations.js`
+- gallery editing templates and related admin UI components
+
 ## Version 0.59
 
 This release focuses on telemetry reliability, upload workflow improvements, DNG image support groundwork, and breadcrumb correctness for nested unpublished galleries.
