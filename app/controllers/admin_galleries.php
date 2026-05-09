@@ -164,6 +164,14 @@ function cms_admin_new_gallery(): void
  */
 function admin_gallery_create_panel_request(): bool
 {
+    return admin_side_panel_request();
+}
+
+/**
+ * Return whether the current admin route is being requested for side-panel use.
+ */
+function admin_side_panel_request(): bool
+{
     return !empty($_GET['panel']) || !empty($_POST['panel']);
 }
 
@@ -853,6 +861,115 @@ function admin_return_tab_from_post(string $fallback = ''): string
 }
 
 /**
+ * Build the JSON payload consumed after a gallery is saved in side-panel mode.
+ */
+function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab): array
+{
+    return [
+        'ok' => true,
+        'type' => 'gallery',
+        'message' => $notice,
+        'gallery_id' => (int) $gallery['id'],
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => gallery_public_url($gallery),
+        'edit_url' => admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab),
+        'refresh_url' => gallery_public_url($gallery),
+    ];
+}
+
+
+/**
+ * Build the JSON payload consumed after a gallery image bulk action runs in side-panel mode.
+ */
+function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = []): array
+{
+    $payload = admin_edit_gallery_success_response($gallery, $notice, $returnTab);
+    $payload['type'] = 'gallery_image_bulk';
+    $payload['bulk_action'] = $action;
+    $payload['image_ids'] = array_values(array_map('intval', $imageIds));
+    $payload['cover_image_id'] = (int) ($gallery['cover_image_id'] ?? 0);
+    return $payload;
+}
+
+/**
+ * Persist a gallery title picture from either the bulk image route or a panel-routed edit request.
+ */
+function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab): void
+{
+    // $galleryId stores the gallery being updated by the title-picture action.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    // $ownedIds stores selected images that still belong to this gallery.
+    $ownedIds = [];
+    foreach ($imageIds as $imageId) {
+        // $image stores the selected image record used for gallery ownership validation.
+        $image = find_image((int) $imageId);
+        if ($image && (int) ($image['gallery_id'] ?? 0) === $galleryId) {
+            $ownedIds[] = (int) $imageId;
+        }
+    }
+    if (!$ownedIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            return;
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
+
+    // $coverImageId stores the first selected image because only one title picture can be saved.
+    $coverImageId = (int) $ownedIds[0];
+    // $stmt stores the database update for the gallery title picture.
+    $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
+    $stmt->execute([$coverImageId, now_sql(), $galleryId]);
+    // $updated stores the reloaded gallery row so JSON reflects the persisted database state.
+    $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+    if ($updated) {
+        write_gallery_sidecar($updated);
+    }
+    // $notice stores the message returned to the direct page or side-panel workflow.
+    $notice = 'Gallery title picture saved.';
+    if (admin_wants_json()) {
+        header('Content-Type: application/json');
+        echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds));
+        return;
+    }
+    flash_message('admin_notice', $notice);
+    redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+}
+
+/**
+ * Build the JSON payload consumed after an image is saved in side-panel mode.
+ */
+function admin_edit_image_success_response(array $image): array
+{
+    // $gallery stores the image gallery used to rebuild public context URLs after saving.
+    $gallery = find_gallery((int) ($image['gallery_id'] ?? 0));
+    return [
+        'ok' => true,
+        'type' => 'image',
+        'message' => 'Image saved.',
+        'image_id' => (int) $image['id'],
+        'gallery_id' => (int) ($image['gallery_id'] ?? 0),
+        'image_title' => (string) ($image['title'] ?? ''),
+        'image_description' => (string) ($image['description'] ?? ''),
+        'image_visibility' => (string) ($image['visibility'] ?? ''),
+        'image_sort_order' => (int) ($image['sort_order'] ?? 0),
+        'image_url' => $gallery ? image_public_url($image, $gallery) : '',
+        'gallery_url' => $gallery ? gallery_public_url($gallery) : '',
+        'edit_url' => url_for('admin_edit_image', ['id' => (int) $image['id'], 'saved' => 1]),
+    ];
+}
+
+/**
+ * Sends a JSON error response for side-panel save failures.
+ */
+function admin_panel_error_response(string $message, int $statusCode = 422): void
+{
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => $message]);
+}
+
+/**
  * Handles cms admin edit gallery logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
@@ -860,7 +977,7 @@ function cms_admin_edit_gallery(): void
 {
     require_admin();
     // Variable $gallery stores this steps working value.
-    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? 0));
+    $gallery = find_gallery((int) ($_GET['id'] ?? $_POST['id'] ?? $_POST['gallery_id'] ?? 0));
     if (!$gallery) {
         cms_not_found();
         return;
@@ -876,6 +993,10 @@ function cms_admin_edit_gallery(): void
         verify_csrf();
         // $returnTab stores the tab fragment used after saving the gallery editor form.
         $returnTab = admin_return_tab_from_post('admin-edit-identity');
+        if ((string) ($_POST['action'] ?? '') === 'cover' && isset($_POST['image_ids'])) {
+            admin_save_gallery_title_picture($gallery, array_map('intval', $_POST['image_ids'] ?? []), $returnTab);
+            return;
+        }
         // Variable $title stores this steps working value.
         $title = trim((string) $_POST['title']);
         // Variable $slug stores this steps working value.
@@ -959,6 +1080,10 @@ function cms_admin_edit_gallery(): void
                     'gallery_id' => (int) $gallery['id'],
                     'error' => $exception->getMessage(),
                 ]);
+                if (admin_wants_json()) {
+                    admin_panel_error_response('Gallery folder move failed: ' . $exception->getMessage());
+                    return;
+                }
                 $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
                 flash_message('admin_notice', 'Gallery folder move failed: ' . $exception->getMessage());
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
@@ -1026,6 +1151,10 @@ function cms_admin_edit_gallery(): void
                     }
                 }
             } catch (RuntimeException $exception) {
+                if (admin_wants_json()) {
+                    admin_panel_error_response('Gallery branding update failed: ' . $exception->getMessage());
+                    return;
+                }
                 flash_message('admin_notice', 'Gallery branding update failed: ' . $exception->getMessage());
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
             }
@@ -1137,6 +1266,11 @@ function cms_admin_edit_gallery(): void
         if (!empty($moveResult['moved'])) {
             // $notice stores an intermediate value used by the surrounding gallery workflow.
             $notice = 'Gallery saved and folder moved.';
+        }
+        if (admin_wants_json()) {
+            header('Content-Type: application/json');
+            echo json_encode(admin_edit_gallery_success_response($gallery, $notice, $returnTab));
+            return;
         }
         flash_message('admin_notice', $notice);
         redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
@@ -1348,7 +1482,7 @@ function cms_admin_edit_gallery(): void
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Edit</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">Delete</button></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Edit</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">Delete</button></td></tr>';
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
@@ -1997,6 +2131,13 @@ function cms_admin_bulk_images(): void
     $submittedImageIds = array_map('intval', $_POST['image_ids'] ?? []);
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? '');
+    if ($action === '') {
+        if (admin_wants_json()) {
+            admin_panel_error_response('Choose a photo action first.');
+            return;
+        }
+        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    }
     // Variable $singleDeleteImageId stores the row-level delete button value, when used.
     $singleDeleteImageId = 0;
     if (preg_match('/^delete:(\d+)$/', $action, $deleteMatch) === 1) {
@@ -2008,6 +2149,10 @@ function cms_admin_bulk_images(): void
     // Variable $count stores this steps working value.
     $count = 0;
     if (!$imageIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('Select at least one photo first.');
+            return;
+        }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     // Variable $ownedIds stores this steps working value.
@@ -2020,6 +2165,10 @@ function cms_admin_bulk_images(): void
         }
     }
     if (!$ownedIds) {
+        if (admin_wants_json()) {
+            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            return;
+        }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if ($action === 'move_existing' || $action === 'move_new') {
@@ -2139,16 +2288,8 @@ function cms_admin_bulk_images(): void
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     if ($action === 'cover') {
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('UPDATE galleries SET cover_image_id = ?, updated_at = ? WHERE id = ?');
-        $stmt->execute([$ownedIds[0], now_sql(), $galleryId]);
-        // Variable $updated stores this steps working value.
-        $updated = find_gallery($galleryId);
-        if ($updated) {
-            write_gallery_sidecar($updated);
-        }
-        flash_message('admin_notice', 'Gallery saved.');
-        redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+        admin_save_gallery_title_picture($gallery, $ownedIds, $returnTab);
+        return;
     }
     if (in_array($action, ['draft', 'public', 'private'], true)) {
         // Variable $placeholders stores this steps working value.
@@ -2356,6 +2497,13 @@ function cms_admin_edit_image(): void
         sync_entity_tags('image', (int) $image['id'], (string) ($_POST['tags'] ?? ''));
         if (public_path_schema_ready()) {
             regenerate_public_paths();
+        }
+        // $image stores the freshly saved image metadata returned to side-panel saves.
+        $image = find_image((int) $image['id']) ?: $image;
+        if (admin_wants_json()) {
+            header('Content-Type: application/json');
+            echo json_encode(admin_edit_image_success_response($image));
+            return;
         }
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }

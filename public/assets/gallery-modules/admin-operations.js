@@ -59,8 +59,22 @@ function normalizedAdminTabHash(hash) {
 }
 
 // Function `setupAdminTabs` executes this focused behavior.
-export function setupAdminTabs() {
-    document.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+export function setupAdminTabs(root = document) {
+    setupAdminTabsInRoot(root);
+}
+
+/**
+ * Attach admin tab behavior inside one document area.
+ *
+ * @param {ParentNode} root DOM root that contains admin tab controls.
+ * @returns {void}
+ */
+function setupAdminTabsInRoot(root) {
+    root.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
+        if (!(tabsRoot instanceof HTMLElement) || tabsRoot.dataset.adminTabsBound === '1') {
+            return;
+        }
+        tabsRoot.dataset.adminTabsBound = '1';
         // tabs stores state or configuration for the admin tab flow.
         const tabs = Array.from(tabsRoot.querySelectorAll('[role="tab"][data-admin-tab-target]'));
         if (!tabs.length) {
@@ -73,6 +87,8 @@ export function setupAdminTabs() {
         if (!panels.length) {
             return;
         }
+        // shouldManageHash stores whether this tab group owns the browser URL hash.
+        const shouldManageHash = !tabsRoot.closest('[data-admin-side-panel]');
 
         // activateTab stores behavior for selecting one tab and hiding the other panels.
         const activateTab = (targetId, options = {}) => {
@@ -97,13 +113,13 @@ export function setupAdminTabs() {
             if (options.focusTab) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();
             }
-            if (options.updateHash) {
+            if (options.updateHash && shouldManageHash) {
                 const nextHash = `#${targetPanel.id}`;
                 if (window.location.hash !== nextHash) {
                     window.history.pushState(null, '', nextHash);
                 }
             }
-            document.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
+            tabsRoot.closest('form, [data-admin-side-panel-body], main')?.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
                 if (input instanceof HTMLInputElement) {
                     input.value = targetPanel.id;
                 }
@@ -111,7 +127,7 @@ export function setupAdminTabs() {
         };
 
         // activeHash stores the hash that should select the initial tab.
-        const activeHash = normalizedAdminTabHash(window.location.hash);
+        const activeHash = shouldManageHash ? normalizedAdminTabHash(window.location.hash) : '';
         if (activeHash && activeHash !== window.location.hash) {
             window.history.replaceState(null, '', activeHash);
         }
@@ -154,6 +170,10 @@ export function setupAdminTabs() {
                 activateTab(tabs[nextIndex].dataset.adminTabTarget || '', {updateHash: true, focusTab: true});
             });
         });
+
+        if (!shouldManageHash) {
+            return;
+        }
 
         // handleHashNavigation stores behavior shared by hashchange and history traversal.
         const handleHashNavigation = () => {
@@ -391,19 +411,74 @@ export function setupAdminGallerySidePanel() {
         await submitAdminGalleryPanelCreateForm(form);
     });
 
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-edit-form]')) {
+            return;
+        }
+        event.preventDefault();
+        await submitAdminPanelEditForm(form);
+    });
+
+    document.addEventListener('click', (event) => {
+        const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
+        if (!(submitter instanceof HTMLElement)) {
+            return;
+        }
+        const form = submitter.closest('form[data-admin-panel-bulk-form]');
+        if (form instanceof HTMLFormElement) {
+            form.__adminPanelSubmitter = submitter;
+        }
+    }, true);
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-panel-bulk-form]')) {
+            return;
+        }
+        const submitter = event.submitter || form.__adminPanelSubmitter || null;
+        if (isThumbnailSubmission(form, submitter)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitAdminPanelImageBulkForm(form, submitter);
+    }, true);
+
     document.addEventListener('php-gallery:side-panel-success', (event) => {
         const panel = event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : document.querySelector('[data-admin-side-panel]');
-        if (panel instanceof HTMLElement) {
+        const source = String(event.detail?.source || '');
+        const result = event.detail?.result || {};
+        const shouldKeepPanelOpen = source === 'gallery-image-bulk' && String(result.bulk_action || '') === 'cover';
+        if (panel instanceof HTMLElement && !shouldKeepPanelOpen) {
             closeAdminGallerySidePanel(panel);
         }
-        reflectCreatedGalleryInCurrentView(event.detail?.result || {});
+        if (source === 'gallery-image-bulk') {
+            reflectGalleryImageBulkInCurrentView(result);
+            if (panel instanceof HTMLElement && shouldKeepPanelOpen) {
+                writeAdminGallerySidePanelStatus(panel, String(result.message || 'Gallery title picture saved.'), false);
+            }
+            return;
+        }
+        if (source === 'gallery-edit') {
+            reflectSavedGalleryInCurrentView(result);
+            return;
+        }
+        if (source === 'image-edit') {
+            reflectSavedImageInCurrentView(result);
+            return;
+        }
+        reflectCreatedGalleryInCurrentView(result);
     });
 }
 
 /**
- * Open the reusable side panel and fill it from the create-gallery fragment.
+ * Open the reusable side panel and fill it from an admin workflow.
  *
- * @param {HTMLAnchorElement} link Enhanced Add gallery here link.
+ * @param {HTMLAnchorElement} link Enhanced admin workflow link.
  * @returns {Promise<void>} Resolves after content is loaded or fallback navigation starts.
  */
 async function openAdminGallerySidePanel(link) {
@@ -413,9 +488,13 @@ async function openAdminGallerySidePanel(link) {
         window.location.href = link.href;
         return;
     }
+    const workflow = sidePanelWorkflowFromLink(link);
+    setAdminGallerySidePanelHeading(panel, workflow.kicker, workflow.title);
+    panel.dataset.adminSidePanelWorkflow = workflow.name;
+    panel.classList.toggle('is-edit-panel', workflow.name !== 'create');
     openAdminGallerySidePanelShell(panel);
-    writeAdminGallerySidePanelStatus(panel, 'Loading gallery workflow...', false);
-    body.innerHTML = '<div class="admin-side-panel-loading" role="status">Loading gallery workflow...</div>';
+    writeAdminGallerySidePanelStatus(panel, workflow.loadingMessage, false);
+    body.innerHTML = `<div class="admin-side-panel-loading" role="status">${escapeHtmlText(workflow.loadingMessage)}</div>`;
 
     try {
         const url = new URL(link.dataset.gallerySidePanelUrl || link.href, window.location.href);
@@ -429,19 +508,247 @@ async function openAdminGallerySidePanel(link) {
         });
         const html = await response.text();
         if (!response.ok || html.trim() === '') {
-            throw new Error('The gallery workflow could not be loaded.');
+            throw new Error(workflow.loadErrorMessage);
         }
-        body.innerHTML = html;
+        body.innerHTML = sidePanelContentFromHtml(html, workflow);
+        prepareAdminSidePanelLoadedContent(body, workflow, response.url || url.toString());
         writeAdminGallerySidePanelStatus(panel, '', false);
-        setupGalleryUploadProgress();
         const firstField = body.querySelector('input:not([type="hidden"]), select, textarea, button');
         if (firstField instanceof HTMLElement) {
             firstField.focus({preventScroll: true});
         }
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || 'The gallery workflow could not be loaded.', true);
-        body.innerHTML = `<div class="notice is-alert">The side-panel workflow could not be loaded. Use the normal create page instead: <a href="${escapeHtmlAttribute(link.href)}">open Create gallery</a>.</div>`;
+        writeAdminGallerySidePanelStatus(panel, error.message || workflow.loadErrorMessage, true);
+        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} Use the normal admin page instead: <a href="${escapeHtmlAttribute(link.href)}">open directly</a>.</div>`;
     }
+}
+
+/**
+ * Read side-panel workflow metadata from an enhanced link.
+ *
+ * @param {HTMLAnchorElement} link Enhanced admin workflow link.
+ * @returns {{name: string, kicker: string, title: string, loadingMessage: string, loadErrorMessage: string}} Workflow configuration.
+ */
+function sidePanelWorkflowFromLink(link) {
+    const name = String(link.dataset.adminSidePanelWorkflow || 'create');
+    if (name === 'gallery-edit') {
+        return {
+            name,
+            kicker: link.dataset.adminSidePanelKicker || 'Gallery editor',
+            title: link.dataset.adminSidePanelTitle || 'Edit gallery',
+            loadingMessage: 'Loading gallery editor...',
+            loadErrorMessage: 'The gallery editor could not be loaded.',
+        };
+    }
+    if (name === 'image-edit') {
+        return {
+            name,
+            kicker: link.dataset.adminSidePanelKicker || 'Photo editor',
+            title: link.dataset.adminSidePanelTitle || 'Edit photo',
+            loadingMessage: 'Loading photo editor...',
+            loadErrorMessage: 'The photo editor could not be loaded.',
+        };
+    }
+    return {
+        name: 'create',
+        kicker: link.dataset.adminSidePanelKicker || 'Admin shortcut',
+        title: link.dataset.adminSidePanelTitle || 'Add gallery here',
+        loadingMessage: 'Loading gallery workflow...',
+        loadErrorMessage: 'The gallery workflow could not be loaded.',
+    };
+}
+
+/**
+ * Update the reusable side-panel heading for the current workflow.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @param {string} kicker Small heading label.
+ * @param {string} title Main heading text.
+ * @returns {void}
+ */
+function setAdminGallerySidePanelHeading(panel, kicker, title) {
+    const kickerNode = panel.querySelector('[data-admin-side-panel-kicker]');
+    const titleNode = panel.querySelector('[data-admin-side-panel-title]');
+    if (kickerNode instanceof HTMLElement) {
+        kickerNode.textContent = kicker;
+    }
+    if (titleNode instanceof HTMLElement) {
+        titleNode.textContent = title;
+    }
+}
+
+/**
+ * Extract usable panel content from either a fragment response or a full admin page.
+ *
+ * @param {string} html Server-rendered HTML.
+ * @param {{name: string}} workflow Active side-panel workflow.
+ * @returns {string} HTML safe to inject into the panel body.
+ */
+function sidePanelContentFromHtml(html, workflow) {
+    const trimmed = html.trim();
+    if (trimmed.startsWith('<div') || trimmed.startsWith('<section')) {
+        return trimmed;
+    }
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const directFragment = parsed.querySelector('[data-gallery-create-panel]');
+    if (directFragment instanceof HTMLElement) {
+        return directFragment.outerHTML;
+    }
+    const main = parsed.querySelector('main.site-main') || parsed.querySelector('main');
+    if (main instanceof HTMLElement) {
+        const devModePanel = main.querySelector('.admin-devmode-panel');
+        if (devModePanel instanceof HTMLElement) {
+            devModePanel.remove();
+        }
+        return `<div class="admin-side-panel-stack admin-side-panel-edit-workspace" data-admin-edit-panel-workspace="${escapeHtmlAttribute(workflow.name)}">${main.innerHTML}</div>`;
+    }
+    return trimmed;
+}
+
+/**
+ * Prepare forms and dynamic controls after admin content is injected into the panel.
+ *
+ * @param {HTMLElement} body Side-panel body element.
+ * @param {{name: string}} workflow Active side-panel workflow.
+ * @param {string} sourceUrl URL that produced the loaded content.
+ * @returns {void}
+ */
+function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
+    setupGalleryUploadProgress();
+    setupAdminTabsInRoot(body);
+    setupAdminPanelRangeDisplays(body);
+    setupAdminPanelThumbnailBoundControls(body);
+    if (workflow.name === 'gallery-edit') {
+        prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
+        prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
+        setupAdminImageReordering();
+    } else if (workflow.name === 'image-edit') {
+        const imageForm = body.querySelector('section.panel form.form-grid, form.form-grid');
+        prepareAdminPanelEditForm(imageForm, workflow.name, sourceUrl);
+    }
+}
+
+/**
+ * Mark one loaded admin form as side-panel owned and fix its action URL.
+ *
+ * @param {Element|null} formCandidate Loaded form candidate.
+ * @param {string} workflowName Active workflow name.
+ * @param {string} sourceUrl URL that should receive the POST.
+ * @returns {void}
+ */
+function prepareAdminPanelEditForm(formCandidate, workflowName, sourceUrl) {
+    if (!(formCandidate instanceof HTMLFormElement)) {
+        return;
+    }
+    formCandidate.dataset.adminPanelEditForm = 'true';
+    formCandidate.dataset.adminPanelWorkflow = workflowName;
+    formCandidate.dataset.adminPanelAction = sourceUrl;
+    formCandidate.action = sourceUrl;
+}
+
+
+/**
+ * Mark the gallery image bulk form as side-panel owned while keeping its original action route.
+ *
+ * @param {Element|null} formCandidate Loaded bulk form candidate.
+ * @returns {void}
+ */
+function prepareAdminPanelBulkForm(formCandidate) {
+    if (!(formCandidate instanceof HTMLFormElement)) {
+        return;
+    }
+    formCandidate.dataset.adminPanelBulkForm = 'true';
+    formCandidate.dataset.adminPanelWorkflow = 'gallery-edit';
+    const actionAttribute = formCandidate.getAttribute('action') || '';
+    formCandidate.dataset.adminPanelAction = actionAttribute ? new URL(actionAttribute, window.location.href).toString() : (formCandidate.action || window.location.href);
+}
+
+/**
+ * Keep gallery grid range labels synchronized inside dynamically loaded panel content.
+ *
+ * @param {HTMLElement} root Side-panel body element.
+ * @returns {void}
+ */
+function setupAdminPanelRangeDisplays(root) {
+    const pairs = [
+        ['[data-gallery-grid-columns]', '[data-gallery-grid-columns-display]'],
+        ['[data-gallery-grid-rows]', '[data-gallery-grid-rows-display]'],
+    ];
+    pairs.forEach(([controlSelector, displaySelector]) => {
+        const control = root.querySelector(controlSelector);
+        const display = root.querySelector(displaySelector);
+        if (!(control instanceof HTMLInputElement) || !(display instanceof HTMLElement) || control.dataset.adminPanelRangeBound === '1') {
+            return;
+        }
+        control.dataset.adminPanelRangeBound = '1';
+        const override = root.querySelector('[data-gallery-grid-override-enabled]');
+        const sync = () => {
+            display.textContent = control.value;
+        };
+        const markCustom = () => {
+            if (override instanceof HTMLInputElement) {
+                override.checked = true;
+            }
+            sync();
+        };
+        control.addEventListener('input', markCustom);
+        control.addEventListener('change', markCustom);
+        sync();
+    });
+}
+
+/**
+ * Keep thumbnail-bound slider pairs synchronized inside dynamically loaded panel content.
+ *
+ * @param {HTMLElement} root Side-panel body element.
+ * @returns {void}
+ */
+function setupAdminPanelThumbnailBoundControls(root) {
+    root.querySelectorAll('[data-thumbnail-bound-control]').forEach((controlRoot) => {
+        if (!(controlRoot instanceof HTMLElement) || controlRoot.dataset.adminPanelThumbnailBound === '1') {
+            return;
+        }
+        controlRoot.dataset.adminPanelThumbnailBound = '1';
+        const values = String(controlRoot.getAttribute('data-thumbnail-bound-values') || '0')
+            .split(',')
+            .map((value) => parseInt(value, 10))
+            .filter((value) => Number.isFinite(value));
+        const minIndexControl = controlRoot.querySelector('[data-thumbnail-bound-min-index]');
+        const maxIndexControl = controlRoot.querySelector('[data-thumbnail-bound-max-index]');
+        const minValueControl = controlRoot.querySelector('[data-thumbnail-bound-min-value]');
+        const maxValueControl = controlRoot.querySelector('[data-thumbnail-bound-max-value]');
+        const summary = controlRoot.querySelector('[data-thumbnail-bound-summary]');
+        if (values.length < 2 || !(minIndexControl instanceof HTMLInputElement) || !(maxIndexControl instanceof HTMLInputElement) || !(minValueControl instanceof HTMLInputElement) || !(maxValueControl instanceof HTMLInputElement) || !(summary instanceof HTMLElement)) {
+            return;
+        }
+        const formatSize = (value, side) => value === 0 ? (side === 'min' ? 'Auto min' : 'Auto max') : `${value}px`;
+        const sync = (changedControl = null) => {
+            let minIndex = parseInt(minIndexControl.value, 10) || 0;
+            let maxIndex = parseInt(maxIndexControl.value, 10) || 0;
+            const highestIndex = values.length - 1;
+            minIndex = Math.max(0, Math.min(highestIndex, minIndex));
+            maxIndex = Math.max(0, Math.min(highestIndex, maxIndex));
+            if (minIndex > maxIndex) {
+                if (changedControl === minIndexControl) {
+                    maxIndex = minIndex;
+                } else {
+                    minIndex = maxIndex;
+                }
+            }
+            minIndexControl.value = String(minIndex);
+            maxIndexControl.value = String(maxIndex);
+            const minValue = values[minIndex] || 0;
+            const maxValue = values[maxIndex] || 0;
+            minValueControl.value = String(minValue);
+            maxValueControl.value = String(maxValue);
+            summary.textContent = `${formatSize(minValue, 'min')} to ${formatSize(maxValue, 'max')}`;
+        };
+        minIndexControl.addEventListener('input', () => sync(minIndexControl));
+        minIndexControl.addEventListener('change', () => sync(minIndexControl));
+        maxIndexControl.addEventListener('input', () => sync(maxIndexControl));
+        maxIndexControl.addEventListener('change', () => sync(maxIndexControl));
+        sync();
+    });
 }
 
 /**
@@ -464,8 +771,8 @@ function ensureAdminGallerySidePanel() {
         <aside class="admin-side-panel-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-side-panel-title">
             <header class="admin-side-panel-header">
                 <div>
-                    <p class="admin-kicker">Admin shortcut</p>
-                    <h2 id="admin-side-panel-title">Add gallery here</h2>
+                    <p class="admin-kicker" data-admin-side-panel-kicker>Admin shortcut</p>
+                    <h2 id="admin-side-panel-title" data-admin-side-panel-title>Add gallery here</h2>
                 </div>
                 <button type="button" class="button secondary" data-admin-side-panel-close>Close</button>
             </header>
@@ -566,6 +873,273 @@ async function submitAdminGalleryPanelCreateForm(form) {
             button.disabled = false;
         });
     }
+}
+
+/**
+ * Submit an existing admin edit form through the side-panel JSON path.
+ *
+ * @param {HTMLFormElement} form Side-panel edit form.
+ * @returns {Promise<void>} Resolves after success handling or error reporting.
+ */
+async function submitAdminPanelEditForm(form) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const workflowName = String(form.dataset.adminPanelWorkflow || 'edit');
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? 'Saving photo...' : 'Saving gallery...', false);
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+        const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? 'Photo save failed.' : 'Gallery save failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || 'Save failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: workflowName,
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Save failed.', true);
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+
+/**
+ * Submit the gallery image bulk form from a side panel without relying on browser submitter routing.
+ *
+ * @param {HTMLFormElement} form Loaded gallery image bulk form.
+ * @param {HTMLElement|null} submitter Button or control that triggered the submit.
+ * @returns {Promise<void>} Resolves after the bulk action response is handled.
+ */
+async function submitAdminPanelImageBulkForm(form, submitter) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const selectedInputs = Array.from(form.querySelectorAll('input[name="image_ids[]"]:checked'));
+    const actionControl = form.querySelector('[name="action"]');
+    let action = actionControl instanceof HTMLSelectElement || actionControl instanceof HTMLInputElement ? String(actionControl.value || '') : '';
+    if (submitter instanceof HTMLButtonElement && submitter.name === 'action' && submitter.value !== '') {
+        action = submitter.value;
+    }
+    if (selectedInputs.length === 0) {
+        writeAdminGallerySidePanelStatus(panel, 'Select at least one photo first.', true);
+        return;
+    }
+    if (action === '') {
+        writeAdminGallerySidePanelStatus(panel, 'Choose a photo action first.', true);
+        return;
+    }
+
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, action === 'cover' ? 'Saving title picture...' : 'Applying photo action...', false);
+    try {
+        const body = new FormData();
+        const csrfInput = form.querySelector('input[name="csrf_token"]');
+        const galleryInput = form.querySelector('input[name="gallery_id"]');
+        const returnTabInput = form.querySelector('input[name="return_tab"]');
+        if (csrfInput instanceof HTMLInputElement) {
+            body.set('csrf_token', csrfInput.value);
+        }
+        if (galleryInput instanceof HTMLInputElement) {
+            body.set('gallery_id', galleryInput.value);
+            body.set('id', galleryInput.value);
+        }
+        if (returnTabInput instanceof HTMLInputElement) {
+            body.set('return_tab', returnTabInput.value);
+        }
+        selectedInputs.forEach((input) => {
+            if (input instanceof HTMLInputElement) {
+                body.append('image_ids[]', input.value);
+            }
+        });
+        body.set('action', action);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+
+        const response = await fetch(form.dataset.adminPanelAction || form.action || window.location.href, {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, 'Photo action failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || 'Photo action failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: 'gallery-image-bulk',
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Photo action failed.', true);
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+/**
+ * Reflect a completed gallery image bulk action in the visible edit table and public context.
+ *
+ * @param {Record<string, *>} result Server response for the image bulk action.
+ * @returns {void}
+ */
+async function reflectGalleryImageBulkInCurrentView(result) {
+    const coverImageId = String(result.cover_image_id || '');
+    if (String(result.bulk_action || '') === 'cover' && coverImageId !== '') {
+        document.querySelectorAll('[data-admin-image-order-row]').forEach((row) => {
+            if (!(row instanceof HTMLElement)) {
+                return;
+            }
+            const coverCell = row.querySelector('[data-admin-image-cover-cell]');
+            if (coverCell instanceof HTMLElement) {
+                coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? 'Title picture' : '';
+            }
+        });
+        await refreshPublicSubgallerySectionFromServer(String(result.gallery_id || ''));
+    }
+    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo action completed.'), String(result.gallery_url || ''));
+}
+
+/**
+ * Reflect a saved gallery in the current page without forcing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the saved gallery.
+ * @returns {void}
+ */
+async function reflectSavedGalleryInCurrentView(result) {
+    const galleryId = String(result.gallery_id || '');
+    const galleryTitle = String(result.gallery_title || 'Gallery');
+    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
+    if (refreshed) {
+        showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
+        return;
+    }
+    const heading = document.querySelector('.hero h1, .gallery-branding-title');
+    if (heading instanceof HTMLElement && galleryTitle) {
+        heading.textContent = galleryTitle;
+    }
+    showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
+}
+
+/**
+ * Reflect a saved image in the current page without forcing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function reflectSavedImageInCurrentView(result) {
+    const imageId = String(result.image_id || '');
+    if (!imageId) {
+        showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+        return;
+    }
+    updateAdminImageRowsFromResult(imageId, result);
+    updatePublicImageCardsFromResult(imageId, result);
+    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+}
+
+/**
+ * Update admin image table rows that are already visible behind the panel.
+ *
+ * @param {string} imageId Saved image id.
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function updateAdminImageRowsFromResult(imageId, result) {
+    document.querySelectorAll(`[data-admin-image-order-row][data-image-id="${CSS.escape(imageId)}"]`).forEach((row) => {
+        if (!(row instanceof HTMLElement)) {
+            return;
+        }
+        const statusCell = row.querySelector('td:nth-child(6)');
+        if (statusCell instanceof HTMLElement && result.image_visibility) {
+            statusCell.textContent = String(result.image_visibility);
+        }
+        const sortOrder = Number(result.image_sort_order || 0);
+        if (Number.isFinite(sortOrder)) {
+            row.dataset.imageSortOrder = String(sortOrder);
+        }
+    });
+}
+
+/**
+ * Update public image cards that are already visible behind the panel.
+ *
+ * @param {string} imageId Saved image id.
+ * @param {Record<string, *>} result Server response for the saved image.
+ * @returns {void}
+ */
+function updatePublicImageCardsFromResult(imageId, result) {
+    document.querySelectorAll(`[data-lightbox-image][data-image-id="${CSS.escape(imageId)}"]`).forEach((card) => {
+        if (!(card instanceof HTMLElement)) {
+            return;
+        }
+        const title = String(result.image_title || '');
+        const description = String(result.image_description || '');
+        card.dataset.title = title;
+        card.dataset.description = description;
+        let meta = card.querySelector('.image-meta');
+        if ((title !== '' || description !== '') && !(meta instanceof HTMLElement)) {
+            const stage = card.querySelector('.image-stage');
+            if (stage instanceof HTMLElement) {
+                meta = document.createElement('div');
+                meta.className = 'image-meta image-meta-overlay';
+                stage.append(meta);
+            }
+        }
+        if (!(meta instanceof HTMLElement)) {
+            return;
+        }
+        meta.innerHTML = '';
+        if (title !== '') {
+            const titleNode = document.createElement('h2');
+            titleNode.textContent = title;
+            meta.append(titleNode);
+        }
+        if (description !== '') {
+            const descriptionNode = document.createElement('p');
+            descriptionNode.textContent = description;
+            meta.append(descriptionNode);
+        }
+        if (title === '' && description === '') {
+            meta.remove();
+        }
+    });
 }
 
 /**
@@ -717,16 +1291,16 @@ function createPublicSubgallerySection() {
  * @param {string} galleryUrl Public gallery URL.
  * @returns {void}
  */
-function showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl) {
+function showAdminGallerySidePanelResultNotice(message, targetUrl) {
     const main = document.querySelector('main.site-main');
     if (!(main instanceof HTMLElement)) {
         return;
     }
     const notice = document.createElement('div');
     notice.className = 'notice';
-    notice.innerHTML = galleryUrl
-        ? `Gallery created: <a href="${escapeHtmlAttribute(galleryUrl)}">${escapeHtmlText(galleryTitle)}</a>.`
-        : `Gallery created: ${escapeHtmlText(galleryTitle)}.`;
+    notice.innerHTML = targetUrl
+        ? `${escapeHtmlText(message)} <a href="${escapeHtmlAttribute(targetUrl)}">Open</a>.`
+        : `${escapeHtmlText(message)}.`;
     main.prepend(notice);
 }
 
@@ -2580,6 +3154,70 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
+    }
+
+    /**
      * Removes document-level movement listeners for any active input path.
      *
      * @returns {void}
@@ -2978,15 +3616,22 @@ export function setupAdminGalleryReordering() {
  * @returns {void}
  */
 export function setupAdminImageReordering() {
+    // root stores the currently active panel body when the edit table was loaded dynamically.
+    const panelBody = document.querySelector('[data-admin-side-panel]:not([hidden]) [data-admin-side-panel-body]');
+    const root = panelBody instanceof HTMLElement ? panelBody : document;
     // table stores the reorder-enabled image table on the edit-gallery screen.
-    const table = document.querySelector('[data-admin-image-order-table]');
+    const table = root.querySelector('[data-admin-image-order-table]');
     // toolbar stores endpoint metadata and status UI for the reorder feature.
-    const toolbar = document.querySelector('[data-admin-image-order-toolbar]');
+    const toolbar = root.querySelector('[data-admin-image-order-toolbar]');
     // form stores the existing image bulk form, reused only for gallery id and CSRF values.
-    const form = document.querySelector('[data-admin-image-bulk-form]');
+    const form = root.querySelector('[data-admin-image-bulk-form]');
     if (!table || !toolbar || !form) {
         return;
     }
+    if (table.dataset.adminImageReorderBound === '1') {
+        return;
+    }
+    table.dataset.adminImageReorderBound = '1';
 
     // body stores the table body containing movable image rows.
     const body = table.querySelector('tbody');
@@ -3059,6 +3704,78 @@ export function setupAdminImageReordering() {
      */
     function rowIndex(row) {
         return Array.from(body.querySelectorAll('[data-admin-image-order-row]')).indexOf(row);
+    }
+
+    /**
+     * Reads the filename value used by automatic Name-column sorting.
+     *
+     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
+     * @returns {string} Trimmed name used for locale-aware comparison.
+     */
+    function sortableImageName(row) {
+        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
+        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
+    }
+
+    /**
+     * Synchronizes visual and accessibility state of the Name sorting header.
+     *
+     * @param {HTMLButtonElement} button Header button used to sort names.
+     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
+     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
+     * @returns {void}
+     */
+    function updateNameSortHeader(button, nextDirection, activeDirection) {
+        const sortHeader = button.closest('th');
+        const arrow = button.querySelector('[aria-hidden="true"]');
+        button.dataset.sortDirection = nextDirection;
+        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
+        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
+        if (arrow) {
+            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
+        }
+    }
+
+    /**
+     * Sorts rows by filename and persists the generated order immediately.
+     *
+     * Automatic name sorting intentionally reuses the same save endpoint as
+     * manual dragging. Server-side validation, CSRF checks, exact image-list
+     * comparison, transactional sort_order updates, and admin logging therefore
+     * stay identical for both ordering methods.
+     *
+     * @param {MouseEvent} event Click event from the Name header button.
+     * @returns {void}
+     */
+    function handleNameSortClick(event) {
+        if (draggedRow) {
+            return;
+        }
+        const button = event.currentTarget;
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
+        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
+        const multiplier = direction === 'asc' ? 1 : -1;
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        if (rows.length < 2) {
+            setStatus('There is only one image, so sorting is not needed.', 'idle');
+            return;
+        }
+
+        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
+        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
+            .sort((left, right) => {
+                const compared = collator.compare(left.name, right.name);
+                if (compared !== 0) {
+                    return compared * multiplier;
+                }
+                return left.index - right.index;
+            })
+            .forEach((entry) => body.appendChild(entry.row));
+
+        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
+        saveOrder();
     }
 
     /**

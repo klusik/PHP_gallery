@@ -654,7 +654,7 @@ function render_public_gallery_admin_form(array $gallery): void
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a></div>';
     echo '</form></details>';
@@ -682,7 +682,7 @@ function render_public_image_admin_form(array $image): void
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '">Admin edit</a></div>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Admin edit</a></div>';
     echo '</form></details>';
 }
 

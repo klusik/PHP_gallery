@@ -72,7 +72,7 @@ import {
     setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260509-gallery-side-panel-ux-v5';
+} from './gallery-modules/admin-operations.js?v=20260509-edit-side-panel-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

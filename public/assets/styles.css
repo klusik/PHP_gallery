@@ -5454,3 +5454,81 @@ body.has-admin-side-panel {
 .admin-gallery-order-placeholder[data-drag-direction="left"] td::after {
     content: attr(data-drag-hint);
 }
+
+/* Admin edit side-panel reuse */
+.admin-side-panel.is-edit-panel .admin-side-panel-dialog {
+    width: min(72rem, calc(100vw - 3rem));
+}
+.admin-side-panel-edit-workspace {
+    gap: 1rem;
+}
+.admin-side-panel .admin-dashboard-hero,
+.admin-side-panel .admin-edit-gallery-hero {
+    margin: 0;
+    padding: 1.1rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+.admin-side-panel .admin-dashboard-hero h1,
+.admin-side-panel .admin-edit-gallery-hero h1 {
+    font-size: clamp(1.45rem, 2.2vw, 2rem);
+}
+.admin-side-panel .admin-hero-actions {
+    gap: 0.55rem;
+}
+.admin-side-panel .admin-metric-grid {
+    margin: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.admin-side-panel .admin-metric-card {
+    min-height: auto;
+    padding: 0.8rem;
+}
+.admin-side-panel .admin-metric-card strong {
+    font-size: 1rem;
+}
+.admin-side-panel .admin-tabs {
+    position: sticky;
+    top: 4.65rem;
+    z-index: 3;
+    margin: 0;
+    padding: 0.45rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 18px;
+    background: rgba(246, 248, 251, 0.94);
+    backdrop-filter: blur(14px);
+}
+.admin-side-panel .admin-tab-panel {
+    margin: 0;
+}
+.admin-side-panel .admin-edit-gallery-form,
+.admin-side-panel section.panel form.form-grid {
+    margin: 0;
+}
+.admin-side-panel .admin-edit-card-grid {
+    gap: 0.8rem;
+}
+.admin-side-panel .admin-edit-card {
+    padding: 0.95rem;
+    border-radius: 18px;
+}
+.admin-side-panel .admin-edit-gallery-savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    margin: 1rem -1.25rem -1.35rem;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px);
+}
+.admin-side-panel .admin-image-order-table {
+    min-width: 56rem;
+}
+.admin-side-panel .admin-side-panel-edit-workspace > .panel {
+    margin: 0;
+}
+.admin-side-panel .admin-side-panel-edit-workspace > .notice {
+    margin: 0;
+}

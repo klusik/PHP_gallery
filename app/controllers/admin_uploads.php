@@ -331,6 +331,11 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
  */
 function admin_wants_json(): bool
 {
-    return !empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+    return !empty($_POST['ajax'])
+        || !empty($_GET['ajax'])
+        || !empty($_POST['panel'])
+        || !empty($_GET['panel'])
+        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
 }
 
