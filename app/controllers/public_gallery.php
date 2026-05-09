@@ -687,21 +687,25 @@ function render_public_gallery_admin_form(array $gallery): void
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor" data-admin-inline-editor><summary>Edit gallery</summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid">' . csrf_field();
+    echo '<details class="inline-editor public-inline-editor gallery-inline-editor" data-admin-inline-editor><summary><span>Edit gallery</span><small>Quick public-page controls</small></summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid inline-editor-form">' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<label>Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
+    echo '<div class="inline-editor-fields">';
+    echo '<label class="inline-editor-title-field">Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
     echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
+    echo '</div>';
+    echo '<div class="inline-editor-options">';
     if (gallery_filename_display_schema_ready()) {
-        echo '<label><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> <span>Show file names</span></label>';
     }
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
     }
-    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '</div>';
+    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
-    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a></div>';
@@ -718,18 +722,22 @@ function render_public_image_admin_form(array $image): void
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor image-inline-editor" data-admin-inline-editor><summary>Edit photo</summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid">' . csrf_field();
+    echo '<details class="inline-editor public-inline-editor image-inline-editor" data-admin-inline-editor><summary><span>Edit photo</span><small>Quick public-page controls</small></summary>';
+    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid inline-editor-form">' . csrf_field();
     echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-    echo '<label>Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
+    echo '<div class="inline-editor-fields">';
+    echo '<label class="inline-editor-title-field">Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
     echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
+    echo '</div>';
+    echo '<div class="inline-editor-options">';
     if (nsfw_guard_schema_ready()) {
-        echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark as NSFW / 18+</label>';
+        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
     }
-    echo '<div class="bulk-row"><button type="submit" name="action" value="save">Save</button>';
+    echo '</div>';
+    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
     echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
     echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
-    echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
+    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Admin edit</a></div>';
     echo '</form></details>';
 }

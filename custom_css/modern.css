@@ -242,9 +242,9 @@ th {
 
 /* Styles the .inline-editor area of the gallery interface. */
 .inline-editor {
-    border-color: #bfdbfe;
-    background: #f8fbff;
-    border-radius: 10px;
+    border-color: var(--line, #bfdbfe);
+    background: var(--field, #f8fbff);
+    border-radius: var(--radius, 10px);
 }
 
 /* Styles the .lightbox area of the gallery interface. */
