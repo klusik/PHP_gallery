@@ -103,6 +103,24 @@ function gallery_upload_entries(?array $files): array
     return $entries;
 }
 
+
+/**
+ * Return upload entries when files were provided, or an empty list when the file picker was left empty.
+ */
+function gallery_upload_entries_or_empty(?array $files): array
+{
+    if (!$files || empty($files['name']) || !is_array($files['name'])) {
+        return [];
+    }
+    foreach ($files['name'] as $index => $name) {
+        $error = (int) ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+        if ($error !== UPLOAD_ERR_NO_FILE || (string) $name !== '') {
+            return gallery_upload_entries($files);
+        }
+    }
+    return [];
+}
+
 /**
  * Handles heic conversion supported logic for the gallery application.
  * @return mixed Result produced by this operation.

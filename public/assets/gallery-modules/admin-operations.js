@@ -225,9 +225,10 @@ function ensureGalleryRefreshProgress(form) {
 // Function `setupGalleryUploadProgress` executes this focused behavior.
 export function setupGalleryUploadProgress() {
     document.querySelectorAll('[data-gallery-upload-form]').forEach((form) => {
-        if (!(form instanceof HTMLFormElement)) {
+        if (!(form instanceof HTMLFormElement) || form.dataset.galleryUploadProgressBound === '1') {
             return;
         }
+        form.dataset.galleryUploadProgressBound = '1';
         form.addEventListener('submit', (event) => {
             event.preventDefault();
             runGalleryUpload(form);
@@ -239,10 +240,16 @@ export function setupGalleryUploadProgress() {
 async function runGalleryUpload(form) {
     // progress stores state or configuration for the gallery front-end flow.
     const progress = ensureThumbnailProgress(form);
+    revealPanelUploadProgress(form, progress);
+    form.classList.add('is-uploading');
     // buttons stores state or configuration for the gallery front-end flow.
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     buttons.forEach((button) => {
         button.disabled = true;
+        if (button instanceof HTMLButtonElement) {
+            button.dataset.originalText = button.dataset.originalText || button.textContent || '';
+            button.textContent = 'Working...';
+        }
     });
     try {
         // createThumbnails stores state or configuration for the gallery front-end flow.
@@ -256,14 +263,497 @@ async function runGalleryUpload(form) {
         } else {
             updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
         }
+        if (galleryUploadShouldClosePanel(form)) {
+            dispatchAdminSidePanelSuccess(form, result);
+            return;
+        }
         window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
     } catch (error) {
         updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+    } finally {
+        form.classList.remove('is-uploading');
+        buttons.forEach((button) => {
+            button.disabled = false;
+            if (button instanceof HTMLButtonElement && button.dataset.originalText) {
+                button.textContent = button.dataset.originalText;
+            }
+        });
+    }
+}
+
+
+/**
+ * Move side-panel upload progress into view before network work starts.
+ *
+ * @param {HTMLFormElement} form Upload form currently being submitted.
+ * @param {HTMLElement} progress Progress element used by the upload workflow.
+ * @returns {void}
+ */
+function revealPanelUploadProgress(form, progress) {
+    const dialog = form.closest('.admin-side-panel-dialog');
+    if (!(dialog instanceof HTMLElement)) {
+        return;
+    }
+    progress.classList.add('is-panel-upload-progress');
+    dialog.scrollTo({top: 0, behavior: 'smooth'});
+    progress.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+/**
+ * Return whether an upload form should complete inside the side-panel workflow.
+ *
+ * @param {HTMLFormElement} form Upload form submitted by the admin.
+ * @returns {boolean} True when the side panel owns the completion behavior.
+ */
+function galleryUploadShouldClosePanel(form) {
+    return form.dataset.galleryPanelCloseOnSuccess === '1' && Boolean(form.closest('[data-admin-side-panel]'));
+}
+
+/**
+ * Notify the side-panel controller that an embedded workflow finished.
+ *
+ * @param {HTMLFormElement} form Completed form.
+ * @param {Record<string, *>} result Server response plus client-side aggregate upload data.
+ * @returns {void}
+ */
+function dispatchAdminSidePanelSuccess(form, result) {
+    form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+        bubbles: true,
+        detail: {
+            source: 'upload',
+            result,
+        },
+    }));
+}
+
+/**
+ * Attach the progressive Add gallery here side-panel behavior.
+ *
+ * Direct links remain unchanged for browsers without JavaScript. The enhanced path
+ * fetches the existing create-gallery page as a fragment and lets the existing
+ * create/upload endpoints handle all mutations.
+ *
+ * @returns {void}
+ */
+export function setupAdminGallerySidePanel() {
+    if (document.body?.dataset.adminGallerySidePanelBound === '1') {
+        return;
+    }
+    if (document.body) {
+        document.body.dataset.adminGallerySidePanelBound = '1';
+    }
+
+    document.addEventListener('click', async (event) => {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+        const link = event.target.closest('[data-gallery-side-panel-link]');
+        if (!(link instanceof HTMLAnchorElement)) {
+            return;
+        }
+        if (!window.fetch || !window.DOMParser) {
+            return;
+        }
+        event.preventDefault();
+        await openAdminGallerySidePanel(link);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+        const closeButton = event.target.closest('[data-admin-side-panel-close], [data-admin-side-panel-scrim]');
+        if (!closeButton) {
+            return;
+        }
+        const panel = event.target.closest('[data-admin-side-panel]') || document.querySelector('[data-admin-side-panel]');
+        if (panel instanceof HTMLElement) {
+            closeAdminGallerySidePanel(panel);
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') {
+            return;
+        }
+        const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
+        if (panel instanceof HTMLElement) {
+            closeAdminGallerySidePanel(panel);
+        }
+    });
+
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-gallery-panel-create-form]')) {
+            return;
+        }
+        event.preventDefault();
+        await submitAdminGalleryPanelCreateForm(form);
+    });
+
+    document.addEventListener('php-gallery:side-panel-success', (event) => {
+        const panel = event.target instanceof Element ? event.target.closest('[data-admin-side-panel]') : document.querySelector('[data-admin-side-panel]');
+        if (panel instanceof HTMLElement) {
+            closeAdminGallerySidePanel(panel);
+        }
+        reflectCreatedGalleryInCurrentView(event.detail?.result || {});
+    });
+}
+
+/**
+ * Open the reusable side panel and fill it from the create-gallery fragment.
+ *
+ * @param {HTMLAnchorElement} link Enhanced Add gallery here link.
+ * @returns {Promise<void>} Resolves after content is loaded or fallback navigation starts.
+ */
+async function openAdminGallerySidePanel(link) {
+    const panel = ensureAdminGallerySidePanel();
+    const body = panel.querySelector('[data-admin-side-panel-body]');
+    if (!(body instanceof HTMLElement)) {
+        window.location.href = link.href;
+        return;
+    }
+    openAdminGallerySidePanelShell(panel);
+    writeAdminGallerySidePanelStatus(panel, 'Loading gallery workflow...', false);
+    body.innerHTML = '<div class="admin-side-panel-loading" role="status">Loading gallery workflow...</div>';
+
+    try {
+        const url = new URL(link.dataset.gallerySidePanelUrl || link.href, window.location.href);
+        url.searchParams.set('panel', '1');
+        const response = await fetch(url.toString(), {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const html = await response.text();
+        if (!response.ok || html.trim() === '') {
+            throw new Error('The gallery workflow could not be loaded.');
+        }
+        body.innerHTML = html;
+        writeAdminGallerySidePanelStatus(panel, '', false);
+        setupGalleryUploadProgress();
+        const firstField = body.querySelector('input:not([type="hidden"]), select, textarea, button');
+        if (firstField instanceof HTMLElement) {
+            firstField.focus({preventScroll: true});
+        }
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'The gallery workflow could not be loaded.', true);
+        body.innerHTML = `<div class="notice is-alert">The side-panel workflow could not be loaded. Use the normal create page instead: <a href="${escapeHtmlAttribute(link.href)}">open Create gallery</a>.</div>`;
+    }
+}
+
+/**
+ * Create the side-panel shell once and reuse it for later gallery actions.
+ *
+ * @returns {HTMLElement} Side-panel root.
+ */
+function ensureAdminGallerySidePanel() {
+    let panel = document.querySelector('[data-admin-side-panel]');
+    if (panel instanceof HTMLElement) {
+        return panel;
+    }
+    panel = document.createElement('div');
+    panel.className = 'admin-side-panel';
+    panel.hidden = true;
+    panel.dataset.adminSidePanel = 'true';
+    panel.setAttribute('aria-hidden', 'true');
+    panel.innerHTML = `
+        <div class="admin-side-panel-scrim" data-admin-side-panel-scrim></div>
+        <aside class="admin-side-panel-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-side-panel-title">
+            <header class="admin-side-panel-header">
+                <div>
+                    <p class="admin-kicker">Admin shortcut</p>
+                    <h2 id="admin-side-panel-title">Add gallery here</h2>
+                </div>
+                <button type="button" class="button secondary" data-admin-side-panel-close>Close</button>
+            </header>
+            <div class="admin-side-panel-status visually-hidden" data-admin-side-panel-status aria-live="polite"></div>
+            <div class="admin-side-panel-body" data-admin-side-panel-body></div>
+        </aside>`;
+    document.body.append(panel);
+    return panel;
+}
+
+/**
+ * Make the side panel visible while keeping the current page in place.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @returns {void}
+ */
+function openAdminGallerySidePanelShell(panel) {
+    panel.hidden = false;
+    panel.classList.add('is-open');
+    panel.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('has-admin-side-panel');
+}
+
+/**
+ * Hide the side panel and clear its transient status.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @returns {void}
+ */
+function closeAdminGallerySidePanel(panel) {
+    panel.hidden = true;
+    panel.classList.remove('is-open');
+    panel.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('has-admin-side-panel');
+    writeAdminGallerySidePanelStatus(panel, '', false);
+}
+
+/**
+ * Write a visible or screen-reader-only side-panel status message.
+ *
+ * @param {HTMLElement} panel Side-panel root.
+ * @param {string} message Status text.
+ * @param {boolean} isError Whether the message should be styled as an error.
+ * @returns {void}
+ */
+function writeAdminGallerySidePanelStatus(panel, message, isError) {
+    const status = panel.querySelector('[data-admin-side-panel-status]');
+    if (!(status instanceof HTMLElement)) {
+        return;
+    }
+    status.textContent = message;
+    status.classList.toggle('visually-hidden', message === '');
+    status.classList.toggle('notice', message !== '');
+    status.classList.toggle('is-alert', isError);
+}
+
+/**
+ * Submit the empty-gallery side-panel form to the existing create endpoint.
+ *
+ * @param {HTMLFormElement} form Side-panel create form.
+ * @returns {Promise<void>} Resolves after success handling or error reporting.
+ */
+async function submitAdminGalleryPanelCreateForm(form) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, 'Creating gallery...', false);
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+        const response = await fetch(form.action || window.location.href, {
+            method: 'POST',
+            body,
+            headers: {'Accept': 'application/json'},
+        });
+        const result = await readJsonResponseSafely(response, 'Gallery creation failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || 'Gallery creation failed.');
+        }
+        form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
+            bubbles: true,
+            detail: {
+                source: 'create',
+                result,
+            },
+        }));
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'Gallery creation failed.', true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
         });
     }
+}
+
+/**
+ * Reflect the created child gallery in the currently visible public page.
+ *
+ * The persisted server render is the source of truth for ordering, covers, image
+ * counts, admin controls, and pagination. After the panel workflow succeeds, the
+ * current gallery page is fetched in the background and only the subgallery area
+ * is replaced. This keeps the page in context without doing a full navigation.
+ *
+ * @param {Record<string, *>} result Server response for the created gallery.
+ * @returns {void}
+ */
+async function reflectCreatedGalleryInCurrentView(result) {
+    const galleryUrl = String(result.gallery_url || '');
+    const galleryTitle = String(result.gallery_title || 'New gallery');
+    const galleryId = String(result.gallery_id || '');
+    if (!galleryUrl) {
+        showAdminGallerySidePanelResultNotice(galleryTitle, '');
+        return;
+    }
+
+    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
+    if (refreshed) {
+        return;
+    }
+
+    let grid = document.querySelector('[data-public-subgallery-grid]');
+    if (!(grid instanceof HTMLElement)) {
+        grid = createPublicSubgallerySection();
+    }
+    if (!(grid instanceof HTMLElement)) {
+        showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
+        return;
+    }
+
+    const card = document.createElement('article');
+    card.className = 'gallery-card';
+    card.dataset.galleryId = galleryId;
+    card.dataset.sidePanelCreatedGallery = 'true';
+    card.innerHTML = `
+        <a class="gallery-card-link" href="${escapeHtmlAttribute(galleryUrl)}">
+            <span class="gallery-card-body">
+                <h2>${escapeHtmlText(galleryTitle)}</h2>
+                <p class="muted">Created just now</p>
+            </span>
+        </a>`;
+    grid.prepend(card);
+    card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+
+/**
+ * Refresh the visible subgallery area from the current server-rendered page.
+ *
+ * @param {string} galleryId Newly created gallery id used for scroll targeting.
+ * @returns {Promise<boolean>} True when the page fragment was refreshed.
+ */
+async function refreshPublicSubgallerySectionFromServer(galleryId) {
+    try {
+        const response = await fetch(window.location.href, {
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const html = await response.text();
+        if (!response.ok || html.trim() === '') {
+            return false;
+        }
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        const freshSection = parsed.querySelector('[data-public-subgallery-section]');
+        const currentSection = document.querySelector('[data-public-subgallery-section]');
+        if (freshSection instanceof HTMLElement) {
+            if (currentSection instanceof HTMLElement) {
+                currentSection.replaceWith(freshSection);
+            } else {
+                const grid = document.querySelector('[data-public-subgallery-grid]');
+                const transientSection = grid instanceof HTMLElement ? grid.closest('[data-public-subgallery-section], .panel') : null;
+                if (transientSection instanceof HTMLElement) {
+                    transientSection.replaceWith(freshSection);
+                } else {
+                    const createdSection = createPublicSubgallerySection();
+                    const createdWrapper = createdSection instanceof HTMLElement ? createdSection.closest('[data-public-subgallery-section], .panel') : null;
+                    if (createdWrapper instanceof HTMLElement) {
+                        createdWrapper.replaceWith(freshSection);
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            focusCreatedGalleryCard(galleryId);
+            return true;
+        }
+        if (currentSection instanceof HTMLElement) {
+            currentSection.remove();
+            return true;
+        }
+        return false;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Scroll the newly created gallery card into view after fragment replacement.
+ *
+ * @param {string} galleryId Newly created gallery id.
+ * @returns {void}
+ */
+function focusCreatedGalleryCard(galleryId) {
+    if (!galleryId) {
+        return;
+    }
+    const card = document.querySelector(`[data-gallery-id="${CSS.escape(galleryId)}"]`);
+    if (card instanceof HTMLElement) {
+        card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+}
+
+/**
+ * Create a subgallery section when the current gallery did not have children yet.
+ *
+ * @returns {HTMLElement|null} New or existing subgallery grid.
+ */
+function createPublicSubgallerySection() {
+    const main = document.querySelector('main.site-main');
+    if (!(main instanceof HTMLElement)) {
+        return null;
+    }
+    const section = document.createElement('section');
+    section.className = 'panel';
+    section.dataset.publicSubgallerySection = 'true';
+    section.innerHTML = '<h2>Subgalleries</h2><div class="grid" data-public-subgallery-grid></div>';
+
+    const insertionPoint = main.querySelector('.gallery-list-frame, [data-gallery-image-list], [data-lightbox]');
+    if (insertionPoint instanceof HTMLElement) {
+        insertionPoint.insertAdjacentElement('beforebegin', section);
+    } else {
+        main.append(section);
+    }
+    return section.querySelector('[data-public-subgallery-grid]');
+}
+
+/**
+ * Show a compact success notice when a card cannot be inserted safely.
+ *
+ * @param {string} galleryTitle Created gallery title.
+ * @param {string} galleryUrl Public gallery URL.
+ * @returns {void}
+ */
+function showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl) {
+    const main = document.querySelector('main.site-main');
+    if (!(main instanceof HTMLElement)) {
+        return;
+    }
+    const notice = document.createElement('div');
+    notice.className = 'notice';
+    notice.innerHTML = galleryUrl
+        ? `Gallery created: <a href="${escapeHtmlAttribute(galleryUrl)}">${escapeHtmlText(galleryTitle)}</a>.`
+        : `Gallery created: ${escapeHtmlText(galleryTitle)}.`;
+    main.prepend(notice);
+}
+
+/**
+ * Escape HTML text before inserting generated success markup.
+ *
+ * @param {string} value Raw value.
+ * @returns {string} Escaped text.
+ */
+function escapeHtmlText(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;',
+    })[character] || character);
+}
+
+/**
+ * Escape an attribute value before inserting generated success markup.
+ *
+ * @param {string} value Raw value.
+ * @returns {string} Escaped attribute value.
+ */
+function escapeHtmlAttribute(value) {
+    return escapeHtmlText(value).replace(/`/g, '&#096;');
 }
 
 /**
@@ -334,8 +824,31 @@ function cloneGalleryUploadBody(form, files, galleryId) {
 async function runGalleryUploadFiles(form, progress, createThumbnails) {
     // files stores state or configuration for the gallery front-end flow.
     const files = selectedGalleryUploadFiles(form);
-    if (files.length === 0) {
+    const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
+    if (files.length === 0 && !allowEmptyPanelGallery) {
         throw new Error('Choose at least one image to upload.');
+    }
+
+    if (files.length === 0 && allowEmptyPanelGallery) {
+        updateBasicProgress(progress, 20, 'Creating gallery...');
+        const emptyResult = await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {});
+        updateBasicProgress(progress, 100, 'Gallery created.');
+        return {
+            ok: true,
+            gallery_id: Number(emptyResult.gallery_id || 0),
+            gallery_ids: emptyResult.gallery_id ? [Number(emptyResult.gallery_id)] : [],
+            gallery_title: String(emptyResult.gallery_title || ''),
+            gallery_url: String(emptyResult.gallery_url || ''),
+            edit_url: String(emptyResult.edit_url || ''),
+            uploaded: 0,
+            scanned: 0,
+            thumbnails: 0,
+            thumbnail_skipped: 0,
+            thumbnail_failed: 0,
+            thumbnail_errors: [],
+            total_files: 0,
+            redirect_url: String(emptyResult.redirect_url || ''),
+        };
     }
 
     // uploaded stores state or configuration for the gallery front-end flow.
@@ -356,6 +869,12 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let redirectUrl = '';
     // galleryIds stores state or configuration for the gallery front-end flow.
     const galleryIds = [];
+    // galleryTitle stores the created or selected gallery title reported by the first upload response.
+    let galleryTitle = '';
+    // galleryUrl stores the public gallery URL reported by the first upload response.
+    let galleryUrl = '';
+    // editUrl stores the admin edit URL reported by the first upload response.
+    let editUrl = '';
 
     for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         // file stores state or configuration for the gallery front-end flow.
@@ -385,6 +904,9 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         uploaded += Number(uploadResult.uploaded || 0);
         scanned += Number(uploadResult.scanned || 0);
         redirectUrl = uploadResult.redirect_url || redirectUrl;
+        galleryTitle = galleryTitle || String(uploadResult.gallery_title || '');
+        galleryUrl = galleryUrl || String(uploadResult.gallery_url || '');
+        editUrl = editUrl || String(uploadResult.edit_url || '');
 
         if (createThumbnails) {
             // imageIds stores state or configuration for the gallery front-end flow.
@@ -404,6 +926,9 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         ok: true,
         gallery_id: galleryId,
         gallery_ids: galleryIds.length > 0 ? galleryIds : (galleryId ? [galleryId] : []),
+        gallery_title: galleryTitle,
+        gallery_url: galleryUrl,
+        edit_url: editUrl,
         uploaded,
         scanned,
         thumbnails,
@@ -1078,6 +1603,18 @@ function ensureThumbnailProgress(form) {
             return progress;
         }
     }
+
+    const panelAnchor = form.closest('[data-gallery-panel-workflow]')?.querySelector('[data-gallery-panel-progress-anchor]');
+    if (panelAnchor instanceof HTMLElement) {
+        let progress = panelAnchor.querySelector('[data-thumbnail-progress]');
+        if (!progress) {
+            progress = createThumbnailProgress();
+            panelAnchor.append(progress);
+        }
+        progress.hidden = false;
+        return progress;
+    }
+
     // Variable `progress` stores this steps working value.
     let progress = form.classList.contains('inline-form')
         ? form.nextElementSibling?.matches('[data-thumbnail-progress]') ? form.nextElementSibling : null

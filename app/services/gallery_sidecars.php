@@ -427,6 +427,28 @@ function create_gallery_row_for_folder(string $folderPath): ?array
 /**
  * Create a real empty folder and immediately index it as a gallery.
  */
+/**
+ * Calculate a sort order that places a newly created gallery before its siblings.
+ *
+ * Existing reorder behavior still uses explicit sort_order values. This helper is
+ * only used when the creation flow did not provide a manual order value, so the
+ * most recently added child appears first after the next server render.
+ */
+function next_gallery_prepend_sort_order(int $parentId): int
+{
+    if ($parentId > 0) {
+        // $stmt stores the query used for normal child galleries.
+        $stmt = db()->prepare('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id = ?');
+        $stmt->execute([$parentId]);
+    } else {
+        // $stmt stores the query used for root-level galleries.
+        $stmt = db()->query('SELECT COALESCE(MIN(sort_order), 0) FROM galleries WHERE parent_id IS NULL');
+    }
+    // $minimumSortOrder stores the first currently rendered sibling order.
+    $minimumSortOrder = (int) $stmt->fetchColumn();
+    return $minimumSortOrder - 10;
+}
+
 function create_empty_gallery(array $input): array
 {
     // $title stores an intermediate value used by the surrounding gallery workflow.
@@ -463,12 +485,17 @@ function create_empty_gallery(array $input): array
         throw new RuntimeException('Could not create gallery folder.');
     }
 
+    // $sortOrder stores the persisted sibling order for the new gallery.
+    $sortOrder = array_key_exists('sort_order', $input)
+        ? (int) $input['sort_order']
+        : next_gallery_prepend_sort_order($parentId);
+
     // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, [
         'title' => $title,
         'description' => $description,
         'visibility' => $visibility,
-        'sort_order' => (int) ($input['sort_order'] ?? 0),
+        'sort_order' => $sortOrder,
         'voting_enabled' => $votingEnabled,
         'show_filenames' => $showFilenames,
     ]);

@@ -248,9 +248,9 @@ function cms_gallery(): void
         echo '<div class="gallery-list-content" data-back-to-top-list>';
     }
     if ($children) {
-        echo '<section class="panel"><h2>Subgalleries</h2>';
+        echo '<section class="panel" data-public-subgallery-section><h2>Subgalleries</h2>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
-        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
+        echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-subgallery-grid>';
         foreach ($children as $child) {
             render_gallery_card($child, true);
         }
@@ -594,7 +594,7 @@ function render_gallery_card(array $gallery, bool $publicOnly): void
     $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
+    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '"><a class="gallery-card-link" href="' . e(gallery_public_url($gallery)) . '">';
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">Protected</span>';
     } elseif ($coverAsset !== '') {
@@ -655,7 +655,7 @@ function render_public_gallery_admin_form(array $gallery): void
     echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
     echo '<button type="submit" class="secondary" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '">Admin edit</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '">Create gallery here</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a></div>';
     echo '</form></details>';
 }

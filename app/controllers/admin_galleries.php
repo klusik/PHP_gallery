@@ -106,32 +106,43 @@ function cms_admin_new_gallery(): void
     $prefillParentId = selected_gallery_id_from_query('parent_id');
     // $prefillParentGallery stores the validated parent gallery record used for contextual helper text.
     $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+    // $isPanelRequest stores whether the create form should render as a reusable side-panel fragment.
+    $isPanelRequest = admin_gallery_create_panel_request();
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = '';
     if (request_method() === 'POST') {
         verify_csrf();
         try {
             // $gallery stores an intermediate value used by the surrounding gallery workflow.
-            $gallery = create_empty_gallery([
-                'title' => $_POST['title'] ?? '',
-                'folder_name' => $_POST['folder_name'] ?? '',
-                'description' => $_POST['description'] ?? '',
-                'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
-                'parent_id' => $_POST['parent_id'] ?? 0,
-                'voting_enabled' => $_POST['voting_enabled'] ?? 0,
-                'show_filenames' => $_POST['show_filenames'] ?? 0,
-            ]);
+            $gallery = create_empty_gallery(admin_new_gallery_input_from_post());
             admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
             ]);
+            if (admin_wants_json()) {
+                header('Content-Type: application/json');
+                echo json_encode(admin_new_gallery_success_response($gallery));
+                return;
+            }
             flash_message('admin_notice', 'Gallery folder created.');
             redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
         } catch (Throwable $exception) {
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
             admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
+            if (admin_wants_json()) {
+                http_response_code(422);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => false, 'error' => $error]);
+                return;
+            }
         }
+    }
+
+    if ($isPanelRequest) {
+        header('Content-Type: text/html; charset=UTF-8');
+        render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
+        return;
     }
 
     render_header('Create empty gallery');
@@ -142,7 +153,59 @@ function cms_admin_new_gallery(): void
     if ($error !== '') {
         echo '<div class="notice">Create failed: ' . e($error) . '</div>';
     }
-    echo '<section class="panel"><form method="post" class="form-grid">' . csrf_field();
+    echo '<section class="panel"><form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="form-grid">' . csrf_field();
+    render_admin_new_gallery_fields($prefillParentId, false);
+    echo '<button type="submit">Create gallery folder</button></form></section>';
+    render_footer();
+}
+
+/**
+ * Return whether the create-gallery page is being requested as side-panel content.
+ */
+function admin_gallery_create_panel_request(): bool
+{
+    return !empty($_GET['panel']) || !empty($_POST['panel']);
+}
+
+/**
+ * Read create-gallery POST values through the same input contract used by the direct admin page.
+ */
+function admin_new_gallery_input_from_post(): array
+{
+    return [
+        'title' => $_POST['title'] ?? '',
+        'folder_name' => $_POST['folder_name'] ?? '',
+        'description' => $_POST['description'] ?? '',
+        'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
+        'parent_id' => $_POST['parent_id'] ?? 0,
+        'voting_enabled' => $_POST['voting_enabled'] ?? 0,
+        'show_filenames' => $_POST['show_filenames'] ?? 0,
+    ];
+}
+
+/**
+ * Build the JSON payload consumed by the progressive side-panel workflow.
+ */
+function admin_new_gallery_success_response(array $gallery): array
+{
+    return [
+        'ok' => true,
+        'message' => 'Gallery folder created.',
+        'gallery_id' => (int) $gallery['id'],
+        'gallery_title' => (string) ($gallery['title'] ?? ''),
+        'gallery_url' => gallery_public_url($gallery),
+        'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]),
+    ];
+}
+
+/**
+ * Render create-gallery fields shared by the full admin page and the side-panel fragment.
+ */
+function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode): void
+{
+    if ($panelMode) {
+        echo '<input type="hidden" name="panel" value="1">';
+    }
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
@@ -150,8 +213,23 @@ function cms_admin_new_gallery(): void
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
     echo '<label>Description<textarea name="description"></textarea></label>';
-    echo '<button type="submit">Create gallery folder</button></form></section>';
-    render_footer();
+}
+
+/**
+ * Render the focused side-panel create workflow without the normal admin shell.
+ */
+function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
+{
+    echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Add gallery here</h2><p class="muted">Create a child gallery here. Photos are optional, so leaving the file picker empty creates an empty gallery.</p></div>';
+    if ($prefillParentGallery) {
+        echo '<div class="notice">Target parent: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+    }
+    if ($error !== '') {
+        echo '<div class="notice">Create failed: ' . e($error) . '</div>';
+    }
+    render_admin_upload_new_gallery_panel_form($prefillParentId);
+    echo '</div>';
 }
 
 /**

@@ -69,9 +69,10 @@ import {
     setupAdminLogLiveFilters,
     setupGalleryRefreshProgress,
     setupGalleryUploadProgress,
+    setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260508-admin-js-recovery-v1';
+} from './gallery-modules/admin-operations.js?v=20260509-gallery-side-panel-ux-v5';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -113,6 +114,7 @@ function bootGalleryBrowserFeatures() {
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
     setupGalleryUploadProgress();
+    setupAdminGallerySidePanel();
     setupPictureGame();
     setupAdminLogStatusForms();
     setupAdminLogLiveFilters();
