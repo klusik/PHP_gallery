@@ -1,5 +1,10 @@
 # Patch notes
 
+## Version 0.61B
+
+- Fixed gallery inline editor overflow so the public gallery edit form stays inside the card layout instead of
+  spilling under the content on the right.
+
 ## Version 0.61
 
 Version 0.61 is a major public UI and UX refinement release focused on modernizing the gallery presentation layer, reducing visual clutter, improving typography consistency, and making public gallery management dramatically more compact and efficient for both visitors and logged-in admins.
