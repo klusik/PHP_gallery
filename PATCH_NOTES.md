@@ -1,5 +1,199 @@
 # Patch notes
 
+## Version 0.63
+
+Version 0.63 is a major public-page admin workflow refinement release focused on replacing bulky inline editing with compact contextual actions, improving side-panel workflows, stabilizing live refresh behavior, and modernizing gallery interaction ergonomics.
+
+This release transforms the public gallery page into a cleaner, more content-focused experience while preserving the existing full admin editing system as a fallback.
+
+### Highlights
+
+#### Public inline editors were replaced with compact contextual admin actions
+
+The old large inline Edit gallery and Edit photo forms were removed from public gallery pages and replaced with compact contextual icon actions.
+
+What changed:
+
+- removed bulky inline public-page edit panels from:
+  - gallery cards
+  - photo cards
+  - gallery hero sections
+- added compact pencil edit actions for:
+  - galleries
+  - photos
+  - current gallery hero
+- added compact delete/remove actions for:
+  - galleries
+  - photos
+- added confirmation dialogs before CMS removal actions execute
+- preserved full-page admin edit routes as fallback entry points
+- reused the existing side-panel admin workflow instead of introducing a second editing system
+- added accessibility labels and titles for all compact admin actions
+- unified the new controls with the translucent glass-style badge design already used by gallery collection indicators
+
+User impact:
+
+- public gallery pages are significantly cleaner
+- admin controls no longer dominate gallery content
+- editing now feels integrated into the gallery itself instead of layered on top of it
+- gallery management is faster and visually lighter
+
+### Side-panel workflows were redesigned into focused actions
+
+The side-panel administration flow was reorganized into clearer, more task-focused workflows.
+
+What changed:
+
+- separated:
+  - Upload photos here
+  - Create gallery here
+  into distinct workflows
+- removed the confusing mixed upload/create panel behavior
+- upload panels now focus only on uploading into existing galleries
+- gallery creation panels now focus only on creating empty galleries
+- added a dedicated compact Create gallery icon into the hero action bar
+- improved side-panel gallery creation UI with:
+  - dedicated identity section
+  - cleaner field grouping
+  - focused parent selection
+  - improved toggles and spacing
+- upload side-panels now display:
+  - explicit target gallery
+  - cleaner upload drop area
+  - simplified upload messaging
+
+User impact:
+
+- workflows are easier to understand
+- upload and gallery creation are no longer mixed together
+- admins make fewer mistakes during nested gallery management
+- side-panel interactions feel more intentional and modern
+
+### Public-page editing now fully uses side-panel workflows
+
+Public-page editing was fully integrated into the existing side-panel architecture.
+
+What changed:
+
+- gallery edit icons now open:
+  - the existing gallery admin side panel
+- photo edit icons now open:
+  - the existing photo admin side panel
+- panel actions now stay isolated from fullscreen/lightbox behavior
+- edit actions now stop event propagation before lightbox handlers execute
+- lightbox click handling explicitly ignores:
+  - admin edit actions
+  - admin delete actions
+  - side-panel triggers
+
+User impact:
+
+- clicking photos still opens fullscreen normally
+- clicking edit icons now always opens the correct admin panel
+- no accidental fullscreen openings during editing
+- editing feels faster and more stable
+
+### Dynamic gallery refresh behavior was stabilized
+
+The public refresh pipeline was redesigned to avoid duplicate gallery and photo rendering after edits or uploads.
+
+What changed:
+
+- replaced fragmented refresh logic with a single gallery-frame refresh model
+- removed conflicting partial DOM replacement paths
+- removed additive update flows that caused duplicate cards after:
+  - uploads
+  - edits
+  - panel saves
+- public refreshes now replace the gallery content as a single source of truth
+- gallery and photo save handlers now:
+  - refresh once
+  - avoid local duplicate mutation passes
+- hero refresh handling was stabilized during partial updates
+
+User impact:
+
+- edited photos no longer appear twice
+- uploaded photos no longer duplicate visually
+- gallery updates feel cleaner and more reliable
+- panel-based workflows now behave consistently without full reloads
+
+### Hero action bar was modernized into compact icon controls
+
+The gallery hero action bar was redesigned into a cleaner compact icon-based system.
+
+What changed:
+
+- converted:
+  - Download gallery
+  - Play picture game
+  into compact icon buttons
+- added compact hero icons for:
+  - edit gallery
+  - remove gallery
+  - create child gallery
+- added icon-based visual treatment using:
+  - translucent glass surfaces
+  - blur effects
+  - compact hover states
+- unified hero actions with:
+  - collection counters
+  - subgallery indicators
+  - overlay badge styling
+- improved icon spacing and responsive sizing
+- fixed overlapping hero action positioning
+- fixed overlap between:
+  - reorder handles
+  - compact admin controls
+  on smaller gallery cards
+
+User impact:
+
+- the hero area feels dramatically cleaner
+- actions remain accessible without dominating the layout
+- visual consistency across overlays and controls is improved
+- small gallery cards remain usable even with reorder mode active
+
+### Public reorder and compact action overlays were improved
+
+The interaction between drag handles and compact action overlays was refined.
+
+What changed:
+
+- cards with reorder handles now receive dedicated layout handling
+- compact edit/delete overlays automatically reposition below reorder handles
+- gallery and photo action overlays now avoid collision with:
+  - subgallery counters
+  - drag handles
+  - compact overlay badges
+- overlay opacity and hover transitions were refined
+
+User impact:
+
+- reorder mode remains readable on compact cards
+- overlay controls no longer visually collide
+- gallery card interactions feel more polished
+
+### Technical Notes
+
+Files heavily updated in this release include:
+
+- `app/controllers/public_gallery.php`
+- `app/controllers/admin_galleries.php`
+- `app/controllers/admin_uploads.php`
+- `public/assets/gallery-modules/admin-operations.js`
+- `public/assets/gallery-modules/lightbox.js`
+- `public/assets/styles/public.css`
+- `public/assets/styles/side-panel.css`
+- `public/assets/styles/utilities.css`
+
+### Notes
+
+- This release intentionally removes the old bulky public inline editing model in favor of compact contextual admin controls.
+- Existing full admin edit routes remain fully functional as fallback workflows.
+- Public-page administration now primarily uses the side-panel editing system.
+- The refresh pipeline was intentionally simplified to avoid duplicate rendering paths and stale fragment conflicts.
+
 ## Version 0.62.2
 
 This is a focused admin workflow bugfix release for side-panel gallery creation, upload refreshes, and photo move behavior.
