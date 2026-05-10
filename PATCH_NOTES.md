@@ -1,5 +1,20 @@
 # Patch notes
 
+## Version 0.62.2
+
+This is a focused admin workflow bugfix release for side-panel gallery creation, upload refreshes, and photo move behavior.
+
+- Fixed side-panel refresh context after creating a new gallery, so the UI now refreshes the correct parent gallery instead of guessing from the newly created gallery URL.
+- Fixed create-and-upload refresh behavior for new galleries, including root-level and nested gallery creation.
+- Improved the Move to new gallery workflow so admins can explicitly choose the parent gallery for the newly created destination.
+- Updated move-to-new-gallery inheritance so the new gallery now inherits visibility, voting, and file-name display settings from the selected parent gallery.
+- Fixed AJAX handling for moving photos from the side panel, including move-to-existing-gallery and move-to-new-gallery actions.
+- Kept the side panel open after photo move operations, matching the existing dynamic behavior for cover changes and deletions.
+- Improved JSON responses for bulk photo moves with source gallery, destination gallery, parent gallery, and refresh URL metadata.
+- Fixed public inline gallery visibility controls so public galleries show Unpublish and non-public galleries show Publish.
+- Split the large public stylesheet into smaller imported CSS files for base, public, lightbox, admin, side-panel, and utility styling.
+- Refreshed the core manifest for the updated file set and stylesheet structure.
+
 ## Version 0.62.1
 
 This is just a small bugfix:
