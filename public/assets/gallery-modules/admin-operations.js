@@ -791,6 +791,8 @@ function setupAdminPanelThumbnailBoundControls(root) {
         const minValueControl = controlRoot.querySelector('[data-thumbnail-bound-min-value]');
         const maxValueControl = controlRoot.querySelector('[data-thumbnail-bound-max-value]');
         const summary = controlRoot.querySelector('[data-thumbnail-bound-summary]');
+        const minDisplay = controlRoot.querySelector('[data-thumbnail-bound-min-display]');
+        const maxDisplay = controlRoot.querySelector('[data-thumbnail-bound-max-display]');
         if (values.length < 2 || !(minIndexControl instanceof HTMLInputElement) || !(maxIndexControl instanceof HTMLInputElement) || !(minValueControl instanceof HTMLInputElement) || !(maxValueControl instanceof HTMLInputElement) || !(summary instanceof HTMLElement)) {
             return;
         }
@@ -814,7 +816,23 @@ function setupAdminPanelThumbnailBoundControls(root) {
             const maxValue = values[maxIndex] || 0;
             minValueControl.value = String(minValue);
             maxValueControl.value = String(maxValue);
-            summary.textContent = `${formatSize(minValue, 'min')} to ${formatSize(maxValue, 'max')}`;
+            const minPercent = highestIndex > 0 ? (minIndex / highestIndex) * 100 : 0;
+            const maxPercent = highestIndex > 0 ? (maxIndex / highestIndex) * 100 : 100;
+            controlRoot.style.setProperty('--thumbnail-bound-min-percent', `${minPercent}%`);
+            controlRoot.style.setProperty('--thumbnail-bound-max-percent', `${maxPercent}%`);
+            controlRoot.style.setProperty('--thumbnail-bound-active-start', `${minPercent}%`);
+            controlRoot.style.setProperty('--thumbnail-bound-active-end', `${maxPercent}%`);
+            controlRoot.style.setProperty('--thumbnail-bound-active-start-number', String(minPercent));
+            controlRoot.style.setProperty('--thumbnail-bound-active-end-number', String(maxPercent));
+            const minLabel = formatSize(minValue, 'min');
+            const maxLabel = formatSize(maxValue, 'max');
+            if (minDisplay instanceof HTMLElement) {
+                minDisplay.textContent = minLabel;
+            }
+            if (maxDisplay instanceof HTMLElement) {
+                maxDisplay.textContent = maxLabel;
+            }
+            summary.textContent = `${minLabel} to ${maxLabel}`;
         };
         minIndexControl.addEventListener('input', () => sync(minIndexControl));
         minIndexControl.addEventListener('change', () => sync(minIndexControl));
