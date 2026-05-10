@@ -196,6 +196,13 @@ function admin_new_gallery_input_from_post(): array
  */
 function admin_new_gallery_success_response(array $gallery): array
 {
+    // $parentGalleryId stores the persisted parent selected by the admin create form.
+    $parentGalleryId = (int) ($gallery['parent_id'] ?? 0);
+    // $parentGallery stores the parent row used by the side-panel refresh contract.
+    $parentGallery = $parentGalleryId > 0 ? find_gallery($parentGalleryId, true) : null;
+    // $parentGalleryUrl stores the public parent URL when the gallery was created below another gallery.
+    $parentGalleryUrl = is_array($parentGallery) ? gallery_public_url($parentGallery) : '';
+
     return [
         'ok' => true,
         'message' => 'Gallery folder created.',
@@ -203,6 +210,10 @@ function admin_new_gallery_success_response(array $gallery): array
         'gallery_title' => (string) ($gallery['title'] ?? ''),
         'gallery_url' => gallery_public_url($gallery),
         'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]),
+        'parent_gallery_id' => $parentGalleryId,
+        'parent_gallery_url' => $parentGalleryUrl,
+        'refresh_url' => $parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home'),
+        'refresh_gallery_id' => $parentGalleryId,
     ];
 }
 
@@ -229,7 +240,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Add gallery here</h2><p class="muted">Create a child gallery here. Photos are optional, so leaving the file picker empty creates an empty gallery.</p></div>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Create gallery</h2><p class="muted">Choose the parent gallery, then create an empty gallery or upload photos immediately.</p></div>';
     if ($prefillParentGallery) {
         echo '<div class="notice">Target parent: ' . e((string) $prefillParentGallery['title']) . '.</div>';
     }
@@ -1667,6 +1678,8 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     $galleryId = (int) $gallery['id'];
     // $destinationOptions stores all galleries except the current source gallery.
     $destinationOptions = gallery_options_for_select(0, $galleryId);
+    // $newGalleryParentOptions stores the selectable parent hierarchy for move-to-new-gallery actions.
+    $newGalleryParentOptions = gallery_options_for_select($galleryId);
 
     echo '<div class="bulk-row admin-edit-image-toolbar" data-admin-image-move-toolbar>';
     echo '<div class="admin-image-bulk-primary">';
@@ -1689,11 +1702,11 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     echo '<p class="admin-image-move-lead">Choose where you want to move the selected photos.</p>';
     echo '<div class="admin-image-move-choice-grid" role="group" aria-label="Move action">';
     echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>Move to existing gallery</strong><small>Pick a gallery that already exists. Its title picture is kept unless it is missing or invalid.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
-    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>Move to new gallery</strong><small>Create a new child gallery here, then move only the selected photos into it.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>Move to new gallery</strong><small>Create a new gallery under the selected parent, then move only the selected photos into it.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
     echo '</div>';
     echo '<div class="admin-image-move-targets">';
     echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>Destination gallery</span><select name="destination_gallery_id"><option value="0">Choose existing gallery</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> The selected photos, thumbnails, and generated display files will be moved into this gallery folder.</small></label>';
-    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>New gallery title</span><input type="text" name="new_gallery_title" placeholder="Example: Prague evening walk"></label><label><span>Optional folder/slug</span><input type="text" name="new_gallery_folder_name" placeholder="Leave empty to derive it from the title"></label><small><span aria-hidden="true">ⓘ</span> The new gallery is created as a child of the current gallery and receives only the selected photos.</small></div>';
+    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>Parent gallery</span><select name="new_gallery_parent_id"><option value="0">No parent</option>' . $newGalleryParentOptions . '</select></label><label><span>New gallery title</span><input type="text" name="new_gallery_title" placeholder="Example: Prague evening walk"></label><label><span>Optional folder/slug</span><input type="text" name="new_gallery_folder_name" placeholder="Leave empty to derive it from the title"></label><small><span aria-hidden="true">ⓘ</span> The new gallery is created under the selected parent and receives only the selected photos.</small></div>';
     echo '</div>';
     echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>Cancel</button><div><strong>Move summary</strong><p data-admin-image-move-summary>Select photos and choose a target to continue.</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>Move selected photos now →</button></div>';
     echo '</section>';
@@ -2396,20 +2409,29 @@ function cms_admin_bulk_images(): void
                 if ($newGalleryTitle === '') {
                     throw new RuntimeException('Enter a title for the new gallery.');
                 }
-                // $newGallerySortOrder stores the next position among the current gallery's children.
+                // $newGalleryParentId stores the selected parent for the new destination gallery.
+                $newGalleryParentId = array_key_exists('new_gallery_parent_id', $_POST) ? (int) ($_POST['new_gallery_parent_id'] ?? 0) : $galleryId;
+                // $newGalleryParent stores the validated parent row for hierarchy and setting inheritance.
+                $newGalleryParent = $newGalleryParentId > 0 ? find_gallery($newGalleryParentId) : null;
+                if ($newGalleryParentId > 0 && !$newGalleryParent) {
+                    throw new RuntimeException('Choose a valid parent gallery for the new gallery.');
+                }
+                // $newGalleryTemplateGallery stores the gallery whose default settings seed the new destination.
+                $newGalleryTemplateGallery = is_array($newGalleryParent) ? $newGalleryParent : $gallery;
+                // $newGallerySortOrder stores the next position among the selected parent's children.
                 $newGallerySortStmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) + 10 FROM galleries WHERE parent_id = ?');
-                $newGallerySortStmt->execute([$galleryId]);
+                $newGallerySortStmt->execute([$newGalleryParentId]);
                 $newGallerySortOrder = (int) $newGallerySortStmt->fetchColumn();
-                // $newGallery stores the newly created child gallery under the current source gallery.
+                // $newGallery stores the newly created destination gallery under the selected parent.
                 $newGallery = create_empty_gallery([
                     'title' => $newGalleryTitle,
                     'folder_name' => trim((string) ($_POST['new_gallery_folder_name'] ?? '')),
                     'description' => '',
-                    'visibility' => gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished')),
-                    'parent_id' => $galleryId,
+                    'visibility' => gallery_visibility_storage_value((string) ($newGalleryTemplateGallery['visibility'] ?? 'unpublished')),
+                    'parent_id' => $newGalleryParentId,
                     'sort_order' => $newGallerySortOrder,
-                    'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
-                    'show_filenames' => gallery_shows_filenames($gallery),
+                    'voting_enabled' => (int) ($newGalleryTemplateGallery['voting_enabled'] ?? 0) === 1,
+                    'show_filenames' => gallery_shows_filenames($newGalleryTemplateGallery),
                 ]);
                 $destinationGalleryId = (int) $newGallery['id'];
                 $createdGalleryId = $destinationGalleryId;
@@ -2442,7 +2464,31 @@ function cms_admin_bulk_images(): void
                 'source_cover_image_id' => $moved['source_cover_image_id'] ?? null,
                 'destination_cover_image_id' => $moved['destination_cover_image_id'] ?? null,
             ], ['category' => 'other', 'severity' => 'info']);
-            flash_message('admin_notice', 'Moved ' . (int) $moved['moved'] . ' image(s), including ' . (int) $moved['originals_moved'] . ' original file(s) and ' . (int) $moved['derivatives_moved'] . ' derivative file(s).');
+            $notice = 'Moved ' . (int) $moved['moved'] . ' image(s), including ' . (int) $moved['originals_moved'] . ' original file(s) and ' . (int) $moved['derivatives_moved'] . ' derivative file(s).';
+            if (admin_wants_json()) {
+                $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
+                $destinationGallery = find_gallery($destinationGalleryId, true) ?: find_gallery($destinationGalleryId) ?: null;
+                $response = admin_bulk_images_success_response($updated, $notice, $returnTab, $action, $ownedIds);
+                $response['source_gallery_id'] = $galleryId;
+                $response['source_gallery_url'] = gallery_public_url($updated);
+                $response['refresh_url'] = gallery_public_url($updated);
+                $response['refresh_gallery_id'] = $galleryId;
+                $response['destination_gallery_id'] = $destinationGalleryId;
+                $response['created_gallery_id'] = $action === 'move_new' ? $destinationGalleryId : 0;
+                if (is_array($destinationGallery)) {
+                    // $destinationParentId stores where a newly-created gallery belongs in the public hierarchy.
+                    $destinationParentId = (int) ($destinationGallery['parent_id'] ?? 0);
+                    // $destinationParent stores the parent row so the client does not infer placement from the destination URL.
+                    $destinationParent = $destinationParentId > 0 ? find_gallery($destinationParentId, true) : null;
+                    $response['destination_gallery_url'] = gallery_public_url($destinationGallery);
+                    $response['destination_parent_gallery_id'] = $destinationParentId;
+                    $response['destination_parent_gallery_url'] = is_array($destinationParent) ? gallery_public_url($destinationParent) : '';
+                }
+                header('Content-Type: application/json');
+                echo json_encode($response);
+                return;
+            }
+            flash_message('admin_notice', $notice);
         } catch (Throwable $exception) {
             if ($createdGalleryId > 0) {
                 try {
@@ -2584,6 +2630,10 @@ function cms_admin_public_update_gallery(): void
     if ($action === 'publish') {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
+    }
+    if ($action === 'unpublish') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
+        $visibility = 'unpublished';
     }
     if (in_array($action, gallery_visibility_values(), true)) {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.

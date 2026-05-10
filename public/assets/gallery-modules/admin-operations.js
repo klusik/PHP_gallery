@@ -41,6 +41,8 @@
  * setupExample();
  */
 
+import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260509-image-move-v2';
+
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
     ['#admin-ordering', '#admin-tab-galleries'],
@@ -461,7 +463,7 @@ export function setupAdminGallerySidePanel() {
         const source = String(event.detail?.source || '');
         const result = event.detail?.result || {};
         const bulkAction = String(result.bulk_action || '');
-        const shouldKeepPanelOpen = (source === 'gallery-image-bulk' && (bulkAction === 'cover' || bulkAction === 'delete')) || source === 'upload';
+        const shouldKeepPanelOpen = (source === 'gallery-image-bulk' && (bulkAction === 'cover' || bulkAction === 'delete' || bulkAction === 'move_existing' || bulkAction === 'move_new')) || source === 'upload';
         if (panel instanceof HTMLElement && !shouldKeepPanelOpen) {
             closeAdminGallerySidePanel(panel);
         }
@@ -645,6 +647,7 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupAdminTabsInRoot(body);
     setupAdminPanelRangeDisplays(body);
     setupAdminPanelThumbnailBoundControls(body);
+    setupImageBulkMoveFields();
     if (workflow.name === 'gallery-edit') {
         prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
         prepareAdminPanelBulkForm(body.querySelector('[data-admin-image-bulk-form]'));
@@ -1017,6 +1020,26 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         if (returnTabInput instanceof HTMLInputElement) {
             body.set('return_tab', returnTabInput.value);
         }
+        if (action === 'move_existing') {
+            const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
+            if (destinationSelect instanceof HTMLSelectElement) {
+                body.set('destination_gallery_id', destinationSelect.value);
+            }
+        }
+        if (action === 'move_new') {
+            const newGalleryParent = form.querySelector('select[name="new_gallery_parent_id"]');
+            const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
+            const newGalleryFolderName = form.querySelector('input[name="new_gallery_folder_name"]');
+            if (newGalleryParent instanceof HTMLSelectElement) {
+                body.set('new_gallery_parent_id', newGalleryParent.value);
+            }
+            if (newGalleryTitle instanceof HTMLInputElement) {
+                body.set('new_gallery_title', newGalleryTitle.value);
+            }
+            if (newGalleryFolderName instanceof HTMLInputElement) {
+                body.set('new_gallery_folder_name', newGalleryFolderName.value);
+            }
+        }
         selectedInputs.forEach((input) => {
             if (input instanceof HTMLInputElement) {
                 body.append('image_ids[]', input.value);
@@ -1064,7 +1087,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
 async function reflectGalleryImageBulkInCurrentView(result) {
     const action = String(result.bulk_action || '');
     const coverImageId = String(result.cover_image_id || '');
-    if (action === 'delete') {
+    if (action === 'delete' || action === 'move_existing' || action === 'move_new') {
         const removedIds = Array.isArray(result.image_ids) ? result.image_ids.map((value) => String(value || '')) : [];
         removedIds.forEach((imageId) => {
             if (!imageId) {
@@ -1081,16 +1104,18 @@ async function reflectGalleryImageBulkInCurrentView(result) {
                 }
             });
         });
-        await refreshAdminSidePanelFromServer();
-        await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
-        showAdminGallerySidePanelResultNotice(String(result.message || 'Photo deleted.'), String(result.gallery_url || ''));
+        const refreshUrl = String(result.refresh_url || result.source_gallery_url || result.gallery_url || '');
+        await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
+        await refreshCurrentGalleryContextFromServer(refreshUrl);
+        const noticeTarget = action === 'delete' ? String(result.gallery_url || '') : String(result.destination_gallery_url || result.gallery_url || '');
+        showAdminGallerySidePanelResultNotice(String(result.message || (action === 'delete' ? 'Photo deleted.' : 'Photo move completed.')), noticeTarget);
         return;
     }
-    if (action === 'cover' && coverImageId !== '') {
-        document.querySelectorAll('[data-admin-image-order-row]').forEach((row) => {
-            if (!(row instanceof HTMLElement)) {
-                return;
-            }
+        if (action === 'cover' && coverImageId !== '') {
+            document.querySelectorAll('[data-admin-image-order-row]').forEach((row) => {
+                if (!(row instanceof HTMLElement)) {
+                    return;
+                }
             const coverCell = row.querySelector('[data-admin-image-cover-cell]');
             if (coverCell instanceof HTMLElement) {
                 coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? 'Title picture' : '';
@@ -1151,9 +1176,12 @@ async function reflectSavedImageInCurrentView(result) {
 async function reflectUploadedGalleryInCurrentView(result) {
     const message = String(result.message || 'Upload complete.');
     const targetUrl = String(result.gallery_url || '');
+    const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
     showAdminGallerySidePanelResultNotice(message, targetUrl);
     await refreshAdminSidePanelFromServer();
-    await refreshCurrentGalleryContextFromServer(targetUrl);
+    if (refreshUrl === '' || adminSidePanelSamePageUrl(refreshUrl, window.location.href) || document.querySelector('main.site-main .admin-edit-gallery-hero')) {
+        await refreshCurrentGalleryContextFromServer(refreshUrl);
+    }
 }
 
 /**
@@ -1331,6 +1359,26 @@ function updatePublicImageCardsFromResult(imageId, result) {
     });
 }
 
+
+/**
+ * Return whether two URLs point at the same visible page for safe fragment refresh.
+ *
+ * @param {string} left First URL candidate.
+ * @param {string} right Second URL candidate.
+ * @returns {boolean} True when path and query match after URL normalization.
+ */
+function adminSidePanelSamePageUrl(left, right) {
+    try {
+        const leftUrl = new URL(left, window.location.href);
+        const rightUrl = new URL(right, window.location.href);
+        leftUrl.hash = '';
+        rightUrl.hash = '';
+        return leftUrl.toString() === rightUrl.toString();
+    } catch (error) {
+        return false;
+    }
+}
+
 /**
  * Reflect the created child gallery in the currently visible public page.
  *
@@ -1346,8 +1394,14 @@ async function reflectCreatedGalleryInCurrentView(result) {
     const galleryUrl = String(result.gallery_url || '');
     const galleryTitle = String(result.gallery_title || 'New gallery');
     const galleryId = String(result.gallery_id || '');
+    const refreshUrl = String(result.refresh_url || result.parent_gallery_url || '');
     if (!galleryUrl) {
         showAdminGallerySidePanelResultNotice(galleryTitle, '');
+        return;
+    }
+
+    if (refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
+        showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
         return;
     }
 
@@ -1690,6 +1744,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
             gallery_title: String(emptyResult.gallery_title || ''),
             gallery_url: String(emptyResult.gallery_url || ''),
             edit_url: String(emptyResult.edit_url || ''),
+            parent_gallery_id: Number(emptyResult.parent_gallery_id || 0),
+            parent_gallery_url: String(emptyResult.parent_gallery_url || ''),
+            refresh_gallery_id: Number(emptyResult.refresh_gallery_id || 0),
+            refresh_url: String(emptyResult.refresh_url || ''),
             uploaded: 0,
             scanned: 0,
             thumbnails: 0,
@@ -1725,6 +1783,12 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     let galleryUrl = '';
     // editUrl stores the admin edit URL reported by the first upload response.
     let editUrl = '';
+    // refreshUrl stores the page that should redraw the visible context behind the panel.
+    let refreshUrl = '';
+    // parentGalleryUrl stores the selected parent public URL for newly-created galleries.
+    let parentGalleryUrl = '';
+    // parentGalleryId stores the selected parent identifier for newly-created galleries.
+    let parentGalleryId = 0;
 
     for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
         // file stores state or configuration for the gallery front-end flow.
@@ -1757,6 +1821,9 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         galleryTitle = galleryTitle || String(uploadResult.gallery_title || '');
         galleryUrl = galleryUrl || String(uploadResult.gallery_url || '');
         editUrl = editUrl || String(uploadResult.edit_url || '');
+        refreshUrl = refreshUrl || String(uploadResult.refresh_url || '');
+        parentGalleryUrl = parentGalleryUrl || String(uploadResult.parent_gallery_url || '');
+        parentGalleryId = parentGalleryId || Number(uploadResult.parent_gallery_id || 0);
 
         if (createThumbnails) {
             // imageIds stores state or configuration for the gallery front-end flow.
@@ -1779,6 +1846,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         gallery_title: galleryTitle,
         gallery_url: galleryUrl,
         edit_url: editUrl,
+        parent_gallery_id: parentGalleryId,
+        parent_gallery_url: parentGalleryUrl,
+        refresh_gallery_id: parentGalleryId,
+        refresh_url: refreshUrl,
         uploaded,
         scanned,
         thumbnails,

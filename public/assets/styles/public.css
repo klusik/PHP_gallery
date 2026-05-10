@@ -1,0 +1,728 @@
+﻿/* Shared navigation and buttons */
+
+.site-header,
+.site-main,
+.site-footer {
+    width: min(var(--page-width-default, 1120px), calc(100% - 2rem));
+    margin: 0 auto;
+}
+
+/* Public layout width presets are selected by Theme settings on the body class. */
+.public-page.page-width-wide .site-header,
+.public-page.page-width-wide .site-main,
+.public-page.page-width-wide .site-footer {
+    width: min(var(--page-width-wide, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-custom .site-header,
+.public-page.page-width-custom .site-main,
+.public-page.page-width-custom .site-footer {
+    width: min(var(--page-width-custom, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-full .site-header,
+.public-page.page-width-full .site-main,
+.public-page.page-width-full .site-footer {
+    width: calc(100% - clamp(1rem, 3vw, 3rem));
+}
+.site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.5rem 0;
+}
+.brand {
+    font-size: clamp(1.7rem, 4vw, 3rem);
+    line-height: var(--type-tight-line-height, 1.05);
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 800;
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+}
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.nav a,
+.button,
+button,
+input[type="submit"] {
+    border: 1px solid var(--accent-dark);
+    background: var(--accent);
+    color: #fffdf8;
+    padding: 0.55rem 0.85rem;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+    border-radius: var(--radius, 16px);
+}
+
+.button.secondary,
+button.secondary {
+    background: transparent;
+    color: var(--accent-dark);
+}
+
+.nav a.is-update-pending,
+.button.is-update-pending,
+button.is-update-pending {
+    border-color: #7f1d1d !important;
+    background: repeating-linear-gradient(135deg, #b91c1c 0 0.55rem, #f59e0b 0.55rem 1.1rem) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #7f1d1d !important;
+    font-weight: 800;
+}
+
+/* Panels, cards, and gallery grids */
+
+.hero,
+.panel,
+.gallery-card,
+.image-card {
+    background: rgba(255, 250, 240, 0.88);
+    border: 1px solid var(--line);
+    box-shadow: 0 12px 34px rgba(54, 38, 20, 0.08);
+}
+
+.hero,
+.panel {
+    padding: clamp(1rem, 3vw, 2rem);
+    margin-bottom: 1rem;
+    border-radius: var(--radius, 16px);
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+}
+
+.gallery-card,
+.image-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius, 16px);
+}
+.gallery-card-link {
+    display: grid;
+    min-height: 12rem;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(135deg, rgba(165, 72, 28, 0.18), rgba(255, 250, 240, 0.8));
+}
+.gallery-card img {
+    display: block;
+    width: 100%;
+    height: 8rem;
+    object-fit: cover;
+}
+.gallery-collage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 8rem;
+    overflow: hidden;
+}
+.gallery-collage img {
+    height: 100%;
+    aspect-ratio: auto;
+}
+.gallery-locked-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 8rem;
+    background: #1f2937;
+    color: #ffffff;
+    font-weight: 700;
+}
+.gallery-collage.collage-count-1 {
+    grid-template-columns: 1fr;
+}
+.gallery-collage.collage-count-3 img:first-child {
+    grid-row: span 2;
+}
+.gallery-card-body {
+    display: grid;
+    align-content: end;
+    min-height: 10rem;
+    padding: 1rem;
+}
+.image-card {
+    position: relative;
+}
+.image-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    cursor: zoom-in;
+}
+.image-meta {
+    padding: 0.75rem;
+}
+
+/* Keeps the anonymous preview entry and exit control visible without mixing it into editable admin forms. */
+.anonymous-preview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(92, 64, 51, 0.18);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 253, 248, 0.88);
+    box-shadow: 0 10px 28px rgba(78, 48, 34, 0.08);
+    color: var(--text);
+}
+
+/* Keeps the preview toolbar usable on narrow public gallery pages. */
+@media (max-width: 720px) {
+    .anonymous-preview-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .anonymous-preview-toolbar .button {
+        justify-content: center;
+        text-align: center;
+    }
+}
+.inline-editor {
+    margin: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 253, 248, 0.78);
+    border-radius: var(--radius, 16px);
+}
+.hero + .inline-editor {
+    margin: 0 0 1rem;
+}
+.inline-editor summary {
+    cursor: pointer;
+    color: var(--accent-dark);
+    font-weight: 700;
+}
+.inline-editor[open] summary {
+    margin-bottom: 0.75rem;
+}
+.game-entry {
+    margin: -0.25rem 0 1rem;
+}
+.picture-game {
+    margin-bottom: 1rem;
+}
+.picture-game form {
+    margin: 0;
+}
+.picture-game-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: stretch;
+}
+.picture-game-choice {
+    display: grid;
+    grid-template-rows: minmax(18rem, 58vh) auto;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 0;
+    padding: 0.75rem;
+    border: 2px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    text-align: left;
+    border-radius: var(--radius, 16px);
+}
+
+.picture-game-choice:hover,
+.picture-game-choice:focus {
+    border-color: var(--accent);
+    background: var(--field);
+}
+.picture-game-choice img {
+    width: 100%;
+    height: 100%;
+    min-height: 18rem;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: calc(var(--radius, 16px) * 0.75);
+}
+.picture-game-choice span {
+    display: grid;
+    gap: 0.15rem;
+}
+.picture-game-choice small {
+    color: var(--muted);
+}
+.image-inline-editor textarea {
+    min-height: 5rem;
+}
+
+/* Presents public inline edit forms as compact admin-style control cards. */
+.public-page .public-inline-editor {
+    position: relative;
+    margin: 0.65rem 0 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border-radius: var(--radius, 16px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.public-page .gallery-card .public-inline-editor,
+.public-page .image-card .public-inline-editor {
+    margin: 0.25rem clamp(0.65rem, 1.2vw, 0.9rem) clamp(0.65rem, 1.2vw, 0.9rem);
+}
+
+.public-page .public-inline-editor summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.45rem;
+    padding: 0.55rem 0.75rem;
+    cursor: pointer;
+    color: var(--ink);
+    font-weight: 800;
+    list-style: none;
+}
+
+.public-page .public-inline-editor summary::-webkit-details-marker {
+    display: none;
+}
+
+.public-page .public-inline-editor summary::after {
+    content: "Edit";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.75rem;
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--accent-dark);
+    background: transparent;
+    color: var(--accent-dark);
+    border-radius: var(--radius, 16px);
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.public-page .public-inline-editor[open] summary {
+    margin-bottom: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--field) 72%, transparent);
+}
+
+.public-page .public-inline-editor[open] summary::after {
+    content: "Close";
+    background: var(--accent);
+    color: #fffdf8;
+}
+
+.public-page .public-inline-editor summary small {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+}
+
+.public-page .inline-editor-form {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(13rem, 0.45fr);
+    gap: 0.7rem;
+    padding: 0.75rem;
+}
+
+.public-page .inline-editor-fields {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.52fr) minmax(14rem, 1fr);
+    gap: 0.65rem;
+    align-items: end;
+}
+
+.public-page .inline-editor-fields label,
+.public-page .inline-editor-options label {
+    margin: 0;
+}
+
+.public-page .inline-editor-fields input,
+.public-page .inline-editor-fields textarea {
+    min-height: 2.25rem;
+    padding: 0.52rem 0.65rem;
+    font-size: 0.95rem;
+}
+
+.public-page .inline-editor-fields textarea {
+    min-height: 2.25rem;
+    max-height: 5.5rem;
+    resize: vertical;
+}
+
+.public-page .inline-editor-options {
+    display: flex;
+    align-items: end;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.public-page .inline-editor-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    border-radius: var(--radius, 16px);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.public-page .inline-editor-toggle input {
+    width: auto;
+    margin: 0;
+}
+
+.public-page .inline-editor-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    margin: 0;
+    padding-top: 0.65rem;
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.public-page .inline-editor-actions button,
+.public-page .inline-editor-actions .button {
+    min-height: 2.15rem;
+    padding: 0.42rem 0.7rem;
+    border-radius: var(--radius, 16px);
+    font-size: 0.84rem;
+    font-weight: 800;
+    line-height: 1.15;
+}
+
+.public-page .inline-editor-actions .danger {
+    border-color: color-mix(in srgb, #dc2626 55%, var(--accent-dark));
+    color: color-mix(in srgb, #dc2626 72%, var(--accent-dark));
+}
+
+@media (max-width: 920px) {
+    .public-page .inline-editor-form,
+    .public-page .inline-editor-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .public-page .inline-editor-options,
+    .public-page .inline-editor-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 620px) {
+    .public-page .public-inline-editor summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .public-page .public-inline-editor summary::after {
+        width: 100%;
+    }
+
+    .public-page .inline-editor-actions button,
+    .public-page .inline-editor-actions .button {
+        flex: 1 1 100%;
+        justify-content: center;
+        text-align: center;
+    }
+}
+.muted {
+    color: var(--muted);
+}
+
+/* Admin forms, breadcrumbs, and hierarchy indicators */
+
+.form-grid {
+    display: grid;
+    gap: 0.8rem;
+}
+.form-grid-spaced {
+    margin-top: 1rem;
+}
+.bulk-row {
+    display: flex;
+    align-items: end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.bulk-row label {
+    min-width: min(18rem, 100%);
+}
+.inline-action-form {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0;
+}
+.breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0 0 1rem;
+    color: var(--muted);
+}
+.breadcrumbs a {
+    color: var(--accent-dark);
+}
+.tree-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.tree-depth-1 { padding-left: 1.4rem; }
+.tree-depth-2 { padding-left: 2.8rem; }
+.tree-depth-3 { padding-left: 4.2rem; }
+.tree-depth-4 { padding-left: 5.6rem; }
+.tree-depth-5 { padding-left: 7rem; }
+.tree-depth-6 { padding-left: 8.4rem; }
+.tree-depth-7 { padding-left: 9.8rem; }
+.tree-depth-8 { padding-left: 11.2rem; }
+.tree-branch::before {
+    content: "\21B3";
+    color: var(--muted);
+}
+tr.is-subgallery td {
+    background: rgba(165, 72, 28, 0.05);
+}
+label {
+    display: grid;
+    gap: 0.25rem;
+    font-weight: 700;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    border-radius: var(--radius, 16px);
+}
+textarea {
+    min-height: 8rem;
+}
+input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    min-height: 0;
+    padding: 0;
+    border-radius: 3px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+/* Tags */
+
+.tag-list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.5rem 0;
+}
+.gallery-card > .tag-list {
+    padding: 0 1rem 1rem;
+}
+.tag-list-label {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.tag {
+    color: var(--accent-dark);
+    border: 1px solid var(--line);
+    background: rgba(255, 253, 248, 0.75);
+    border-radius: var(--radius, 16px);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.tag:hover,
+.tag:focus {
+    border-color: var(--accent-dark);
+    background: var(--panel);
+}
+.tag-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.tag-suggestions button {
+    padding: 0.2rem 0.5rem;
+    background: transparent;
+    color: var(--accent-dark);
+}
+
+/* Tables and admin thumbnails */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border-radius: var(--radius, 16px);
+    overflow: hidden;
+}
+
+th,
+td {
+    padding: 0.6rem;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+}
+.admin-thumb {
+    display: block;
+    width: 5rem;
+    height: 3.75rem;
+    object-fit: cover;
+    border-radius: var(--radius, 16px);
+}
+.notice {
+    padding: 0.75rem 1rem;
+    background: #fff3cd;
+    border: 1px solid #e3c46d;
+    margin-bottom: 1rem;
+    border-radius: var(--radius, 16px);
+}
+.notice.is-alert {
+    border-color: #b45309;
+    background: #fff4e6;
+    box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.18) inset;
+}
+.notice.is-alert .inline-action-form button {
+    border-color: #9a3412;
+    background: #d97706;
+    color: #fffdf8;
+}
+
+/* Keeps the thumbnail maintenance warning readable while giving the admin a small temporary-dismiss action. */
+.admin-thumbnail-maintenance-notice {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+/* Allows the warning text to wrap naturally beside the dismiss form. */
+.admin-thumbnail-maintenance-copy {
+    flex: 1 1 auto;
+}
+
+/* Prevents the dismiss form from stretching the notice vertically more than needed. */
+.admin-thumbnail-maintenance-dismiss {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* Keeps the dismiss button usable on narrow admin screens. */
+@media (max-width: 44rem) {
+    .admin-thumbnail-maintenance-notice {
+        display: block;
+    }
+
+    .admin-thumbnail-maintenance-dismiss {
+        margin-top: 0.75rem;
+    }
+}
+.compact-support {
+    padding: 0.75rem 1rem;
+}
+.compact-support h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+}
+.support-matrix {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.support-matrix th,
+.support-matrix td {
+    padding: 0.35rem 0.55rem;
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+}
+.support-matrix th[scope="row"] {
+    text-align: left;
+    font-weight: 700;
+}
+.support-yes {
+    color: #166534;
+    font-weight: 700;
+}
+.support-no {
+    color: #b91c1c;
+    font-weight: 700;
+}
+.inline-form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+}
+.thumbnail-progress {
+    width: 100%;
+    margin: 0 0 1rem;
+}
+.thumbnail-progress-bar {
+    display: block;
+    width: 100%;
+    height: 0.75rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--field);
+    border-radius: var(--radius, 16px);
+    appearance: none;
+}
+.thumbnail-progress-bar::-webkit-progress-bar {
+    background: var(--field);
+}
+.thumbnail-progress-bar::-webkit-progress-value {
+    background: var(--accent);
+    transition: inline-size 0.2s ease;
+}
+.thumbnail-progress-bar::-moz-progress-bar {
+    background: var(--accent);
+}
+.thumbnail-progress p {
+    margin: 0.35rem 0 0;
+}
+
+.tree-toggle,
+.tree-spacer {
+    display: inline-grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+}
+.tree-toggle {
+    padding: 0;
+    background: transparent;
+    color: var(--accent-dark);
+}
+

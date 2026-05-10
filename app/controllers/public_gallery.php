@@ -706,8 +706,12 @@ function render_public_gallery_admin_form(array $gallery): void
     }
     echo '</div>';
     echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
-    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
-    echo '<button type="submit" class="secondary" name="action" value="unpublished">Set unpublished</button>';
+    $galleryVisibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
+    if ($galleryVisibility === 'public') {
+        echo '<button type="submit" class="secondary" name="action" value="unpublish">Unpublish</button>';
+    } else {
+        echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
+    }
     echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
     echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '">Admin edit</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';

@@ -135,6 +135,16 @@ function cms_admin_upload(): void
                     'filenames' => $scanFailedFilenames,
                 ]);
             }
+            // $parentGalleryId stores the parent used by side-panel refreshes after create-and-upload.
+            $parentGalleryId = (int) ($gallery['parent_id'] ?? 0);
+            // $parentGallery stores the row that should refresh when a new child gallery appears.
+            $parentGallery = $parentGalleryId > 0 ? find_gallery($parentGalleryId, true) : null;
+            // $parentGalleryUrl stores the public parent URL, or stays empty for root-level galleries.
+            $parentGalleryUrl = is_array($parentGallery) ? gallery_public_url($parentGallery) : '';
+            // $refreshGalleryId stores the public page that should redraw after the upload workflow.
+            $refreshGalleryId = $mode === 'new' ? $parentGalleryId : (int) $gallery['id'];
+            // $refreshUrl stores the source URL for current-context refreshes without guessing on the client.
+            $refreshUrl = $mode === 'new' ? ($parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home')) : gallery_public_url($gallery);
             // $response stores an intermediate value used by the surrounding gallery workflow.
             $response = [
                 'ok' => true,
@@ -143,6 +153,11 @@ function cms_admin_upload(): void
                 'gallery_title' => (string) ($gallery['title'] ?? ''),
                 'gallery_url' => gallery_public_url($gallery),
                 'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned']]),
+                'parent_gallery_id' => $parentGalleryId,
+                'parent_gallery_url' => $parentGalleryUrl,
+                'refresh_gallery_id' => $refreshGalleryId,
+                'refresh_url' => $refreshUrl,
+                'created_gallery' => $mode === 'new',
                 'image_ids' => array_map('intval', $stored['image_ids'] ?? []),
                 'filenames' => array_values($stored['filenames'] ?? []),
                 'uploaded' => (int) $stored['uploaded'],
