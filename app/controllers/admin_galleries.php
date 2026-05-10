@@ -2585,6 +2585,10 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
     }
+    if ($action === 'unpublish') {
+        // $visibility stores an intermediate value used by the surrounding gallery workflow.
+        $visibility = 'unpublished';
+    }
     if (in_array($action, gallery_visibility_values(), true)) {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = gallery_visibility_storage_value($action);
