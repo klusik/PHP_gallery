@@ -1260,7 +1260,7 @@ export function setupGalleryLightbox() {
     const clickableLightboxCards = lightboxSourceCards.length > 0 ? visibleLightboxCards.concat(lightboxSourceCards) : cards;
     clickableLightboxCards.forEach((card) => {
         card.addEventListener('click', (event) => {
-            if (event.target.closest('form, [data-admin-inline-editor], [data-photo-map], [data-gallery-map-url]')) {
+            if (event.target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link], [data-photo-map], [data-gallery-map-url]')) {
                 return;
             }
             // index stores the card position in the complete viewer order.

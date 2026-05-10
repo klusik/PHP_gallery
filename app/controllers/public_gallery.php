@@ -230,12 +230,14 @@ function cms_gallery(): void
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
     echo '<div class="hero-meta">';
     echo '<div class="hero-actions" aria-label="Gallery actions">';
-    echo '<a class="button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '">Download gallery</a>';
+    render_public_gallery_admin_delete_form($gallery, 'hero');
+    render_public_gallery_admin_edit_link($gallery, 'hero');
+    echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" aria-label="Download gallery" title="Download gallery"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">Download gallery</span></a>';
     if ($galleryMapPoints) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
     }
     if (picture_game_available($gallery, $pictureGameImages)) {
-        echo '<a class="button secondary" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '">Play picture game</a>';
+        echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="Play picture game" title="Play picture game"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">Play picture game</span></a>';
     }
     echo '</div>';
     echo '<div class="hero-tags" aria-label="Gallery tags">';
@@ -250,7 +252,6 @@ function cms_gallery(): void
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_preview_toolbar($gallery);
-    render_public_gallery_admin_form($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
     if ($children || $images) {
@@ -281,7 +282,8 @@ function cms_gallery(): void
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
         if ($imageNeedsNsfwGate) {
             echo '<article class="image-card nsfw-card"><div class="image-stage nsfw-stage"><a class="nsfw-placeholder" href="' . e(image_public_url($image, $gallery)) . '"><strong>18+ photo</strong><span>Confirm your age to view this restricted photo.</span></a></div>';
-            render_public_image_admin_form($image);
+            render_public_image_admin_edit_link($image);
+            render_public_image_admin_delete_form($image);
             echo '</article>';
             continue;
         }
@@ -305,7 +307,8 @@ function cms_gallery(): void
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
-        echo '<article class="image-card" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        $imageCardClass = $publicPhotoReorderEnabled ? 'image-card has-public-reorder-handle' : 'image-card';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="Drag photo to reorder visible photos" title="Drag to reorder this visible photo"><span aria-hidden="true">↕</span><span>Move photo</span></button>';
         }
@@ -333,7 +336,8 @@ function cms_gallery(): void
             echo '</div>';
         }
         echo '</div>';
-        render_public_image_admin_form($image);
+        render_public_image_admin_edit_link($image);
+        render_public_image_admin_delete_form($image);
         echo '</article>';
     }
     if ($images) {
@@ -641,7 +645,8 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
     // Variable $branchImageCount stores this steps working value.
     $branchImageCount = $isProtectedPublicCard ? 0 : gallery_branch_image_count((int) $gallery['id'], $publicOnly);
-    echo '<article class="gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
+    $galleryCardClass = 'gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '');
+    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="Drag subgallery to reorder visible subgalleries" title="Drag to reorder this visible subgallery"><span aria-hidden="true">↕</span><span>Move gallery</span></button>';
     }
@@ -676,77 +681,104 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
     }
     echo '</div>';
-    render_public_gallery_admin_form($gallery);
+    render_public_gallery_admin_edit_link($gallery, 'card');
+    render_public_gallery_admin_delete_form($gallery, 'card');
     echo '</article>';
 }
 
 /**
- * Handles render public gallery admin form logic for the gallery application.
+ * Render the compact public-page gallery edit entry point for logged-in admins.
+ *
+ * The link keeps the full admin edit route as its href while enhancing the click
+ * into the existing side-panel workflow when JavaScript is available.
+ *
  * @param mixed $gallery Input used by this operation.
+ * @param mixed $placement Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_public_gallery_admin_form(array $gallery): void
+function render_public_gallery_admin_edit_link(array $gallery, string $placement = 'card'): void
 {
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor public-inline-editor gallery-inline-editor" data-admin-inline-editor><summary><span>Edit gallery</span><small>Quick public-page controls</small></summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_gallery')) . '" class="form-grid inline-editor-form">' . csrf_field();
+    $label = $placement === 'hero' ? 'Edit current gallery' : 'Edit gallery ' . (string) $gallery['title'];
+    $class = $placement === 'hero' ? 'public-admin-edit-button public-admin-edit-button-hero' : 'public-admin-edit-button public-admin-edit-button-card';
+    echo '<a class="' . e($class) . '" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+}
+
+
+/**
+ * Render the compact public-page gallery delete entry point for logged-in admins.
+ *
+ * This uses the existing public admin update route and keeps the action as an
+ * explicit POST so browsers without JavaScript still have a safe CSRF-protected
+ * fallback. JavaScript adds the confirmation prompt before the form is submitted.
+ *
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $placement Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function render_public_gallery_admin_delete_form(array $gallery, string $placement = 'card'): void
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return;
+    }
+    $name = trim((string) ($gallery['title'] ?? 'gallery'));
+    $label = $placement === 'hero' ? 'Remove current gallery from CMS' : 'Remove gallery ' . $name . ' from CMS';
+    $class = $placement === 'hero' ? 'public-admin-delete-form public-admin-delete-form-hero' : 'public-admin-delete-form public-admin-delete-form-card';
+    echo '<form class="' . e($class) . '" method="post" action="' . e(url_for('admin_public_update_gallery')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="gallery">';
+    echo csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
-    echo '<div class="inline-editor-fields">';
-    echo '<label class="inline-editor-title-field">Gallery name<input name="title" value="' . e((string) $gallery['title']) . '" required></label>';
-    echo '<label>Description<textarea name="description">' . e((string) $gallery['description']) . '</textarea></label>';
-    echo '</div>';
-    echo '<div class="inline-editor-options">';
-    if (gallery_filename_display_schema_ready()) {
-        echo '<label class="inline-editor-toggle"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> <span>Show file names</span></label>';
-    }
-    if (nsfw_guard_schema_ready()) {
-        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
-    }
-    echo '</div>';
-    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
-    $galleryVisibility = normalize_gallery_visibility((string) ($gallery['visibility'] ?? 'unpublished'));
-    if ($galleryVisibility === 'public') {
-        echo '<button type="submit" class="secondary" name="action" value="unpublish">Unpublish</button>';
-    } else {
-        echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
-    }
-    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="Gallery editor" data-admin-side-panel-title="Edit gallery" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'panel' => 1])) . '">Admin edit</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Add gallery here</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a></div>';
-    echo '</form></details>';
+    echo '<input type="hidden" name="action" value="delete">';
+    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+    echo '</form>';
 }
 
 /**
- * Handles render public image admin form logic for the gallery application.
+ * Render the compact public-page photo edit entry point for logged-in admins.
+ *
+ * The link falls back to the full admin edit image page and uses the current
+ * side-panel loader when the gallery JavaScript is active.
+ *
  * @param mixed $image Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_public_image_admin_form(array $image): void
+function render_public_image_admin_edit_link(array $image): void
 {
     if (!current_user() || admin_anonymous_preview_active()) {
         return;
     }
-    echo '<details class="inline-editor public-inline-editor image-inline-editor" data-admin-inline-editor><summary><span>Edit photo</span><small>Quick public-page controls</small></summary>';
-    echo '<form method="post" action="' . e(url_for('admin_public_update_image')) . '" class="form-grid inline-editor-form">' . csrf_field();
-    echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
-    echo '<div class="inline-editor-fields">';
-    echo '<label class="inline-editor-title-field">Photo title<input name="title" value="' . e((string) ($image['title'] ?? '')) . '"></label>';
-    echo '<label>Description<textarea name="description">' . e((string) $image['description']) . '</textarea></label>';
-    echo '</div>';
-    echo '<div class="inline-editor-options">';
-    if (nsfw_guard_schema_ready()) {
-        echo '<label class="inline-editor-toggle"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> <span>Mark as NSFW / 18+</span></label>';
+    $title = trim((string) ($image['title'] ?? ''));
+    $name = $title !== '' ? $title : (string) ($image['relative_path'] ?? 'photo');
+    $label = 'Edit photo ' . $name;
+    echo '<a class="public-admin-edit-button public-admin-edit-button-card public-admin-edit-button-photo" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#9998;</span><span class="visually-hidden">' . e($label) . '</span></a>';
+}
+
+
+/**
+ * Render the compact public-page photo delete entry point for logged-in admins.
+ *
+ * The form reuses the existing public admin image update route. The route removes
+ * the image row from the CMS and redirects back to the current public context
+ * when JavaScript is unavailable.
+ *
+ * @param mixed $image Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function render_public_image_admin_delete_form(array $image): void
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return;
     }
-    echo '</div>';
-    echo '<div class="bulk-row inline-editor-actions"><button type="submit" name="action" value="save">Save</button>';
-    echo '<button type="submit" class="secondary" name="action" value="publish">Publish</button>';
-    echo '<button type="submit" class="secondary" name="action" value="hide">Hide from public</button>';
-    echo '<button type="submit" class="secondary danger" name="action" value="delete">Remove from CMS</button>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Admin edit</a></div>';
-    echo '</form></details>';
+    $title = trim((string) ($image['title'] ?? ''));
+    $name = $title !== '' ? $title : (string) ($image['relative_path'] ?? 'photo');
+    $label = 'Remove photo ' . $name . ' from CMS';
+    echo '<form class="public-admin-delete-form public-admin-delete-form-card public-admin-delete-form-photo" method="post" action="' . e(url_for('admin_public_update_image')) . '" data-public-admin-card-action data-public-admin-delete-form data-public-admin-delete-name="' . e($name) . '" data-public-admin-delete-kind="photo">';
+    echo csrf_field();
+    echo '<input type="hidden" name="image_id" value="' . (int) $image['id'] . '">';
+    echo '<input type="hidden" name="action" value="delete">';
+    echo '<button type="submit" class="public-admin-card-action-button public-admin-delete-button" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">&#128465;</span><span class="visually-hidden">' . e($label) . '</span></button>';
+    echo '</form>';
 }
 
 /**

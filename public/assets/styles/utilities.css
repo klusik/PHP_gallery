@@ -229,17 +229,6 @@ body.public-reorder-active {
     padding-top: 0.65rem;
 }
 
-.public-page .gallery-card > .public-inline-editor {
-    grid-column: 1 / -1;
-    min-width: 0;
-}
-
-.public-page .gallery-card > .public-inline-editor summary,
-.public-page .gallery-card > .public-inline-editor[open] summary {
-    box-sizing: border-box;
-}
-
-
 .public-page .gallery-card-count-visual-hidden {
     position: absolute;
     inline-size: 1px;
@@ -390,4 +379,55 @@ body.public-reorder-active {
     top: 4.55rem;
     z-index: 7;
     margin: 0 0 0.9rem;
+}
+
+/* Keeps hero and admin item icons aligned with the translucent gallery-counter style. */
+.public-page .hero-actions .hero-icon-button,
+.public-page .hero-actions .public-admin-edit-button-hero,
+.public-page .hero-actions .public-admin-card-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.05rem;
+    height: 2.05rem;
+    min-width: 2.05rem;
+    min-height: 2.05rem;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--panel) 44%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--ink) 28%, transparent);
+    color: var(--panel);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    line-height: 1;
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+}
+
+.public-page .hero-actions .hero-icon-button:hover,
+.public-page .hero-actions .hero-icon-button:focus-visible,
+.public-page .hero-actions .public-admin-edit-button-hero:hover,
+.public-page .hero-actions .public-admin-edit-button-hero:focus-visible,
+.public-page .hero-actions .public-admin-card-action-button:hover,
+.public-page .hero-actions .public-admin-card-action-button:focus-visible {
+    border-color: color-mix(in srgb, var(--panel) 62%, transparent);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);
+    color: var(--panel);
+}
+
+.public-page .hero-actions .public-admin-delete-button:hover,
+.public-page .hero-actions .public-admin-delete-button:focus-visible {
+    border-color: color-mix(in srgb, var(--danger, #b42318) 58%, var(--panel));
+    background: color-mix(in srgb, var(--danger, #b42318) 72%, transparent);
+    color: #fffdf8;
+}
+
+@media (max-width: 640px) {
+    .public-page .hero-actions .hero-icon-button,
+    .public-page .hero-actions .public-admin-edit-button-hero,
+    .public-page .hero-actions .public-admin-card-action-button {
+        width: 2.25rem;
+        height: 2.25rem;
+        min-width: 2.25rem;
+        min-height: 2.25rem;
+    }
 }
