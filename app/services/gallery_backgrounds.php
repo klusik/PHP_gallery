@@ -114,12 +114,12 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
     if ($source === 'existing') {
         // $image stores an intermediate value used by the surrounding gallery workflow.
         $image = gallery_cover_image((int) $gallery['id'], $publicOnly);
-        return $image ? thumbnail_url($image, 800) : '';
+        return $image ? public_render_profile_with_thumbnail_purpose('gallery background existing 800', static fn (): string => thumbnail_url($image, 800)) : '';
     }
     if ($source === 'collage') {
         // $collage stores an intermediate value used by the surrounding gallery workflow.
         $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly, 1);
-        return $collage ? thumbnail_url($collage[0], 800) : '';
+        return $collage ? public_render_profile_with_thumbnail_purpose('gallery background collage 800', static fn (): string => thumbnail_url($collage[0], 800)) : '';
     }
     return '';
 }

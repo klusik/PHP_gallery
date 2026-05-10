@@ -53,12 +53,12 @@
  */
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260506-gps-pin-preview';
-import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js';
+import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
-import { setupBackToTopButton } from './gallery-modules/back-to-top.js';
+import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
 import { setupVoteForms } from './gallery-modules/votes.js';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260509-image-move-v2';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox.js?v=20260509-public-reorder-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260510-lazy-map-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -73,7 +73,7 @@ import {
     setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260509-public-reorder-v1';
+} from './gallery-modules/admin-operations.js?v=20260510-lazy-map-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

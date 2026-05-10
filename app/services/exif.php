@@ -260,33 +260,48 @@ function image_has_gps(array $image): bool
 /**
  * Convert one image record into the map marker shape consumed by JavaScript.
  */
-function image_map_point(array $image, array $gallery): array
+function image_map_point(array $image, array $gallery, bool $includeThumb = true, ?array $thumbnailBundle = null): array
 {
-    return [
+    // $point stores the lightweight marker payload consumed by JavaScript maps.
+    $point = [
         'id' => (int) $image['id'],
         'lat' => (float) $image['gps_lat'],
         'lng' => (float) $image['gps_lng'],
         'title' => (string) ($image['title'] ?: $image['filename']),
         'description' => (string) ($image['description'] ?? ''),
-        'thumb' => thumbnail_url($image, 300),
         'image' => url_for('media', ['id' => $image['id']]),
         'gallery' => (string) $gallery['title'],
     ];
+    if ($includeThumb) {
+        $thumbnailBundle = $thumbnailBundle ?: public_render_profile_with_thumbnail_purpose('map point bundle discovery', static fn (): array => thumbnail_bundle($image));
+        $point['thumb'] = public_render_profile_with_thumbnail_purpose('map point thumb 300', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 300));
+    }
+    return $point;
 }
 
 /**
- * Return GPS map points for one gallery, optionally including subgalleries.
+ * Return the cache directory used for lazily generated gallery map point payloads.
  */
-function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array
+function gallery_map_cache_dir(): string
 {
-    if (!gallery_allows_gps_maps($gallery)) {
-        return [];
+    // $basePath stores the writable application cache directory used by generated map metadata.
+    $basePath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'gallery-maps';
+    if (!is_dir($basePath)) {
+        @mkdir($basePath, 0775, true);
     }
-    // Variable $folderPath stores this steps working value.
+    return rtrim($basePath, DIRECTORY_SEPARATOR);
+}
+
+/**
+ * Build the SQL WHERE parts and parameters shared by map availability and map payload generation.
+ */
+function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursive): array
+{
+    // $folderPath stores the normalized branch root used by recursive map queries.
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
-    // Variable $conditions stores this steps working value.
+    // $conditions stores the SQL filters for images that can produce map markers.
     $conditions = ["i.gps_lat IS NOT NULL", "i.gps_lng IS NOT NULL"];
-    // Variable $params stores this steps working value.
+    // $params stores positional query parameters matching the generated conditions.
     $params = [];
     if ($recursive) {
         $conditions[] = '(g.folder_path = ? OR g.folder_path LIKE ?)';
@@ -300,20 +315,151 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
         $conditions[] = public_gallery_listing_condition('g');
         $conditions[] = "i.visibility = 'public'";
     }
-    // Variable $sql stores this steps working value.
-    $sql = 'SELECT i.*, g.title AS gallery_title, g.id AS gallery_id, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $conditions) . ' ORDER BY g.folder_path, i.sort_order, i.filename';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    // Variable $points stores this steps working value.
-    $points = [];
-    foreach ($stmt->fetchAll() as $image) {
-        // Variable $imageGallery stores this steps working value.
-        $imageGallery = find_gallery((int) $image['gallery_id']) ?: $gallery;
-        if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !visitor_can_access_gallery($imageGallery))) {
-            continue;
-        }
-        $points[] = image_map_point($image, $imageGallery);
-    }
-    return $points;
+    return ['conditions' => $conditions, 'params' => $params];
 }
+
+/**
+ * Return a cheap fingerprint for one gallery map payload.
+ *
+ * The fingerprint changes when GPS-capable images or their containing galleries
+ * change. This gives the map cache deterministic invalidation without requiring
+ * every upload, edit, delete, and move workflow to remember a separate cache call.
+ */
+function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $recursive): string
+{
+    if (!gallery_allows_gps_maps($gallery)) {
+        return 'disabled';
+    }
+    $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+    $sql = 'SELECT COUNT(*) AS point_count, MAX(i.updated_at) AS image_updated_at, MAX(i.gps_extracted_at) AS gps_extracted_at, MAX(g.updated_at) AS gallery_updated_at FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']);
+    $row = public_render_profile_db('gallery_map_fingerprint', static function () use ($sql, $parts): array {
+        $stmt = db()->prepare($sql);
+        $stmt->execute($parts['params']);
+        return $stmt->fetch() ?: [];
+    });
+    return hash('sha256', json_encode([
+        'gallery_id' => (int) $gallery['id'],
+        'public_only' => $publicOnly,
+        'recursive' => $recursive,
+        'point_count' => (int) ($row['point_count'] ?? 0),
+        'image_updated_at' => (string) ($row['image_updated_at'] ?? ''),
+        'gps_extracted_at' => (string) ($row['gps_extracted_at'] ?? ''),
+        'gallery_updated_at' => (string) ($row['gallery_updated_at'] ?? ''),
+    ], JSON_UNESCAPED_SLASHES));
+}
+
+/**
+ * Return the cache file path for one gallery map point payload.
+ */
+function gallery_map_cache_file(array $gallery, bool $publicOnly, bool $recursive, string $fingerprint): string
+{
+    // $mode stores whether the payload uses anonymous or logged-in access rules.
+    $mode = $publicOnly ? 'public' : 'admin';
+    return gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . (int) $gallery['id'] . '-' . $mode . '-' . ($recursive ? 'recursive' : 'direct') . '-' . $fingerprint . '.json';
+}
+
+/**
+ * Remove older cache files for one gallery map payload family after writing a fresh payload.
+ */
+function gallery_map_cache_prune(array $gallery, bool $publicOnly, bool $recursive, string $keepFile): void
+{
+    // $mode stores whether the payload uses anonymous or logged-in access rules.
+    $mode = $publicOnly ? 'public' : 'admin';
+    // $pattern stores all previous fingerprints for this gallery and access mode.
+    $pattern = gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-' . (int) $gallery['id'] . '-' . $mode . '-' . ($recursive ? 'recursive' : 'direct') . '-*.json';
+    foreach (glob($pattern) ?: [] as $filePath) {
+        if ($filePath !== $keepFile && is_file($filePath)) {
+            @unlink($filePath);
+        }
+    }
+}
+
+/**
+ * Clear generated gallery map payload cache files.
+ *
+ * Thumbnail maintenance calls this because cached marker popup thumbnails can
+ * otherwise keep pointing at a fallback URL after thumbnails are regenerated.
+ */
+function gallery_map_cache_clear_all(): void
+{
+    foreach (glob(gallery_map_cache_dir() . DIRECTORY_SEPARATOR . 'gallery-*.json') ?: [] as $filePath) {
+        if (is_file($filePath)) {
+            @unlink($filePath);
+        }
+    }
+}
+
+/**
+ * Return true when a gallery branch has at least one map point without building the full marker payload.
+ */
+function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursive = true): bool
+{
+    if (!gallery_allows_gps_maps($gallery)) {
+        return false;
+    }
+    return public_render_profile_span('gallery_map_availability', static function () use ($gallery, $publicOnly, $recursive): bool {
+        $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+        $sql = 'SELECT 1 FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']) . ' LIMIT 1';
+        return public_render_profile_db('gallery_map_availability_db', static function () use ($sql, $parts): bool {
+            $stmt = db()->prepare($sql);
+            $stmt->execute($parts['params']);
+            return (bool) $stmt->fetchColumn();
+        });
+    });
+}
+
+/**
+ * Return GPS map points for one gallery, optionally including subgalleries.
+ */
+function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array
+{
+    if (!gallery_allows_gps_maps($gallery)) {
+        return [];
+    }
+
+    return public_render_profile_span('gallery_map_points', static function () use ($gallery, $publicOnly, $recursive): array {
+        // $fingerprint stores the cache identity derived from current image and gallery metadata.
+        $fingerprint = gallery_map_cache_fingerprint($gallery, $publicOnly, $recursive);
+        // $cacheFile stores the concrete JSON payload path for this gallery map.
+        $cacheFile = gallery_map_cache_file($gallery, $publicOnly, $recursive, $fingerprint);
+        if (is_file($cacheFile)) {
+            public_render_profile_count('gallery_map_cache_hits');
+            $cached = json_decode((string) file_get_contents($cacheFile), true);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
+        public_render_profile_count('gallery_map_cache_misses');
+        $parts = gallery_map_query_parts($gallery, $publicOnly, $recursive);
+        $sql = 'SELECT i.*, g.title AS gallery_title, g.id AS gallery_id, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE ' . implode(' AND ', $parts['conditions']) . ' ORDER BY g.folder_path, i.sort_order, i.filename';
+        $rows = public_render_profile_db('gallery_map_points_db', static function () use ($sql, $parts): array {
+            $stmt = db()->prepare($sql);
+            $stmt->execute($parts['params']);
+            return $stmt->fetchAll();
+        });
+
+        // $galleryCache stores looked-up gallery records while building this map payload.
+        $galleryCache = [(int) $gallery['id'] => $gallery];
+        // $points stores the marker payload consumed by the browser map overlay.
+        $points = [];
+        foreach ($rows as $image) {
+            $imageGalleryId = (int) $image['gallery_id'];
+            if (!array_key_exists($imageGalleryId, $galleryCache)) {
+                $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+            }
+            $imageGallery = $galleryCache[$imageGalleryId];
+            if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !visitor_can_access_gallery($imageGallery))) {
+                continue;
+            }
+            $points[] = image_map_point($image, $imageGallery, true);
+        }
+
+        if (is_dir(gallery_map_cache_dir())) {
+            @file_put_contents($cacheFile, json_encode($points, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            gallery_map_cache_prune($gallery, $publicOnly, $recursive, $cacheFile);
+        }
+        return $points;
+    });
+}
+

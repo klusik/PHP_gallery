@@ -1,5 +1,550 @@
 # Patch notes
 
+## Version 0.64
+
+Version 0.64 is a major public rendering performance and admin workflow refinement release focused on making large galleries faster, reducing unnecessary thumbnail work, improving dynamic refresh stability, and restoring the full create-and-upload gallery workflow from the public hero and gallery editor actions.
+
+This release is especially important for real galleries with many photos, GPS metadata, pagination, subgalleries, and active admin-side editing. A large part of the work is internal optimization, but the result should be visible in normal browsing: faster first render, fewer filesystem checks, fewer repeated thumbnail lookups, lighter gallery map handling, and cleaner admin side-panel behavior.
+
+### Highlights
+
+#### Public gallery rendering was profiled and optimized
+
+A new admin-only public render profiler was added for public gallery and home page rendering.
+
+What changed:
+
+- added a dedicated public render profiling service
+- added request timing for public home and gallery pages
+- added counters for:
+  - database queries
+  - filesystem checks
+  - thumbnail lookups
+  - thumbnail direct hits
+  - thumbnail fallback searches
+  - thumbnail fallback checks
+  - thumbnail fallback hits
+  - thumbnail media fallbacks
+  - thumbnail bundle requests
+  - thumbnail bundle cache hits
+  - thumbnail bundle cache misses
+  - thumbnail bundle variant hits
+  - gallery scan calls
+  - gallery map cache hits
+  - gallery map cache misses
+  - rendered subgalleries
+  - rendered images
+  - SEO JSON-LD images
+- added named timers for expensive render phases such as:
+  - gallery image query
+  - child gallery lookup
+  - image tag lookup
+  - image vote lookup
+  - gallery grid settings
+  - picture game lookup
+  - background asset lookup
+  - SEO metadata lookup
+  - gallery card rendering
+  - image card rendering
+  - thumbnail bundle discovery
+  - filesystem checks
+- added thumbnail-purpose tracking so expensive thumbnail work can be tied back to the exact render feature that caused it
+- added a compact admin-only diagnostic panel on public pages
+- kept the profiling invisible to anonymous visitors
+
+User impact:
+
+- admins can now see what actually makes a public gallery page expensive
+- large gallery performance tuning is much easier
+- thumbnail and filesystem pressure can be diagnosed directly from the rendered page
+- anonymous visitors do not see the diagnostic panel
+- normal visitor behavior is not changed by the profiler UI
+
+#### Thumbnail rendering now uses request-local thumbnail bundles
+
+Thumbnail lookup behavior was heavily optimized by resolving available thumbnail variants once per image during a request.
+
+What changed:
+
+- added request-local thumbnail bundle discovery
+- added a stable thumbnail bundle cache key per image
+- collected generated JPEG and WebP variants in one pass
+- reused discovered variants for:
+  - visible image cards
+  - subgallery covers
+  - subgallery collages
+  - lightbox preview URLs
+  - map marker thumbnails
+  - responsive `srcset` output
+- added bundle-aware URL selection
+- added bundle-aware `srcset` generation
+- added safe media fallback handling when no generated thumbnail exists
+- preserved existing fallback behavior for missing, partially generated, deleted, regenerated, or DNG-derived thumbnails
+- reduced repeated `is_file()` checks for the same image and size combinations
+- added request-local caching to legacy `thumbnail_url()` calls
+- added profiling counters for direct thumbnail hits, fallback hits, media fallbacks, and cache hits
+
+User impact:
+
+- gallery pages with many visible photos should render with fewer repeated thumbnail checks
+- public pages should spend less time repeatedly searching for the same thumbnail variants
+- DNG display derivatives and fallback media behavior remain safe
+- thumbnail generation and maintenance behavior remains compatible with existing galleries
+- admins get better diagnostic visibility into which thumbnail paths are expensive
+
+#### Progressive thumbnail rendering was added
+
+Public gallery cards now use a progressive thumbnail strategy.
+
+What changed:
+
+- added `thumbnail_progressive_picture_html()`
+- visible cards initially render with a small thumbnail candidate
+- larger responsive `srcset` candidates are attached as deferred progressive data
+- the browser can paint the public grid sooner
+- JavaScript upgrades thumbnails after initial render when appropriate
+- first visible images can be marked eager with high fetch priority
+- later images remain lazy and low priority
+- gallery covers and collage images also use the progressive thumbnail path
+- existing `thumbnail_picture_html()` was updated to support precomputed thumbnail bundles
+
+User impact:
+
+- first paint should feel faster on image-heavy gallery pages
+- large image grids should avoid forcing all responsive candidates immediately
+- public galleries should feel more responsive during initial load
+- browser bandwidth and decode pressure should be better aligned with what is actually visible
+
+#### Responsive thumbnail sizing was rebuilt for lifecycle-safe updates
+
+The responsive thumbnail JavaScript module was updated to work safely with dynamically replaced public gallery content.
+
+What changed:
+
+- added teardown support for responsive thumbnail behavior
+- added lifecycle state tracking with `AbortController`
+- added deferred idle work for thumbnail upgrades
+- measured card widths are used to update `sizes`
+- progressive thumbnails are upgraded only when needed
+- high-DPI screens are handled with a capped device-pixel-ratio heuristic
+- thumbnails are processed in small batches instead of all at once
+- responsive thumbnail listeners are cleaned up before public gallery fragments are replaced
+- responsive thumbnail behavior is rebound after server-rendered content refreshes
+
+User impact:
+
+- dynamically refreshed gallery content no longer keeps stale thumbnail listeners
+- side-panel edits and uploads can refresh the public gallery more safely
+- thumbnail sizing remains accurate after gallery content changes
+- large galleries avoid a large burst of immediate client-side thumbnail work
+
+#### Public lightbox loading is now deferred
+
+The public lightbox module was split so the heavy viewer logic is loaded only when needed.
+
+What changed:
+
+- added a new `lightbox-deferred.js` module
+- the full lightbox implementation is loaded dynamically
+- the real lightbox is activated:
+  - after page load and idle time
+  - immediately when a visitor clicks a photo
+  - immediately when a visitor opens a photo map
+  - immediately when a gallery map is opened
+- the first user click is replayed after the full module is loaded
+- deferred activation ignores admin controls and side-panel triggers
+- the existing lightbox implementation remains preserved
+- gallery.js now imports the deferred lightbox entry point instead of the full module directly
+
+User impact:
+
+- public gallery pages do less JavaScript work during first render
+- visitors still get normal lightbox behavior when clicking a photo
+- gallery maps and photo maps still work when requested
+- admin edit/delete/sidebar actions do not accidentally trigger lightbox initialization
+- large photo pages should feel lighter before the first photo is opened
+
+#### Lightbox lifecycle cleanup was added
+
+The full lightbox module now supports explicit teardown and cleaner reinitialization.
+
+What changed:
+
+- added `teardownGalleryLightbox()`
+- added internal lightbox state tracking
+- added `AbortController` based listener cleanup
+- cleaned up pending animation frames and timers
+- cleaned up fullscreen and map-related state before DOM replacement
+- removed stale map instances during teardown
+- removed stale split-map resize observers during teardown
+- refreshed lightbox order after public content replacement
+- kept public gallery reorder integration compatible with the refreshed DOM
+
+User impact:
+
+- dynamic gallery refreshes are safer
+- side-panel saves, uploads, and gallery changes are less likely to leave stale lightbox state behind
+- map overlays are less likely to reference removed DOM nodes
+- fullscreen navigation order remains aligned with the current rendered gallery state
+
+#### Gallery map handling is now lazy and cacheable
+
+GPS gallery map payloads were optimized so normal gallery rendering no longer has to build full map marker data just to decide whether the map button should appear.
+
+What changed:
+
+- added a cheap `gallery_has_map_points()` availability check
+- gallery pages now check whether map points exist without building every marker payload
+- full map marker payload generation remains available through the map endpoint
+- added a gallery map cache directory under `cache/gallery-maps`
+- added deterministic map payload cache fingerprints
+- map cache fingerprints include:
+  - gallery id
+  - public/admin access mode
+  - recursive/direct mode
+  - point count
+  - image update timestamps
+  - GPS extraction timestamps
+  - gallery update timestamps
+- added cache hit and miss profiling counters
+- added pruning of older cache files after writing a fresh map payload
+- added a global map cache clear helper
+- thumbnail maintenance now clears cached gallery map payloads so marker thumbnails do not keep stale fallback URLs
+- `image_map_point()` can now skip thumbnail generation when only metadata is needed
+
+User impact:
+
+- gallery pages with GPS-enabled branches should render faster
+- the gallery map button can still appear correctly
+- full marker data is built only when the map payload is actually needed
+- cached map payloads make repeated map openings cheaper
+- regenerated thumbnails no longer leave old marker thumbnail URLs behind
+
+#### Hidden lightbox source nodes no longer resolve large previews eagerly
+
+Pagination-aware lightbox source nodes were optimized to avoid resolving large preview thumbnails for non-rendered photos during normal page rendering.
+
+What changed:
+
+- hidden lightbox source nodes now keep preview URLs empty
+- hidden source nodes remain available for fullscreen ordering
+- visible image cards still provide their normal preview data
+- map metadata for hidden nodes can skip thumbnail generation
+- JSON-LD image metadata is capped to the visible page slice
+
+User impact:
+
+- paginated galleries no longer spend work resolving 1600px thumbnails for every hidden image
+- fullscreen ordering remains compatible with pagination
+- large galleries avoid unnecessary preview URL construction during normal page load
+- SEO metadata remains present but is kept bounded and practical
+
+#### SEO JSON-LD image output was capped to visible content
+
+Gallery JSON-LD rendering was adjusted to avoid expensive metadata generation for very large galleries.
+
+What changed:
+
+- gallery JSON-LD now receives the currently visible image slice
+- JSON-LD image output is capped to the first 20 visible images
+- NSFW-restricted images continue to be skipped
+- thumbnail resolution for JSON-LD content URLs is now profiled
+- hidden lightbox ordering remains separate from crawler metadata
+
+User impact:
+
+- large galleries avoid unnecessary SEO thumbnail lookups across the whole image set
+- crawler metadata remains useful without turning public rendering into a full-gallery thumbnail scan
+- paginated galleries now keep structured metadata aligned with the visible page
+
+#### Create gallery here now uses create-and-upload mode
+
+The `Create gallery here` workflow was restored and corrected so it opens the combined gallery creation and optional upload workflow.
+
+What changed:
+
+- added `upload_mode=new` support to the upload controller
+- added `parent_id` handling for the create-and-upload workflow
+- added validated parent-gallery prefill logic
+- added contextual notices for the selected parent gallery
+- updated non-panel upload rendering so create-and-upload mode shows only the new-gallery form
+- updated side-panel rendering so create-and-upload mode opens a focused gallery workflow
+- the side panel now explains that photos are optional
+- the workflow can still create an empty gallery when no photos are selected
+- `Create gallery here` in the gallery editor now links to `admin_upload` with `upload_mode=new`
+- the old empty-gallery-only admin-new-gallery side-panel path is no longer used for this action
+
+User impact:
+
+- admins can create a child gallery and upload photos in one workflow
+- the action no longer creates only an empty gallery unless the user intentionally uploads nothing
+- the parent gallery context is explicit
+- gallery creation from the editor is consistent with the public hero action
+- fewer clicks are needed when building nested galleries
+
+#### Add gallery here was restored to the public hero action bar
+
+The public gallery hero now includes a compact admin-only child-gallery creation action.
+
+What changed:
+
+- added `render_public_gallery_admin_add_child_link()`
+- added an admin-only `Add gallery here` hero icon
+- the icon is hidden during anonymous preview mode
+- the icon opens the side panel in create-and-upload mode
+- the action uses the current gallery as the new gallery parent
+- the action includes accessibility labels and title text
+- the button uses the compact hero icon button styling
+
+User impact:
+
+- logged-in admins can create a child gallery directly from the public gallery hero
+- the public page workflow matches the admin edit workflow
+- anonymous preview remains clean and visitor-like
+- public gallery management is faster when building nested albums
+
+#### Dynamic public gallery refresh now has proper lifecycle teardown and rebind
+
+The side-panel refresh pipeline was improved so replacing public gallery content also resets dependent browser modules cleanly.
+
+What changed:
+
+- public gallery refresh now tracks whether the public gallery was replaced
+- responsive thumbnails are torn down before content replacement
+- back-to-top behavior is torn down before content replacement
+- lightbox behavior is torn down before content replacement
+- public gallery lifecycle modules are rebound after replacement
+- public page reordering is rebound after replacement
+- a `php-gallery:public-content-replaced` event is dispatched after replacement
+- the back-to-top shell can be preserved while replacing the server-rendered gallery frame
+- attributes are copied from the fresh server-rendered frame to the persistent frame
+- stable controls such as the back-to-top button are preserved instead of being discarded unnecessarily
+- subgallery refresh now uses the same replacement path as the full public gallery refresh
+
+User impact:
+
+- side-panel upload and edit workflows refresh the visible gallery more reliably
+- back-to-top behavior survives dynamic gallery updates
+- lightbox behavior does not keep stale references after updates
+- responsive thumbnails continue working after panel saves
+- public reorder mode remains compatible with refreshed server-rendered content
+
+#### Back-to-top behavior was made refresh-safe
+
+The back-to-top module was rewritten to avoid holding stale DOM references.
+
+What changed:
+
+- added module-level lifecycle state
+- added `teardownBackToTopButton()`
+- DOM elements are looked up on demand
+- click handling is delegated safely
+- scroll and resize listeners use `AbortController`
+- animation-frame updates are cancelled during teardown
+- visibility checks now confirm that current elements are connected
+- fullscreen and lightbox states continue to suppress the button
+
+User impact:
+
+- back-to-top no longer breaks after gallery content is dynamically replaced
+- the button remains correctly hidden during fullscreen/lightbox states
+- repeated refreshes do not stack duplicate event listeners
+- long gallery pages keep the expected scroll helper behavior
+
+#### Browser rendering of large public grids was improved
+
+Public gallery cards and image cards now allow the browser to skip work for offscreen content when supported.
+
+What changed:
+
+- added `content-visibility: auto` for public gallery cards and image cards
+- added intrinsic size hints for skipped cards
+- cards become fully visible when focused or dragged
+- support is applied only in browsers that support `content-visibility`
+
+User impact:
+
+- large public grids can be cheaper for the browser to lay out and paint
+- keyboard focus and drag interactions remain safe
+- unsupported browsers simply keep the previous behavior
+
+### Public UI and Admin Workflow Refinements
+
+#### Hero and editor gallery creation
+
+- The public hero now exposes the missing `Add gallery here` action for logged-in admins.
+- The admin gallery editor now routes `Create gallery here` to the combined create-and-upload workflow.
+- Both paths use the same parent-gallery context.
+- Both paths support optional photo upload during gallery creation.
+- Empty gallery creation remains possible by submitting without selecting photos.
+
+#### Upload panel copy and context
+
+- Existing-gallery upload mode now clearly says it adds photos to an existing gallery.
+- Create-and-upload mode now clearly says it creates a child gallery and optionally uploads photos.
+- Errors in create-and-upload mode now use `Create or upload failed` wording.
+- Parent context is shown when available.
+
+#### Admin-side public refresh behavior
+
+- Public gallery refresh now prefers server-rendered HTML as the source of truth.
+- The dynamic refresh path avoids stale module state.
+- The refresh system now handles gallery frames, subgallery sections, and image lists more consistently.
+
+### Performance Details
+
+This release reduces several expensive public render behaviors.
+
+#### Reduced repeated thumbnail work
+
+Before this release, a visible photo could trigger multiple independent thumbnail checks for the same generated files. The new thumbnail bundle path discovers available generated variants once and reuses them for multiple outputs during the same request.
+
+This affects:
+
+- image card thumbnail HTML
+- lightbox preview URLs
+- map marker thumbnails
+- progressive picture HTML
+- WebP source sets
+- JPEG source sets
+- subgallery covers
+- subgallery collages
+
+#### Reduced full-gallery work during paginated rendering
+
+Paginated galleries now avoid some work that was previously performed across the complete image set during normal rendering.
+
+Reduced work includes:
+
+- large preview URL generation for hidden lightbox source nodes
+- full map marker payload construction just to show the map button
+- JSON-LD thumbnail resolution across the whole gallery
+
+#### Better first-render behavior in the browser
+
+The browser now performs less immediate work on large gallery pages because:
+
+- full lightbox setup is deferred
+- responsive thumbnail upgrades are batched
+- progressive thumbnails start smaller
+- offscreen cards can use `content-visibility`
+- lifecycle modules are rebound only after server-rendered refreshes
+
+### Technical Notes
+
+Files heavily updated in this release include:
+
+- `app/controllers/admin_galleries.php`
+- `app/controllers/admin_uploads.php`
+- `app/controllers/public_gallery.php`
+- `app/helpers.php`
+- `app/services.php`
+- `app/services/exif.php`
+- `app/services/gallery_backgrounds.php`
+- `app/services/gallery_lookup.php`
+- `app/services/public_render_profiler.php`
+- `app/services/thumbnails.php`
+- `public/assets/gallery-modules/admin-operations.js`
+- `public/assets/gallery-modules/back-to-top.js`
+- `public/assets/gallery-modules/lightbox-deferred.js`
+- `public/assets/gallery-modules/lightbox.js`
+- `public/assets/gallery-modules/responsive-thumbnails.js`
+- `public/assets/gallery.js`
+- `public/assets/styles/public.css`
+- `app/core-manifest.json`
+
+### Internal Changes
+
+#### New backend service
+
+- Added `app/services/public_render_profiler.php`
+- Loaded the profiler from `app/services.php`
+- The profiler is admin-only and disabled for CLI requests
+- The profiler exposes helpers for:
+  - request start
+  - gallery id assignment
+  - counters
+  - timers
+  - database timing
+  - filesystem timing
+  - thumbnail-purpose tracking
+  - final diagnostic panel rendering
+
+#### Thumbnail service changes
+
+- Added request-local thumbnail URL caching
+- Added thumbnail bundle discovery
+- Added bundle variant selection
+- Added bundle `srcset` generation
+- Added progressive picture HTML generation
+- Added profiling instrumentation around thumbnail lookups
+- Added profiling instrumentation around filesystem checks
+- Added map cache invalidation when thumbnail maintenance changes
+
+#### EXIF and map service changes
+
+- Added optional thumbnail generation to `image_map_point()`
+- Added map query helper reuse
+- Added map availability checks
+- Added map payload cache files
+- Added map cache fingerprinting
+- Added map cache pruning
+- Added map cache clearing
+
+#### Front-end module changes
+
+- Added deferred lightbox bootstrap module
+- Added teardown support for lightbox, responsive thumbnails, and back-to-top modules
+- Added dynamic import for the full lightbox
+- Added public content replacement lifecycle handling
+- Added cache-busted imports for refreshed modules
+
+#### Public rendering changes
+
+- Gallery and home rendering now start a public render profile for admins.
+- Home gallery queries are profiled.
+- Gallery image queries are profiled.
+- Child gallery lookup is profiled.
+- Tag, vote, picture game, grid settings, background, and SEO lookups are profiled.
+- Subgallery and image rendering are profiled.
+- Visible image cards use thumbnail bundles and progressive picture HTML.
+- Hidden lightbox source nodes avoid large preview resolution.
+- Gallery map button availability no longer requires full marker payload generation.
+- JSON-LD image output is capped to visible content.
+
+### User Impact
+
+#### For visitors
+
+- Large galleries should load faster.
+- Initial gallery rendering should feel lighter.
+- Photo grids should become interactive sooner.
+- Lightbox behavior remains the same when a photo is opened.
+- Gallery maps remain available when GPS points exist.
+- Offscreen cards may cost less browser rendering work.
+- Paginated galleries avoid unnecessary work for non-visible photos.
+
+#### For administrators
+
+- `Add gallery here` is available again in the public hero action bar.
+- `Create gallery here` in the gallery editor now opens the create-and-upload workflow.
+- New child galleries can be created with photos in one side-panel workflow.
+- Empty child galleries can still be created when needed.
+- Public gallery refreshes after side-panel actions are more stable.
+- Admins get a new public render profile panel for diagnosing slow galleries.
+- Thumbnail, filesystem, database, map, and render costs are now visible per request.
+
+### Notes
+
+- The public render profiler is intentionally admin-only.
+- Anonymous visitors do not see profiling output.
+- The thumbnail bundle cache is request-local only and does not persist thumbnail metadata.
+- Gallery map payload cache is persisted under `cache/gallery-maps`.
+- Thumbnail maintenance clears gallery map cache files to avoid stale marker thumbnails.
+- The full lightbox implementation is preserved, but it is now loaded through the deferred entry point.
+- The create-and-upload workflow still allows empty gallery creation when no files are selected.
+- The core manifest was refreshed for the updated file set.
+
 ## Version 0.63
 
 Version 0.63 is a major public-page admin workflow refinement release focused on replacing bulky inline editing with compact contextual actions, improving side-panel workflows, stabilizing live refresh behavior, and modernizing gallery interaction ergonomics.

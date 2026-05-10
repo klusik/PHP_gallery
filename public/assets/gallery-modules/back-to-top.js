@@ -41,68 +41,145 @@
  * setupExample();
  */
 
-export function setupBackToTopButton() {
-    // scope stores state or configuration for the gallery front-end flow.
-    const scope = document.querySelector('[data-back-to-top-scope]');
-    // listing stores state or configuration for the gallery front-end flow.
-    const listing = document.querySelector('[data-back-to-top-list]') || document.querySelector('[data-gallery-image-list]');
-    // button stores state or configuration for the gallery front-end flow.
-    const button = document.querySelector('[data-back-to-top-button]');
-    if (!scope || !listing || !button) {
+const backToTopState = {
+    controller: null,
+    frameId: 0,
+    ticking: false,
+};
+
+/**
+ * Finds the currently active back-to-top elements.
+ *
+ * DOM nodes are looked up on demand so this module never stores old gallery
+ * fragments after a server-rendered refresh replaces the public listing.
+ *
+ * @returns {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}}
+ */
+function findBackToTopElements() {
+    return {
+        scope: document.querySelector('[data-back-to-top-scope]'),
+        listing: document.querySelector('[data-back-to-top-list]') || document.querySelector('[data-gallery-image-list]'),
+        button: document.querySelector('[data-back-to-top-button]'),
+    };
+}
+
+/**
+ * Returns whether the supplied back-to-top elements are usable.
+ *
+ * @param {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}} elements Current DOM lookup result.
+ * @returns {boolean}
+ */
+function hasConnectedBackToTopElements(elements) {
+    return Boolean(
+        elements.scope
+        && elements.listing
+        && elements.button
+        && elements.scope.isConnected
+        && elements.listing.isConnected
+        && elements.button.isConnected
+    );
+}
+
+/**
+ * Determines whether the back-to-top button should be visible now.
+ *
+ * @param {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}} elements Current DOM lookup result.
+ * @returns {boolean}
+ */
+function shouldShowBackToTopButton(elements) {
+    if (!hasConnectedBackToTopElements(elements)) {
+        return false;
+    }
+    if (document.body.classList.contains('has-lightbox') || document.body.classList.contains('has-mobile-lightbox') || document.fullscreenElement) {
+        return false;
+    }
+
+    const scopeRect = elements.scope.getBoundingClientRect();
+    const listingRect = elements.listing.getBoundingClientRect();
+    const enteredListing = listingRect.top < window.innerHeight * 0.72;
+    const stillInsideListing = scopeRect.bottom > window.innerHeight * 0.24;
+    return enteredListing && stillInsideListing && window.scrollY > 180;
+}
+
+/**
+ * Applies the current back-to-top visibility state.
+ *
+ * @returns {void}
+ */
+function updateBackToTopVisibility() {
+    backToTopState.frameId = 0;
+    backToTopState.ticking = false;
+
+    const elements = findBackToTopElements();
+    if (!hasConnectedBackToTopElements(elements)) {
         return;
     }
 
-    // ticking stores state or configuration for the gallery front-end flow.
-    let ticking = false;
+    const visible = shouldShowBackToTopButton(elements);
+    elements.button.hidden = !visible;
+    elements.button.classList.toggle('is-visible', visible);
+}
 
-    /**
-     * Handles should show button behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
-     */
-    function shouldShowButton() {
-        if (document.body.classList.contains('has-lightbox') || document.body.classList.contains('has-mobile-lightbox') || document.fullscreenElement) {
-            return false;
-        }
-        // scopeRect stores state or configuration for the gallery front-end flow.
-        const scopeRect = scope.getBoundingClientRect();
-        // listingRect stores state or configuration for the gallery front-end flow.
-        const listingRect = listing.getBoundingClientRect();
-        // enteredListing stores state or configuration for the gallery front-end flow.
-        const enteredListing = listingRect.top < window.innerHeight * 0.72;
-        // stillInsideListing stores state or configuration for the gallery front-end flow.
-        const stillInsideListing = scopeRect.bottom > window.innerHeight * 0.24;
-        return enteredListing && stillInsideListing && window.scrollY > 180;
+/**
+ * Schedules a back-to-top visibility update for the next animation frame.
+ *
+ * @returns {void}
+ */
+function requestBackToTopVisibilityUpdate() {
+    if (!backToTopState.controller || backToTopState.controller.signal.aborted || backToTopState.ticking) {
+        return;
+    }
+    backToTopState.ticking = true;
+    backToTopState.frameId = window.requestAnimationFrame(updateBackToTopVisibility);
+}
+
+/**
+ * Scrolls the public page back to the top when the delegated button is clicked.
+ *
+ * @param {MouseEvent} event Click event from the document-level listener.
+ * @returns {void}
+ */
+function handleBackToTopClick(event) {
+    const target = event.target instanceof Element ? event.target.closest('[data-back-to-top-button]') : null;
+    if (!(target instanceof HTMLElement) || !target.isConnected) {
+        return;
+    }
+    event.preventDefault();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+/**
+ * Releases the active back-to-top binding before gallery content is refreshed.
+ *
+ * @returns {void}
+ */
+export function teardownBackToTopButton() {
+    if (backToTopState.frameId) {
+        window.cancelAnimationFrame(backToTopState.frameId);
+        backToTopState.frameId = 0;
+    }
+    if (backToTopState.controller) {
+        backToTopState.controller.abort();
+        backToTopState.controller = null;
+    }
+    backToTopState.ticking = false;
+}
+
+export function setupBackToTopButton() {
+    teardownBackToTopButton();
+
+    const elements = findBackToTopElements();
+    if (!hasConnectedBackToTopElements(elements)) {
+        return;
     }
 
-    /**
-     * Handles update visibility behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
-     */
-    function updateVisibility() {
-        ticking = false;
-        // visible stores state or configuration for the gallery front-end flow.
-        const visible = shouldShowButton();
-        button.hidden = !visible;
-        button.classList.toggle('is-visible', visible);
-    }
+    const controller = new AbortController();
+    backToTopState.controller = controller;
+    backToTopState.ticking = false;
 
-    /**
-     * Handles request visibility update behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
-     */
-    function requestVisibilityUpdate() {
-        if (ticking) {
-            return;
-        }
-        ticking = true;
-        window.requestAnimationFrame(updateVisibility);
-    }
-
-    button.addEventListener('click', () => {
-        window.scrollTo({top: 0, behavior: 'smooth'});
-    });
-    window.addEventListener('scroll', requestVisibilityUpdate, {passive: true});
-    window.addEventListener('resize', requestVisibilityUpdate);
-    document.addEventListener('fullscreenchange', requestVisibilityUpdate);
-    updateVisibility();
+    document.addEventListener('click', handleBackToTopClick, {signal: controller.signal});
+    window.addEventListener('scroll', requestBackToTopVisibilityUpdate, {passive: true, signal: controller.signal});
+    window.addEventListener('resize', requestBackToTopVisibilityUpdate, {signal: controller.signal});
+    document.addEventListener('fullscreenchange', requestBackToTopVisibilityUpdate, {signal: controller.signal});
+    updateBackToTopVisibility();
 }

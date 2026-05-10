@@ -42,6 +42,9 @@
  */
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260509-image-move-v2';
+import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
+import { setupGalleryLightbox, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260510-lazy-map-v1';
+import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 
 const legacyAdminTabHashes = new Map([
     ['#admin-galleries', '#admin-tab-galleries'],
@@ -1474,12 +1477,18 @@ async function refreshCurrentGalleryContextFromServer(sourceUrl = '') {
         }
         const parsed = new DOMParser().parseFromString(html, 'text/html');
         let replaced = false;
+        let publicGalleryReplaced = false;
         replaced = replaceAdminEditorMainFromParsedDocument(parsed) || replaced;
-        replaced = replacePublicGalleryFragmentsFromParsedDocument(parsed) || replaced;
+        publicGalleryReplaced = replacePublicGalleryFragmentsFromParsedDocument(parsed);
+        replaced = publicGalleryReplaced || replaced;
         if (replaced) {
             setupAdminTabs(document);
             setupAdminImageReordering();
-            setupPublicGalleryPageReordering();
+            if (publicGalleryReplaced) {
+                rebindPublicGalleryLifecycleAfterRefresh();
+            } else {
+                setupPublicGalleryPageReordering();
+            }
         }
         return replaced;
     } catch (error) {
@@ -1528,11 +1537,73 @@ function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
 
     const currentFrame = document.querySelector('[data-back-to-top-scope]');
     const freshFrame = parsed.querySelector('[data-back-to-top-scope]');
+    const frameChanged = replacePublicGalleryFrame(currentFrame, freshFrame);
+    if (frameChanged) {
+        document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
+        return true;
+    }
+
+    const fragmentPairs = [
+        ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
+        ['[data-gallery-image-list]', '[data-gallery-image-list]'],
+    ];
+    fragmentPairs.forEach(([currentSelector, freshSelector]) => {
+        const current = document.querySelector(currentSelector);
+        const fresh = parsed.querySelector(freshSelector);
+        if (current instanceof HTMLElement && fresh instanceof HTMLElement) {
+            teardownPublicGalleryLifecycleBeforeRefresh();
+            current.replaceWith(fresh);
+            replaced = true;
+        } else if (current instanceof HTMLElement && !(fresh instanceof HTMLElement)) {
+            teardownPublicGalleryLifecycleBeforeRefresh();
+            current.remove();
+            replaced = true;
+        }
+    });
+    if (replaced) {
+        document.dispatchEvent(new CustomEvent('php-gallery:public-content-replaced'));
+    }
+    return replaced;
+}
+
+/**
+ * Releases browser-side public gallery bindings before server-rendered content is replaced.
+ *
+ * @returns {void}
+ */
+function teardownPublicGalleryLifecycleBeforeRefresh() {
+    teardownResponsiveThumbnailSizes();
+    teardownBackToTopButton();
+    teardownGalleryLightbox();
+}
+
+/**
+ * Recreates browser-side public gallery bindings after server-rendered content is replaced.
+ *
+ * @returns {void}
+ */
+function rebindPublicGalleryLifecycleAfterRefresh() {
+    setupResponsiveThumbnailSizes();
+    setupBackToTopButton();
+    setupGalleryLightbox();
+    setupPublicGalleryPageReordering();
+}
+
+/**
+ * Refreshes the public gallery frame while keeping stable controls outside the replaced content.
+ *
+ * @param {Element|null} currentFrame Current public gallery frame.
+ * @param {Element|null} freshFrame Fresh public gallery frame from the server-rendered response.
+ * @returns {boolean} True when the public gallery frame changed.
+ */
+function replacePublicGalleryFrame(currentFrame, freshFrame) {
     if (currentFrame instanceof HTMLElement && freshFrame instanceof HTMLElement) {
-        currentFrame.replaceWith(freshFrame);
+        teardownPublicGalleryLifecycleBeforeRefresh();
+        replacePublicGalleryFrameChildren(currentFrame, freshFrame);
         return true;
     }
     if (currentFrame instanceof HTMLElement && !(freshFrame instanceof HTMLElement)) {
+        teardownPublicGalleryLifecycleBeforeRefresh();
         currentFrame.remove();
         return true;
     }
@@ -1548,23 +1619,61 @@ function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
             return true;
         }
     }
+    return false;
+}
 
-    const fragmentPairs = [
-        ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
-        ['[data-gallery-image-list]', '[data-gallery-image-list]'],
-    ];
-    fragmentPairs.forEach(([currentSelector, freshSelector]) => {
-        const current = document.querySelector(currentSelector);
-        const fresh = parsed.querySelector(freshSelector);
-        if (current instanceof HTMLElement && fresh instanceof HTMLElement) {
-            current.replaceWith(fresh);
-            replaced = true;
-        } else if (current instanceof HTMLElement && !(fresh instanceof HTMLElement)) {
-            current.remove();
-            replaced = true;
+/**
+ * Replaces frame content without discarding the existing back-to-top shell.
+ *
+ * @param {HTMLElement} currentFrame Current public gallery frame.
+ * @param {HTMLElement} freshFrame Fresh public gallery frame from the server-rendered response.
+ * @returns {void}
+ */
+function replacePublicGalleryFrameChildren(currentFrame, freshFrame) {
+    copyElementIdentity(currentFrame, freshFrame);
+
+    const currentButton = currentFrame.querySelector('[data-back-to-top-button]');
+    const freshButton = freshFrame.querySelector('[data-back-to-top-button]');
+    if (freshButton instanceof HTMLElement) {
+        freshButton.remove();
+    }
+
+    Array.from(currentFrame.childNodes).forEach((node) => {
+        if (node !== currentButton) {
+            node.remove();
         }
     });
-    return replaced;
+
+    const anchor = currentButton instanceof HTMLElement ? currentButton : null;
+    Array.from(freshFrame.childNodes).forEach((node) => {
+        if (anchor) {
+            currentFrame.insertBefore(node, anchor);
+        } else {
+            currentFrame.appendChild(node);
+        }
+    });
+
+    if (!(currentButton instanceof HTMLElement) && freshButton instanceof HTMLElement) {
+        currentFrame.appendChild(freshButton);
+    }
+}
+
+/**
+ * Copies attributes from a fresh server-rendered element to a persistent element.
+ *
+ * @param {HTMLElement} current Current element kept in the live document.
+ * @param {HTMLElement} fresh Fresh element parsed from the server response.
+ * @returns {void}
+ */
+function copyElementIdentity(current, fresh) {
+    Array.from(current.attributes).forEach((attribute) => {
+        if (!fresh.hasAttribute(attribute.name)) {
+            current.removeAttribute(attribute.name);
+        }
+    });
+    Array.from(fresh.attributes).forEach((attribute) => {
+        current.setAttribute(attribute.name, attribute.value);
+    });
 }
 
 /**
@@ -1587,34 +1696,13 @@ async function refreshPublicSubgallerySectionFromServer(galleryId) {
             return false;
         }
         const parsed = new DOMParser().parseFromString(html, 'text/html');
-        const freshSection = parsed.querySelector('[data-public-subgallery-section]');
-        const currentSection = document.querySelector('[data-public-subgallery-section]');
-        if (freshSection instanceof HTMLElement) {
-            if (currentSection instanceof HTMLElement) {
-                currentSection.replaceWith(freshSection);
-            } else {
-                const grid = document.querySelector('[data-public-subgallery-grid]');
-                const transientSection = grid instanceof HTMLElement ? grid.closest('[data-public-subgallery-section], .panel') : null;
-                if (transientSection instanceof HTMLElement) {
-                    transientSection.replaceWith(freshSection);
-                } else {
-                    const createdSection = createPublicSubgallerySection();
-                    const createdWrapper = createdSection instanceof HTMLElement ? createdSection.closest('[data-public-subgallery-section], .panel') : null;
-                    if (createdWrapper instanceof HTMLElement) {
-                        createdWrapper.replaceWith(freshSection);
-                    } else {
-                        return false;
-                    }
-                }
-            }
-            focusCreatedGalleryCard(galleryId);
-            return true;
+        const replaced = replacePublicGalleryFragmentsFromParsedDocument(parsed);
+        if (!replaced) {
+            return false;
         }
-        if (currentSection instanceof HTMLElement) {
-            currentSection.remove();
-            return true;
-        }
-        return false;
+        rebindPublicGalleryLifecycleAfterRefresh();
+        focusCreatedGalleryCard(galleryId);
+        return true;
     } catch (error) {
         return false;
     }

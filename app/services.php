@@ -39,6 +39,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/services/app_settings.php';
 // Load schema helpers before feature modules perform optional-column checks.
 require_once __DIR__ . '/services/database_helpers.php';
+// Load public render profiling helpers before public gallery services can record timings.
+require_once __DIR__ . '/services/public_render_profiler.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.
 require_once __DIR__ . '/services/custom_css.php';
 // Load theme settings and CSS default helpers after custom CSS paths are available.

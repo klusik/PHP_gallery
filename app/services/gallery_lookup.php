@@ -64,10 +64,12 @@ function child_galleries(int $parentId, bool $publicOnly): array
         $sql .= ' AND ' . public_gallery_listing_condition('g');
     }
     $sql .= ' GROUP BY g.id ORDER BY g.sort_order, g.title';
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    return $cache[$cacheKey] = $stmt->fetchAll();
+    return $cache[$cacheKey] = public_render_profile_db('child_galleries_db', static function () use ($sql, $params): array {
+        // $stmt stores the prepared child gallery query.
+        $stmt = db()->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    });
 }
 
 /**

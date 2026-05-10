@@ -606,6 +606,12 @@ function render_public_seo_tags(array $gallery, array $images = []): void
 
 /**
  * Render JSON-LD for one gallery page.
+ *
+ * The caller intentionally passes only the images rendered on the current public
+ * page. Full-gallery lightbox ordering is handled by hidden source nodes in the
+ * body, while crawler metadata stays capped to the visible pagination slice so
+ * large galleries do not perform thumbnail resolution for every image during a
+ * normal request.
  */
 function render_gallery_json_ld(array $gallery, array $images = []): void
 {
@@ -613,7 +619,11 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
     $items = [];
     // $position stores an intermediate value used by the surrounding gallery workflow.
     $position = 1;
-    foreach ($images as $image) {
+    // $jsonLdImages stores a conservative visible-page subset for crawler metadata.
+    $jsonLdImages = array_slice($images, 0, 20);
+    public_render_profile_count('seo_json_ld_images', count($jsonLdImages));
+
+    foreach ($jsonLdImages as $image) {
         if (image_nsfw_restricted($image, $gallery)) {
             continue;
         }
@@ -621,7 +631,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
             '@type' => 'ImageObject',
             'position' => $position++,
             'name' => image_alt_text($image, $gallery, $position - 1),
-            'contentUrl' => absolute_public_url(thumbnail_url($image, 800)),
+            'contentUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld visible content 800', static fn (): string => thumbnail_url($image, 800))),
             'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
     }
