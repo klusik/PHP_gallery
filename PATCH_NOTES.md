@@ -1,5 +1,11 @@
 # Patch notes
 
+## Version 0.62.1
+
+This is just a small bugfix:
+
+- admin panel (right) now correctly reloads panel & gallery view during addin and removing pictures from gallery
+
 ## Version 0.62
 
 - Fixed the version number
