@@ -193,15 +193,21 @@ function cms_admin_upload(): void
 
     // $prefillGalleryId stores the gallery that should be pre-selected when upload is opened from a public gallery page.
     $prefillGalleryId = selected_gallery_id_from_query('gallery_id');
+    // $prefillParentId stores the parent gallery for the create-and-upload workflow.
+    $prefillParentId = selected_gallery_id_from_query('parent_id');
     // $prefillGallery stores the validated gallery record used for contextual helper text.
     $prefillGallery = $prefillGalleryId > 0 ? find_gallery($prefillGalleryId) : null;
+    // $prefillParentGallery stores the validated parent row for create-and-upload helper text.
+    $prefillParentGallery = $prefillParentId > 0 ? find_gallery($prefillParentId) : null;
+    // $requestedUploadMode stores whether this screen should show existing-upload or create-and-upload UI.
+    $requestedUploadMode = (string) ($_GET['upload_mode'] ?? 'existing');
     // $error stores an intermediate value used by the surrounding gallery workflow.
     $error = (string) ($_SESSION['admin_upload_error'] ?? '');
     unset($_SESSION['admin_upload_error']);
     // $panelMode stores whether the upload screen is being rendered inside the reusable admin side panel.
     $panelMode = !empty($_GET['panel']);
     if ($panelMode) {
-        render_admin_upload_side_panel($prefillGalleryId, $prefillGallery, $error);
+        render_admin_upload_side_panel($prefillGalleryId, $prefillGallery, $error, $requestedUploadMode, $prefillParentId, $prefillParentGallery);
         return;
     }
     render_header('Upload photos');
@@ -209,22 +215,42 @@ function cms_admin_upload(): void
     if ($prefillGallery) {
         echo '<div class="notice">Upload target pre-selected: ' . e((string) $prefillGallery['title']) . '.</div>';
     }
+    if ($prefillParentGallery) {
+        echo '<div class="notice">New gallery will be created inside: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+    }
     if ($error !== '') {
         echo '<div class="notice">Upload failed: ' . e($error) . '</div>';
     }
     render_admin_upload_support_panel();
-    render_admin_upload_existing_gallery_form($prefillGalleryId);
-    render_admin_upload_new_gallery_form($prefillGalleryId);
+    if ($requestedUploadMode === 'new' || $prefillParentId > 0) {
+        render_admin_upload_new_gallery_form($prefillParentId);
+    } else {
+        render_admin_upload_existing_gallery_form($prefillGalleryId);
+        render_admin_upload_new_gallery_form($prefillGalleryId);
+    }
     render_footer();
 }
 
 /**
  * Render the focused upload workflow inside the reusable admin side panel.
  */
-function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error): void
+function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error, string $requestedUploadMode = 'existing', int $prefillParentId = 0, ?array $prefillParentGallery = null): void
 {
+    $createAndUploadMode = $requestedUploadMode === 'new' || $prefillParentId > 0;
     echo '<div class="admin-side-panel-stack" data-admin-upload-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Upload workflow</p><h2>Upload photos</h2><p class="muted">Add photos to an existing gallery. Creating a new child gallery now has its own focused action.</p></div>';
+    if ($createAndUploadMode) {
+        echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Create gallery here</h2><p class="muted">Create a child gallery and upload photos in the same workflow. Photos are optional, so the gallery can still be created empty when needed.</p></div>';
+        if ($prefillParentGallery) {
+            echo '<div class="notice">New gallery will be created inside: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+        }
+        if ($error !== '') {
+            echo '<div class="notice">Create or upload failed: ' . e($error) . '</div>';
+        }
+        render_admin_upload_new_gallery_panel_form($prefillParentId);
+        echo '</div>';
+        return;
+    }
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Upload workflow</p><h2>Upload photos</h2><p class="muted">Add photos to an existing gallery without leaving the drawer.</p></div>';
     if ($prefillGallery) {
         echo '<div class="notice">Upload target pre-selected: ' . e((string) $prefillGallery['title']) . '.</div>';
     }

@@ -243,6 +243,7 @@ function cms_gallery(): void
     echo '<div class="hero-actions" aria-label="Gallery actions">';
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
+    render_public_gallery_admin_add_child_link($gallery, 'hero');
     echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" aria-label="Download gallery" title="Download gallery"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">Download gallery</span></a>';
     if ($galleryMapAvailable) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
@@ -706,6 +707,29 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     render_public_gallery_admin_edit_link($gallery, 'card');
     render_public_gallery_admin_delete_form($gallery, 'card');
     echo '</article>';
+}
+
+
+/**
+ * Render the compact public-page child-gallery creation entry point for logged-in admins.
+ *
+ * This opens the upload controller in create-and-upload mode, so the admin can
+ * create a child gallery and optionally upload photos in one panel workflow.
+ *
+ * @param mixed $gallery Input used by this operation.
+ * @param mixed $placement Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function render_public_gallery_admin_add_child_link(array $gallery, string $placement = 'card'): void
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return;
+    }
+    $label = $placement === 'hero' ? 'Add gallery here' : 'Add gallery inside ' . (string) $gallery['title'];
+    $class = $placement === 'hero' ? 'public-admin-add-gallery-button public-admin-add-gallery-button-hero hero-icon-button' : 'public-admin-add-gallery-button public-admin-add-gallery-button-card';
+    $url = url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]);
+    $panelUrl = url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]);
+    echo '<a class="' . e($class) . '" href="' . e($url) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Gallery workflow" data-admin-side-panel-title="Add gallery here" data-gallery-side-panel-url="' . e($panelUrl) . '" aria-label="' . e($label) . '" title="' . e($label) . '"><span aria-hidden="true">+</span><span class="visually-hidden">' . e($label) . '</span></a>';
 }
 
 /**
