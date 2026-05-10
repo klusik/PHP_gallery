@@ -42,18 +42,21 @@ declare(strict_types=1);
 
 function cms_home(): void
 {
+    public_render_profile_start('home');
     // $listingCondition stores an intermediate value used by the surrounding gallery workflow.
     $listingCondition = public_gallery_listing_condition('g');
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
-        FROM galleries g
-        LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
-        WHERE $listingCondition AND g.parent_id IS NULL
-        GROUP BY g.id
-        ORDER BY g.sort_order, g.title");
-    $stmt->execute();
-    // Variable $galleries stores this steps working value.
-    $galleries = $stmt->fetchAll();
+    $galleries = public_render_profile_db('home_gallery_query', static function () use ($listingCondition): array {
+        // $stmt stores the prepared home gallery query.
+        $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
+            FROM galleries g
+            LEFT JOIN images i ON i.gallery_id = g.id AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'
+            WHERE $listingCondition AND g.parent_id IS NULL
+            GROUP BY g.id
+            ORDER BY g.sort_order, g.title");
+        $stmt->execute();
+        return $stmt->fetchAll();
+    });
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = main_page_gallery_grid_settings();
     // Variable $galleryPagination stores this steps working value.
@@ -67,14 +70,18 @@ function cms_home(): void
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
         echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
-        foreach ($galleries as $gallery) {
-            render_gallery_card($gallery, true, false, true);
-        }
+        public_render_profile_count('rendered_subgalleries', count($galleries));
+        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries): void {
+            foreach ($galleries as $gallery) {
+                render_gallery_card($gallery, true, false, true);
+            }
+        });
         echo '</section>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], 'Gallery pages');
         render_back_to_top_button();
         echo '</div>';
     }
+    render_public_render_profile_panel();
     telemetry_append_public_script([
         'route_name' => 'home',
         'page_kind' => 'home',
@@ -88,6 +95,7 @@ function cms_home(): void
  */
 function cms_gallery(): void
 {
+    public_render_profile_start('gallery');
     // Variable $anonymousPreview stores whether a logged-in admin asked to render the page with anonymous visitor rules.
     $anonymousPreview = admin_anonymous_preview_active();
     // Variable $viewer stores this steps working value.
@@ -138,6 +146,7 @@ function cms_gallery(): void
         render_gallery_access_gate($gallery, '', $requestedImage);
         return;
     }
+    public_render_profile_set_gallery((int) $gallery['id']);
     // Variable $publicOnly stores this steps working value.
     $publicOnly = !$viewer;
 
@@ -152,33 +161,35 @@ function cms_gallery(): void
     $sql .= "
         GROUP BY i.id
         ORDER BY i.sort_order, i.filename";
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->prepare($sql);
-    $stmt->execute([(int) $gallery['id']]);
-    // Variable $images stores this steps working value.
-    $images = $stmt->fetchAll();
+    $images = public_render_profile_db('gallery_image_query', static function () use ($sql, $gallery): array {
+        // $stmt stores the prepared gallery image query.
+        $stmt = db()->prepare($sql);
+        $stmt->execute([(int) $gallery['id']]);
+        return $stmt->fetchAll();
+    });
     // Variable $allImages stores the complete sorted image list before optional pagination slicing.
     $allImages = $images;
     // Variable $imageIds stores this steps working value.
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
     // Variable $imageTagsById stores this steps working value.
-    $imageTagsById = tags_for_entities('image', $imageIds);
+    $imageTagsById = public_render_profile_span('image_tag_lookup', static fn (): array => tags_for_entities('image', $imageIds));
     // Variable $votesById stores this steps working value.
-    $votesById = current_votes_for_images($imageIds);
+    $votesById = public_render_profile_span('image_vote_lookup', static fn (): array => current_votes_for_images($imageIds));
     // Variable $children stores this steps working value.
-    $children = child_galleries((int) $gallery['id'], $publicOnly);
+    public_render_profile_count('gallery_scan_calls');
+    $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
     // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
     $allChildren = $children;
     // Variable $mapsAllowed stores this steps working value.
     $mapsAllowed = gallery_allows_gps_maps($gallery);
-    // Variable $galleryMapPoints stores this steps working value.
-    $galleryMapPoints = $mapsAllowed ? gallery_map_points($gallery, $publicOnly, true) : [];
+    // Variable $galleryMapAvailable stores whether the map button should be shown without building the full marker payload.
+    $galleryMapAvailable = $mapsAllowed ? gallery_has_map_points($gallery, $publicOnly, true) : false;
     // Variable $votingAllowed stores this steps working value.
     $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $pictureGameImages stores this steps working value.
-    $pictureGameImages = picture_game_images($gallery);
+    $pictureGameImages = public_render_profile_span('picture_game_lookup', static fn (): array => picture_game_images($gallery));
     // Variable $paginationSettings stores this steps working value.
-    $paginationSettings = gallery_effective_grid_settings($gallery);
+    $paginationSettings = public_render_profile_span('gallery_grid_settings', static fn (): array => gallery_effective_grid_settings($gallery));
     // Variable $galleryPaginationPath stores the gallery-level URL path used for clean pagination links.
     $galleryPaginationPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($galleryPaginationPath === '') {
@@ -213,12 +224,12 @@ function cms_gallery(): void
         $images = pagination_slice_items($images, $photoPagination);
     }
     // Variable $backgroundAssetUrl stores this steps working value.
-    $backgroundAssetUrl = gallery_background_asset_url($gallery, $publicOnly);
+    $backgroundAssetUrl = public_render_profile_span('background_asset_lookup', static fn (): string => gallery_background_asset_url($gallery, $publicOnly));
     // Variable $seo stores this steps working value.
-    $seo = public_gallery_metadata($gallery);
+    $seo = public_render_profile_span('seo_metadata_lookup', static fn (): array => public_gallery_metadata($gallery));
     ob_start();
     render_public_seo_tags($gallery, $allImages);
-    render_gallery_json_ld($gallery, $allImages);
+    render_gallery_json_ld($gallery, $images);
     append_cms_head_extras((string) ob_get_clean());
     if ($backgroundAssetUrl !== '') {
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
@@ -233,7 +244,7 @@ function cms_gallery(): void
     render_public_gallery_admin_delete_form($gallery, 'hero');
     render_public_gallery_admin_edit_link($gallery, 'hero');
     echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" aria-label="Download gallery" title="Download gallery"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">Download gallery</span></a>';
-    if ($galleryMapPoints) {
+    if ($galleryMapAvailable) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">Show gallery map</button>';
     }
     if (picture_game_available($gallery, $pictureGameImages)) {
@@ -243,7 +254,7 @@ function cms_gallery(): void
     echo '<div class="hero-tags" aria-label="Gallery tags">';
     render_tag_list(tags_for_entity('gallery', (int) $gallery['id']));
     if ($children) {
-        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+        render_tag_list(public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly)), 'Containing tags');
     }
     echo '</div>';
     echo '</div>';
@@ -263,9 +274,12 @@ function cms_gallery(): void
         render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
-        foreach ($children as $child) {
-            render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true);
-        }
+        public_render_profile_count('rendered_subgalleries', count($children));
+        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicPageReorderEnabled): void {
+            foreach ($children as $child) {
+                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true);
+            }
+        });
         echo '</div>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], 'Subgallery pages');
         echo '</section>';
@@ -277,6 +291,8 @@ function cms_gallery(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], 'Photo pages');
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list>';
     }
+    public_render_profile_count('rendered_images', count($images));
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -291,14 +307,16 @@ function cms_gallery(): void
         $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
+        // Variable $thumbnailBundle stores all generated variants for this visible card during this request.
+        $thumbnailBundle = public_render_profile_with_thumbnail_purpose('image card bundle discovery', static fn (): array => thumbnail_bundle($image));
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 1600);
+        $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
         // Variable $imageTags stores this steps working value.
         $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
         $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
-        $imageMapPoint = $imageHasPublicGps ? image_map_point($image, $gallery) : null;
+        $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
         // Variable $displayIndex stores this steps working value.
         $displayIndex = $index + 1 + (!empty($paginationSettings['enabled']) ? (int) $photoPagination['offset'] : 0);
         // Variable $altText stores this steps working value.
@@ -315,7 +333,9 @@ function cms_gallery(): void
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
         $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
-        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . thumbnail_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, 'loading="lazy" data-responsive-thumbnail') . '</a>';
+        // $thumbnailLoadingAttributes keeps the first visible photos responsive while the rest stay lazy.
+        $thumbnailLoadingAttributes = $index < 2 ? 'loading="eager" fetchpriority="high" data-responsive-thumbnail' : 'loading="lazy" fetchpriority="low" data-responsive-thumbnail';
+        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card progressive picture', static fn (): string => thumbnail_progressive_picture_html($image, 300, [300, 600, 800, 960], '300px', $thumbnailSizesAttribute, $altText, $thumbnailLoadingAttributes, $thumbnailBundle)) . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="Show photo location" title="Show photo location">&#128205;</button>';
         }
@@ -340,6 +360,7 @@ function cms_gallery(): void
         render_public_image_admin_delete_form($image);
         echo '</article>';
     }
+    });
     if ($images) {
         echo '</section>';
         if (!empty($paginationSettings['enabled']) && count($allImages) > count($images)) {
@@ -356,6 +377,7 @@ function cms_gallery(): void
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
+    render_public_render_profile_panel();
     telemetry_append_public_script([
         'route_name' => 'gallery',
         'page_kind' => 'gallery',
@@ -640,11 +662,11 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // Variable $cover stores this steps working value.
-    $coverAsset = $isProtectedPublicCard ? '' : gallery_cover_asset_url($gallery, $publicOnly);
+    $coverAsset = $isProtectedPublicCard ? '' : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly));
     // $cover stores an intermediate value used by the surrounding gallery workflow.
-    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : gallery_cover_image((int) $gallery['id'], $publicOnly);
+    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly));
     // Variable $branchImageCount stores this steps working value.
-    $branchImageCount = $isProtectedPublicCard ? 0 : gallery_branch_image_count((int) $gallery['id'], $publicOnly);
+    $branchImageCount = $isProtectedPublicCard ? 0 : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly));
     $galleryCardClass = 'gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '');
     echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showPublicReorderHandle) {
@@ -659,14 +681,14 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     } elseif ($coverAsset !== '') {
         echo '<img decoding="async" loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo thumbnail_picture_html($cover, 800, [300, 800, 960], '(max-width: 299px) 300px, 800px', '', 'loading="lazy"');
+        echo public_render_profile_with_thumbnail_purpose('subgallery cover progressive picture', static fn (): string => thumbnail_progressive_picture_html($cover, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail'));
     } else {
         // Variable $collage stores this steps working value.
-        $collage = gallery_cover_collage_images((int) $gallery['id'], $publicOnly);
+        $collage = public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo thumbnail_picture_html($image, 800, [300, 800, 960], '(max-width: 299px) 300px, 800px', '', 'loading="lazy"');
+                echo public_render_profile_with_thumbnail_purpose('subgallery collage progressive picture', static fn (): string => thumbnail_progressive_picture_html($image, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail'));
             }
             echo '</span>';
         }
@@ -678,7 +700,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         echo '<p class="muted gallery-card-count">Protected gallery</p>';
     } else {
         echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . $branchImageCount . ' images</p>';
-        render_tag_list(contained_tags_for_gallery($gallery, $publicOnly), 'Containing tags');
+        render_tag_list(public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly)), 'Containing tags');
     }
     echo '</div>';
     render_public_gallery_admin_edit_link($gallery, 'card');
@@ -826,13 +848,16 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = thumbnail_url($image, 1600);
+        // Hidden source nodes are metadata for fullscreen order only. Keep their
+        // preview empty so paginated galleries do not resolve a large thumbnail
+        // for every non-rendered image during normal page render.
+        $previewUrl = '';
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
         // Variable $vote stores this steps working value.
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $imageMapPoint stores this steps working value.
-        $imageMapPoint = $mapsAllowed && image_has_gps($image) ? image_map_point($image, $gallery) : null;
+        $imageMapPoint = $mapsAllowed && image_has_gps($image) ? public_render_profile_with_thumbnail_purpose('hidden source map metadata no thumb', static fn (): array => image_map_point($image, $gallery, false)) : null;
         // $sourceAttribute stores a separate marker from visible cards so JavaScript can preserve the full image order.
         $sourceAttribute = 'data-lightbox-source';
         echo '<div ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute) . '></div>';

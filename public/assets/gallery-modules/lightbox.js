@@ -96,31 +96,43 @@ export function setupTagSuggestions() {
     });
 }
 
+const galleryLightboxState = {
+    controller: null,
+    cleanup: null,
+};
+
+/**
+ * Releases lightbox listeners and viewer-held DOM references before public gallery content is replaced.
+ *
+ * @returns {void}
+ */
+export function teardownGalleryLightbox() {
+    if (typeof galleryLightboxState.cleanup === 'function') {
+        galleryLightboxState.cleanup();
+        galleryLightboxState.cleanup = null;
+    }
+    if (galleryLightboxState.controller) {
+        galleryLightboxState.controller.abort();
+        galleryLightboxState.controller = null;
+    }
+}
+
 export function setupGalleryLightbox() {
-    // Lightbox state is derived from a dedicated ordered source list when pagination is active.
-    // Normal visible image links remain valid when JavaScript is unavailable.
-    const visibleLightboxCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
-    // lightboxSourceCards stores the complete gallery order used by fullscreen navigation.
-    const lightboxSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
+    teardownGalleryLightbox();
+
+    const controller = new AbortController();
+    galleryLightboxState.controller = controller;
+
     // cards stores the authoritative image order for the viewer.
-    let cards = lightboxSourceCards.length > 0 ? lightboxSourceCards : visibleLightboxCards;
+    let cards = [];
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
 
-    // GPS map buttons can exist on public cards even if the lightbox markup is
-    // absent, so this listener is registered before the lightbox early return.
-    setupGpsMaps();
-
-    if (!overlay || cards.length === 0) {
-        return;
-    }
-
     /**
-     * Refreshes the lightbox order after an admin reorders visible photo cards.
+     * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
      *
-     * The clickable handlers stay attached to the same DOM nodes, but navigation
-     * must read the new DOM order so Next and Previous match the saved gallery
-     * order without requiring a page reload.
+     * Navigation must read the current DOM order so Next and Previous match the
+     * saved gallery order without requiring a full page reload.
      *
      * @returns {void}
      */
@@ -130,7 +142,34 @@ export function setupGalleryLightbox() {
         cards = nextSourceCards.length > 0 ? nextSourceCards : nextVisibleCards;
     }
 
-    document.addEventListener('publicGalleryPhotoOrderChanged', refreshLightboxOrderFromDom);
+    refreshLightboxOrderFromDom();
+
+    // GPS map buttons can exist on public cards even if the lightbox markup is
+    // absent, so this listener is registered before the lightbox early return.
+    setupGpsMaps(controller.signal);
+
+    galleryLightboxState.cleanup = () => {
+        controller.abort();
+        cards = [];
+        if (overlay?.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        if (overlay?.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+        if (overlay?.galleryLeafletMap) {
+            overlay.galleryLeafletMap.remove();
+            overlay.galleryLeafletMap = null;
+        }
+    };
+
+    if (!overlay || cards.length === 0) {
+        return;
+    }
+
+    document.addEventListener('publicGalleryPhotoOrderChanged', refreshLightboxOrderFromDom, {signal: controller.signal});
 
     // Variable `image` stores this steps working value.
     const image = overlay.querySelector('[data-lightbox-img]');
@@ -214,6 +253,8 @@ export function setupGalleryLightbox() {
         evictions: 0,
         frameMs: 0,
         lastFrameAt: 0,
+        frameId: 0,
+        intervalId: 0,
     };
     setupGalleryDevModeOverlay();
     // supportsPointerGestures stores state or configuration for the gallery front-end flow.
@@ -222,6 +263,66 @@ export function setupGalleryLightbox() {
     const isLightboxDebugEnabled = detectLightboxDebugFlag();
     overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
     window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
+
+    galleryLightboxState.cleanup = () => {
+        controller.abort();
+        cards = [];
+        clearPendingFullImageSwap();
+        clearLightboxHudTimer();
+        removeTransitionImage();
+        preloadedSources.clear();
+        decodedLightboxImages.clear();
+        if (galleryDevModeState.frameId) {
+            window.cancelAnimationFrame(galleryDevModeState.frameId);
+            galleryDevModeState.frameId = 0;
+        }
+        if (galleryDevModeState.intervalId) {
+            window.clearInterval(galleryDevModeState.intervalId);
+            galleryDevModeState.intervalId = 0;
+        }
+        if (galleryDevModeState.overlay) {
+            galleryDevModeState.overlay.remove();
+            galleryDevModeState.overlay = null;
+            galleryDevModeState.text = null;
+            galleryDevModeState.canvas = null;
+            galleryDevModeState.canvasContext = null;
+        }
+        if (overlay?.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        if (overlay?.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+        if (overlay?.galleryLeafletMap) {
+            overlay.galleryLeafletMap.remove();
+            overlay.galleryLeafletMap = null;
+        }
+        const mapOverlay = document.querySelector('[data-map-overlay]');
+        if (mapOverlay?.galleryMapOverlayCloseController) {
+            mapOverlay.galleryMapOverlayCloseController.abort();
+            mapOverlay.galleryMapOverlayCloseController = null;
+        }
+        if (mapOverlay?.galleryLeafletMap) {
+            mapOverlay.galleryLeafletMap.remove();
+            mapOverlay.galleryLeafletMap = null;
+        }
+        if (mapOverlay instanceof HTMLElement) {
+            mapOverlay.hidden = true;
+        }
+        if (document.fullscreenElement === overlay && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => undefined);
+        }
+        overlay.hidden = true;
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split');
+        overlay.removeAttribute('data-current-image-id');
+        overlay.removeAttribute('data-current-title');
+        if (image) {
+            image.removeAttribute('src');
+        }
+        document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
+    };
 
     // Function `syncLightboxVote` executes this focused behavior.
     function syncLightboxVote(card) {
@@ -316,8 +417,8 @@ export function setupGalleryLightbox() {
             devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
             devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
         });
-        requestAnimationFrame(devFrameTick);
-        window.setInterval(renderGalleryDevModeOverlay, 350);
+        galleryDevModeState.frameId = requestAnimationFrame(devFrameTick);
+        galleryDevModeState.intervalId = window.setInterval(renderGalleryDevModeOverlay, 350);
         renderGalleryDevModeOverlay();
     }
 
@@ -327,14 +428,14 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function devFrameTick(timestamp) {
-        if (!galleryDevModeEnabled) {
+        if (!galleryDevModeEnabled || controller.signal.aborted) {
             return;
         }
         if (galleryDevModeState.lastFrameAt > 0) {
             galleryDevModeState.frameMs = timestamp - galleryDevModeState.lastFrameAt;
         }
         galleryDevModeState.lastFrameAt = timestamp;
-        requestAnimationFrame(devFrameTick);
+        galleryDevModeState.frameId = requestAnimationFrame(devFrameTick);
     }
 
     /**
@@ -1203,8 +1304,11 @@ export function setupGalleryLightbox() {
         if (!card) {
             return;
         }
-        // previewSrc stores state or configuration for the gallery front-end flow.
-        const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
+        // previewSrc stores the lightweight preview source when one was rendered.
+        // Hidden pagination source nodes intentionally omit previews so normal
+        // page render does not resolve a thumbnail for every image. Do not treat
+        // the full-size source as a preview during adjacent preview preloading.
+        const previewSrc = card.dataset.previewSrc || '';
         // fullSrc stores state or configuration for the gallery front-end flow.
         const fullSrc = card.dataset.fullSrc || previewSrc;
         [previewSrc, includeFullImage ? fullSrc : ''].forEach((src) => {
@@ -1256,22 +1360,26 @@ export function setupGalleryLightbox() {
         return ['slow-2g', '2g'].includes(connection.effectiveType);
     }
 
-    // clickableLightboxCards stores visible cards plus hidden ordered sources used by direct image URLs.
-    const clickableLightboxCards = lightboxSourceCards.length > 0 ? visibleLightboxCards.concat(lightboxSourceCards) : cards;
-    clickableLightboxCards.forEach((card) => {
-        card.addEventListener('click', (event) => {
-            if (event.target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link], [data-photo-map], [data-gallery-map-url]')) {
-                return;
-            }
-            // index stores the card position in the complete viewer order.
-            const index = cards.findIndex((candidate) => candidate.dataset.imageId === card.dataset.imageId);
-            if (index < 0) {
-                return;
-            }
-            event.preventDefault();
-            openAt(index);
-        });
-    });
+    document.addEventListener('click', (event) => {
+        if (controller.signal.aborted || !(event.target instanceof Element)) {
+            return;
+        }
+        const card = event.target.closest('[data-lightbox-image], [data-lightbox-source]');
+        if (!(card instanceof HTMLElement)) {
+            return;
+        }
+        if (event.target.closest('form, [data-admin-inline-editor], [data-public-admin-card-action], [data-gallery-side-panel-link], [data-photo-map], [data-gallery-map-url]')) {
+            return;
+        }
+        refreshLightboxOrderFromDom();
+        // index stores the card position in the complete viewer order.
+        const index = cards.findIndex((candidate) => candidate.dataset.imageId === card.dataset.imageId);
+        if (index < 0) {
+            return;
+        }
+        event.preventDefault();
+        openAt(index);
+    }, {signal: controller.signal});
 
     overlay.addEventListener('click', (event) => {
         // target stores state or configuration for the gallery front-end flow.
@@ -1313,10 +1421,10 @@ export function setupGalleryLightbox() {
                 openPhotoMapFromJson(mapButton.dataset.mapPoint || '');
             }
         }
-    });
+    }, {signal: controller.signal});
 
     if (lightboxMapSplitClose) {
-        lightboxMapSplitClose.addEventListener('click', closeLightboxMapSplit);
+        lightboxMapSplitClose.addEventListener('click', closeLightboxMapSplit, {signal: controller.signal});
     }
 
     if (stageLink) {
@@ -1324,31 +1432,31 @@ export function setupGalleryLightbox() {
             if (event.button === 0) {
                 event.preventDefault();
             }
-        });
+        }, {signal: controller.signal});
     }
 
-    overlay.addEventListener('mousemove', showLightboxHud);
-    overlay.addEventListener('pointermove', showLightboxHud);
-    overlay.addEventListener('mouseleave', scheduleHideLightboxHud);
+    overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
+    overlay.addEventListener('pointermove', showLightboxHud, {signal: controller.signal});
+    overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
     if (supportsPointerGestures) {
-        overlay.addEventListener('pointerdown', startTouchGesture);
-        overlay.addEventListener('pointermove', trackTouchGesture);
-        overlay.addEventListener('pointerup', finishTouchGesture);
-        overlay.addEventListener('pointercancel', clearTouchGesture);
+        overlay.addEventListener('pointerdown', startTouchGesture, {signal: controller.signal});
+        overlay.addEventListener('pointermove', trackTouchGesture, {signal: controller.signal});
+        overlay.addEventListener('pointerup', finishTouchGesture, {signal: controller.signal});
+        overlay.addEventListener('pointercancel', clearTouchGesture, {signal: controller.signal});
     } else {
-        overlay.addEventListener('touchstart', startTouchGesture, {passive: false});
-        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false});
-        overlay.addEventListener('touchend', finishTouchGesture, {passive: false});
-        overlay.addEventListener('touchcancel', clearTouchGesture);
+        overlay.addEventListener('touchstart', startTouchGesture, {passive: false, signal: controller.signal});
+        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false, signal: controller.signal});
+        overlay.addEventListener('touchend', finishTouchGesture, {passive: false, signal: controller.signal});
+        overlay.addEventListener('touchcancel', clearTouchGesture, {signal: controller.signal});
     }
-    overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState);
-    document.addEventListener('fullscreenchange', syncLightboxFullscreenState);
+    overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
+    document.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     window.addEventListener('resize', () => {
-        if (overlay.hidden || currentIndex < 0) {
+        if (controller.signal.aborted || overlay.hidden || currentIndex < 0) {
             return;
         }
         updateNormalLightboxStageSize(cards[currentIndex]);
-    });
+    }, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {
@@ -1376,7 +1484,7 @@ export function setupGalleryLightbox() {
             event.preventDefault();
             toggleLightboxFullscreen();
         }
-    });
+    }, {signal: controller.signal});
 
     // Function `submitLightboxVote` executes this focused behavior.
     function submitLightboxVote(value) {
@@ -1746,8 +1854,11 @@ export function setupGalleryLightbox() {
 
 
     // Function `setupGpsMaps` executes this focused behavior.
-    function setupGpsMaps() {
+    function setupGpsMaps(signal) {
         document.addEventListener('click', async (event) => {
+            if (signal.aborted) {
+                return;
+            }
             if (!(event.target instanceof Element)) {
                 return;
             }
@@ -1771,7 +1882,7 @@ export function setupGalleryLightbox() {
                 event.stopPropagation();
                 await openGalleryMap(galleryButton.dataset.galleryMapUrl || '', galleryButton.dataset.galleryMapTitle || 'Gallery map');
             }
-        }, true);
+        }, {capture: true, signal});
     }
 
     // Function `openPhotoMapFromJson` executes this focused behavior.
@@ -1940,13 +2051,8 @@ export function setupGalleryLightbox() {
             overlay.dataset.mapOverlay = 'true';
             overlay.innerHTML = '<div class="map-dialog"><button type="button" class="map-close" data-map-close>Close</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.</p></div>';
             document.body.append(overlay);
-            overlay.addEventListener('click', (event) => {
-                if (event.target === overlay || event.target.closest('[data-map-close]')) {
-                    overlay.hidden = true;
-                    document.body.classList.remove('has-map-overlay');
-                }
-            });
         }
+        bindMapOverlayClose(overlay);
         overlay.hidden = false;
         document.body.classList.add('has-map-overlay');
         overlay.querySelector('[data-map-title]').textContent = title;
@@ -1992,6 +2098,30 @@ export function setupGalleryLightbox() {
 
         setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
         stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+    }
+
+    /**
+     * Ensures the persistent map overlay has exactly one close listener for the active viewer lifecycle.
+     *
+     * @param {HTMLElement} mapOverlay Persistent map overlay element.
+     * @returns {void}
+     */
+    function bindMapOverlayClose(mapOverlay) {
+        if (mapOverlay.galleryMapOverlayCloseController) {
+            mapOverlay.galleryMapOverlayCloseController.abort();
+        }
+        const closeController = new AbortController();
+        mapOverlay.galleryMapOverlayCloseController = closeController;
+        controller.signal.addEventListener('abort', () => closeController.abort(), {once: true});
+        mapOverlay.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element)) {
+                return;
+            }
+            if (event.target === mapOverlay || event.target.closest('[data-map-close]')) {
+                mapOverlay.hidden = true;
+                document.body.classList.remove('has-map-overlay');
+            }
+        }, {signal: closeController.signal});
     }
 
     /**
@@ -2206,11 +2336,14 @@ export function setupGalleryLightbox() {
 
     // The vote module owns the fetch call. The lightbox only updates viewer-specific state.
     document.addEventListener('php-gallery:vote-updated', (event) => {
+        if (controller.signal.aborted) {
+            return;
+        }
         const result = event.detail || {};
         if (overlay && score && overlay.dataset.currentImageId === String(result.image_id)) {
             score.textContent = String(result.score);
             updateLightboxVoteButtons(String(result.vote));
             updateLightboxVoteIndicator(String(result.vote));
         }
-    });
+    }, {signal: controller.signal});
 }
