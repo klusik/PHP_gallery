@@ -1,0 +1,135 @@
+﻿/**
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ *
+ * File: public/assets/styles.css
+ * Module Type: Stylesheet
+ *
+ * Purpose:
+ *   Defines visual styling for the PHP Gallery interface.
+ *
+ * Responsibilities:
+ *   - Style server-rendered and JavaScript-enhanced UI states
+ *   - Keep selectors aligned with PHP templates and JS class toggles
+ *   - Preserve responsive behavior across gallery layouts
+ *
+ * Author:
+ *   Rudolf Klusal
+ *
+ * Contact:
+ *   https://github.com/klusik
+ *
+ * License:
+ *   MIT License (see LICENSE file in repository)
+ *
+ * Notes:
+ *   - Keep comments and docstrings intact when modifying this file.
+ *   - Prefer small, readable changes over broad rewrites.
+ *
+ * Last Updated:
+ *   2026-05-04
+ */
+
+/* Section index
+   1. Foundation and shared public layout
+   2. Navigation, forms, tables, cards, and gallery grids
+   3. Public gallery polish, voting, pagination, branding, and media overlays
+   4. Lightbox and fullscreen viewer states
+   5. Leaflet and EXIF GPS map hardening
+   6. Admin base styling, dashboard, navigation, logs, telemetry, and account screens
+   7. Admin gallery ordering, edit-gallery panels, image move workflow, and theme preview
+   8. Responsive overrides near the features they affect
+*/
+:root {
+    /* Defaults are overridden by DB-backed theme settings in app/helpers.php. */
+    /* `--ink` defines the base foreground text color used across the UI. */
+    --ink: #202124;
+    /* `--muted` defines secondary text tone for less prominent metadata. */
+    --muted: #626975;
+    /* `--paper` defines the page-level background tone. */
+    --paper: #f8f4ec;
+    /* `--panel` defines container backgrounds for cards, panels, and tables. */
+    --panel: #fffaf0;
+    /* `--gallery-panel` defines the opened public gallery header panel. */
+    --gallery-panel: #fffaf0;
+    /* `--line` defines shared border and divider color. */
+    --line: #ded4c2;
+    /* `--accent` defines primary interactive color. */
+    --accent: #a5481c;
+    /* `--accent-dark` defines darker accent tone for contrast and links. */
+    --accent-dark: #713414;
+    /* `--field` defines form control background fill. */
+    --field: #fffdf8;
+    /* `--radius` controls rounded corner size for reusable components. */
+    --radius: 16px;
+    --type-body-size: 1rem;
+    --type-body-line-height: 1.5;
+    --type-heading-line-height: 1.12;
+    --type-tight-line-height: 1.05;
+    --type-tracking-tight: -0.025em;
+}
+
+
+/* Foundation */
+
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    color: var(--ink);
+    background:
+        radial-gradient(circle at top left, rgba(165, 72, 28, 0.15), transparent 28rem),
+        linear-gradient(135deg, var(--paper) 0%, #efe4d0 100%);
+    font-family: var(--font-family, Georgia, "Times New Roman", serif);
+    font-size: var(--type-body-size, 1rem);
+    line-height: var(--type-body-line-height, 1.5);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+    color: var(--accent-dark);
+}
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.brand,
+button,
+.button,
+input,
+select,
+textarea {
+    font-family: var(--font-family, Georgia, "Times New Roman", serif);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    line-height: var(--type-heading-line-height, 1.12);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+}
+
+p,
+li,
+dd,
+dt,
+label,
+input,
+select,
+textarea {
+    line-height: var(--type-body-line-height, 1.5);
+}
+
