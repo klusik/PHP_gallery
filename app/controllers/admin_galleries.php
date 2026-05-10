@@ -1492,7 +1492,7 @@ function cms_admin_edit_gallery(): void
 
     echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
     echo '<div><p class="admin-kicker">Gallery editor</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">Edit identity, access, presentation, media assets, and photo ordering from one focused workspace.</p></div>';
-    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
+    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
     echo '</section>';
 
     echo '<div class="admin-metric-grid admin-edit-gallery-summary">';
@@ -1632,7 +1632,7 @@ function cms_admin_edit_gallery(): void
     echo '</form>';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Images</p><h2>Photos and ordering</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '">Upload photos here</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">Scan/import images</button></form></div></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Images</p><h2>Photos and ordering</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">Scan/import images</button></form></div></div>';
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
@@ -2474,6 +2474,8 @@ function cms_admin_bulk_images(): void
         try {
             // Variable $deleted stores the filesystem and database deletion result.
             $deleted = delete_gallery_images($galleryId, $ownedIds);
+            // $updated stores the gallery row after deletion so panel JSON reflects the current cover and metadata.
+            $updated = find_gallery($galleryId, true) ?: find_gallery($galleryId) ?: $gallery;
             admin_log_event('warning', 'image.bulk_deleted', 'Admin deleted selected gallery images.', [
                 'gallery_id' => $galleryId,
                 'requested' => (int) $deleted['requested'],
@@ -2482,7 +2484,13 @@ function cms_admin_bulk_images(): void
                 'derivatives_deleted' => (int) $deleted['derivatives_deleted'],
                 'missing_files' => (int) $deleted['missing_files'],
             ], ['category' => 'other', 'severity' => 'warning']);
-            flash_message('admin_notice', 'Deleted ' . (int) $deleted['deleted'] . ' image(s), removed ' . (int) $deleted['files_deleted'] . ' original file(s), and cleaned ' . (int) $deleted['derivatives_deleted'] . ' derivative file(s).');
+            $notice = 'Deleted ' . (int) $deleted['deleted'] . ' image(s), removed ' . (int) $deleted['files_deleted'] . ' original file(s), and cleaned ' . (int) $deleted['derivatives_deleted'] . ' derivative file(s).';
+            if (admin_wants_json()) {
+                header('Content-Type: application/json');
+                echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'delete', $ownedIds));
+                return;
+            }
+            flash_message('admin_notice', $notice);
         } catch (Throwable $exception) {
             admin_log_event('error', 'image.bulk_delete_failed', 'Admin image delete failed.', [
                 'gallery_id' => $galleryId,
