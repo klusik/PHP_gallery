@@ -257,191 +257,6 @@ button.is-update-pending {
 .picture-game-choice small {
     color: var(--muted);
 }
-.image-inline-editor textarea {
-    min-height: 5rem;
-}
-
-/* Presents public inline edit forms as compact admin-style control cards. */
-.public-page .public-inline-editor {
-    position: relative;
-    margin: 0.65rem 0 0;
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-    background: color-mix(in srgb, var(--panel) 88%, transparent);
-    border-radius: var(--radius, 16px);
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-}
-
-.public-page .gallery-card .public-inline-editor,
-.public-page .image-card .public-inline-editor {
-    margin: 0.25rem clamp(0.65rem, 1.2vw, 0.9rem) clamp(0.65rem, 1.2vw, 0.9rem);
-}
-
-.public-page .public-inline-editor summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    min-height: 2.45rem;
-    padding: 0.55rem 0.75rem;
-    cursor: pointer;
-    color: var(--ink);
-    font-weight: 800;
-    list-style: none;
-}
-
-.public-page .public-inline-editor summary::-webkit-details-marker {
-    display: none;
-}
-
-.public-page .public-inline-editor summary::after {
-    content: "Edit";
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 1.75rem;
-    padding: 0.25rem 0.65rem;
-    border: 1px solid var(--accent-dark);
-    background: transparent;
-    color: var(--accent-dark);
-    border-radius: var(--radius, 16px);
-    font-size: 0.78rem;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.public-page .public-inline-editor[open] summary {
-    margin-bottom: 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-    background: color-mix(in srgb, var(--field) 72%, transparent);
-}
-
-.public-page .public-inline-editor[open] summary::after {
-    content: "Close";
-    background: var(--accent);
-    color: #fffdf8;
-}
-
-.public-page .public-inline-editor summary small {
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 650;
-}
-
-.public-page .inline-editor-form {
-    display: grid;
-    grid-template-columns: minmax(16rem, 1fr) minmax(13rem, 0.45fr);
-    gap: 0.7rem;
-    padding: 0.75rem;
-}
-
-.public-page .inline-editor-fields {
-    display: grid;
-    grid-template-columns: minmax(12rem, 0.52fr) minmax(14rem, 1fr);
-    gap: 0.65rem;
-    align-items: end;
-}
-
-.public-page .inline-editor-fields label,
-.public-page .inline-editor-options label {
-    margin: 0;
-}
-
-.public-page .inline-editor-fields input,
-.public-page .inline-editor-fields textarea {
-    min-height: 2.25rem;
-    padding: 0.52rem 0.65rem;
-    font-size: 0.95rem;
-}
-
-.public-page .inline-editor-fields textarea {
-    min-height: 2.25rem;
-    max-height: 5.5rem;
-    resize: vertical;
-}
-
-.public-page .inline-editor-options {
-    display: flex;
-    align-items: end;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-}
-
-.public-page .inline-editor-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-height: 2.25rem;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--line);
-    background: var(--field);
-    color: var(--ink);
-    border-radius: var(--radius, 16px);
-    font-size: 0.86rem;
-    font-weight: 700;
-}
-
-.public-page .inline-editor-toggle input {
-    width: auto;
-    margin: 0;
-}
-
-.public-page .inline-editor-actions {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.45rem;
-    margin: 0;
-    padding-top: 0.65rem;
-    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
-}
-
-.public-page .inline-editor-actions button,
-.public-page .inline-editor-actions .button {
-    min-height: 2.15rem;
-    padding: 0.42rem 0.7rem;
-    border-radius: var(--radius, 16px);
-    font-size: 0.84rem;
-    font-weight: 800;
-    line-height: 1.15;
-}
-
-.public-page .inline-editor-actions .danger {
-    border-color: color-mix(in srgb, #dc2626 55%, var(--accent-dark));
-    color: color-mix(in srgb, #dc2626 72%, var(--accent-dark));
-}
-
-@media (max-width: 920px) {
-    .public-page .inline-editor-form,
-    .public-page .inline-editor-fields {
-        grid-template-columns: 1fr;
-    }
-
-    .public-page .inline-editor-options,
-    .public-page .inline-editor-actions {
-        justify-content: flex-start;
-    }
-}
-
-@media (max-width: 620px) {
-    .public-page .public-inline-editor summary {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .public-page .public-inline-editor summary::after {
-        width: 100%;
-    }
-
-    .public-page .inline-editor-actions button,
-    .public-page .inline-editor-actions .button {
-        flex: 1 1 100%;
-        justify-content: center;
-        text-align: center;
-    }
-}
 .muted {
     color: var(--muted);
 }
@@ -726,3 +541,156 @@ td {
     color: var(--accent-dark);
 }
 
+
+/* Positions compact admin actions without exposing the full inline editor on public cards. */
+.public-admin-edit-button,
+.public-admin-card-action-button,
+.hero-actions .hero-icon-button {
+    z-index: 14;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.05rem;
+    height: 2.05rem;
+    min-width: 2.05rem;
+    min-height: 2.05rem;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--panel) 44%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--ink) 28%, transparent);
+    color: var(--panel);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    text-decoration: none;
+    line-height: 1;
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.public-admin-edit-button:hover,
+.public-admin-edit-button:focus-visible,
+.public-admin-card-action-button:hover,
+.public-admin-card-action-button:focus-visible,
+.hero-actions .hero-icon-button:hover,
+.hero-actions .hero-icon-button:focus-visible {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--panel) 62%, transparent);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);
+    color: var(--panel);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.22);
+    outline: none;
+}
+
+.public-admin-edit-button:focus-visible,
+.public-admin-card-action-button:focus-visible,
+.hero-actions .hero-icon-button:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent);
+    outline-offset: 2px;
+}
+
+.public-admin-edit-button span[aria-hidden="true"],
+.public-admin-card-action-button span[aria-hidden="true"],
+.hero-actions .hero-icon-button span[aria-hidden="true"] {
+    font-size: 0.98rem;
+    line-height: 1;
+}
+
+.public-admin-edit-button-card {
+    position: absolute;
+    top: 0.55rem;
+    left: 3rem;
+}
+
+.public-admin-delete-form {
+    margin: 0;
+}
+
+.public-admin-delete-form-card {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.55rem;
+    z-index: 14;
+}
+
+.public-admin-edit-button-hero,
+.public-admin-delete-form-hero,
+.hero-actions .hero-icon-button {
+    position: static;
+    flex: 0 0 auto;
+}
+
+.public-admin-card-action-button {
+    appearance: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+.public-admin-delete-button {
+    color: var(--panel);
+}
+
+.public-admin-delete-button:hover,
+.public-admin-delete-button:focus-visible {
+    border-color: color-mix(in srgb, var(--danger, #b42318) 58%, var(--panel));
+    background: color-mix(in srgb, var(--danger, #b42318) 72%, transparent);
+    color: #fffdf8;
+}
+
+.public-page .hero {
+    position: relative;
+}
+
+.public-page .gallery-card .public-admin-edit-button-card,
+.public-page .gallery-card .public-admin-delete-form-card,
+.public-page .image-card .public-admin-edit-button-card,
+.public-page .image-card .public-admin-delete-form-card {
+    opacity: 0.96;
+}
+
+@media (hover: hover) {
+    .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
+    .public-page .gallery-card:not(:hover):not(:focus-within) .public-admin-delete-form-card,
+    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-edit-button-card,
+    .public-page .image-card:not(:hover):not(:focus-within) .public-admin-delete-form-card {
+        opacity: 0.76;
+    }
+}
+
+.hero-actions .hero-picture-game-button span[aria-hidden="true"] {
+    font-size: 0.96rem;
+}
+
+@media (max-width: 640px) {
+    .public-admin-edit-button,
+    .public-admin-card-action-button,
+    .hero-actions .hero-icon-button {
+        width: 2.25rem;
+        height: 2.25rem;
+        min-width: 2.25rem;
+        min-height: 2.25rem;
+    }
+
+    .public-admin-edit-button-card {
+        left: 3.15rem;
+    }
+}
+
+/* Moves edit/delete card icons below the public reorder handle on compact cards. */
+.public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card,
+.public-page .image-card.has-public-reorder-handle .public-admin-delete-form-card {
+    top: 3.05rem;
+}
+
+.public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
+.public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card {
+    top: 3.05rem;
+}
+
+@media (max-width: 640px) {
+    .public-page .gallery-card.has-public-reorder-handle .public-admin-delete-form-card,
+    .public-page .image-card.has-public-reorder-handle .public-admin-delete-form-card,
+    .public-page .gallery-card.has-public-reorder-handle .public-admin-edit-button-card,
+    .public-page .image-card.has-public-reorder-handle .public-admin-edit-button-card {
+        top: 3.25rem;
+    }
+}

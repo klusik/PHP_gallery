@@ -385,8 +385,33 @@ export function setupAdminGallerySidePanel() {
             return;
         }
         event.preventDefault();
+        event.stopPropagation();
         await openAdminGallerySidePanel(link);
-    });
+    }, true);
+
+
+
+    document.addEventListener('submit', (event) => {
+        if (!(event.target instanceof HTMLFormElement)) {
+            return;
+        }
+        const form = event.target.closest('[data-public-admin-delete-form]');
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+        event.stopPropagation();
+        const kind = form.dataset.publicAdminDeleteKind === 'gallery' ? 'gallery' : 'photo';
+        const name = String(form.dataset.publicAdminDeleteName || kind).trim();
+        const message = [
+            `Remove this ${kind} from CMS?`,
+            name ? `Item: ${name}` : '',
+            '',
+            'This removes the CMS record. Continue?'
+        ].filter((line) => line !== '').join('\n');
+        if (!window.confirm(message)) {
+            event.preventDefault();
+        }
+    }, true);
 
     document.addEventListener('click', (event) => {
         if (!(event.target instanceof Element)) {
@@ -1134,17 +1159,13 @@ async function reflectGalleryImageBulkInCurrentView(result) {
  * @returns {void}
  */
 async function reflectSavedGalleryInCurrentView(result) {
-    const galleryId = String(result.gallery_id || '');
     const galleryTitle = String(result.gallery_title || 'Gallery');
-    await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
-    const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
-    if (refreshed) {
-        showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
-        return;
-    }
-    const heading = document.querySelector('.hero h1, .gallery-branding-title');
-    if (heading instanceof HTMLElement && galleryTitle) {
-        heading.textContent = galleryTitle;
+    const refreshed = await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
+    if (!refreshed) {
+        const heading = document.querySelector('.hero h1, .gallery-branding-title');
+        if (heading instanceof HTMLElement && galleryTitle) {
+            heading.textContent = galleryTitle;
+        }
     }
     showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
 }
@@ -1157,13 +1178,10 @@ async function reflectSavedGalleryInCurrentView(result) {
  */
 async function reflectSavedImageInCurrentView(result) {
     const imageId = String(result.image_id || '');
-    if (!imageId) {
-        showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
-        return;
+    if (imageId) {
+        updateAdminImageRowsFromResult(imageId, result);
     }
-    updateAdminImageRowsFromResult(imageId, result);
-    updatePublicImageCardsFromResult(imageId, result);
-    await refreshCurrentGalleryContextFromServer(String(result.gallery_url || ''));
+    await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
     showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
 }
 
@@ -1501,9 +1519,37 @@ function replaceAdminEditorMainFromParsedDocument(parsed) {
  */
 function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
     let replaced = false;
+    const currentHero = document.querySelector('.hero');
+    const freshHero = parsed.querySelector('.hero');
+    if (currentHero instanceof HTMLElement && freshHero instanceof HTMLElement) {
+        currentHero.replaceWith(freshHero);
+        replaced = true;
+    }
+
+    const currentFrame = document.querySelector('[data-back-to-top-scope]');
+    const freshFrame = parsed.querySelector('[data-back-to-top-scope]');
+    if (currentFrame instanceof HTMLElement && freshFrame instanceof HTMLElement) {
+        currentFrame.replaceWith(freshFrame);
+        return true;
+    }
+    if (currentFrame instanceof HTMLElement && !(freshFrame instanceof HTMLElement)) {
+        currentFrame.remove();
+        return true;
+    }
+    if (!(currentFrame instanceof HTMLElement) && freshFrame instanceof HTMLElement) {
+        const main = document.querySelector('main.site-main');
+        const lightbox = main instanceof HTMLElement ? main.querySelector('[data-lightbox]') : null;
+        if (lightbox instanceof HTMLElement) {
+            lightbox.insertAdjacentElement('beforebegin', freshFrame);
+            return true;
+        }
+        if (main instanceof HTMLElement) {
+            main.append(freshFrame);
+            return true;
+        }
+    }
+
     const fragmentPairs = [
-        ['.hero', '.hero'],
-        ['[data-admin-inline-editor]', '[data-admin-inline-editor]'],
         ['[data-public-subgallery-section]', '[data-public-subgallery-section]'],
         ['[data-gallery-image-list]', '[data-gallery-image-list]'],
     ];
@@ -1513,7 +1559,7 @@ function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
         if (current instanceof HTMLElement && fresh instanceof HTMLElement) {
             current.replaceWith(fresh);
             replaced = true;
-        } else if (current instanceof HTMLElement && !(fresh instanceof HTMLElement) && current.matches('[data-public-subgallery-section], [data-gallery-image-list]')) {
+        } else if (current instanceof HTMLElement && !(fresh instanceof HTMLElement)) {
             current.remove();
             replaced = true;
         }

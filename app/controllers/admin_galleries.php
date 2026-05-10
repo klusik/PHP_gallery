@@ -225,6 +225,19 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
     if ($panelMode) {
         echo '<input type="hidden" name="panel" value="1">';
     }
+    if ($panelMode) {
+        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">New gallery</p><h3>Gallery identity</h3></div><p class="muted">Only the gallery is created here.</p></div><div class="admin-side-panel-field-grid">';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Gallery name</span><input name="title" required></label>';
+        echo '<label class="admin-side-panel-field"><span>Folder name</span><input name="folder_name" autocomplete="off"><small>Leave empty to derive it from the gallery name.</small></label>';
+        echo '<label class="admin-side-panel-field"><span>Visibility</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Parent gallery</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Description</span><textarea name="description" rows="4"></textarea></label>';
+        echo '</div><div class="admin-side-panel-toggle-row">';
+        echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>Enable image voting</span></label>';
+        echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>Show file names</span></label>';
+        echo '</div></div>';
+        return;
+    }
     echo '<label>Gallery name<input name="title" required></label>';
     echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
     echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
@@ -240,14 +253,18 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Create gallery</h2><p class="muted">Choose the parent gallery, then create an empty gallery or upload photos immediately.</p></div>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Create gallery</h2><p class="muted">Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.</p></div>';
     if ($prefillParentGallery) {
         echo '<div class="notice">Target parent: ' . e((string) $prefillParentGallery['title']) . '.</div>';
     }
     if ($error !== '') {
         echo '<div class="notice">Create failed: ' . e($error) . '</div>';
     }
-    render_admin_upload_new_gallery_panel_form($prefillParentId);
+    echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
+    echo '<form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="admin-side-panel-form" data-gallery-panel-create-form>' . csrf_field();
+    render_admin_new_gallery_fields($prefillParentId, true);
+    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>Create gallery</button><p class="muted">The new gallery is created empty. Use Upload photos for media.</p></div>';
+    echo '</form></section>';
     echo '</div>';
 }
 
@@ -1503,7 +1520,7 @@ function cms_admin_edit_gallery(): void
 
     echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
     echo '<div><p class="admin-kicker">Gallery editor</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">Edit identity, access, presentation, media assets, and photo ordering from one focused workspace.</p></div>';
-    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
+    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><a class="button secondary" href="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="create" data-admin-side-panel-kicker="Gallery workflow" data-admin-side-panel-title="Create gallery" data-gallery-side-panel-url="' . e(url_for('admin_new_gallery', ['parent_id' => $gallery['id'], 'panel' => 1])) . '">Create gallery here</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
     echo '</section>';
 
     echo '<div class="admin-metric-grid admin-edit-gallery-summary">';

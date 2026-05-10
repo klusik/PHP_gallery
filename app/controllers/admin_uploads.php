@@ -224,7 +224,7 @@ function cms_admin_upload(): void
 function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-admin-upload-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Upload workflow</p><h2>Upload photos</h2><p class="muted">Use an existing gallery or create a new one from the same drawer.</p></div>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Upload workflow</p><h2>Upload photos</h2><p class="muted">Add photos to an existing gallery. Creating a new child gallery now has its own focused action.</p></div>';
     if ($prefillGallery) {
         echo '<div class="notice">Upload target pre-selected: ' . e((string) $prefillGallery['title']) . '.</div>';
     }
@@ -233,7 +233,6 @@ function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGa
     }
     render_admin_upload_support_panel();
     render_admin_upload_existing_gallery_form($prefillGalleryId, true);
-    render_admin_upload_new_gallery_panel_form($prefillGalleryId);
     echo '</div>';
 }
 
@@ -290,10 +289,21 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
         echo '<section class="panel"><h2>Upload into existing gallery</h2><form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
     }
     echo '<input type="hidden" name="upload_mode" value="existing">';
-    echo '<label>Gallery<select name="gallery_id" required>' . gallery_options_for_select($prefillGalleryId) . '</select></label>';
-    echo '<label>Images<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple' . ($panelMode ? '' : ' required') . '><span class="muted">' . ($panelMode ? 'Optional. Leave empty if you only want to confirm the target and create no upload.' : 'Choose one or more images.') . '</span></label>';
-    echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails after upload</label>';
-    echo '<button type="submit"' . ($panelMode ? ' class="button primary" data-gallery-panel-submit' : '') . '>Upload images</button></form></section>';
+    if ($panelMode && $prefillGalleryId > 0) {
+        $targetGallery = find_gallery($prefillGalleryId, true);
+        echo '<input type="hidden" name="gallery_id" value="' . (int) $prefillGalleryId . '">';
+        echo '<div class="admin-side-panel-target"><span>Target gallery</span><strong>' . e((string) ($targetGallery['title'] ?? ('#' . $prefillGalleryId))) . '</strong></div>';
+    } else {
+        echo '<label' . ($panelMode ? ' class="admin-side-panel-field admin-side-panel-field-wide"' : '') . '><span>Gallery</span><select name="gallery_id" required>' . gallery_options_for_select($prefillGalleryId) . '</select></label>';
+    }
+    echo '<label' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">Images</span><input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple' . ($panelMode ? ' required' : ' required') . '><span class="muted">Choose one or more images for this gallery.</span></label>';
+    echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>Create optimized thumbnails after upload</span></label>';
+    if ($panelMode) {
+        echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>Upload images</button><p class="muted">Progress appears at the top of this panel.</p></div>';
+    } else {
+        echo '<button type="submit">Upload images</button>';
+    }
+    echo '</form></section>';
 }
 
 /**
