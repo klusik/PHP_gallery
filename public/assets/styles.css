@@ -6290,3 +6290,10 @@ body.public-reorder-active {
         font-size: 0.8rem;
     }
 }
+
+.admin-side-panel.is-uploading .is-panel-upload-progress {
+    position: sticky;
+    top: 4.55rem;
+    z-index: 7;
+    margin: 0 0 0.9rem;
+}
