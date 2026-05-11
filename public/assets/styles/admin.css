@@ -3537,3 +3537,58 @@ button.gallery-row-action.secondary {
     border-radius: 999px;
     background: #fff;
 }
+
+/* Admin dashboard render timing panel. */
+.admin-render-profile {
+    margin: 1.5rem 0;
+    border: 1px solid color-mix(in srgb, var(--theme-border, #d1d5db) 80%, transparent);
+    border-radius: var(--theme-radius, 18px);
+    background: color-mix(in srgb, var(--theme-surface, #ffffff) 94%, transparent);
+    color: var(--theme-text, #1f2937);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+}
+
+.admin-render-profile summary {
+    cursor: pointer;
+    padding: 0.9rem 1rem;
+    font-weight: 700;
+    user-select: none;
+}
+
+.admin-render-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    padding: 0 1rem 1rem;
+}
+
+.admin-render-profile h2 {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+}
+
+.admin-render-profile table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.admin-render-profile th,
+.admin-render-profile td {
+    padding: 0.35rem 0.45rem;
+    border-top: 1px solid color-mix(in srgb, var(--theme-border, #d1d5db) 70%, transparent);
+    text-align: right;
+    vertical-align: top;
+}
+
+.admin-render-profile th:first-child {
+    text-align: left;
+}
+
+.admin-render-profile-note {
+    margin: 0;
+    padding: 0 1rem 1rem;
+    color: var(--theme-muted, #64748b);
+    font-size: 0.8rem;
+}

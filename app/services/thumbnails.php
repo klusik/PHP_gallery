@@ -1468,6 +1468,69 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
     return $summary;
 }
 
+
+/**
+ * Return a cached thumbnail maintenance summary without warming the cache.
+ *
+ * The admin dashboard calls this helper so the first page after login does not
+ * spend seconds checking thumbnail files on disk. Explicit thumbnail maintenance
+ * actions still use thumbnail_maintenance_summary() and can refresh the cache.
+ *
+ * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ */
+function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
+{
+    // $galleryIds stores the normalized optional gallery scope used by both cache keys and summary queries.
+    $galleryIds = $galleryIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if ($galleryIds !== null && $galleryIds === []) {
+        return [
+            'images_scanned' => 0,
+            'images_with_missing' => 0,
+            'missing_variants' => 0,
+            'webp_skipped' => 0,
+            'limited' => false,
+            'deferred' => false,
+            'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
+        ];
+    }
+
+    // $scopeKey stores a compact stable key for the dashboard-wide or gallery-scoped summary.
+    $scopeKey = $galleryIds === null ? 'all' : implode(',', $galleryIds);
+    // $cacheKey stores the DB setting that contains the cached summary payload.
+    $cacheKey = 'thumbnail_maintenance_summary_' . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
+    // $generation stores the invalidation marker changed after thumbnail creation or deletion.
+    $generation = (string) app_setting('thumbnail_maintenance_summary_generation', '0');
+    // $fingerprint stores the cheap image inventory state. It changes when images are imported.
+    $fingerprint = thumbnail_inventory_fingerprint($galleryIds);
+    // $cachedJson stores the previous summary payload, if any.
+    $cachedJson = (string) app_setting($cacheKey, '');
+
+    if ($cachedJson !== '') {
+        // $cachedPayload stores the decoded summary cache candidate.
+        $cachedPayload = json_decode($cachedJson, true);
+        if (is_array($cachedPayload)
+            && (string) ($cachedPayload['generation'] ?? '') === $generation
+            && (string) ($cachedPayload['fingerprint'] ?? '') === $fingerprint
+            && time() - (int) ($cachedPayload['created_at'] ?? 0) <= max(30, $ttlSeconds)
+            && is_array($cachedPayload['summary'] ?? null)
+        ) {
+            $cachedPayload['summary']['inventory_fingerprint'] = $fingerprint;
+            $cachedPayload['summary']['deferred'] = false;
+            return $cachedPayload['summary'];
+        }
+    }
+
+    return [
+        'images_scanned' => 0,
+        'images_with_missing' => 0,
+        'missing_variants' => 0,
+        'webp_skipped' => 0,
+        'limited' => false,
+        'deferred' => true,
+        'inventory_fingerprint' => $fingerprint,
+    ];
+}
+
 /**
  * Invalidate cached thumbnail maintenance summaries after cache files change.
  */

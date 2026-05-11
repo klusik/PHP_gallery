@@ -43,29 +43,30 @@ declare(strict_types=1);
 function cms_admin(): void
 {
     require_admin();
+    admin_render_profile_start('admin_dashboard');
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = picture_game_schema_ready();
+    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready();
+    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
     // Variable $votingReady stores this steps working value.
-    $votingReady = gallery_voting_schema_ready();
+    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
     // Variable $filenameDisplayReady stores this steps working value.
-    $filenameDisplayReady = gallery_filename_display_schema_ready();
+    $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
     // Variable $migrationPending stores this steps working value.
-    $migrationPending = pending_migrations_exist();
+    $migrationPending = admin_render_profile_schema('schema_pending_migrations', static fn (): bool => pending_migrations_exist());
     // Variable $accessReady stores this steps working value.
-    $accessReady = gallery_access_schema_ready();
+    $accessReady = admin_render_profile_schema('schema_gallery_access', static fn (): bool => gallery_access_schema_ready());
     // $backgroundSourceReady stores whether gallery background source data can be read without optional-column errors.
-    $backgroundSourceReady = gallery_background_source_schema_ready();
+    $backgroundSourceReady = admin_render_profile_schema('schema_background_source', static fn (): bool => gallery_background_source_schema_ready());
     // $publicPathReady stores whether clean public URL paths can be read directly from gallery rows.
-    $publicPathReady = public_path_schema_ready();
+    $publicPathReady = admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
-    $coverAssetReady = gallery_cover_asset_schema_ready();
+    $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
 
     if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
         // Self-heal voting/game state periodically instead of on every admin navigation.
-        $repairedVotingGame = sync_gallery_voting_game_state();
-        admin_dashboard_mark_self_heal('admin_dashboard_voting_game_sync_last');
+        $repairedVotingGame = admin_render_profile_span('self_heal_voting_game_sync', static fn (): int => sync_gallery_voting_game_state());
+        admin_render_profile_span('self_heal_voting_game_mark', static function (): void { admin_dashboard_mark_self_heal('admin_dashboard_voting_game_sync_last'); });
         if ($repairedVotingGame > 0) {
             admin_log_event('info', 'gallery.voting_game_synced', 'Admin dashboard repaired gallery voting/game settings.', [
                 'gallery_count' => $repairedVotingGame,
@@ -74,27 +75,32 @@ function cms_admin(): void
     }
 
     if (admin_dashboard_parent_sync_needed()) {
-        sync_gallery_parent_ids();
-        admin_dashboard_store_parent_sync_fingerprint();
+        admin_render_profile_span('parent_id_sync', static function (): void { sync_gallery_parent_ids(); });
+        admin_render_profile_span('parent_id_sync_store_fingerprint', static function (): void { admin_dashboard_store_parent_sync_fingerprint(); });
     }
 
     // Variable $galleries stores this steps working value.
-    $galleries = admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady);
+    $galleries = admin_render_profile_db('dashboard_gallery_rows', static fn (): array => admin_dashboard_gallery_rows($accessReady, $gpsMapReady, $backgroundSourceReady, $filenameDisplayReady, $votingReady, $pictureGameReady, $publicPathReady, $coverAssetReady));
+    admin_render_profile_set_counter('gallery_rows', count($galleries));
     // Variable $galleries stores the admin tree in display order, with manual sibling ordering respected.
-    $galleries = admin_ordered_gallery_rows($galleries);
+    $galleries = admin_render_profile_span('order_gallery_tree', static fn (): array => admin_ordered_gallery_rows($galleries));
+    admin_render_profile_set_counter('ordered_gallery_rows', count($galleries));
     // Variable $collapsedIds stores this steps working value.
-    $collapsedIds = array_flip(collapsed_gallery_ids());
+    $collapsedIds = admin_render_profile_setting_read('collapsed_gallery_ids', static fn (): array => array_flip(collapsed_gallery_ids()));
+    admin_render_profile_set_counter('collapsed_gallery_ids', count($collapsedIds));
     // $childrenByParent stores direct child ids once so row rendering does not rescan the full gallery list.
-    $childrenByParent = admin_gallery_children_by_parent($galleries);
+    $childrenByParent = admin_render_profile_span('gallery_children_index', static fn (): array => admin_gallery_children_by_parent($galleries));
+    admin_render_profile_set_counter('parent_groups', count($childrenByParent));
 
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
-    $updatePending = application_update_pending();
+    $updatePending = admin_render_profile_span('application_update_pending', static fn (): bool => application_update_pending());
     // $updateButtonClass stores an intermediate value used by the surrounding gallery workflow.
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
-    $thumbnailSummary = cached_thumbnail_maintenance_summary(null, 1000);
+    admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
+    $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
@@ -120,7 +126,10 @@ function cms_admin(): void
         ['id' => 'admin-tab-maintenance', 'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'), 'badge' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
-    render_header(t('admin.dashboard.page_title', 'Admin dashboard'));
+    admin_render_profile_set_counter('thumbnail_missing_variants', $missingThumbnailVariants);
+    admin_render_profile_set_counter('thumbnail_maintenance_deferred', !empty($thumbnailSummary['deferred']) ? 1 : 0);
+
+    admin_render_profile_span('render_header', static function (): void { render_header(t('admin.dashboard.page_title', 'Admin dashboard')); });
     echo '<section class="hero admin-dashboard-hero"><div><p class="admin-kicker">' . e(t('admin.dashboard.kicker', 'Admin')) . '</p><h1>' . e(t('admin.dashboard.title', 'Dashboard')) . '</h1><p class="muted">' . e(t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.')) . '</p></div>';
     echo '<div class="admin-hero-actions">';
     echo '<a class="button" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_gallery', 'Create gallery')) . '</a>';
@@ -157,20 +166,26 @@ function cms_admin(): void
     }
     echo '<div id="admin-dashboard-thumbnail-progress" class="admin-dashboard-progress-slot" aria-live="polite"></div>';
 
-    render_admin_tabs($adminTabs, 'admin-tab-overview');
+    admin_render_profile_span('render_admin_tabs', static function () use ($adminTabs): void { render_admin_tabs($adminTabs, 'admin-tab-overview'); });
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.overview_kicker', 'Overview')) . '</p><h2>' . e(t('admin.dashboard.overview_title', 'Admin at a glance')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.overview_description', 'Use this page for immediate work. Dedicated tools stay on their own pages.')) . '</p></div>';
     echo '<section class="admin-metric-grid" aria-label="' . e(t('admin.dashboard.admin_summary', 'Admin summary')) . '">';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '</small></article>';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_top_level_images', 'Top-level images')) . '</span><strong>' . (int) $totalImages . '</strong><small>' . e(t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists')) . '</small></article>';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . e(t('admin.dashboard.metric_images_sampled', 'images sampled')) . '</small></article>';
+    if (!empty($thumbnailSummary['deferred'])) {
+        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . e(t('admin.dashboard.metric_not_checked', 'Not checked')) . '</strong><small>' . e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')) . '</small></article>';
+    } else {
+        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . e(t('admin.dashboard.metric_images_sampled', 'images sampled')) . '</small></article>';
+    }
     echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_system_state', 'System state')) . '</span><strong>' . ($migrationPending ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready')) . '</strong><small>' . ($migrationPending ? t('admin.dashboard.state_migration_pending', 'Database migration pending') : t('admin.dashboard.state_no_migration_warning', 'No migration warning')) . '</small></article>';
     echo '</section>';
     if ($migrationPending) {
         render_admin_migration_notice('' . t('admin.dashboard.migration_notice', 'Some admin features still need database migrations.') . '');
     }
-    render_admin_thumbnail_maintenance_notice($thumbnailSummary);
+    if (empty($thumbnailSummary['deferred'])) {
+        render_admin_thumbnail_maintenance_notice($thumbnailSummary);
+    }
     echo '<section class="admin-quick-panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.actions_kicker', 'Actions')) . '</p><h2>' . e(t('admin.dashboard.quick_actions', 'Quick actions')) . '</h2></div></div><div class="admin-action-grid">';
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form>' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button></form>';
@@ -255,7 +270,7 @@ function cms_admin(): void
     }
     echo '</tbody></table></div></section></form>';
     $galleriesHtml = (string) ob_get_clean();
-    render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false);
+    admin_render_profile_span('render_galleries_tab_panel', static function () use ($galleriesHtml): void { render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false); });
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.maintenance_kicker', 'Maintenance')) . '</p><h2>' . e(t('admin.dashboard.system_tools', 'System tools')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.system_tools_hint', 'Operational tools remain on their dedicated pages. This tab keeps only useful shortcuts and active maintenance controls.')) . '</p></div>';
@@ -268,7 +283,12 @@ function cms_admin(): void
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-maintenance-card" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong><span>' . (int) $missingThumbnailVariants . ' ' . e(t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.')) . '</span>';
+    echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
+    if (!empty($thumbnailSummary['deferred'])) {
+        echo '<span>' . e(t('admin.dashboard.thumbnail_check_deferred', 'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.')) . '</span>';
+    } else {
+        echo '<span>' . (int) $missingThumbnailVariants . ' ' . e(t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.')) . '</span>';
+    }
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
     if ($migrationPending) {
@@ -277,10 +297,11 @@ function cms_admin(): void
     }
     echo '</div>';
     $maintenanceHtml = (string) ob_get_clean();
-    render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false);
+    admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });
 
     render_admin_devmode_panel();
-    render_footer();
+    render_admin_render_profile_panel();
+    admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
 
@@ -359,23 +380,31 @@ function admin_gallery_children_by_parent(array $rows): array
  */
 function admin_gallery_preview_url(array $gallery): string
 {
-    // $coverAssetUrl stores an uploaded gallery-specific cover asset when the optional column exists.
-    $coverAssetUrl = gallery_cover_asset_url($gallery, false);
-    if ($coverAssetUrl !== '') {
-        return $coverAssetUrl;
-    }
+    admin_render_profile_count('preview_requests');
 
-    // $cover stores the explicit or first direct image for this gallery.
-    $cover = gallery_cover_image((int) ($gallery['id'] ?? 0), false);
-    if ($cover) {
-        return thumbnail_url($cover, 300);
-    }
+    return admin_render_profile_span('gallery_preview_url', static function () use ($gallery): string {
+        // $coverAssetUrl stores an uploaded gallery-specific cover asset when the optional column exists.
+        $coverAssetUrl = gallery_cover_asset_url($gallery, false);
+        if ($coverAssetUrl !== '') {
+            admin_render_profile_count('preview_cover_asset_hits');
+            return $coverAssetUrl;
+        }
 
-    foreach (gallery_cover_collage_images((int) ($gallery['id'] ?? 0), false, 1) as $descendantCover) {
-        return thumbnail_url($descendantCover, 300);
-    }
+        // $cover stores the explicit or first direct image for this gallery.
+        $cover = admin_render_profile_db('preview_direct_cover_lookup', static fn (): ?array => gallery_cover_image((int) ($gallery['id'] ?? 0), false));
+        if ($cover) {
+            admin_render_profile_count('preview_direct_cover_hits');
+            return admin_render_profile_span('preview_direct_thumbnail_url', static fn (): string => thumbnail_url($cover, 300));
+        }
 
-    return '';
+        foreach (admin_render_profile_db('preview_collage_cover_lookup', static fn (): array => gallery_cover_collage_images((int) ($gallery['id'] ?? 0), false, 1)) as $descendantCover) {
+            admin_render_profile_count('preview_collage_cover_hits');
+            return admin_render_profile_span('preview_collage_thumbnail_url', static fn (): string => thumbnail_url($descendantCover, 300));
+        }
+
+        admin_render_profile_count('preview_empty');
+        return '';
+    });
 }
 
 /**
@@ -384,7 +413,7 @@ function admin_gallery_preview_url(array $gallery): string
 function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): bool
 {
     // $lastRun stores the Unix timestamp for the last successful repair attempt.
-    $lastRun = (int) app_setting($settingKey, '0');
+    $lastRun = (int) admin_render_profile_setting_read('self_heal_last_run_setting', static fn (): string => app_setting($settingKey, '0'));
     return $lastRun <= 0 || time() - $lastRun >= max(60, $ttlSeconds);
 }
 
@@ -393,7 +422,7 @@ function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): boo
  */
 function admin_dashboard_mark_self_heal(string $settingKey): void
 {
-    set_app_setting($settingKey, (string) time());
+    admin_render_profile_setting_write('self_heal_last_run_setting_write', static function () use ($settingKey): void { set_app_setting($settingKey, (string) time()); });
 }
 
 /**
@@ -403,7 +432,7 @@ function admin_dashboard_parent_sync_fingerprint(): string
 {
     try {
         // $row stores aggregate gallery data that changes when indexed gallery rows change.
-        $row = db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries")->fetch() ?: [];
+        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn (): array => db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries")->fetch() ?: []);
     } catch (Throwable) {
         return '';
     }
@@ -426,7 +455,7 @@ function admin_dashboard_parent_sync_needed(): bool
     if ($fingerprint === '') {
         return true;
     }
-    return !hash_equals((string) app_setting('admin_dashboard_parent_sync_fingerprint', ''), $fingerprint);
+    return !hash_equals((string) admin_render_profile_setting_read('parent_sync_fingerprint_setting', static fn (): string => app_setting('admin_dashboard_parent_sync_fingerprint', '')), $fingerprint);
 }
 
 /**
@@ -437,7 +466,7 @@ function admin_dashboard_store_parent_sync_fingerprint(): void
     // $fingerprint stores the post-repair gallery hierarchy fingerprint.
     $fingerprint = admin_dashboard_parent_sync_fingerprint();
     if ($fingerprint !== '') {
-        set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint);
+        admin_render_profile_setting_write('parent_sync_fingerprint_setting_write', static function () use ($fingerprint): void { set_app_setting('admin_dashboard_parent_sync_fingerprint', $fingerprint); });
     }
 }
 
