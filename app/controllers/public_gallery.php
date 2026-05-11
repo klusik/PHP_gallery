@@ -72,8 +72,8 @@ function cms_home(): void
         echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
         public_render_profile_count('rendered_subgalleries', count($galleries));
         public_render_profile_span('render_home_gallery_cards', static function () use ($galleries): void {
-            foreach ($galleries as $gallery) {
-                render_gallery_card($gallery, true, false, true);
+            foreach ($galleries as $index => $gallery) {
+                render_gallery_card($gallery, true, false, true, $index);
             }
         });
         echo '</section>';
@@ -277,8 +277,8 @@ function cms_gallery(): void
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         public_render_profile_count('rendered_subgalleries', count($children));
         public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicPageReorderEnabled): void {
-            foreach ($children as $child) {
-                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true);
+            foreach ($children as $index => $child) {
+                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true, $index);
             }
         });
         echo '</div>';
@@ -334,9 +334,9 @@ function cms_gallery(): void
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
         $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
-        // $thumbnailLoadingAttributes keeps the first visible photos responsive while the rest stay lazy.
-        $thumbnailLoadingAttributes = $index < 2 ? 'loading="eager" fetchpriority="high" data-responsive-thumbnail' : 'loading="lazy" fetchpriority="low" data-responsive-thumbnail';
-        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card progressive picture', static fn (): string => thumbnail_progressive_picture_html($image, 300, [300, 600, 800, 960], '300px', $thumbnailSizesAttribute, $altText, $thumbnailLoadingAttributes, $thumbnailBundle)) . '</a>';
+        // $thumbnailLoadingAttributes keeps above-the-fold photos eager without forcing later rows to compete for bandwidth.
+        $thumbnailLoadingAttributes = public_thumbnail_loading_attributes($index);
+        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $thumbnailLoadingAttributes, $thumbnailBundle)) . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="' . e(t('public.show_photo_location', 'Show photo location')) . '" title="' . e(t('public.show_photo_location', 'Show photo location')) . '">&#128205;</button>';
         }
@@ -654,12 +654,32 @@ function gallery_share_url(int $galleryId, string $token): string
 }
 
 /**
+ * Return stable loading attributes for public gallery and photo thumbnails.
+ *
+ * The first visible cards should load during the initial page render, because
+ * lazy-loading a whole first row can leave empty thumbnail slots that then pop
+ * in one by one. Later rows remain lazy so large galleries do not start too
+ * many image requests at once.
+ */
+function public_thumbnail_loading_attributes(int $index): string
+{
+    if ($index < 2) {
+        return 'loading="eager" fetchpriority="high"';
+    }
+    if ($index < 8) {
+        return 'loading="eager" fetchpriority="auto"';
+    }
+    return 'loading="lazy" fetchpriority="low"';
+}
+
+/**
  * Handles render gallery card logic for the gallery application.
  * @param mixed $gallery Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
+ * @param mixed $cardIndex Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
@@ -693,13 +713,15 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     if ($showSubgalleryBadge && !$isProtectedPublicCard) {
         echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => (int) $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . (int) $branchImageCount . '</span></span>';
     }
+    // $coverLoadingAttributes keeps above-the-fold gallery cards eager without forcing later rows to compete for bandwidth.
+    $coverLoadingAttributes = public_thumbnail_loading_attributes($cardIndex);
     if ($isProtectedPublicCard) {
         echo '<span class="gallery-collage gallery-locked-preview" aria-hidden="true">' . e(t('gallery.card.protected', 'Protected')) . '</span>';
     } elseif ($coverAsset !== '') {
-        echo '<img decoding="async" loading="lazy" src="' . e($coverAsset) . '" alt="">';
+        echo '<img decoding="async" ' . $coverLoadingAttributes . ' src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
         $coverThumbnailBundle = public_render_profile_span('subgallery_cover_thumbnail_bundle', static fn (): array => thumbnail_bundle($cover));
-        echo public_render_profile_with_thumbnail_purpose('subgallery cover progressive picture', static fn (): string => thumbnail_progressive_picture_html($cover, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail', $coverThumbnailBundle));
+        echo public_render_profile_with_thumbnail_purpose('subgallery cover stable picture', static fn (): string => thumbnail_picture_html($cover, 300, [300, 600, 800, 960], '(max-width: 299px) 300px, 800px', '', $coverLoadingAttributes, $coverThumbnailBundle));
     } else {
         // Variable $collage stores this steps working value.
         $collage = public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
@@ -708,7 +730,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
             foreach ($collage as $image) {
                 // Collage images must not use progressive replacement. A metagallery card contains several child covers, and independent delayed srcset upgrades make the card repaint in visible waves. Render a stable srcset immediately and let the browser choose the best candidate once.
                 $collageThumbnailBundle = public_render_profile_span('subgallery_collage_thumbnail_bundle', static fn (): array => thumbnail_bundle($image));
-                echo public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', 'loading="lazy" fetchpriority="low"', $collageThumbnailBundle));
+                echo public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', $coverLoadingAttributes, $collageThumbnailBundle));
             }
             echo '</span>';
         }

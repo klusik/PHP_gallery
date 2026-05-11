@@ -121,6 +121,71 @@ function scheduleIdleThumbnailWork(callback) {
     }, 180);
 }
 
+
+/**
+ * Parses a srcset attribute into ordered width candidates.
+ *
+ * @param {string} srcset Source-set string rendered by PHP.
+ * @returns {{url: string, width: number}[]} Parsed candidates with numeric widths.
+ */
+function parseThumbnailSrcsetCandidates(srcset) {
+    return String(srcset || '')
+        .split(',')
+        .map((candidate) => candidate.trim())
+        .map((candidate) => {
+            const parts = candidate.split(/\s+/).filter(Boolean);
+            const descriptor = parts[1] || '';
+            const width = descriptor.endsWith('w') ? Number.parseInt(descriptor.slice(0, -1), 10) : 0;
+            return {
+                url: parts[0] || '',
+                width: Number.isFinite(width) ? width : 0,
+            };
+        })
+        .filter((candidate) => candidate.url !== '')
+        .sort((a, b) => a.width - b.width);
+}
+
+/**
+ * Selects the smallest candidate that satisfies the current rendered thumbnail need.
+ *
+ * @param {string} srcset Source-set string rendered by PHP.
+ * @param {number} requiredWidth Device-pixel width needed for a sharp thumbnail.
+ * @returns {string} URL that should be decoded before the visible srcset changes.
+ */
+function selectThumbnailPreloadCandidate(srcset, requiredWidth) {
+    const candidates = parseThumbnailSrcsetCandidates(srcset);
+    if (!candidates.length) {
+        return '';
+    }
+    const selected = candidates.find((candidate) => candidate.width >= requiredWidth);
+    return (selected || candidates[candidates.length - 1]).url;
+}
+
+/**
+ * Decodes the likely replacement thumbnail before the visible image receives a larger srcset.
+ *
+ * @param {string} src URL selected from the larger progressive srcset.
+ * @returns {Promise<boolean>} True when the browser has loaded or decoded the replacement.
+ */
+function preloadProgressiveThumbnailCandidate(src) {
+    if (!src) {
+        return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+        const preloader = new Image();
+        preloader.decoding = 'async';
+        preloader.onload = () => {
+            if (typeof preloader.decode === 'function') {
+                preloader.decode().then(() => resolve(true)).catch(() => resolve(true));
+                return;
+            }
+            resolve(true);
+        };
+        preloader.onerror = () => resolve(false);
+        preloader.src = src;
+    });
+}
+
 /**
  * Copies progressive srcset data into real image attributes.
  *
@@ -129,30 +194,45 @@ function scheduleIdleThumbnailWork(callback) {
  * @returns {void}
  */
 function upgradeProgressiveThumbnail(image, sizesValue) {
-    if (image.dataset.progressiveUpgraded === '1') {
+    if (image.dataset.progressiveUpgraded === '1' || image.dataset.progressiveUpgradePending === '1') {
         return;
     }
     const runUpgrade = () => {
         if (!image.isConnected || image.dataset.progressiveUpgraded === '1') {
             return;
         }
+        image.dataset.progressiveUpgradePending = '1';
         const finalSizes = image.dataset.progressiveSizes || sizesValue;
+        const effectiveNeed = Math.ceil((Number.parseInt(sizesValue, 10) || image.getBoundingClientRect().width || 300) * Math.min(window.devicePixelRatio || 1, 2));
         const picture = image.closest('picture');
-        if (picture) {
-            picture.querySelectorAll('source[data-progressive-srcset]').forEach((source) => {
-                const nextSrcset = source.getAttribute('data-progressive-srcset') || '';
-                if (nextSrcset !== '') {
-                    source.setAttribute('sizes', source.getAttribute('data-progressive-sizes') || finalSizes);
-                    source.setAttribute('srcset', nextSrcset);
-                }
-            });
-        }
-        const imageSrcset = image.getAttribute('data-progressive-srcset') || '';
-        if (imageSrcset !== '') {
-            image.setAttribute('sizes', finalSizes);
-            image.setAttribute('srcset', imageSrcset);
-        }
-        image.dataset.progressiveUpgraded = '1';
+        const preferredSource = picture?.querySelector('source[data-progressive-srcset]');
+        const preferredSrcset = preferredSource?.getAttribute('data-progressive-srcset') || image.getAttribute('data-progressive-srcset') || '';
+        const preloadSrc = selectThumbnailPreloadCandidate(preferredSrcset, effectiveNeed);
+
+        preloadProgressiveThumbnailCandidate(preloadSrc).then(() => {
+            if (!image.isConnected || image.dataset.progressiveUpgraded === '1') {
+                return;
+            }
+            if (picture) {
+                picture.querySelectorAll('source[data-progressive-srcset]').forEach((source) => {
+                    const nextSrcset = source.getAttribute('data-progressive-srcset') || '';
+                    if (nextSrcset !== '') {
+                        source.setAttribute('sizes', source.getAttribute('data-progressive-sizes') || finalSizes);
+                        source.setAttribute('srcset', nextSrcset);
+                    }
+                });
+            }
+            const imageSrcset = image.getAttribute('data-progressive-srcset') || '';
+            if (imageSrcset !== '') {
+                image.setAttribute('sizes', finalSizes);
+                image.setAttribute('srcset', imageSrcset);
+            }
+            image.dataset.progressiveUpgraded = '1';
+        }).finally(() => {
+            if (image.isConnected) {
+                delete image.dataset.progressiveUpgradePending;
+            }
+        });
     };
 
     const delayMs = Number.parseInt(image.dataset.progressiveDelayMs || '0', 10);

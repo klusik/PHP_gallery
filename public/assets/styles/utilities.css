@@ -199,6 +199,23 @@ body.public-reorder-active {
     display: grid;
 }
 
+/* Gives image slots a stable painted surface while thumbnails are still decoding. */
+.public-page .gallery-card-media picture,
+.public-page .gallery-card-media img,
+.public-page .image-stage > .image-preview-link,
+.public-page .image-stage > .image-preview-link picture,
+.public-page .image-stage > .image-preview-link img {
+    background: color-mix(in srgb, var(--field, #f8fafc) 72%, var(--accent, #2271b1) 8%);
+}
+
+/* Public thumbnails should not inherit visual effects that make decoded image swaps look like flicker. */
+.public-page .gallery-card-media img,
+.public-page .image-stage > .image-preview-link img {
+    opacity: 1;
+    filter: none;
+    transition: none;
+}
+
 .public-page .gallery-card-body {
     display: flex;
     flex-direction: column;
