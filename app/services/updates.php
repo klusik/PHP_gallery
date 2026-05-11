@@ -120,16 +120,10 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
 {
     // $branch stores the trusted branch selected by the update checker or fallback candidates.
     $branch = in_array($preferredBranch, application_update_branch_candidates(), true) ? (string) $preferredBranch : (string) application_update_branch_candidates()[0];
-    // $cacheKey stores the DB setting name for the cached patch notes payload.
-    $cacheKey = 'application_patch_notes_cache_' . preg_replace('/[^a-z0-9_]+/i', '_', $branch);
-    // $cachedJson stores the last fetched patch notes payload for this branch.
-    $cachedJson = (string) app_setting($cacheKey, '');
-    if ($cachedJson !== '') {
-        // $cachedData stores the decoded cache payload when it is still fresh enough for admin viewing.
-        $cachedData = json_decode($cachedJson, true);
-        if (is_array($cachedData) && time() - (int) ($cachedData['cached_at'] ?? 0) <= max(300, $ttlSeconds)) {
-            return $cachedData;
-        }
+    // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
+    $cachedData = application_patch_notes_read_cache($branch, max(300, $ttlSeconds));
+    if ($cachedData !== null) {
+        return $cachedData;
     }
 
     try {
@@ -146,7 +140,7 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
             'versions' => $versions,
             'error' => '',
         ];
-        set_app_setting($cacheKey, json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        application_patch_notes_write_cache($branch, $data);
         return $data;
     } catch (Throwable $exception) {
         // $localPath stores the bundled patch notes file used when GitHub is unavailable.
@@ -162,6 +156,73 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
             'error' => $exception->getMessage(),
         ];
     }
+}
+
+/**
+ * Return the writable file-cache directory for remote patch notes payloads.
+ */
+function application_patch_notes_cache_dir(): string
+{
+    // $path stores the generated metadata cache directory outside the public asset path.
+    $path = application_update_project_root() . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'patch-notes';
+    if (!is_dir($path)) {
+        @mkdir($path, 0775, true);
+    }
+    return rtrim($path, DIRECTORY_SEPARATOR);
+}
+
+/**
+ * Return the cache file path for a trusted update branch.
+ */
+function application_patch_notes_cache_path(string $branch): string
+{
+    // $safeBranch stores a filesystem-safe representation of the trusted branch name.
+    $safeBranch = preg_replace('/[^a-z0-9_.-]+/i', '_', $branch) ?: 'main';
+    return application_patch_notes_cache_dir() . DIRECTORY_SEPARATOR . $safeBranch . '.json';
+}
+
+/**
+ * Read a fresh file-backed patch notes payload when available.
+ */
+function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?array
+{
+    // $path stores the cache file selected for the current GitHub branch.
+    $path = application_patch_notes_cache_path($branch);
+    if (!is_file($path)) {
+        return null;
+    }
+
+    // $modifiedAt stores the cache write timestamp reported by the filesystem.
+    $modifiedAt = filemtime($path);
+    if ($modifiedAt === false || time() - $modifiedAt > $ttlSeconds) {
+        return null;
+    }
+
+    // $json stores the cached JSON payload.
+    $json = (string) file_get_contents($path);
+    // $data stores the decoded payload when it matches the expected shape.
+    $data = json_decode($json, true);
+    if (!is_array($data) || !isset($data['versions']) || !is_array($data['versions'])) {
+        return null;
+    }
+
+    return $data;
+}
+
+/**
+ * Store a patch notes payload in the filesystem cache.
+ */
+function application_patch_notes_write_cache(string $branch, array $data): void
+{
+    // $path stores the cache file selected for the current GitHub branch.
+    $path = application_patch_notes_cache_path($branch);
+    // $json stores the payload without database column length constraints.
+    $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        return;
+    }
+
+    @file_put_contents($path, $json, LOCK_EX);
 }
 
 /**

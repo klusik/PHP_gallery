@@ -42,6 +42,62 @@ declare(strict_types=1);
  * calling it after app/controllers.php loads this separated controller file.
  */
 
+
+/**
+ * Build the patch notes viewer model for the updates screen.
+ */
+function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null): array
+{
+    // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
+    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null);
+    // $patchNotesVersions stores the release-note sections available to the admin selector.
+    $patchNotesVersions = (array) ($patchNotesData['versions'] ?? []);
+    // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
+    $selectedPatchVersion = application_update_normalize_version((string) ($requestedVersion ?? cms_current_version())) ?? cms_current_version();
+    if (!isset($patchNotesVersions[$selectedPatchVersion]) && $patchNotesVersions !== []) {
+        $selectedPatchVersion = array_key_exists(cms_current_version(), $patchNotesVersions) ? cms_current_version() : (string) array_key_first($patchNotesVersions);
+    }
+
+    return [
+        'data' => $patchNotesData,
+        'versions' => $patchNotesVersions,
+        'selected_version' => $selectedPatchVersion,
+    ];
+}
+
+/**
+ * Render only the currently selected patch notes section.
+ */
+function cms_render_update_patch_notes_fragment(array $patchNotesModel): string
+{
+    // $patchNotesData stores source diagnostics displayed above the rendered notes.
+    $patchNotesData = (array) ($patchNotesModel['data'] ?? []);
+    // $patchNotesVersions stores parsed release-note entries keyed by version.
+    $patchNotesVersions = (array) ($patchNotesModel['versions'] ?? []);
+    // $selectedPatchVersion stores the selected release-note key.
+    $selectedPatchVersion = (string) ($patchNotesModel['selected_version'] ?? cms_current_version());
+
+    ob_start();
+    echo '<div class="patch-notes-fragment-inner">';
+    if (!empty($patchNotesData['error'])) {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_remote_failed', 'GitHub patch notes could not be loaded, showing bundled notes if available. Error: {error}', ['error' => (string) $patchNotesData['error']])) . '</p>';
+    } else {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_source_value', 'Source: {source}, branch: {branch}', ['source' => (string) ($patchNotesData['source'] ?? 'github'), 'branch' => (string) ($patchNotesData['branch'] ?? '')])) . '</p>';
+    }
+    if (isset($patchNotesVersions[$selectedPatchVersion])) {
+        // $selectedEntry stores the parsed release notes for the currently displayed version.
+        $selectedEntry = (array) $patchNotesVersions[$selectedPatchVersion];
+        echo '<article class="patch-notes-content">';
+        echo '<h3>' . e((string) ($selectedEntry['title'] ?? ('Version ' . $selectedPatchVersion))) . '</h3>';
+        echo (string) ($selectedEntry['html'] ?? '');
+        echo '</article>';
+    } else {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_unavailable', 'No patch notes are available yet.')) . '</p>';
+    }
+    echo '</div>';
+    return (string) ob_get_clean();
+}
+
 /**
  * Check GitHub for newer application versions and install them on request.
  */
@@ -101,14 +157,20 @@ function cms_admin_update(): void
     $status = check_application_update();
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
-    // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
-    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null);
+    // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
+    $patchNotesModel = cms_update_patch_notes_model($status, (string) ($_GET['patch_version'] ?? cms_current_version()));
     // $patchNotesVersions stores the release-note sections available to the admin selector.
-    $patchNotesVersions = (array) ($patchNotesData['versions'] ?? []);
+    $patchNotesVersions = (array) ($patchNotesModel['versions'] ?? []);
     // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
-    $selectedPatchVersion = application_update_normalize_version((string) ($_GET['patch_version'] ?? cms_current_version())) ?? cms_current_version();
-    if (!isset($patchNotesVersions[$selectedPatchVersion]) && $patchNotesVersions !== []) {
-        $selectedPatchVersion = array_key_exists(cms_current_version(), $patchNotesVersions) ? cms_current_version() : (string) array_key_first($patchNotesVersions);
+    $selectedPatchVersion = (string) ($patchNotesModel['selected_version'] ?? cms_current_version());
+    if (isset($_GET['patch_notes_fragment'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => true,
+            'version' => $selectedPatchVersion,
+            'html' => cms_render_update_patch_notes_fragment($patchNotesModel),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
     }
     render_header(t('admin.updates.title'));
     echo '<section class="hero"><h1>' . e(t('admin.updates.title')) . '</h1><nav class="nav">';
@@ -147,13 +209,13 @@ function cms_admin_update(): void
             echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
         }
     }
-    echo '<details class="patch-notes-viewer">';
+    echo '<details class="patch-notes-viewer" data-patch-notes-viewer data-fragment-url="' . e(url_for('admin_update', ['patch_notes_fragment' => '1'])) . '">';
     echo '<summary><span>' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</span><small>' . e(t('admin.updates.patch_notes_summary', 'Show release notes from GitHub')) . '</small></summary>';
     echo '<div class="patch-notes-toolbar">';
-    echo '<form method="get" class="patch-notes-select-form">';
+    echo '<form method="get" class="patch-notes-select-form" data-patch-notes-form>';
     echo '<input type="hidden" name="page" value="admin_update">';
     echo '<label>' . e(t('admin.updates.patch_notes_version_label', 'Displayed version'));
-    echo '<select name="patch_version" onchange="this.form.submit()">';
+    echo '<select name="patch_version" data-patch-notes-select>';
     foreach ($patchNotesVersions as $version => $entry) {
         // $selected stores the select state for the currently displayed patch notes version.
         $selected = (string) $version === $selectedPatchVersion ? ' selected' : '';
@@ -164,29 +226,29 @@ function cms_admin_update(): void
     echo '</form>';
     echo '<div class="patch-notes-shortcuts">';
     if (isset($patchNotesVersions[cms_current_version()])) {
-        echo '<a class="button secondary" href="' . e(url_for('admin_update', ['patch_version' => cms_current_version()])) . '">' . e(t('admin.updates.patch_notes_current_button', 'Installed version')) . '</a>';
+        echo '<a class="button secondary" href="' . e(url_for('admin_update', ['patch_version' => cms_current_version()])) . '" data-patch-version="' . e(cms_current_version()) . '">' . e(t('admin.updates.patch_notes_current_button', 'Installed version')) . '</a>';
     }
     if (empty($status['error']) && !empty($status['update_available']) && !empty($status['latest_version']) && isset($patchNotesVersions[(string) $status['latest_version']])) {
-        echo '<a class="button is-update-pending" href="' . e(url_for('admin_update', ['patch_version' => (string) $status['latest_version']])) . '">' . e(t('admin.updates.patch_notes_pending_button', 'Pending update notes')) . '</a>';
+        echo '<a class="button is-update-pending" href="' . e(url_for('admin_update', ['patch_version' => (string) $status['latest_version']])) . '" data-patch-version="' . e((string) $status['latest_version']) . '">' . e(t('admin.updates.patch_notes_pending_button', 'Pending update notes')) . '</a>';
     }
     echo '</div>';
     echo '</div>';
-    if (!empty($patchNotesData['error'])) {
-        echo '<p class="muted">' . e(t('admin.updates.patch_notes_remote_failed', 'GitHub patch notes could not be loaded, showing bundled notes if available. Error: {error}', ['error' => (string) $patchNotesData['error']])) . '</p>';
-    } else {
-        echo '<p class="muted">' . e(t('admin.updates.patch_notes_source_value', 'Source: {source}, branch: {branch}', ['source' => (string) ($patchNotesData['source'] ?? 'github'), 'branch' => (string) ($patchNotesData['branch'] ?? '')])) . '</p>';
-    }
-    if (isset($patchNotesVersions[$selectedPatchVersion])) {
-        // $selectedEntry stores the parsed release notes for the currently displayed version.
-        $selectedEntry = (array) $patchNotesVersions[$selectedPatchVersion];
-        echo '<article class="patch-notes-content">';
-        echo '<h3>' . e((string) ($selectedEntry['title'] ?? ('Version ' . $selectedPatchVersion))) . '</h3>';
-        echo (string) ($selectedEntry['html'] ?? '');
-        echo '</article>';
-    } else {
-        echo '<p class="muted">' . e(t('admin.updates.patch_notes_unavailable', 'No patch notes are available yet.')) . '</p>';
-    }
-    echo '</details>'; 
+    echo '<div class="patch-notes-fragment" data-patch-notes-fragment aria-live="polite">';
+    echo cms_render_update_patch_notes_fragment($patchNotesModel);
+    echo '</div>';
+    echo '</details>';
+    echo '<script>';
+    echo '(function(){';
+    echo 'var viewer=document.querySelector("[data-patch-notes-viewer]");if(!viewer||!window.fetch){return;}';
+    echo 'var form=viewer.querySelector("[data-patch-notes-form]");var select=viewer.querySelector("[data-patch-notes-select]");var target=viewer.querySelector("[data-patch-notes-fragment]");';
+    echo 'var endpoint=viewer.getAttribute("data-fragment-url")||"";';
+    echo 'function setLoading(active){viewer.classList.toggle("is-loading",!!active);if(target){target.setAttribute("aria-busy",active?"true":"false");}}';
+    echo 'function loadVersion(version,pushState){if(!endpoint||!target||!version){return;}var url=new URL(endpoint,window.location.href);url.searchParams.set("patch_notes_fragment","1");url.searchParams.set("patch_version",version);setLoading(true);fetch(url.toString(),{headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"}}).then(function(response){if(!response.ok){throw new Error("HTTP "+response.status);}return response.json();}).then(function(payload){if(!payload||!payload.ok){throw new Error("Invalid response");}target.innerHTML=payload.html||"";if(select&&payload.version){select.value=payload.version;}if(pushState&&window.history&&window.history.replaceState){var pageUrl=new URL(window.location.href);pageUrl.searchParams.set("patch_version",payload.version||version);window.history.replaceState(null,"",pageUrl.toString());}}).catch(function(){var fallbackUrl=new URL(' . json_encode(url_for('admin_update')) . ',window.location.href);fallbackUrl.searchParams.set("patch_version",version);window.location.href=fallbackUrl.toString();}).finally(function(){setLoading(false);});}';
+    echo 'if(form){form.addEventListener("submit",function(event){event.preventDefault();viewer.open=true;loadVersion(select?select.value:"",true);});}';
+    echo 'if(select){select.addEventListener("change",function(){viewer.open=true;loadVersion(select.value,true);});}';
+    echo 'viewer.querySelectorAll("[data-patch-version]").forEach(function(link){link.addEventListener("click",function(event){event.preventDefault();viewer.open=true;loadVersion(link.getAttribute("data-patch-version")||"",true);});});';
+    echo '})();';
+    echo '</script>';
 
     echo '<hr><h3>' . e(t('admin.updates.beta_build')) . '</h3>';
     echo '<form method="post" class="form-grid">' . csrf_field();
