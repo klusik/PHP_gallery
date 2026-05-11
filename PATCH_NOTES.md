@@ -1,5 +1,15 @@
 # Patch notes
 
+## Version 0.65.1
+
+Version 0.65.1 tightens public thumbnail loading so the first visible cards paint more consistently and progressive replacements do not flicker as aggressively during decode.
+
+### Highlights
+
+- Public gallery cards now prioritize the first visible thumbnails during initial paint.
+- Progressive thumbnail upgrades now preload the likely replacement image before swapping the visible `srcset`.
+- Public thumbnail slots keep a stable painted background while images decode.
+
 ## Version 0.65
 
 Version 0.65 focuses on gallery metadata, public card presentation, translation coverage, admin diagnostics, update visibility, and access hardening.
