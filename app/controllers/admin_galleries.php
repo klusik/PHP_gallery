@@ -220,6 +220,23 @@ function admin_new_gallery_success_response(array $gallery): array
 /**
  * Render create-gallery fields shared by the full admin page and the side-panel fragment.
  */
+
+/**
+ * Render compact Markdown formatting guidance for gallery description fields.
+ */
+function render_gallery_description_formatting_hint(): void
+{
+    echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">💡</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
+    echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic Markdown is supported in public gallery descriptions.')) . '</p>';
+    echo '<ul>';
+    echo '<li><code>**' . e(t('admin.gallery_editor.description_format_bold_word', 'bold')) . '**</code> ' . e(t('admin.gallery_editor.description_format_bold', 'makes bold text')) . '</li>';
+    echo '<li><code>*' . e(t('admin.gallery_editor.description_format_italic_word', 'italic')) . '*</code> ' . e(t('admin.gallery_editor.description_format_italic', 'makes italic text')) . '</li>';
+    echo '<li><code>`code`</code> ' . e(t('admin.gallery_editor.description_format_code', 'uses inline code styling')) . '</li>';
+    echo '<li><code>[Link](https://example.com)</code> ' . e(t('admin.gallery_editor.description_format_link', 'creates a safe external link')) . '</li>';
+    echo '<li>' . e(t('admin.gallery_editor.description_format_newlines', 'A single Enter is preserved as a new line. Empty lines create separate paragraphs.')) . '</li>';
+    echo '</ul></div></details>';
+}
+
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode): void
 {
     if ($panelMode) {
@@ -232,6 +249,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
+        render_gallery_description_formatting_hint();
         echo '</div><div class="admin-side-panel-toggle-row">';
         echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.gallery_editor.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
         echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</span></label>';
@@ -245,6 +263,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
+    render_gallery_description_formatting_hint();
 }
 
 /**
@@ -1351,6 +1370,8 @@ function cms_admin_edit_gallery(): void
         }
         // Variable $slug stores this steps working value.
         $slug = $slug !== '' ? slugify($slug) : unique_slug(db(), $title, (int) $gallery['id']);
+        // $descriptionLayoutOverride stores the optional gallery-card layout override for this gallery.
+        $descriptionLayoutOverride = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($_POST['description_layout'] ?? 'inherit') : null;
         // $gridUsesCustomSettings stores whether this gallery should stop inheriting the display grid.
         $gridUsesCustomSettings = !empty($_POST['grid_override_enabled']);
         // $gridColumns stores the optional custom column count for public cards/photos in this gallery.
@@ -1384,6 +1405,9 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_filename_display_schema_ready()) {
             $fields['show_filenames = ?'] = $showFilenames;
+        }
+        if (gallery_description_layout_schema_ready()) {
+            $fields['description_layout = ?'] = $descriptionLayoutOverride;
         }
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = $nsfwEnabled;
@@ -1539,7 +1563,9 @@ function cms_admin_edit_gallery(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.identity_kicker', 'Identity')) . '</p><h2>' . e(t('admin.gallery_editor.names_and_placement', 'Names and placement')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label></div>';
+    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
+    render_gallery_description_formatting_hint();
+    echo '</div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options($gallery) . '</select></label><label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</span></label></div>';
@@ -1606,6 +1632,19 @@ function cms_admin_edit_gallery(): void
     }
     if ($gpsMapReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch')) . '</label><p class="muted">' . e(t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.')) . '</p></div>';
+    }
+    if (gallery_description_layout_schema_ready()) {
+        // $currentDescriptionLayout stores the optional value saved directly on this gallery.
+        $currentDescriptionLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
+        // $effectiveDescriptionLayout stores the layout that visitors currently see for this gallery card.
+        $effectiveDescriptionLayout = gallery_effective_description_layout($gallery);
+        echo '<div class="admin-edit-card"><h3>' . e(t('admin.gallery_editor.description_layout_title', 'Gallery description format')) . '</h3><label>' . e(t('admin.gallery_editor.description_layout_label', 'Card layout')) . '<select name="description_layout"><option value="inherit"' . ($currentDescriptionLayout === null ? ' selected' : '') . '>' . e(t('admin.gallery_editor.description_layout_inherit', 'Inherit from Theme')) . '</option>';
+        foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
+            echo '<option value="' . e($descriptionLayoutOption) . '"' . ($currentDescriptionLayout === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
+        }
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.description_layout_help', 'Current source: {source}. Effective layout: {layout}. Horizontal cards place the picture at the top, then title, date placeholder, tags, and a shortened Markdown-capable description.', ['source' => gallery_description_layout_source_label($gallery), 'layout' => gallery_description_layout_label($effectiveDescriptionLayout)])) . '</p></div>';
+    } else {
+        echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.description_layout_migration_hidden', 'Gallery description format overrides will be available after the database migration is applied.')) . '</p></div>';
     }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.

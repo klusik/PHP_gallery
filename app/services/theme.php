@@ -69,6 +69,7 @@ function theme_settings(): array
         'font' => app_setting('theme_font', $defaults['font']),
         'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
         'page_width_custom' => theme_page_width_custom_value(app_setting('theme_page_width_custom')),
+        'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
     ];
 }
 
@@ -96,6 +97,7 @@ function theme_override_settings(): array
         'font' => app_setting('theme_font'),
         'page_width' => app_setting('theme_page_width'),
         'page_width_custom' => app_setting('theme_page_width_custom'),
+        'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }

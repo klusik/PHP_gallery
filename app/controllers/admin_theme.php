@@ -337,6 +337,7 @@ function cms_admin_theme(): void
             $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            set_app_setting('theme_gallery_description_layout', gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical'));
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
             set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
@@ -496,6 +497,13 @@ function cms_admin_theme(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
+    echo '<fieldset class="form-grid" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.layout.description_layout_label', 'Default gallery-card layout')) . '<select name="theme_gallery_description_layout">';
+    foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
+        echo '<option value="' . e($descriptionLayoutOption) . '"' . (gallery_description_layout_normalize((string) ($theme['gallery_description_layout'] ?? 'vertical')) === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
+    }
+    echo '</select><span class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Vertical keeps the current image-left presentation. Horizontal places the gallery image on top, then title, date placeholder, tags, and a shortened Markdown-capable description.')) . '</span></label>';
+    echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-pagination"><legend>' . e(t('admin.theme.layout.pagination_legend', 'Pagination')) . '</legend>';
     echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> ' . e(t('admin.theme.layout.enable_pagination', 'Enable pagination')) . '</label>';
     echo '<label>' . e(t('admin.theme.layout.columns_per_page', 'Columns per page')) . ' <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';

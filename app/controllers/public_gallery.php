@@ -455,8 +455,8 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
 {
     // $title stores the accessible gallery title used by the current page.
     $title = (string) ($seo['title'] ?? $gallery['title'] ?? 'Gallery');
-    // $description stores the public gallery description.
-    $description = (string) ($seo['description'] ?? $gallery['description'] ?? '');
+    // $description stores the public gallery description without SEO fallback text.
+    $description = (string) ($gallery['description'] ?? '');
     // $bannerUrl stores only the per-gallery title-replacement image. Theme fallback banners belong to the shared site header.
     $bannerUrl = gallery_branding_schema_ready() ? gallery_branding_asset_url($gallery, 'banner', $publicOnly) : '';
     // $logoUrl stores the optional supplementary logo image.
@@ -475,7 +475,7 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     }
     echo '</div>';
     if (trim($description) !== '') {
-        echo '<p>' . e($description) . '</p>';
+        echo '<div class="hero-description gallery-description-rich">' . gallery_description_markdown_html($description) . '</div>';
     }
 }
 
@@ -662,13 +662,28 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
+    // $descriptionLayout stores the visual layout selected by Theme or the gallery override.
+    $descriptionLayout = gallery_effective_description_layout($gallery);
     // Variable $cover stores this steps working value.
     $coverAsset = $isProtectedPublicCard ? '' : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly));
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly));
     // Variable $branchImageCount stores this steps working value.
     $branchImageCount = $isProtectedPublicCard ? 0 : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly));
-    $galleryCardClass = 'gallery-card' . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '');
+    // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
+    $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
+        // $ownTags stores tags attached directly to the gallery record.
+        $ownTags = tags_for_entity('gallery', (int) $gallery['id']);
+        if ($ownTags) {
+            return $ownTags;
+        }
+        return contained_tags_for_gallery($gallery, $publicOnly);
+    });
+    // $descriptionPreview stores the card-length Markdown source. Full text remains visible in the opened gallery hero.
+    $descriptionPreview = gallery_description_markdown_excerpt((string) ($gallery['description'] ?? ''));
+    // $descriptionHtml stores the safe rendered card description.
+    $descriptionHtml = gallery_description_markdown_html($descriptionPreview);
+    $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '');
     echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
@@ -699,18 +714,28 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     }
     echo '</a>';
     echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
-    echo '<p class="gallery-card-description">' . e($gallery['description']) . '</p>';
+    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && $galleryCardTags) {
+        echo '<div class="gallery-card-meta-row">';
+        render_tag_list($galleryCardTags);
+        echo '</div>';
+    }
+    if ($descriptionHtml !== '') {
+        echo '<div class="gallery-card-description gallery-card-description-rich">' . $descriptionHtml . '</div>';
+    }
     if ($isProtectedPublicCard) {
-        echo '<p class="muted gallery-card-count">Protected gallery</p>';
+        echo '<p class="muted gallery-card-count">' . e(t('gallery.card.protected_gallery', 'Protected gallery')) . '</p>';
     } else {
         echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => (int) $branchImageCount])) . '</p>';
-        render_tag_list(public_render_profile_span('contained_tag_lookup', static fn (): array => contained_tags_for_gallery($gallery, $publicOnly)), t('gallery.containing_tags', 'Containing tags'));
+        if ($descriptionLayout !== 'horizontal') {
+            render_tag_list($galleryCardTags, t('gallery.containing_tags', 'Containing tags'));
+        }
     }
     echo '</div>';
     render_public_gallery_admin_edit_link($gallery, 'card');
     render_public_gallery_admin_delete_form($gallery, 'card');
     echo '</article>';
 }
+
 
 
 /**

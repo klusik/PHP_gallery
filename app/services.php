@@ -55,6 +55,8 @@ require_once __DIR__ . '/services/favicon.php';
 require_once __DIR__ . '/services/gallery_backgrounds.php';
 // Load reusable pagination helpers before controllers render public lists.
 require_once __DIR__ . '/services/pagination.php';
+// Load gallery description layout helpers before public cards are rendered.
+require_once __DIR__ . '/services/gallery_description_layout.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.
 require_once __DIR__ . '/services/gallery_grid.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.

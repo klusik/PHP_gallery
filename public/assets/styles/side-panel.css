@@ -1314,3 +1314,62 @@ body.has-admin-side-panel {
     color: #111827;
     font-size: 1rem;
 }
+
+.gallery-description-format-help {
+    position: relative;
+    align-self: flex-start;
+    margin-top: 0.45rem;
+    color: var(--muted, #667085);
+}
+
+.gallery-description-format-help summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: fit-content;
+    padding: 0.42rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 22%, transparent);
+    border-radius: max(0.75rem, calc(var(--radius, 16px) * 0.55));
+    background: color-mix(in srgb, var(--panel, #ffffff) 88%, var(--accent, #2563eb) 12%);
+    color: color-mix(in srgb, var(--ink, #111827) 82%, var(--accent, #2563eb));
+    font-size: 0.88rem;
+    font-weight: 750;
+    cursor: pointer;
+    list-style: none;
+}
+
+.gallery-description-format-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.gallery-description-format-help-popover {
+    z-index: 20;
+    width: min(30rem, calc(100vw - 2rem));
+    margin-top: 0.55rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 20%, transparent);
+    border-radius: max(0.9rem, calc(var(--radius, 16px) * 0.65));
+    background: color-mix(in srgb, var(--panel, #ffffff) 94%, var(--field, #f8fafc));
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--shadow, #111827) 16%, transparent);
+    color: var(--ink, #111827);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.gallery-description-format-help-popover p {
+    margin: 0 0 0.55rem;
+}
+
+.gallery-description-format-help-popover ul {
+    display: grid;
+    gap: 0.4rem;
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.gallery-description-format-help-popover code {
+    padding: 0.08rem 0.28rem;
+    border-radius: 0.35rem;
+    background: color-mix(in srgb, var(--field, #f8fafc) 78%, var(--accent, #2563eb) 10%);
+    font-size: 0.88em;
+}
