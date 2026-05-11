@@ -28,19 +28,29 @@ Important routes:
 - `page=media&id=...` streams an image through PHP after visibility checks.
 - `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
   same visibility checks.
-- `page=admin` is the dashboard for discovery, scans, bulk actions, and edits.
+- `page=admin` is the dashboard for discovery, scans, bulk actions, edits, and
+  admin-only render profiling.
 - `page=admin_new_gallery` creates an empty filesystem gallery folder and DB
-  row from an authenticated admin form.
+  row from an authenticated admin form, including optional manual date and
+  description-layout metadata when the schema is available.
 - `page=admin_upload` stores uploaded images inside real gallery folders, then
-  scans the target folder and can continue into thumbnail batch generation.
-- `page=admin_theme` stores theme controls and optional custom CSS.
-- `page=admin_update` checks GitHub for newer releases and can install the
-  configured branch archive after creating a backup of overwritten files.
+  scans the target folder and can continue into thumbnail batch generation. It
+  can also run the create-and-upload workflow for a new gallery under a selected
+  parent.
+- `page=admin_theme` stores theme controls, language choices, default gallery
+  description layout, and optional custom CSS.
+- `page=admin_update` checks GitHub for newer releases, renders cached or
+  bundled patch notes, and can install the configured branch archive after
+  creating a backup of overwritten files.
 - `reset.php` is a standalone admin-only recovery entrypoint that restores the
   current stable branch head when the normal admin update page is unusable
   after a broken beta deploy.
 - `page=admin_run_migrations` runs pending migrations from an authenticated
   admin POST when the dashboard detects a stale schema.
+- `page=admin_account` manages the admin username, recovery email, password,
+  password reset delivery settings, and test email delivery.
+- `page=admin_forgot_password` and `page=admin_reset_password` implement the
+  optional recovery flow when reset email delivery is configured.
 - `page=admin_public_update_gallery` and `page=admin_public_update_image` save
   admin-only inline edits submitted from public gallery pages.
 - `install.php` is standalone and can create config, DB tables, folders, and the
@@ -70,6 +80,16 @@ when a visitor is on a clean gallery URL instead of `index.php`.
 - `app/security.php`: sessions, current user lookup, CSRF, visitor vote hash.
 - `app/services.php`: filesystem discovery, imports, scans, tags, votes,
   settings, covers, ZIP creation, and database lookup helpers.
+- `app/services/translations.php`: request language selection, fallback
+  translation lookup, coverage diagnostics, and browser string export.
+- `app/services/auth_throttle.php`: hashed-subject login and password reset
+  throttling.
+- `app/services/admin_render_profiler.php`: admin-only dashboard timing and
+  counter instrumentation.
+- `app/services/gallery_dates.php`: optional manual gallery date normalization,
+  storage formatting, sidecar support, and public rendering.
+- `app/services/gallery_description_layout.php`: Theme default and per-gallery
+  public card layout resolution.
 - `app/controllers.php`: page handlers and HTML rendering for public/admin UI.
 - `database/migrations/`: ordered PHP files returning SQL statements.
 - `public/assets/styles.css`: built-in themeable stylesheet.
@@ -94,6 +114,14 @@ covers.
 `cover_image_path` stores an uploaded gallery thumbnail separately from the
 imported gallery images. When present and the gallery is public, the card can
 use that asset instead of generating a cover from gallery photos.
+
+`gallery_date` stores an optional admin-selected date for a gallery. It is
+nullable, independent from upload dates and EXIF dates, and indexed for future
+sorting or timeline features. Empty values render nothing on public pages.
+
+`description_layout` stores an optional per-gallery override for the public
+subgallery card layout. `NULL` means the gallery inherits the Theme default.
+Allowed stored values are `vertical` and `horizontal`.
 
 Protected-gallery access is stored on `galleries` separately from visibility.
 `access_mode` determines whether public access is normal or protected,
@@ -135,14 +163,20 @@ when the EXIF extension is available. `gps_lat`, `gps_lng`, `gps_altitude`, and
 rescan. The migration also adds an index for gallery/GPS lookups.
 
 `app_settings` stores configurable application values such as the public site
-name, theme color overrides, radius override, font mode override, and selected
-custom CSS preset. CSS files in `custom_css/` can be selected in the admin theme
+name, active public and admin languages, theme color overrides, radius override,
+font mode override, default gallery description layout, and selected custom CSS
+preset. CSS files in `custom_css/` can be selected in the admin theme
 screen; the selected file or a custom upload is copied to
 `public/assets/custom.css` and loaded after the built-in stylesheet. The active
 CSS skin supplies the default theme-control values. Once a control is changed,
 `page=theme_css` loads after custom CSS and emits the saved overrides. The
 Theme screen's `Reset to CSS` action removes those saved overrides without
 removing the active custom CSS file.
+
+`auth_rate_limits` stores hashed throttle subjects for admin login and password
+reset buckets. The table tracks attempts, first and last attempt timestamps, and
+optional lock expiration. Raw submitted identifiers and raw IP addresses are not
+stored.
 
 `admin_logs` stores admin-visible operational events such as failed migration
 runs and rejected admin-only actions. The dashboard renders recent entries, and
@@ -152,8 +186,11 @@ without server log access.
 
 The application updater is file-based so it can run on shared hosting without
 Git. It reads `CMS_VERSION` from GitHub `app/bootstrap.php` as the version
-source of truth, downloads a branch zip, copies application-managed files, and backs up overwritten files
-under `cache/updates/backups`. Local-only paths such as `config.php`,
+source of truth, downloads a branch zip, copies application-managed files, and
+backs up overwritten files under `cache/updates/backups`. The update page can
+fetch and parse remote `PATCH_NOTES.md`, cache the parsed payload under
+`cache/updates/patch-notes`, and fall back to the bundled local file when GitHub
+is unavailable. Local-only paths such as `config.php`,
 `galleries/`, `cache/`, `custom_css/`, and `public/assets/custom.css` are
 skipped.
 
@@ -173,8 +210,10 @@ a full-page warning. Theme changes should go through theme settings or custom
 CSS, not ad hoc inline HTML styling.
 
 The gallery page batches per-image tags and votes, memoizes request-scoped
-gallery helpers, and preloads adjacent lightbox images so forward/backward
-browsing feels smoother on large images without changing the rendered layout.
+gallery helpers, resolves gallery-card description layout from per-gallery or
+Theme settings, preserves safe Markdown line breaks in descriptions, and preloads
+adjacent lightbox images so forward/backward browsing feels smoother on large
+images without changing the rendered layout.
 
 When GPS maps are enabled, the gallery page renders a pin button on each image
 with coordinates and a map button for the branch. The JavaScript loads Leaflet
@@ -189,9 +228,11 @@ application relies on statement ordering and the migration record table instead
 of transaction wrapping.
 
 Feature code that depends on a new migration should avoid fatal errors against
-older databases. The picture game checks for its required column/table before
-rendering admin controls and shows an authenticated `Run database migration`
-prompt that posts to `page=admin_run_migrations`.
+older databases. The picture game, gallery dates, description layout, password
+reset throttling, thumbnail bounds, and other optional features check schema
+availability before rendering controls or writing new columns. When a feature is
+not ready, the admin UI either hides the control or shows an authenticated `Run
+database migration` prompt that posts to `page=admin_run_migrations`.
 
 ## Filesystem Rules
 
@@ -205,7 +246,7 @@ filenames, scans the folder, and optionally starts the same thumbnail batch
 endpoint used by import and dashboard thumbnail actions.
 
 Sitemap generation reads public galleries from the database and emits absolute
-clean gallery URLs. `robots.txt` allows public crawling, blocks admin routes,
+clean gallery URLs. `robots.txt` allows public crawling, disallows admin routes,
 and points crawlers at the sitemap.
 
 Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
@@ -216,7 +257,9 @@ from the gallery folder. Public cards and image previews use responsive
 `srcset`/`sizes` hints so the browser can choose between the available thumbnail
 sizes based on the actual card width. Missing thumbnails fall back to the
 original media route until an admin generates them. The lightbox intentionally
-uses the original protected media route instead of thumbnails.
+uses the original protected media route instead of thumbnails. The admin
+dashboard can defer exact thumbnail maintenance scans and display cached summary
+data so dashboard rendering does not repeatedly scan large media trees.
 
 Thumbnail creation is incremental. If a generated file exists and is newer than
 or equal to the source image, the service counts it as skipped and does not
@@ -254,12 +297,14 @@ metadata changes.
    galleries use the same folder layout and scan path.
 8. Bulk-publish galleries or images.
 9. Collapse or expand subgallery rows as needed; the state is persisted.
-10. Edit titles, descriptions, tags, cover images, hierarchy, folder names, and
-    theme settings. Changing a gallery parent or folder name moves the real
-    folder subtree and then updates DB paths.
-11. Logged-in admins can also edit gallery and image titles/descriptions directly
-   from public gallery pages through admin-only inline forms. Inline removal
-   deletes CMS records only; filesystem folders and image files are left intact.
+10. Edit titles, descriptions, optional manual gallery dates, tags, cover
+    images, hierarchy, folder names, description layout, and theme settings.
+    Changing a gallery parent or folder name moves the real folder subtree and
+    then updates DB paths.
+11. Logged-in admins can also manage galleries and images from public gallery
+   pages through compact admin actions that open the side-panel workflows.
+   Inline removal deletes CMS records only; filesystem folders and image files
+   are left intact.
 12. Opt galleries or gallery branches into the picture game from gallery edit
     pages or dashboard bulk actions. New galleries remain opted out by default.
 13. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
@@ -299,10 +344,13 @@ JSON, tags, votes, and the picture game.
 write both files. Deleting or server-blocking the installer after setup is still
 reasonable defense in depth on public hosts.
 
-The `app/`, `database/`, `scripts/`, `cache/`, and `galleries/` directories are
-not intended to be browsed directly. Apache `.htaccess` files are included for
-common hosting setups, but server-level configuration should enforce the same
-rule where `.htaccess` is unavailable.
+The `app/`, `database/`, `scripts/`, `cache/`, `logs/`, `tmp/`, `tests/`,
+`deploy/`, and `galleries/` directories are not intended to be browsed directly.
+Apache `.htaccess` files are included for common hosting setups. They disable
+directory indexes, deny common sensitive file extensions, block `.git` paths,
+block dotfiles except `.well-known/`, and deny application-private directories
+from the web root. Server-level configuration should enforce the same rule where
+`.htaccess` is unavailable.
 
 
 ---
@@ -411,6 +459,18 @@ Clean reinstall mode:
 ---
 
 ### Logging and Observability
+
+
+### Admin Render Profiling
+
+The admin dashboard can collect request-local profiling data while rendering the
+admin gallery tree. The profiler records counters and timers around schema
+checks, database calls, app setting reads and writes, self-heal checks, gallery
+ordering, collapsed-tree lookup, preview cover resolution, thumbnail summary
+reads, and tab rendering.
+
+The profiler is admin-only diagnostic output. It is not part of public telemetry
+and must not be shown to anonymous visitors.
 
 Current:
 
