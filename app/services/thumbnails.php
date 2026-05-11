@@ -248,14 +248,7 @@ function thumbnail_abs_path(array $image, array $gallery, int $size, string $for
  */
 function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
 {
-    if ((string) ($image['visibility'] ?? '') !== 'public' || gallery_access_requirement($gallery) !== null) {
-        return false;
-    }
-    // $configuredRoot stores an intermediate value used by the surrounding gallery workflow.
-    $configuredRoot = realpath(galleries_root());
-    // $defaultRoot stores an intermediate value used by the surrounding gallery workflow.
-    $defaultRoot = realpath(dirname(__DIR__) . '/galleries');
-    return $configuredRoot !== false && $defaultRoot !== false && $configuredRoot === $defaultRoot;
+    return false;
 }
 
 /**

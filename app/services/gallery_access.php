@@ -207,6 +207,34 @@ function image_nsfw_restricted(array $image, array $gallery): bool
 }
 
 /**
+ * Return true when one public image may be exposed to the current visitor.
+ */
+function public_image_visible_to_current_visitor(array $image, array $gallery): bool
+{
+    if ((string) ($image['visibility'] ?? '') !== 'public') {
+        return false;
+    }
+    if (!visitor_can_access_gallery($gallery)) {
+        return false;
+    }
+    if (image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content()) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Return true when public media for one gallery needs private cache semantics.
+ */
+function public_media_needs_private_cache(array $gallery, ?array $image = null): bool
+{
+    if (gallery_access_requirement($gallery) || gallery_nsfw_requirement($gallery)) {
+        return true;
+    }
+    return $image !== null && image_nsfw_restricted($image, $gallery);
+}
+
+/**
  * Build the single session key used for NSFW age acknowledgment.
  */
 function nsfw_guard_session_key(): string

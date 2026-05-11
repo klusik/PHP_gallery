@@ -73,6 +73,8 @@ require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
 require_once __DIR__ . '/services/logs.php';
+// Load authentication throttling after logs so rate-limit events can be recorded safely.
+require_once __DIR__ . '/services/auth_throttle.php';
 require_once __DIR__ . '/services/telemetry_settings.php';
 require_once __DIR__ . '/services/telemetry_privacy.php';
 require_once __DIR__ . '/services/telemetry.php';

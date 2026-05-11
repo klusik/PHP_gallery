@@ -333,6 +333,9 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
             if (!$imageGallery) {
                 continue;
             }
+            if ($publicOnly && !public_image_visible_to_current_visitor($image, $imageGallery)) {
+                continue;
+            }
             // Variable $absolute stores this steps working value.
             $absolute = image_abs_path($image, $imageGallery);
             if (!is_file($absolute)) {

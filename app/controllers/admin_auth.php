@@ -575,15 +575,44 @@ function cms_admin_login(): void
         verify_csrf();
         // Variable $identifier stores this steps working value.
         $identifier = (string) ($_POST['identifier'] ?? '');
-        // Variable $user stores this steps working value.
-        $user = cms_find_admin_user_by_identifier($identifier);
-        if ($user && password_verify((string) ($_POST['password'] ?? ''), (string) $user['password_hash'])) {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = (int) $user['id'];
-            redirect_to(url_for('admin'));
+        // $normalizedIdentifier stores the submitted login identifier after trimming and lowercasing for safe throttling.
+        $normalizedIdentifier = auth_throttle_normalize_identifier($identifier);
+        // $visitorSubject stores the privacy-safe visitor identifier used by the login throttling service.
+        $visitorSubject = auth_throttle_visitor_subject();
+        // $visitorThrottle stores the current visitor-level login throttle status.
+        $visitorThrottle = auth_throttle_check('admin_login_visitor', $visitorSubject);
+        // $identifierThrottle stores the current identifier-level login throttle status.
+        $identifierThrottle = $normalizedIdentifier !== ''
+            ? auth_throttle_check('admin_login_identifier', $normalizedIdentifier)
+            : ['allowed' => true, 'retry_after_seconds' => 0, 'attempts' => 0];
+
+        if (!$visitorThrottle['allowed'] || !$identifierThrottle['allowed']) {
+            if (!$visitorThrottle['allowed']) {
+                auth_throttle_log('auth.login_rate_limited', t('admin.auth.log_login_rate_limited'), 'admin_login_visitor', $visitorSubject, $visitorThrottle);
+            }
+            if (!$identifierThrottle['allowed'] && $normalizedIdentifier !== '') {
+                auth_throttle_log('auth.login_rate_limited', t('admin.auth.log_login_rate_limited'), 'admin_login_identifier', $normalizedIdentifier, $identifierThrottle);
+            }
+            $error = t('admin.auth.too_many_attempts');
+        } else {
+            // Variable $user stores this steps working value.
+            $user = cms_find_admin_user_by_identifier($identifier);
+            if ($user && password_verify((string) ($_POST['password'] ?? ''), (string) $user['password_hash'])) {
+                auth_throttle_clear('admin_login_visitor', $visitorSubject);
+                if ($normalizedIdentifier !== '') {
+                    auth_throttle_clear('admin_login_identifier', $normalizedIdentifier);
+                }
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = (int) $user['id'];
+                redirect_to(url_for('admin'));
+            }
+            auth_throttle_record_attempt('admin_login_visitor', $visitorSubject);
+            if ($normalizedIdentifier !== '') {
+                auth_throttle_record_attempt('admin_login_identifier', $normalizedIdentifier);
+            }
+            // Variable $error stores this steps working value.
+            $error = t('admin.auth.invalid_login');
         }
-        // Variable $error stores this steps working value.
-        $error = t('admin.auth.invalid_login');
     }
     render_header(t('admin.auth.login_title'));
     if (isset($_GET['reset'])) {
@@ -616,26 +645,50 @@ function cms_admin_forgot_password(): void
         verify_csrf();
         // $identifier stores an intermediate value used by the surrounding gallery workflow.
         $identifier = (string) ($_POST['identifier'] ?? '');
-        // Variable $user stores this steps working value.
-        $user = cms_find_admin_user_by_identifier($identifier);
-        if ($user && trim((string) ($user['email'] ?? '')) !== '') {
-            // $token stores an intermediate value used by the surrounding gallery workflow.
-            $token = cms_create_password_reset_token((int) $user['id']);
-            if ($token) {
-                // $resetUrl stores an intermediate value used by the surrounding gallery workflow.
-                $resetUrl = cms_password_reset_url((string) $token['selector'], (string) $token['token']);
-                // $delivery stores safe mail diagnostics for the admin log without storing the submitted identifier or token value.
-                $delivery = cms_send_password_reset_email($user, $resetUrl, (string) $token['expires_at']);
-                admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? t('admin.auth.log_password_reset_email_sent') : t('admin.auth.log_password_reset_token_created_no_email'), [
-                    'identifier_sha256' => hash('sha256', cms_normalize_account_email($identifier)),
-                    'identifier_looks_like_email' => filter_var(trim($identifier), FILTER_VALIDATE_EMAIL) !== false,
-                    'visitor_hash' => visitor_hash(),
-                    'request_id' => function_exists('telemetry_request_id') ? telemetry_request_id() : '',
-                    'user_id' => (int) $user['id'],
-                    'username' => (string) $user['username'],
-                    'token_selector' => (string) $token['selector'],
-                    'email_delivery' => $delivery,
-                ]);
+        // $normalizedIdentifier stores the submitted reset identifier after trimming and lowercasing for safe throttling.
+        $normalizedIdentifier = auth_throttle_normalize_identifier($identifier);
+        // $visitorSubject stores the privacy-safe visitor identifier used by the reset throttling service.
+        $visitorSubject = auth_throttle_visitor_subject();
+        // $visitorThrottle stores the current visitor-level reset throttle status.
+        $visitorThrottle = auth_throttle_check('password_reset_visitor', $visitorSubject);
+        // $identifierThrottle stores the current identifier-level reset throttle status.
+        $identifierThrottle = $normalizedIdentifier !== ''
+            ? auth_throttle_check('password_reset_identifier', $normalizedIdentifier)
+            : ['allowed' => true, 'retry_after_seconds' => 0, 'attempts' => 0];
+
+        if (!$visitorThrottle['allowed'] || !$identifierThrottle['allowed']) {
+            if (!$visitorThrottle['allowed']) {
+                auth_throttle_log('auth.reset_rate_limited', t('admin.auth.log_reset_rate_limited'), 'password_reset_visitor', $visitorSubject, $visitorThrottle);
+            }
+            if (!$identifierThrottle['allowed'] && $normalizedIdentifier !== '') {
+                auth_throttle_log('auth.reset_rate_limited', t('admin.auth.log_reset_rate_limited'), 'password_reset_identifier', $normalizedIdentifier, $identifierThrottle);
+            }
+        } else {
+            auth_throttle_record_attempt('password_reset_visitor', $visitorSubject);
+            if ($normalizedIdentifier !== '') {
+                auth_throttle_record_attempt('password_reset_identifier', $normalizedIdentifier);
+            }
+            // Variable $user stores this steps working value.
+            $user = cms_find_admin_user_by_identifier($identifier);
+            if ($user && trim((string) ($user['email'] ?? '')) !== '') {
+                // $token stores an intermediate value used by the surrounding gallery workflow.
+                $token = cms_create_password_reset_token((int) $user['id']);
+                if ($token) {
+                    // $resetUrl stores an intermediate value used by the surrounding gallery workflow.
+                    $resetUrl = cms_password_reset_url((string) $token['selector'], (string) $token['token']);
+                    // $delivery stores safe mail diagnostics for the admin log without storing the submitted identifier or token value.
+                    $delivery = cms_send_password_reset_email($user, $resetUrl, (string) $token['expires_at']);
+                    admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? t('admin.auth.log_password_reset_email_sent') : t('admin.auth.log_password_reset_token_created_no_email'), [
+                        'identifier_sha256' => hash('sha256', cms_normalize_account_email($identifier)),
+                        'identifier_looks_like_email' => filter_var(trim($identifier), FILTER_VALIDATE_EMAIL) !== false,
+                        'visitor_hash' => visitor_hash(),
+                        'request_id' => function_exists('telemetry_request_id') ? telemetry_request_id() : '',
+                        'user_id' => (int) $user['id'],
+                        'username' => (string) $user['username'],
+                        'token_selector' => (string) $token['selector'],
+                        'email_delivery' => $delivery,
+                    ]);
+                }
             }
         }
         $notice = t('admin.auth.reset_link_sent_if_possible');
