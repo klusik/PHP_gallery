@@ -44,4 +44,7 @@ return [
     'gallery.workflow' => 'Gallery workflow',
     'gallery.editor' => 'Gallery editor',
     'gallery.edit' => 'Edit gallery',
+    'admin.gallery_editor.gallery_date' => 'Date',
+    'admin.gallery_editor.gallery_date_help' => 'Optional manual gallery date, for example an event, trip, or shooting date.',
+    'admin.gallery_editor.invalid_gallery_date' => 'Enter a valid gallery date.',
 ];

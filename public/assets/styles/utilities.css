@@ -468,6 +468,29 @@ body.public-reorder-active {
     line-height: 1.58;
 }
 
+.public-page .hero-gallery-date,
+.public-page .gallery-card-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-weight: 750;
+}
+
+.public-page .hero-gallery-date {
+    margin-top: 0.4rem;
+}
+
+.public-page .gallery-card-date::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--panel) 75%, transparent);
+}
+
 .public-page .gallery-card.is-gallery-description-horizontal {
     grid-template-columns: 1fr;
     align-content: start;
@@ -500,27 +523,17 @@ body.public-reorder-active {
 .public-page .gallery-card-meta-row {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.45rem 0.65rem;
     min-height: 1.7rem;
+    overflow: hidden;
     color: var(--muted);
     font-size: 0.86rem;
 }
 
-.public-page .gallery-card-date-placeholder {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-weight: 700;
-}
-
-.public-page .gallery-card-date-placeholder::before {
-    content: "";
-    width: 0.58rem;
-    height: 0.58rem;
-    border: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
-    border-radius: 999px;
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--panel) 75%, transparent);
+.public-page .gallery-card-meta-row .gallery-card-date {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .public-page .gallery-card.is-gallery-description-horizontal .tag-list {
@@ -528,10 +541,29 @@ body.public-reorder-active {
     gap: 0.3rem;
 }
 
+.public-page .gallery-card.is-gallery-description-horizontal .tag-list-compact {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow: hidden;
+}
+
 .public-page .gallery-card.is-gallery-description-horizontal .tag {
+    flex: 0 0 auto;
     padding: 0.12rem 0.48rem;
+    overflow: hidden;
+    max-width: 8rem;
     background: color-mix(in srgb, var(--field) 78%, transparent);
     font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.public-page .gallery-card.is-gallery-description-horizontal .tag-more {
+    max-width: none;
+    color: var(--muted);
+    cursor: default;
 }
 
 .public-page .gallery-card.is-gallery-description-horizontal .gallery-card-description {

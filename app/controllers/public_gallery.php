@@ -474,6 +474,7 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
         echo '<h1 class="gallery-title">' . e($title) . '</h1>';
     }
     echo '</div>';
+    render_gallery_date($gallery, 'hero-gallery-date');
     if (trim($description) !== '') {
         echo '<div class="hero-description gallery-description-rich">' . gallery_description_markdown_html($description) . '</div>';
     }
@@ -714,10 +715,13 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     }
     echo '</a>';
     echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
-    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && $galleryCardTags) {
+    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && ($galleryCardTags || gallery_date_display_value($gallery['gallery_date'] ?? null) !== '')) {
         echo '<div class="gallery-card-meta-row">';
-        render_tag_list($galleryCardTags);
+        render_gallery_date($gallery, 'gallery-card-date');
+        render_compact_tag_list($galleryCardTags);
         echo '</div>';
+    } elseif (!$isProtectedPublicCard) {
+        render_gallery_date($gallery, 'gallery-card-date');
     }
     if ($descriptionHtml !== '') {
         echo '<div class="gallery-card-description gallery-card-description-rich">' . $descriptionHtml . '</div>';

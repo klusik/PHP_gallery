@@ -47,4 +47,7 @@ return [
     'gallery.workflow' => 'Práce s galerií',
     'gallery.editor' => 'Editor galerie',
     'gallery.edit' => 'Upravit galerii',
+    'admin.gallery_editor.gallery_date' => 'Datum',
+    'admin.gallery_editor.gallery_date_help' => 'Volitelné ručně zadané datum galerie, například datum akce, výletu nebo focení.',
+    'admin.gallery_editor.invalid_gallery_date' => 'Zadejte platné datum galerie.',
 ];

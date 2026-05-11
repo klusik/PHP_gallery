@@ -46,3 +46,21 @@
 }
 
 /* Cache marker: gallery description layout CSS imports. */
+
+.admin-edit-gallery-form input[type="date"],
+.admin-side-panel-field input[type="date"] {
+    min-height: 42px;
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--theme-radius, 14px);
+    background: var(--color-surface, #ffffff);
+    color: var(--color-text, #111827);
+    border: 1px solid var(--color-border, rgba(15, 23, 42, 0.16));
+    font: inherit;
+}
+
+.admin-edit-gallery-form input[type="date"]:focus,
+.admin-side-panel-field input[type="date"]:focus {
+    outline: 2px solid color-mix(in srgb, var(--accent-color, #2563eb) 34%, transparent);
+    outline-offset: 2px;
+    border-color: color-mix(in srgb, var(--accent-color, #2563eb) 58%, var(--color-border, rgba(15, 23, 42, 0.16)));
+}

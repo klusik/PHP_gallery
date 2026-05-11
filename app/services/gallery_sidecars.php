@@ -241,6 +241,9 @@ function write_gallery_sidecar(array $gallery): void
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
+    if (gallery_date_schema_ready() && !empty($gallery['gallery_date'])) {
+        $data['gallery_date'] = gallery_date_storage_value($gallery['gallery_date']);
+    }
     if (gallery_description_layout_schema_ready()) {
         // $descriptionLayout stores a per-gallery card layout override, when this gallery has one.
         $descriptionLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
@@ -308,6 +311,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'folder_path' => $folderPath,
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
+        'gallery_date' => gallery_date_schema_ready() ? gallery_date_sidecar_value($metadata['gallery_date'] ?? '') : null,
         'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
@@ -360,6 +364,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $showFilenames = gallery_filename_display_schema_ready() && (int) ($candidate['show_filenames'] ?? 0) === 1 ? 1 : 0;
     // $descriptionLayout stores a per-gallery card layout override read from gallery.json.
     $descriptionLayout = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($candidate['description_layout'] ?? null) : null;
+    // $galleryDate stores the optional manual gallery date read from gallery.json.
+    $galleryDate = gallery_date_schema_ready() ? gallery_date_sidecar_value($candidate['gallery_date'] ?? '') : null;
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
@@ -393,6 +399,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_description_layout_schema_ready()) {
         $columns[] = 'description_layout';
         $values[] = $descriptionLayout;
+    }
+    if (gallery_date_schema_ready()) {
+        $columns[] = 'gallery_date';
+        $values[] = $galleryDate;
     }
     if (gallery_grid_schema_ready()) {
         $columns[] = 'grid_columns';
@@ -472,6 +482,8 @@ function create_empty_gallery(array $input): array
     }
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
+    // $galleryDate stores the optional manual date for this gallery, independent from upload dates.
+    $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($input['gallery_date'] ?? '') : null;
     // $visibility stores an intermediate value used by the surrounding gallery workflow.
     $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
@@ -508,6 +520,7 @@ function create_empty_gallery(array $input): array
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, [
         'title' => $title,
         'description' => $description,
+        'gallery_date' => $galleryDate,
         'visibility' => $visibility,
         'sort_order' => $sortOrder,
         'voting_enabled' => $votingEnabled,

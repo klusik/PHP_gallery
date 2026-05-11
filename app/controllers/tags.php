@@ -92,6 +92,34 @@ function render_tag_list(array $tags, ?string $label = null): void
 }
 
 /**
+ * Render a one-line tag preview for horizontal gallery cards.
+ *
+ * Full gallery pages still render every tag through render_tag_list(). This
+ * helper keeps card metadata visually stable beside the optional manual date
+ * by showing the first tags inline and replacing the remaining tags with a
+ * compact ellipsis indicator.
+ */
+function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
+{
+    if (!$tags) {
+        return;
+    }
+
+    $visibleLimit = max(1, $visibleLimit);
+    $visibleTags = array_slice($tags, 0, $visibleLimit);
+    $hiddenCount = max(0, count($tags) - count($visibleTags));
+
+    echo '<p class="tag-list tag-list-compact">';
+    foreach ($visibleTags as $tag) {
+        echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+    }
+    if ($hiddenCount > 0) {
+        echo '<span class="tag tag-more" title="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '" aria-label="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '">...</span>';
+    }
+    echo '</p>';
+}
+
+/**
  * Render the public vote controls and current vote state.
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void

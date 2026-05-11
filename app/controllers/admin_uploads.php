@@ -74,6 +74,7 @@ function cms_admin_upload(): void
                     'folder_name' => $_POST['folder_name'] ?? '',
                     'description' => $_POST['description'] ?? '',
                     'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
+                    'gallery_date' => $_POST['gallery_date'] ?? '',
                     'parent_id' => $_POST['parent_id'] ?? 0,
                     'voting_enabled' => $_POST['voting_enabled'] ?? 0,
                     'show_filenames' => $_POST['show_filenames'] ?? 0,
@@ -363,6 +364,11 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
         echo '<label>' . e(t('admin.upload.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.upload.folder_name_help', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
         echo '<label>' . e(t('admin.upload.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.upload.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
         echo '<label>' . e(t('admin.upload.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+        if (gallery_date_schema_ready()) {
+            echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
+        }
         echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.upload.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
         echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.upload.show_file_names', 'Show file names')) . '</label>';
         echo '<label>' . e(t('admin.upload.description', 'Description')) . '<textarea name="description"></textarea></label>';
@@ -384,6 +390,11 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
     echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
     echo '<label class="admin-side-panel-field"><span>' . e(t('admin.upload.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.upload.folder_name_help', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
     echo '<label class="admin-side-panel-field"><span>' . e(t('admin.upload.visibility', 'Visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+    if (gallery_date_schema_ready()) {
+        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
+    } else {
+        echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
+    }
     echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.upload.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
     echo '</div>';

@@ -184,6 +184,7 @@ function admin_new_gallery_input_from_post(): array
         'title' => $_POST['title'] ?? '',
         'folder_name' => $_POST['folder_name'] ?? '',
         'description' => $_POST['description'] ?? '',
+        'gallery_date' => $_POST['gallery_date'] ?? '',
         'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
         'parent_id' => $_POST['parent_id'] ?? 0,
         'voting_enabled' => $_POST['voting_enabled'] ?? 0,
@@ -247,6 +248,11 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+        if (gallery_date_schema_ready()) {
+            echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
+        } else {
+            echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
+        }
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
         render_gallery_description_formatting_hint();
@@ -260,6 +266,11 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+    if (gallery_date_schema_ready()) {
+        echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
+    } else {
+        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
+    }
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
@@ -1212,6 +1223,17 @@ function cms_admin_edit_gallery(): void
         $slug = trim((string) $_POST['slug']);
         // Variable $visibility stores this steps working value.
         $visibility = gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished'));
+        try {
+            // $galleryDate stores the optional manual date selected by an admin.
+            $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($_POST['gallery_date'] ?? '') : null;
+        } catch (InvalidArgumentException $exception) {
+            if (admin_wants_json()) {
+                admin_panel_error_response($exception->getMessage());
+                return;
+            }
+            flash_message('admin_notice', $exception->getMessage());
+            redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
+        }
         // Variable $pictureGameEnabled stores this steps working value.
         $pictureGameEnabled = $pictureGameReady && !empty($_POST['picture_game_enabled']) ? 1 : 0;
         // Variable $gpsMapEnabled stores this steps working value.
@@ -1394,6 +1416,9 @@ function cms_admin_edit_gallery(): void
             'visibility = ?' => gallery_visibility_storage_value($visibility),
             'sort_order = ?' => (int) $_POST['sort_order'],
         ];
+        if (gallery_date_schema_ready()) {
+            $fields['gallery_date = ?'] = $galleryDate;
+        }
         if ($pictureGameReady) {
             $fields['picture_game_enabled = ?'] = $pictureGameEnabled;
         }
@@ -1563,7 +1588,13 @@ function cms_admin_edit_gallery(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.identity_kicker', 'Identity')) . '</p><h2>' . e(t('admin.gallery_editor.names_and_placement', 'Names and placement')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
+    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
+    if (gallery_date_schema_ready()) {
+        echo '<label class="admin-date-picker-field">' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date" value="' . e(gallery_date_input_value($gallery['gallery_date'] ?? null)) . '"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
+    } else {
+        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
+    }
+    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
     echo '</div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
@@ -2695,12 +2726,22 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = gallery_visibility_storage_value($action);
     }
+    try {
+        // $galleryDate stores the optional manual date submitted from inline admin editing.
+        $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($_POST['gallery_date'] ?? ($gallery['gallery_date'] ?? '')) : null;
+    } catch (InvalidArgumentException $exception) {
+        flash_message('admin_notice', $exception->getMessage());
+        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
+    }
     // Variable $fields stores this steps working value.
     $fields = [
         'title = ?' => $title,
         'description = ?' => (string) ($_POST['description'] ?? ''),
         'visibility = ?' => $visibility,
     ];
+    if (gallery_date_schema_ready()) {
+        $fields['gallery_date = ?'] = $galleryDate;
+    }
     if (gallery_filename_display_schema_ready()) {
         $fields['show_filenames = ?'] = !empty($_POST['show_filenames']) ? 1 : 0;
     }
