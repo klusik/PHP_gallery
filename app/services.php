@@ -37,10 +37,14 @@ declare(strict_types=1);
 
 // Load DB-backed application settings before any feature module reads app_setting().
 require_once __DIR__ . '/services/app_settings.php';
+// Load translation helpers early so controllers can use t() for visible text.
+require_once __DIR__ . '/services/translations.php';
 // Load schema helpers before feature modules perform optional-column checks.
 require_once __DIR__ . '/services/database_helpers.php';
 // Load public render profiling helpers before public gallery services can record timings.
 require_once __DIR__ . '/services/public_render_profiler.php';
+// Load admin render profiling helpers before admin controllers can record dashboard timings.
+require_once __DIR__ . '/services/admin_render_profiler.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.
 require_once __DIR__ . '/services/custom_css.php';
 // Load theme settings and CSS default helpers after custom CSS paths are available.
@@ -51,6 +55,10 @@ require_once __DIR__ . '/services/favicon.php';
 require_once __DIR__ . '/services/gallery_backgrounds.php';
 // Load reusable pagination helpers before controllers render public lists.
 require_once __DIR__ . '/services/pagination.php';
+// Load gallery description layout helpers before public cards are rendered.
+require_once __DIR__ . '/services/gallery_description_layout.php';
+// Load optional manual gallery-date helpers before admin and public gallery rendering.
+require_once __DIR__ . '/services/gallery_dates.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.
 require_once __DIR__ . '/services/gallery_grid.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
@@ -71,6 +79,8 @@ require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
 require_once __DIR__ . '/services/logs.php';
+// Load authentication throttling after logs so rate-limit events can be recorded safely.
+require_once __DIR__ . '/services/auth_throttle.php';
 require_once __DIR__ . '/services/telemetry_settings.php';
 require_once __DIR__ . '/services/telemetry_privacy.php';
 require_once __DIR__ . '/services/telemetry.php';

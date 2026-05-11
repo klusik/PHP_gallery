@@ -129,7 +129,7 @@ function gallery_thumbs_dir(array $gallery, bool $create = false): string
     // That was correct for existing thumbnail folders, but it broke safe maintenance
     // workflows that need to inspect a future/non-existing thumbs directory first.
     if (!thumbnail_path_inside_existing_gallery($galleryRoot, $path)) {
-        throw new RuntimeException('Thumbnail path is outside its gallery.');
+        throw new RuntimeException(t('thumbnails.error_path_outside_gallery'));
     }
 
     return $path;
@@ -219,7 +219,7 @@ function normalize_filesystem_path(string $path): string
 function thumbnail_filename(array $image, int $size, string $format = 'jpg'): string
 {
     if (!in_array($format, ['jpg', 'webp'], true)) {
-        throw new RuntimeException('Unsupported thumbnail format.');
+        throw new RuntimeException(t('thumbnails.error_unsupported_format'));
     }
     return pathinfo((string) $image['filename'], PATHINFO_FILENAME) . '_thumb' . $size . '.' . $format;
 }
@@ -235,7 +235,7 @@ function thumbnail_filename(array $image, int $size, string $format = 'jpg'): st
 function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
     if (!in_array($size, thumbnail_sizes(), true)) {
-        throw new RuntimeException('Unsupported thumbnail size.');
+        throw new RuntimeException(t('thumbnails.error_unsupported_size'));
     }
     return gallery_thumbs_dir($gallery, false) . DIRECTORY_SEPARATOR . thumbnail_filename($image, $size, $format);
 }
@@ -248,14 +248,7 @@ function thumbnail_abs_path(array $image, array $gallery, int $size, string $for
  */
 function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
 {
-    if ((string) ($image['visibility'] ?? '') !== 'public' || gallery_access_requirement($gallery) !== null) {
-        return false;
-    }
-    // $configuredRoot stores an intermediate value used by the surrounding gallery workflow.
-    $configuredRoot = realpath(galleries_root());
-    // $defaultRoot stores an intermediate value used by the surrounding gallery workflow.
-    $defaultRoot = realpath(dirname(__DIR__) . '/galleries');
-    return $configuredRoot !== false && $defaultRoot !== false && $configuredRoot === $defaultRoot;
+    return false;
 }
 
 /**
@@ -644,23 +637,23 @@ function dng_derivative_generation_supported(): bool
 function dng_derivative_generation_status(): array
 {
     if (function_exists('dng_conversion_supported') && dng_conversion_supported()) {
-        return ['supported' => true, 'reason' => 'DNG RAW conversion support is available through Imagick/ImageMagick.'];
+        return ['supported' => true, 'reason' => t('thumbnail.dng_support.imagick_raw')];
     }
     if (function_exists('dng_embedded_preview_supported') && dng_embedded_preview_supported()) {
-        return ['supported' => true, 'reason' => 'DNG embedded JPEG preview fallback is available.'];
+        return ['supported' => true, 'reason' => t('thumbnail.dng_support.embedded_preview')];
     }
     if (!dng_embedded_preview_supported()) {
-        return ['supported' => false, 'reason' => 'The server cannot decode embedded DNG JPEG previews into WebP. Enable Imagick with JPEG/WebP support or GD with JPEG/WebP support.'];
+        return ['supported' => false, 'reason' => t('thumbnail.dng_support.preview_decode_unavailable')];
     }
     if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
-        return ['supported' => false, 'reason' => 'The Imagick PHP extension is not loaded and full DNG RAW decoding is unavailable. Embedded preview fallback may still work for compatible DNG files.'];
+        return ['supported' => false, 'reason' => t('thumbnail.dng_support.imagick_missing')];
     }
     foreach (['DNG', 'WEBP', 'JPEG'] as $format) {
         if (!imagick_format_supported($format)) {
-            return ['supported' => false, 'reason' => 'The server Imagick/ImageMagick installation does not report ' . $format . ' support, and no usable embedded DNG preview fallback is available.'];
+            return ['supported' => false, 'reason' => t('thumbnail.dng_support.format_missing', ['format' => $format])];
         }
     }
-    return ['supported' => false, 'reason' => 'No usable DNG derivative generation path is available.'];
+    return ['supported' => false, 'reason' => t('thumbnail.dng_support.no_path')];
 }
 
 /**
@@ -951,7 +944,7 @@ function write_dng_derivative(string $sourcePath, string $targetPath, string $fo
 function create_dng_image_derivatives_result(array $image, array $gallery, string $sourcePath): array
 {
     if (!is_file($sourcePath)) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => ['The original DNG file is missing.']];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => [t('thumbnails.dng.error_original_missing')]];
     }
     // $generationStatus stores the concrete DNG converter availability state for user-facing diagnostics.
     $generationStatus = dng_derivative_generation_status();
@@ -981,7 +974,7 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     } else {
         $webpSkipped++;
         $failed++;
-        $errors[] = 'Could not create the full-size WebP display master for this DNG. RAW decoding failed and no baseline/progressive embedded JPEG preview could be used.';
+        $errors[] = t('thumbnails.dng.error_master_failed');
     }
 
     foreach (thumbnail_sizes() as $size) {
@@ -1006,7 +999,7 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     }
 
     if ($failed > 0 && !$errors) {
-        $errors[] = 'One or more DNG derivatives could not be generated. Check Imagick/ImageMagick RAW support, GD WebP support, and whether the DNG contains an embedded JPEG preview.';
+        $errors[] = t('thumbnails.dng.error_derivatives_failed');
     }
 
     return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors))];
@@ -1473,6 +1466,69 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
     ], JSON_UNESCAPED_SLASHES));
 
     return $summary;
+}
+
+
+/**
+ * Return a cached thumbnail maintenance summary without warming the cache.
+ *
+ * The admin dashboard calls this helper so the first page after login does not
+ * spend seconds checking thumbnail files on disk. Explicit thumbnail maintenance
+ * actions still use thumbnail_maintenance_summary() and can refresh the cache.
+ *
+ * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ */
+function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
+{
+    // $galleryIds stores the normalized optional gallery scope used by both cache keys and summary queries.
+    $galleryIds = $galleryIds === null ? null : array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if ($galleryIds !== null && $galleryIds === []) {
+        return [
+            'images_scanned' => 0,
+            'images_with_missing' => 0,
+            'missing_variants' => 0,
+            'webp_skipped' => 0,
+            'limited' => false,
+            'deferred' => false,
+            'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
+        ];
+    }
+
+    // $scopeKey stores a compact stable key for the dashboard-wide or gallery-scoped summary.
+    $scopeKey = $galleryIds === null ? 'all' : implode(',', $galleryIds);
+    // $cacheKey stores the DB setting that contains the cached summary payload.
+    $cacheKey = 'thumbnail_maintenance_summary_' . substr(hash('sha256', $scopeKey . '|' . $maxImagesToScan), 0, 16);
+    // $generation stores the invalidation marker changed after thumbnail creation or deletion.
+    $generation = (string) app_setting('thumbnail_maintenance_summary_generation', '0');
+    // $fingerprint stores the cheap image inventory state. It changes when images are imported.
+    $fingerprint = thumbnail_inventory_fingerprint($galleryIds);
+    // $cachedJson stores the previous summary payload, if any.
+    $cachedJson = (string) app_setting($cacheKey, '');
+
+    if ($cachedJson !== '') {
+        // $cachedPayload stores the decoded summary cache candidate.
+        $cachedPayload = json_decode($cachedJson, true);
+        if (is_array($cachedPayload)
+            && (string) ($cachedPayload['generation'] ?? '') === $generation
+            && (string) ($cachedPayload['fingerprint'] ?? '') === $fingerprint
+            && time() - (int) ($cachedPayload['created_at'] ?? 0) <= max(30, $ttlSeconds)
+            && is_array($cachedPayload['summary'] ?? null)
+        ) {
+            $cachedPayload['summary']['inventory_fingerprint'] = $fingerprint;
+            $cachedPayload['summary']['deferred'] = false;
+            return $cachedPayload['summary'];
+        }
+    }
+
+    return [
+        'images_scanned' => 0,
+        'images_with_missing' => 0,
+        'missing_variants' => 0,
+        'webp_skipped' => 0,
+        'limited' => false,
+        'deferred' => true,
+        'inventory_fingerprint' => $fingerprint,
+    ];
 }
 
 /**

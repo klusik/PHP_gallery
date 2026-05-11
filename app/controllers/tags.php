@@ -56,9 +56,9 @@ function cms_tag(): void
     }
     // Variable $galleries stores this steps working value.
     $galleries = public_galleries_for_tag((int) $tag['id']);
-    render_header('Tag: ' . (string) $tag['name']);
-    echo '<nav class="breadcrumbs" aria-label="Breadcrumbs"><a href="' . e(url_for('home')) . '">Galleries</a><span aria-hidden="true">/</span><span>Tag: ' . e($tag['name']) . '</span></nav>';
-    echo '<section class="hero"><h1>Tag: ' . e($tag['name']) . '</h1><p class="muted">' . count($galleries) . ' galleries</p></section>';
+    render_header(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']]));
+    echo '<nav class="breadcrumbs" aria-label="' . e(t('public.common.breadcrumbs', 'Breadcrumbs')) . '"><a href="' . e(url_for('home')) . '">' . e(t('public.gallery.galleries', 'Galleries')) . '</a><span aria-hidden="true">/</span><span>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</span></nav>';
+    echo '<section class="hero"><h1>' . e(t('public.tag.title_value', 'Tag: {tag}', ['tag' => (string) $tag['name']])) . '</h1><p class="muted">' . e(t('public.tag.gallery_count', '{count} galleries', ['count' => count($galleries)])) . '</p></section>';
     if ($galleries) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<section class="grid gallery-list-content" data-back-to-top-list>';
@@ -92,6 +92,34 @@ function render_tag_list(array $tags, ?string $label = null): void
 }
 
 /**
+ * Render a one-line tag preview for horizontal gallery cards.
+ *
+ * Full gallery pages still render every tag through render_tag_list(). This
+ * helper keeps card metadata visually stable beside the optional manual date
+ * by showing the first tags inline and replacing the remaining tags with a
+ * compact ellipsis indicator.
+ */
+function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
+{
+    if (!$tags) {
+        return;
+    }
+
+    $visibleLimit = max(1, $visibleLimit);
+    $visibleTags = array_slice($tags, 0, $visibleLimit);
+    $hiddenCount = max(0, count($tags) - count($visibleTags));
+
+    echo '<p class="tag-list tag-list-compact">';
+    foreach ($visibleTags as $tag) {
+        echo '<a class="tag" href="' . e(url_for('tag', ['slug' => $tag['slug']])) . '">' . e($tag['name']) . '</a>';
+    }
+    if ($hiddenCount > 0) {
+        echo '<span class="tag tag-more" title="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '" aria-label="' . e(t('gallery.more_tags', '{count} more tags', ['count' => $hiddenCount])) . '">...</span>';
+    }
+    echo '</p>';
+}
+
+/**
  * Render the public vote controls and current vote state.
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
@@ -102,9 +130,9 @@ function render_vote_form(int $imageId, int $score, int $currentVote, bool $voti
     echo '<form class="vote-row image-vote-overlay" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
     echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
     echo csrf_field();
-    echo '<span class="vote-score-badge" aria-label="Likes"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
+    echo '<span class="vote-score-badge" aria-label="' . e(t('public.vote.likes', 'Likes')) . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
     echo '<span class="vote-action-group">';
-    echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="Vote up">&#9650;</button>';
+    echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="' . e(t('public.vote.up', 'Vote up')) . '">&#9650;</button>';
     echo '</span>';
     echo '</form>';
 }
@@ -131,7 +159,7 @@ function cms_vote(): void
     if (!in_array($vote, [0, 1], true) || !$image || !$gallery || !gallery_voting_allowed($gallery) || (($image['visibility'] !== 'public' || !visitor_can_access_gallery($gallery)) && !current_user())) {
         http_response_code(422);
         header('Content-Type: application/json');
-        echo json_encode(['error' => 'Invalid vote.']);
+        echo json_encode(['error' => t('public.vote.invalid', 'Invalid vote.')]);
         return;
     }
     // Variable $user stores this steps working value.

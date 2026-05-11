@@ -161,9 +161,21 @@ function picture_game_images(array $gallery): array
     // Variable $filenameSelect stores this steps working value.
     $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
     // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
     $stmt->execute($galleryIds);
-    return $cache[$cacheKey] = $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+    $galleryCache = [(int) $gallery['id'] => $gallery];
+    $visible = [];
+    foreach ($rows as $image) {
+        $imageGalleryId = (int) $image['gallery_id'];
+        if (!array_key_exists($imageGalleryId, $galleryCache)) {
+            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+        }
+        if (public_image_visible_to_current_visitor($image, $galleryCache[$imageGalleryId])) {
+            $visible[] = $image;
+        }
+    }
+    return $cache[$cacheKey] = $visible;
 }
 
 /**

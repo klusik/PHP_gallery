@@ -48,6 +48,16 @@ return [
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
     'setup_key' => 'replace-with-a-temporary-setup-key',
 
+    // Language configuration is intentionally small for the first localization
+    // foundation. Add app/lang/<code>.json files and list their codes here.
+    // Legacy app/lang/<code>.php files are still accepted as fallback dictionaries.
+    'language' => [
+        'default' => 'en',
+        'available' => ['en', 'cs'],
+        'show_missing_keys_to_admins' => false,
+        'append_missing_keys_to_ui' => false,
+    ],
+
     // Password reset email is disabled by default because many shared hosts
     // require explicit mail setup. Enable it only after the From address works.
     // mail_transport currently supports php_mail. SMTP can be added later without

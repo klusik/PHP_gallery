@@ -449,7 +449,7 @@ function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = 
                 $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
             }
             $imageGallery = $galleryCache[$imageGalleryId];
-            if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !visitor_can_access_gallery($imageGallery))) {
+            if (!gallery_allows_gps_maps($imageGallery) || ($publicOnly && !public_image_visible_to_current_visitor($image, $imageGallery))) {
                 continue;
             }
             $points[] = image_map_point($image, $imageGallery, true);

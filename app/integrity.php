@@ -153,7 +153,7 @@ function integrity_load_manifest(): array
     if (!is_file($manifestPath)) {
         return [
             'ok' => false,
-            'error' => 'Core manifest is missing.',
+            'error' => function_exists('t') ? t('integrity.error.manifest_missing', 'Core manifest is missing.') : 'Core manifest is missing.',
             'manifest' => [],
         ];
     }
@@ -163,7 +163,7 @@ function integrity_load_manifest(): array
     if ($manifestJson === false || trim($manifestJson) === '') {
         return [
             'ok' => false,
-            'error' => 'Core manifest is empty or unreadable.',
+            'error' => function_exists('t') ? t('integrity.error.manifest_empty', 'Core manifest is empty or unreadable.') : 'Core manifest is empty or unreadable.',
             'manifest' => [],
         ];
     }
@@ -173,7 +173,7 @@ function integrity_load_manifest(): array
     if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest['files'])) {
         return [
             'ok' => false,
-            'error' => 'Core manifest is invalid JSON or does not contain a files object.',
+            'error' => function_exists('t') ? t('integrity.error.manifest_invalid', 'Core manifest is invalid JSON or does not contain a files object.') : 'Core manifest is invalid JSON or does not contain a files object.',
             'manifest' => [],
         ];
     }
@@ -414,10 +414,10 @@ function integrity_status(bool $forceRefresh = false): array
 function integrity_status_label(string $status): string
 {
     return match ($status) {
-        'ok' => 'OK',
-        'warning' => 'Warning',
-        'modified' => 'Modified core files',
-        'error' => 'Integrity check error',
-        default => 'Unknown',
+        'ok' => t('admin.integrity.status_ok', 'OK'),
+        'warning' => t('admin.integrity.status_warning', 'Warning'),
+        'modified' => t('admin.integrity.status_modified', 'Modified core files'),
+        'error' => t('admin.integrity.status_error', 'Integrity check error'),
+        default => t('admin.integrity.status_unknown', 'Unknown'),
     };
 }

@@ -91,6 +91,8 @@ $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
 $excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
+# Variable $alwaysIncludeRelatives stores deploy paths that must stay packaged even as filters evolve.
+$alwaysIncludeRelatives = @('app/lang')
 
 
 # Function `Invoke-ManifestGenerator` handles manifest refresh before deployment.
@@ -146,6 +148,13 @@ function Should-Skip($Path) {
     $portableRelative = $relative.Replace('\', '/')
     if ($portableRelative -eq 'cache/.htaccess' -or $portableRelative -eq 'galleries/.htaccess') {
         return $false
+    }
+    foreach ($alwaysIncludeRelative in $alwaysIncludeRelatives) {
+        # Variable $portableAlwaysInclude stores one deploy path that must not be filtered out.
+        $portableAlwaysInclude = $alwaysIncludeRelative.Replace('\', '/').Trim('/')
+        if ($portableRelative -eq $portableAlwaysInclude -or $portableRelative.StartsWith($portableAlwaysInclude + '/')) {
+            return $false
+        }
     }
     foreach ($dir in $excludeDirs) {
         if ($relative -match "^[.\\/]?$([regex]::Escape($dir))([\\/]|$)") { return $true }

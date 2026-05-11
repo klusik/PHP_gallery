@@ -42,6 +42,62 @@ declare(strict_types=1);
  * calling it after app/controllers.php loads this separated controller file.
  */
 
+
+/**
+ * Build the patch notes viewer model for the updates screen.
+ */
+function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null): array
+{
+    // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
+    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null);
+    // $patchNotesVersions stores the release-note sections available to the admin selector.
+    $patchNotesVersions = (array) ($patchNotesData['versions'] ?? []);
+    // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
+    $selectedPatchVersion = application_update_normalize_version((string) ($requestedVersion ?? cms_current_version())) ?? cms_current_version();
+    if (!isset($patchNotesVersions[$selectedPatchVersion]) && $patchNotesVersions !== []) {
+        $selectedPatchVersion = array_key_exists(cms_current_version(), $patchNotesVersions) ? cms_current_version() : (string) array_key_first($patchNotesVersions);
+    }
+
+    return [
+        'data' => $patchNotesData,
+        'versions' => $patchNotesVersions,
+        'selected_version' => $selectedPatchVersion,
+    ];
+}
+
+/**
+ * Render only the currently selected patch notes section.
+ */
+function cms_render_update_patch_notes_fragment(array $patchNotesModel): string
+{
+    // $patchNotesData stores source diagnostics displayed above the rendered notes.
+    $patchNotesData = (array) ($patchNotesModel['data'] ?? []);
+    // $patchNotesVersions stores parsed release-note entries keyed by version.
+    $patchNotesVersions = (array) ($patchNotesModel['versions'] ?? []);
+    // $selectedPatchVersion stores the selected release-note key.
+    $selectedPatchVersion = (string) ($patchNotesModel['selected_version'] ?? cms_current_version());
+
+    ob_start();
+    echo '<div class="patch-notes-fragment-inner">';
+    if (!empty($patchNotesData['error'])) {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_remote_failed', 'GitHub patch notes could not be loaded, showing bundled notes if available. Error: {error}', ['error' => (string) $patchNotesData['error']])) . '</p>';
+    } else {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_source_value', 'Source: {source}, branch: {branch}', ['source' => (string) ($patchNotesData['source'] ?? 'github'), 'branch' => (string) ($patchNotesData['branch'] ?? '')])) . '</p>';
+    }
+    if (isset($patchNotesVersions[$selectedPatchVersion])) {
+        // $selectedEntry stores the parsed release notes for the currently displayed version.
+        $selectedEntry = (array) $patchNotesVersions[$selectedPatchVersion];
+        echo '<article class="patch-notes-content">';
+        echo '<h3>' . e((string) ($selectedEntry['title'] ?? ('Version ' . $selectedPatchVersion))) . '</h3>';
+        echo (string) ($selectedEntry['html'] ?? '');
+        echo '</article>';
+    } else {
+        echo '<p class="muted patch-notes-source-note">' . e(t('admin.updates.patch_notes_unavailable', 'No patch notes are available yet.')) . '</p>';
+    }
+    echo '</div>';
+    return (string) ob_get_clean();
+}
+
 /**
  * Check GitHub for newer application versions and install them on request.
  */
@@ -59,30 +115,30 @@ function cms_admin_update(): void
             if ($action === 'beta_install') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
-                admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.beta_installed', t('admin.updates.log_beta_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_installed', 'Installed beta code {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             } elseif ($action === 'beta_revert') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = restore_application_stable_release();
-                admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head. Copied ' . (int) $result['files_copied'] . ' files and removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s).';
+                admin_log_event('info', 'update.beta_reverted', t('admin.updates.log_beta_reverted'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_reverted', 'Restored the stable release from the GitHub branch head. Copied {files} files and removed {removed} obsolete path(s).', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0)]);
             } elseif ($action === 'clean_reinstall') {
                 if (strtoupper(trim((string) ($_POST['clean_reinstall_confirm'] ?? ''))) !== 'REINSTALL') {
-                    throw new RuntimeException('Type REINSTALL to confirm the clean reinstall.');
+                    throw new RuntimeException(t('admin.updates.confirm_reinstall_error'));
                 }
                 // $result stores clean reinstall diagnostics for the admin log and user-facing notice.
                 $result = clean_reinstall_current_application_version();
-                admin_log_event('info', 'update.clean_reinstalled', 'Admin performed a clean reinstall of the stable branch head.', $result, ['category' => 'update', 'severity' => 'warning']);
-                $_SESSION['admin_update_notice'] = 'Clean reinstall finished. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' unexpected path(s), removed ' . (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0) . ' cached ZIP file(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.clean_reinstalled', t('admin.updates.log_clean_reinstalled'), $result, ['category' => 'update', 'severity' => 'warning']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_clean_reinstalled', 'Clean reinstall finished. Copied {files} files, removed {removed} unexpected path(s), removed {zips} cached ZIP file(s), and applied {migrations} migrations.', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'zips' => (string) (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             } else {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_update();
-                admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.installed', t('admin.updates.log_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_updated', 'Updated to version {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             }
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'update.failed', 'Application update failed.', [
+            admin_log_event('warning', 'update.failed', t('admin.updates.log_failed'), [
                 'action' => (string) ($_POST['update_action'] ?? 'stable_update'),
                 'error' => $exception->getMessage(),
                 'current_version' => cms_current_version(),
@@ -101,64 +157,120 @@ function cms_admin_update(): void
     $status = check_application_update();
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
-    render_header('Application updates');
-    echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
-    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">Open GitHub</a>';
+    // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
+    $patchNotesModel = cms_update_patch_notes_model($status, (string) ($_GET['patch_version'] ?? cms_current_version()));
+    // $patchNotesVersions stores the release-note sections available to the admin selector.
+    $patchNotesVersions = (array) ($patchNotesModel['versions'] ?? []);
+    // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
+    $selectedPatchVersion = (string) ($patchNotesModel['selected_version'] ?? cms_current_version());
+    if (isset($_GET['patch_notes_fragment'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => true,
+            'version' => $selectedPatchVersion,
+            'html' => cms_render_update_patch_notes_fragment($patchNotesModel),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return;
+    }
+    render_header(t('admin.updates.title'));
+    echo '<section class="hero"><h1>' . e(t('admin.updates.title')) . '</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
+    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
     echo '</nav></section>';
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
     if ($error !== null) {
-        echo '<div class="notice">Update failed: ' . e($error) . '</div>';
+        echo '<div class="notice">' . e(t('admin.updates.failed_value', ['error' => $error])) . '</div>';
     }
-    echo '<section class="panel"><h2>Status</h2>';
-    echo '<p>Installed version: <strong>' . e(cms_current_version()) . '</strong></p>';
+    echo '<section class="panel"><h2>' . e(t('admin.updates.status')) . '</h2>';
+    echo '<p>' . e(t('admin.updates.installed_version')) . ': <strong>' . e(cms_current_version()) . '</strong></p>';
     if ($betaActive) {
-        echo '<p>Active channel: <strong>beta</strong></p>';
-        echo '<p>Installed beta code: <code>' . e(application_update_beta_commit()) . '</code></p>';
+        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_beta')) . '</strong></p>';
+        echo '<p>' . e(t('admin.updates.installed_beta_code')) . ': <code>' . e(application_update_beta_commit()) . '</code></p>';
     } else {
-        echo '<p>Active channel: <strong>stable</strong></p>';
+        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_stable')) . '</strong></p>';
     }
-    echo '<p>Repository: <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
+    echo '<p>' . e(t('admin.updates.repository')) . ': <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
     if (!empty($status['error'])) {
-        echo '<p class="muted">Could not check for updates: ' . e((string) $status['error']) . '</p>';
+        echo '<p class="muted">' . e(t('admin.updates.check_failed_value', ['error' => (string) $status['error']])) . '</p>';
     } else {
-        echo '<p>Latest version on GitHub: <strong>' . e((string) $status['latest_version']) . '</strong></p>';
-        echo '<p class="muted">Checked branch: ' . e((string) $status['branch']) . '</p>';
+        echo '<p>' . e(t('admin.updates.latest_version')) . ': <strong>' . e((string) $status['latest_version']) . '</strong></p>';
+        echo '<p class="muted">' . e(t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</p>';
         if (!empty($status['version_source'])) {
-            echo '<p class="muted">Version source: ' . e((string) $status['version_source']) . '</p>';
+            echo '<p class="muted">' . e(t('admin.updates.version_source_value', ['source' => (string) $status['version_source']])) . '</p>';
         }
         if (!empty($status['update_available'])) {
             echo '<form method="post" class="form-grid">' . csrf_field();
             echo '<input type="hidden" name="update_action" value="stable_update">';
-            echo '<p>A newer version is available. The updater will download the GitHub branch archive, back up overwritten files under <code>cache/updates/backups</code>, and keep local config, galleries, cache, and custom CSS untouched.</p>';
-            echo '<button type="submit" class="is-update-pending">Update(1)</button></form>';
+            echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
+            echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
         } else {
-            echo '<p class="muted">This installation is current.</p>';
+            echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
         }
     }
-    echo '<hr><h3>Beta build</h3>';
+    echo '<details class="patch-notes-viewer" data-patch-notes-viewer data-fragment-url="' . e(url_for('admin_update', ['patch_notes_fragment' => '1'])) . '">';
+    echo '<summary><span>' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</span><small>' . e(t('admin.updates.patch_notes_summary', 'Show release notes from GitHub')) . '</small></summary>';
+    echo '<div class="patch-notes-toolbar">';
+    echo '<form method="get" class="patch-notes-select-form" data-patch-notes-form>';
+    echo '<input type="hidden" name="page" value="admin_update">';
+    echo '<label>' . e(t('admin.updates.patch_notes_version_label', 'Displayed version'));
+    echo '<select name="patch_version" data-patch-notes-select>';
+    foreach ($patchNotesVersions as $version => $entry) {
+        // $selected stores the select state for the currently displayed patch notes version.
+        $selected = (string) $version === $selectedPatchVersion ? ' selected' : '';
+        echo '<option value="' . e((string) $version) . '"' . $selected . '>' . e((string) ($entry['title'] ?? ('Version ' . $version))) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<button type="submit" class="button secondary">' . e(t('admin.updates.patch_notes_show_button', 'Show')) . '</button>';
+    echo '</form>';
+    echo '<div class="patch-notes-shortcuts">';
+    if (isset($patchNotesVersions[cms_current_version()])) {
+        echo '<a class="button secondary" href="' . e(url_for('admin_update', ['patch_version' => cms_current_version()])) . '" data-patch-version="' . e(cms_current_version()) . '">' . e(t('admin.updates.patch_notes_current_button', 'Installed version')) . '</a>';
+    }
+    if (empty($status['error']) && !empty($status['update_available']) && !empty($status['latest_version']) && isset($patchNotesVersions[(string) $status['latest_version']])) {
+        echo '<a class="button is-update-pending" href="' . e(url_for('admin_update', ['patch_version' => (string) $status['latest_version']])) . '" data-patch-version="' . e((string) $status['latest_version']) . '">' . e(t('admin.updates.patch_notes_pending_button', 'Pending update notes')) . '</a>';
+    }
+    echo '</div>';
+    echo '</div>';
+    echo '<div class="patch-notes-fragment" data-patch-notes-fragment aria-live="polite">';
+    echo cms_render_update_patch_notes_fragment($patchNotesModel);
+    echo '</div>';
+    echo '</details>';
+    echo '<script>';
+    echo '(function(){';
+    echo 'var viewer=document.querySelector("[data-patch-notes-viewer]");if(!viewer||!window.fetch){return;}';
+    echo 'var form=viewer.querySelector("[data-patch-notes-form]");var select=viewer.querySelector("[data-patch-notes-select]");var target=viewer.querySelector("[data-patch-notes-fragment]");';
+    echo 'var endpoint=viewer.getAttribute("data-fragment-url")||"";';
+    echo 'function setLoading(active){viewer.classList.toggle("is-loading",!!active);if(target){target.setAttribute("aria-busy",active?"true":"false");}}';
+    echo 'function loadVersion(version,pushState){if(!endpoint||!target||!version){return;}var url=new URL(endpoint,window.location.href);url.searchParams.set("patch_notes_fragment","1");url.searchParams.set("patch_version",version);setLoading(true);fetch(url.toString(),{headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"}}).then(function(response){if(!response.ok){throw new Error("HTTP "+response.status);}return response.json();}).then(function(payload){if(!payload||!payload.ok){throw new Error("Invalid response");}target.innerHTML=payload.html||"";if(select&&payload.version){select.value=payload.version;}if(pushState&&window.history&&window.history.replaceState){var pageUrl=new URL(window.location.href);pageUrl.searchParams.set("patch_version",payload.version||version);window.history.replaceState(null,"",pageUrl.toString());}}).catch(function(){var fallbackUrl=new URL(' . json_encode(url_for('admin_update')) . ',window.location.href);fallbackUrl.searchParams.set("patch_version",version);window.location.href=fallbackUrl.toString();}).finally(function(){setLoading(false);});}';
+    echo 'if(form){form.addEventListener("submit",function(event){event.preventDefault();viewer.open=true;loadVersion(select?select.value:"",true);});}';
+    echo 'if(select){select.addEventListener("change",function(){viewer.open=true;loadVersion(select.value,true);});}';
+    echo 'viewer.querySelectorAll("[data-patch-version]").forEach(function(link){link.addEventListener("click",function(event){event.preventDefault();viewer.open=true;loadVersion(link.getAttribute("data-patch-version")||"",true);});});';
+    echo '})();';
+    echo '</script>';
+
+    echo '<hr><h3>' . e(t('admin.updates.beta_build')) . '</h3>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="beta_install">';
-    echo '<label>Beta code<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
-    echo '<p class="muted">Enter the beta code for the snapshot you want to install.</p>';
-    echo '<button type="submit">Install beta snapshot</button>';
+    echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
+    echo '<p class="muted">' . e(t('admin.updates.beta_code_help')) . '</p>';
+    echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
     echo '</form>';
     if ($betaActive) {
         echo '<form method="post" class="form-grid form-grid-spaced">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
-        echo '<p class="muted">This downloads the stable branch head from GitHub and restores application files from that release. Database changes from the beta are not rolled back automatically.</p>';
-        echo '<button type="submit" class="button secondary">Restore stable release</button>';
+        echo '<p class="muted">' . e(t('admin.updates.restore_stable_help')) . '</p>';
+        echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
         echo '</form>';
     }
-    echo '<hr><h3>Clean reinstall current version</h3>';
+    echo '<hr><h3>' . e(t('admin.updates.clean_reinstall_title')) . '</h3>';
     echo '<form method="post" class="form-grid form-grid-spaced danger-zone">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="clean_reinstall">';
-    echo '<p>This downloads a clean copy of the stable branch, backs up replaced files, removes application files that do not belong to the release, clears generated ZIP files from cache, runs migrations, and invalidates PHP OPcache.</p>';
-    echo '<p class="muted">Protected data is kept: <code>config.php</code>, <code>galleries/</code>, <code>custom_css/</code>, <code>cache/</code> metadata, and <code>public/assets/custom.css</code>. This is intended for broken design or partial update recovery.</p>';
-    echo '<label>Type REINSTALL to confirm<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
-    echo '<button type="submit" class="button danger">Clean reinstall current version</button>';
+    echo '<p>' . e(t('admin.updates.clean_reinstall_description')) . '</p>';
+    echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
+    echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
+    echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
     echo '</form>';
     echo '</section>';
     render_footer();

@@ -55,21 +55,21 @@ function render_admin_integrity_summary(array $integrityStatus): void
     // $checkedAt stores an intermediate value used by the surrounding gallery workflow.
     $checkedAt = (string) ($integrityStatus['checked_at_iso'] ?? '');
 
-    echo '<section class="panel"><h2>System integrity</h2>';
-    echo '<p><strong>Status:</strong> ' . e($label) . '</p>';
+    echo '<section class="panel"><h2>' . e(t('admin.integrity.title', 'System integrity')) . '</h2>';
+    echo '<p><strong>' . e(t('admin.integrity.status', 'Status')) . ':</strong> ' . e($label) . '</p>';
     if ($status === 'ok') {
-        echo '<p class="muted">Core PHP, HTML, CSS and JavaScript files match the installed manifest.</p>';
+        echo '<p class="muted">' . e(t('admin.integrity.summary_ok', 'Core PHP, HTML, CSS and JavaScript files match the installed manifest.')) . '</p>';
     } elseif ($status === 'warning') {
-        echo '<p class="notice">Core files match, but ' . (int) $unknownCount . ' unknown core-like file(s) were found.</p>';
+        echo '<p class="notice">' . e(t('admin.integrity.summary_warning', 'Core files match, but {count} unknown core-like file(s) were found.', ['count' => (string) $unknownCount])) . '</p>';
     } elseif ($status === 'modified') {
-        echo '<p class="notice">Detected ' . (int) $modifiedCount . ' modified and ' . (int) $missingCount . ' missing core file(s).</p>';
+        echo '<p class="notice">' . e(t('admin.integrity.summary_modified', 'Detected {modified} modified and {missing} missing core file(s).', ['modified' => (string) $modifiedCount, 'missing' => (string) $missingCount])) . '</p>';
     } else {
-        echo '<p class="notice">' . e((string) ($integrityStatus['manifest_error'] ?? 'Integrity check failed.')) . '</p>';
+        echo '<p class="notice">' . e((string) ($integrityStatus['manifest_error'] ?? t('admin.integrity.check_failed', 'Integrity check failed.'))) . '</p>';
     }
     if ($checkedAt !== '') {
-        echo '<p class="muted">Last checked: ' . e($checkedAt) . '</p>';
+        echo '<p class="muted">' . e(t('admin.integrity.last_checked_value', 'Last checked: {time}', ['time' => $checkedAt])) . '</p>';
     }
-    echo '<p><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">Show details</a></p>';
+    echo '<p><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.integrity.show_details', 'Show details')) . '</a></p>';
     echo '</section>';
 }
 
@@ -83,7 +83,7 @@ function render_admin_integrity_path_list(string $title, array $paths): void
 {
     echo '<h3>' . e($title) . '</h3>';
     if (!$paths) {
-        echo '<p class="muted">None.</p>';
+        echo '<p class="muted">' . e(t('admin.integrity.none', 'None.')) . '</p>';
         return;
     }
 
@@ -117,31 +117,31 @@ function cms_admin_integrity(): void
 
     // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = integrity_status(false);
-    render_header('System integrity');
-    echo '<section class="hero"><h1>System integrity</h1><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
+    render_header(t('admin.integrity.title', 'System integrity'));
+    echo '<section class="hero"><h1>' . e(t('admin.integrity.title', 'System integrity')) . '</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard', 'Back to dashboard')) . '</a>';
     echo '<form method="post" action="' . e(url_for('admin_integrity')) . '" class="inline-action-form">' . csrf_field();
-    echo '<button type="submit">Check now</button>';
+    echo '<button type="submit">' . e(t('admin.integrity.check_now', 'Check now')) . '</button>';
     echo '</form>';
     echo '</nav></section>';
 
     if (isset($_GET['checked'])) {
-        echo '<div class="notice">Integrity check completed.</div>';
+        echo '<div class="notice">' . e(t('admin.integrity.completed', 'Integrity check completed.')) . '</div>';
     }
 
     echo '<section class="panel">';
-    echo '<h2>Status: ' . e(integrity_status_label((string) ($status['status'] ?? 'error'))) . '</h2>';
-    echo '<p><strong>Manifest version:</strong> ' . e((string) ($status['version'] ?? '')) . '</p>';
-    echo '<p><strong>Last checked:</strong> ' . e((string) ($status['checked_at_iso'] ?? '')) . '</p>';
+    echo '<h2>' . e(t('admin.integrity.status_value', 'Status: {status}', ['status' => integrity_status_label((string) ($status['status'] ?? 'error'))])) . '</h2>';
+    echo '<p><strong>' . e(t('admin.integrity.manifest_version', 'Manifest version')) . ':</strong> ' . e((string) ($status['version'] ?? '')) . '</p>';
+    echo '<p><strong>' . e(t('admin.integrity.last_checked', 'Last checked')) . ':</strong> ' . e((string) ($status['checked_at_iso'] ?? '')) . '</p>';
 
     if (!empty($status['manifest_error'])) {
         echo '<p class="notice">' . e((string) $status['manifest_error']) . '</p>';
     }
 
-    render_admin_integrity_path_list('Modified core files', (array) ($status['modified'] ?? []));
-    render_admin_integrity_path_list('Missing core files', (array) ($status['missing'] ?? []));
-    render_admin_integrity_path_list('Unknown core-like files', (array) ($status['unknown'] ?? []));
-    echo '<p class="muted">Ignored folders include cache, galleries, custom CSS, local config, and common hosting/runtime files.</p>';
+    render_admin_integrity_path_list(t('admin.integrity.modified_core_files', 'Modified core files'), (array) ($status['modified'] ?? []));
+    render_admin_integrity_path_list(t('admin.integrity.missing_core_files', 'Missing core files'), (array) ($status['missing'] ?? []));
+    render_admin_integrity_path_list(t('admin.integrity.unknown_core_files', 'Unknown core-like files'), (array) ($status['unknown'] ?? []));
+    echo '<p class="muted">' . e(t('admin.integrity.ignored_folders', 'Ignored folders include cache, galleries, custom CSS, local config, and common hosting/runtime files.')) . '</p>';
     echo '</section>';
     render_footer();
 }

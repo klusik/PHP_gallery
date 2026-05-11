@@ -43,7 +43,7 @@ declare(strict_types=1);
 function gallery_upload_entries(?array $files): array
 {
     if (!$files || empty($files['name']) || !is_array($files['name'])) {
-        throw new RuntimeException('Choose at least one image to upload.');
+        throw new RuntimeException(t('upload.error.choose_image', 'Choose at least one image to upload.'));
     }
     // $entries stores an intermediate value used by the surrounding gallery workflow.
     $entries = [];
@@ -59,36 +59,36 @@ function gallery_upload_entries(?array $files): array
         // $tmpName stores an intermediate value used by the surrounding gallery workflow.
         $tmpName = (string) ($files['tmp_name'][$index] ?? '');
         if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-            throw new RuntimeException('Uploaded file is not available.');
+            throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
         }
         // $originalName stores an intermediate value used by the surrounding gallery workflow.
         $originalName = (string) $name;
         if (!is_supported_image_path($originalName)) {
             // $message stores an intermediate value used by the surrounding gallery workflow.
-            $message = 'Only JPG, PNG, GIF, and WebP images can be uploaded.';
+            $message = t('upload.error.supported_images_basic', 'Only JPG, PNG, GIF, and WebP images can be uploaded.');
             if (heic_conversion_supported() && raw_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.';
+                $message = t('upload.error.supported_images_heic_dng', 'Only JPG, PNG, GIF, WebP, HEIC, HEIF, and DNG images can be uploaded.');
             } elseif (heic_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.';
+                $message = t('upload.error.supported_images_heic', 'Only JPG, PNG, GIF, WebP, HEIC, and HEIF images can be uploaded.');
             } elseif (raw_conversion_supported()) {
                 // $message stores an intermediate value used by the surrounding gallery workflow.
-                $message = 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.';
+                $message = t('upload.error.supported_images_dng', 'Only JPG, PNG, GIF, WebP, and DNG images can be uploaded.');
             }
-            throw new RuntimeException($message . ' Offending file: ' . $originalName . '.');
+            throw new RuntimeException(t('upload.error.offending_file', '{message} Offending file: {filename}.', ['message' => $message, 'filename' => $originalName]));
         }
         if (is_dng_image_path($originalName)) {
             // $dngMetadata stores the readable DNG dimensions reported by Imagick.
             $dngMetadata = dng_image_metadata($tmpName);
             if ($dngMetadata === null) {
-                throw new RuntimeException('One uploaded DNG file could not be decoded by the server.');
+                throw new RuntimeException(t('upload.error.dng_decode_failed', 'One uploaded DNG file could not be decoded by the server.'));
             }
         } else {
             // $info stores an intermediate value used by the surrounding gallery workflow.
             $info = @getimagesize($tmpName);
             if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                throw new RuntimeException('One uploaded file is not a valid image.');
+                throw new RuntimeException(t('upload.error.invalid_image', 'One uploaded file is not a valid image.'));
             }
         }
         $entries[] = [
@@ -98,7 +98,7 @@ function gallery_upload_entries(?array $files): array
         ];
     }
     if (!$entries) {
-        throw new RuntimeException('Choose at least one image to upload.');
+        throw new RuntimeException(t('upload.error.choose_image', 'Choose at least one image to upload.'));
     }
     return $entries;
 }
@@ -581,12 +581,12 @@ function dng_image_metadata(string $path): ?array
 function upload_error_message(int $error): string
 {
     return match ($error) {
-        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'An uploaded file is larger than the server allows.',
-        UPLOAD_ERR_PARTIAL => 'An uploaded file was only partially received.',
-        UPLOAD_ERR_NO_TMP_DIR => 'The server has no temporary upload directory.',
-        UPLOAD_ERR_CANT_WRITE => 'The server could not write an uploaded file.',
-        UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the upload.',
-        default => 'Upload failed.',
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => t('upload.error.too_large_server', 'An uploaded file is larger than the server allows.'),
+        UPLOAD_ERR_PARTIAL => t('upload.error.partial', 'An uploaded file was only partially received.'),
+        UPLOAD_ERR_NO_TMP_DIR => t('upload.error.no_temp_dir', 'The server has no temporary upload directory.'),
+        UPLOAD_ERR_CANT_WRITE => t('upload.error.cannot_write', 'The server could not write an uploaded file.'),
+        UPLOAD_ERR_EXTENSION => t('upload.error.extension_stopped', 'A PHP extension stopped the upload.'),
+        default => t('upload.error.generic', 'Upload failed.'),
     };
 }
 
@@ -643,12 +643,12 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException('Gallery not found.');
+        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
-        throw new RuntimeException('Gallery folder is not writable.');
+        throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
     }
 
     // $stored stores an intermediate value used by the surrounding gallery workflow.
@@ -656,7 +656,7 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
     foreach ($entries as $entry) {
         [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
         if (!move_uploaded_file((string) $entry['tmp_name'], $target)) {
-            throw new RuntimeException('Could not store uploaded image.');
+            throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
         }
         $stored[] = $filename;
     }
@@ -710,17 +710,17 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException('Gallery not found.');
+        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     // $coverDir stores an intermediate value used by the surrounding gallery workflow.
     $coverDir = $galleryRoot . DIRECTORY_SEPARATOR . 'thumbnail';
     if (!is_dir($coverDir) && !mkdir($coverDir, 0775, true)) {
-        throw new RuntimeException('Could not create thumbnail folder.');
+        throw new RuntimeException(t('gallery.error.create_thumbnail_folder_failed', 'Could not create thumbnail folder.'));
     }
     if (!path_inside($galleryRoot, $coverDir)) {
-        throw new RuntimeException('Thumbnail path is outside its gallery.');
+        throw new RuntimeException(t('gallery.error.thumbnail_path_outside_gallery', 'Thumbnail path is outside its gallery.'));
     }
     // $target stores an intermediate value used by the surrounding gallery workflow.
     $target = $coverDir . DIRECTORY_SEPARATOR . 'cover.jpg';
@@ -734,25 +734,25 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
     // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-        throw new RuntimeException('Could not read the uploaded gallery thumbnail image.');
+        throw new RuntimeException(t('gallery.error.cover_read_failed', 'Could not read the uploaded gallery thumbnail image.'));
     }
     if (!extension_loaded('gd')) {
-        throw new RuntimeException('Gallery thumbnail resizing requires the GD extension.');
+        throw new RuntimeException(t('gallery.error.cover_resize_requires_gd', 'Gallery thumbnail resizing requires the GD extension.'));
     }
     // $source stores an intermediate value used by the surrounding gallery workflow.
     $source = image_create_from_path($tmpPath, (string) $info['mime']);
     if (!$source) {
-        throw new RuntimeException('Could not decode the uploaded gallery thumbnail image.');
+        throw new RuntimeException(t('gallery.error.cover_decode_failed', 'Could not decode the uploaded gallery thumbnail image.'));
     }
     if (!write_resized_jpeg($source, (int) $info[0], (int) $info[1], 800, $target)) {
         imagedestroy($source);
-        throw new RuntimeException('Could not store gallery thumbnail.');
+        throw new RuntimeException(t('gallery.error.cover_store_failed', 'Could not store gallery thumbnail.'));
     }
     imagedestroy($source);
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'thumbnail/cover.jpg';
     if (!is_file($target)) {
-        throw new RuntimeException('Could not store gallery thumbnail.');
+        throw new RuntimeException(t('gallery.error.cover_store_failed', 'Could not store gallery thumbnail.'));
     }
     set_gallery_cover_path($galleryId, $relative);
     return $relative;
@@ -772,12 +772,12 @@ function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, arr
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException('Gallery not found.');
+        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
     // $uploadError stores an intermediate value used by the surrounding gallery workflow.
     $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($uploadError === UPLOAD_ERR_NO_FILE) {
-        throw new RuntimeException('Choose a branding image to upload.');
+        throw new RuntimeException(t('branding.error.choose_image', 'Choose a branding image to upload.'));
     }
     if ($uploadError !== UPLOAD_ERR_OK) {
         throw new RuntimeException(upload_error_message($uploadError));
@@ -785,40 +785,40 @@ function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, arr
     // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
-        throw new RuntimeException('Uploaded branding image is not available.');
+        throw new RuntimeException(t('branding.error.file_unavailable', 'Uploaded branding image is not available.'));
     }
     // $originalName stores an intermediate value used by the surrounding gallery workflow.
     $originalName = (string) ($file['name'] ?? '');
     if (!gallery_branding_upload_extension_allowed($originalName)) {
-        throw new RuntimeException('Only JPG, PNG, GIF, and WebP branding images can be uploaded.');
+        throw new RuntimeException(t('branding.error.supported_images', 'Only JPG, PNG, GIF, and WebP branding images can be uploaded.'));
     }
     // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = (int) ($file['size'] ?? 0);
     if ($size > gallery_branding_uploaded_asset_max_bytes()) {
-        throw new RuntimeException('The branding image is larger than 8 MB.');
+        throw new RuntimeException(t('branding.error.too_large', 'The branding image is larger than 8 MB.'));
     }
     // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
     if ($info === false || empty($info['mime'])) {
-        throw new RuntimeException('The uploaded branding image is not a valid image.');
+        throw new RuntimeException(t('branding.error.invalid_image', 'The uploaded branding image is not a valid image.'));
     }
     // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = gallery_branding_mime_extension((string) $info['mime']);
     if ($extension === null) {
-        throw new RuntimeException('Only JPG, PNG, GIF, and WebP branding images can be uploaded.');
+        throw new RuntimeException(t('branding.error.supported_images', 'Only JPG, PNG, GIF, and WebP branding images can be uploaded.'));
     }
     // $galleryRoot stores an intermediate value used by the surrounding gallery workflow.
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     if (!is_dir($galleryRoot) || !is_writable($galleryRoot)) {
-        throw new RuntimeException('Gallery folder is not writable.');
+        throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
     }
     // $brandingDir stores an intermediate value used by the surrounding gallery workflow.
     $brandingDir = $galleryRoot . DIRECTORY_SEPARATOR . 'branding';
     if (!is_dir($brandingDir) && !mkdir($brandingDir, 0775, true)) {
-        throw new RuntimeException('Could not create branding folder.');
+        throw new RuntimeException(t('branding.error.create_folder_failed', 'Could not create branding folder.'));
     }
     if (!path_inside($galleryRoot, $brandingDir)) {
-        throw new RuntimeException('Branding path is outside its gallery.');
+        throw new RuntimeException(t('branding.error.path_outside_gallery', 'Branding path is outside its gallery.'));
     }
     // $stem stores an intermediate value used by the surrounding gallery workflow.
     $stem = gallery_branding_asset_filename_stem($kind);
@@ -827,7 +827,7 @@ function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, arr
     // $stagedTarget stores the uploaded file before the previous asset is replaced.
     $stagedTarget = $brandingDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
     if (!move_uploaded_file($tmpPath, $stagedTarget)) {
-        throw new RuntimeException('Could not store gallery branding image.');
+        throw new RuntimeException(t('branding.error.store_failed', 'Could not store gallery branding image.'));
     }
     foreach (glob($brandingDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
         if (is_file($oldFile)) {
@@ -836,7 +836,7 @@ function store_uploaded_gallery_branding_asset(int $galleryId, string $kind, arr
     }
     if (!@rename($stagedTarget, $target)) {
         @unlink($stagedTarget);
-        throw new RuntimeException('Could not finalize gallery branding image.');
+        throw new RuntimeException(t('branding.error.finalize_failed', 'Could not finalize gallery branding image.'));
     }
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'branding/' . $stem . '.' . $extension;

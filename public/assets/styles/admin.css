@@ -3422,3 +3422,410 @@ button.gallery-row-action.secondary {
 }
 
 
+
+.admin-language-tab-grid {
+    margin-bottom: 1rem;
+}
+
+.admin-language-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.admin-language-table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: collapse;
+}
+
+.admin-language-table th,
+.admin-language-table td {
+    padding: 0.75rem 0.85rem;
+    border-bottom: 1px solid var(--admin-border, #e5ebf2);
+    text-align: left;
+    vertical-align: top;
+}
+
+.admin-language-table th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--admin-muted, #64748b);
+    background: #f8fafc;
+}
+
+.admin-language-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-language-table code {
+    white-space: nowrap;
+}
+
+.admin-language-editor {
+    margin-top: 1rem;
+}
+
+.admin-language-json-editor {
+    width: 100%;
+    min-height: 26rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+}
+
+.admin-language-coverage-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin: 0.25rem 0 0.85rem;
+}
+
+.admin-language-coverage-summary span {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.4rem 0.65rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 999px;
+    background: #fff;
+}
+
+.admin-language-key-details {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.admin-language-key-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.admin-language-key-list {
+    display: block;
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.75rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 12px;
+    background: #fff;
+    white-space: pre-wrap;
+}
+
+.admin-language-conventions {
+    margin-top: 1rem;
+}
+
+.admin-language-convention-list {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.75rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.admin-language-convention-list code {
+    display: inline-flex;
+    margin-right: 0.35rem;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 999px;
+    background: #fff;
+}
+
+/* Admin dashboard render timing panel. */
+.admin-render-profile {
+    margin: 1.5rem 0;
+    border: 1px solid color-mix(in srgb, var(--theme-border, #d1d5db) 80%, transparent);
+    border-radius: var(--theme-radius, 18px);
+    background: color-mix(in srgb, var(--theme-surface, #ffffff) 94%, transparent);
+    color: var(--theme-text, #1f2937);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+}
+
+.admin-render-profile summary {
+    cursor: pointer;
+    padding: 0.9rem 1rem;
+    font-weight: 700;
+    user-select: none;
+}
+
+.admin-render-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    padding: 0 1rem 1rem;
+}
+
+.admin-render-profile h2 {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+}
+
+.admin-render-profile table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.admin-render-profile th,
+.admin-render-profile td {
+    padding: 0.35rem 0.45rem;
+    border-top: 1px solid color-mix(in srgb, var(--theme-border, #d1d5db) 70%, transparent);
+    text-align: right;
+    vertical-align: top;
+}
+
+.admin-render-profile th:first-child {
+    text-align: left;
+}
+
+.admin-render-profile-note {
+    margin: 0;
+    padding: 0 1rem 1rem;
+    color: var(--theme-muted, #64748b);
+    font-size: 0.8rem;
+}
+
+
+.patch-notes-viewer {
+    margin-top: 1.25rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 72%, transparent);
+    border-radius: calc(var(--radius, 16px) + 4px);
+    background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 11%, transparent), transparent 34rem),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+}
+
+.patch-notes-viewer > summary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.05rem 1.15rem;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 780;
+}
+
+.patch-notes-viewer > summary::-webkit-details-marker {
+    display: none;
+}
+
+.patch-notes-viewer > summary::after {
+    content: "+";
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 70%, transparent);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    color: var(--admin-accent, #2271b1);
+    font-size: 1.15rem;
+    line-height: 1;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.patch-notes-viewer[open] > summary::after {
+    content: "−";
+}
+
+.patch-notes-viewer > summary span {
+    display: block;
+    font-size: 1.04rem;
+    letter-spacing: -0.01em;
+}
+
+.patch-notes-viewer > summary small {
+    display: block;
+    margin-top: 0.18rem;
+    color: var(--muted, #64748b);
+    font-size: 0.84rem;
+    font-weight: 550;
+}
+
+.patch-notes-viewer[open] > summary {
+    border-bottom: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 72%, transparent);
+}
+
+.patch-notes-toolbar {
+    display: grid;
+    grid-template-columns: minmax(15rem, 24rem) 1fr;
+    align-items: end;
+    gap: 1rem;
+    padding: 1rem 1.15rem 0.75rem;
+}
+
+.patch-notes-select-form,
+.patch-notes-shortcuts {
+    display: flex;
+    align-items: end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.patch-notes-shortcuts {
+    justify-content: flex-end;
+}
+
+.patch-notes-select-form label {
+    display: grid;
+    gap: 0.38rem;
+    min-width: min(100%, 15rem);
+    color: var(--muted, #64748b);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.patch-notes-select-form select {
+    min-height: 2.55rem;
+    border-radius: calc(var(--radius, 16px) * 0.75);
+    border-color: color-mix(in srgb, var(--admin-border, #d7dde3) 82%, transparent);
+    background-color: rgba(255, 255, 255, 0.86);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.patch-notes-shortcuts .button,
+.patch-notes-select-form .button {
+    min-height: 2.55rem;
+    border-radius: calc(var(--radius, 16px) * 0.75);
+}
+
+.patch-notes-shortcuts .button.is-update-pending {
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 72%, #0f172a);
+    color: #ffffff;
+    background:
+        repeating-linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--admin-accent, #2271b1) 92%, #ffffff),
+            color-mix(in srgb, var(--admin-accent, #2271b1) 92%, #ffffff) 10px,
+            color-mix(in srgb, var(--admin-accent, #2271b1) 76%, #0f172a) 10px,
+            color-mix(in srgb, var(--admin-accent, #2271b1) 76%, #0f172a) 20px
+        );
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--admin-accent, #2271b1) 22%, transparent);
+}
+
+.patch-notes-fragment-inner {
+    padding: 0 1.15rem 1.15rem;
+}
+
+.patch-notes-content {
+    margin: 0;
+    padding: 1.1rem 1.15rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 76%, transparent);
+    border-radius: calc(var(--radius, 16px) + 2px);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.patch-notes-content h3,
+.patch-notes-content h4,
+.patch-notes-content h5 {
+    margin-top: 1.05rem;
+    margin-bottom: 0.45rem;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.patch-notes-content h3:first-child {
+    margin-top: 0;
+}
+
+.patch-notes-content p {
+    margin: 0.5rem 0;
+    color: #334155;
+    line-height: 1.62;
+}
+
+.patch-notes-content ul {
+    display: grid;
+    gap: 0.38rem;
+    margin: 0.45rem 0 0.9rem;
+    padding-left: 1.25rem;
+}
+
+.patch-notes-content li {
+    color: #334155;
+    line-height: 1.55;
+}
+
+.patch-notes-content li::marker {
+    color: var(--admin-accent, #2271b1);
+}
+
+.patch-notes-content code {
+    padding: 0.08rem 0.32rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 60%, transparent);
+    border-radius: 0.45rem;
+    background: rgba(15, 23, 42, 0.055);
+    color: #0f172a;
+    font-size: 0.92em;
+}
+
+.patch-notes-content pre {
+    overflow: auto;
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 62%, transparent);
+    border-radius: calc(var(--radius, 16px) * 0.75);
+    background: rgba(15, 23, 42, 0.07);
+}
+
+.patch-notes-content pre code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.patch-notes-fragment {
+    position: relative;
+    min-height: 4rem;
+}
+
+.patch-notes-viewer.is-loading .patch-notes-fragment {
+    opacity: 0.68;
+    pointer-events: none;
+}
+
+.patch-notes-viewer.is-loading .patch-notes-fragment::after {
+    content: "";
+    position: absolute;
+    inset: 0 1.15rem 1.15rem;
+    border-radius: calc(var(--radius, 16px) + 2px);
+    background:
+        repeating-linear-gradient(
+            135deg,
+            rgba(34, 113, 177, 0.06),
+            rgba(34, 113, 177, 0.06) 10px,
+            rgba(34, 113, 177, 0.14) 10px,
+            rgba(34, 113, 177, 0.14) 20px
+        );
+}
+
+.patch-notes-source-note {
+    margin: 0 0 0.75rem;
+    padding: 0.62rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 65%, transparent);
+    border-radius: calc(var(--radius, 16px) * 0.7);
+    background: rgba(255, 255, 255, 0.68);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+    .patch-notes-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .patch-notes-shortcuts {
+        justify-content: flex-start;
+    }
+}
+

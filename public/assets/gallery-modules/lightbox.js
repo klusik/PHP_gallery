@@ -47,6 +47,25 @@
  * setupGalleryLightbox();
  */
 
+
+/**
+ * Return a translated browser string with simple placeholder replacement.
+ *
+ * @param {string} key Translation key emitted by the server.
+ * @param {string} fallback Safe English fallback.
+ * @param {Object<string, string|number>} parameters Placeholder values.
+ * @returns {string} Browser-facing translated text.
+ */
+function i18n(key, fallback, parameters = {}) {
+    const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
+    const strings = root.strings && typeof root.strings === 'object' ? root.strings : {};
+    let text = typeof strings[key] === 'string' ? strings[key] : fallback;
+    Object.entries(parameters).forEach(([name, value]) => {
+        text = text.split(`{${name}}`).join(String(value));
+    });
+    return text;
+}
+
 export function setupTagSuggestions() {
     // Tag fields still store comma-separated text, but this small helper makes
     // reused tags discoverable while the admin types.
@@ -356,7 +375,7 @@ export function setupGalleryLightbox() {
             return;
         }
         lightboxVoteIndicator.classList.toggle('is-up', vote === '1');
-        lightboxVoteIndicator.textContent = vote === '1' ? 'Liked' : 'No like';
+        lightboxVoteIndicator.textContent = vote === '1' ? i18n('votes.liked', 'Liked') : i18n('votes.no_like', 'No like');
     }
 
     /**

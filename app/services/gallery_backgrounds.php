@@ -179,7 +179,7 @@ function store_uploaded_theme_background(array $file): string
         }
     }
     if (!move_uploaded_file((string) ($file['tmp_name'] ?? ''), $target)) {
-        throw new RuntimeException('Could not store theme background image.');
+        throw new RuntimeException(t('theme.background.error_store_failed', 'Could not store theme background image.'));
     }
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'cache/theme-background/' . $filename;

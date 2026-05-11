@@ -52,20 +52,20 @@ function gallery_branding_asset_types(): array
         'banner' => [
             'column' => 'banner_image_path',
             'filename' => 'banner',
-            'label' => 'Banner image',
-            'description' => 'Shown instead of the visible gallery text title.',
+            'label' => t('gallery.branding.banner.label'),
+            'description' => t('gallery.branding.banner.description'),
         ],
         'logo' => [
             'column' => 'logo_image_path',
             'filename' => 'logo',
-            'label' => 'Logo image',
-            'description' => 'Shown beside the title text or beside the banner.',
+            'label' => t('gallery.branding.logo.label'),
+            'description' => t('gallery.branding.logo.description'),
         ],
         'separator' => [
             'column' => 'separator_image_path',
             'filename' => 'separator',
-            'label' => 'Horizontal separator image',
-            'description' => 'Shown below the title area before gallery content.',
+            'label' => t('gallery.branding.separator.label'),
+            'description' => t('gallery.branding.separator.description'),
         ],
     ];
 }
@@ -78,7 +78,7 @@ function gallery_branding_asset_kind(string $kind): string
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = strtolower(trim($kind));
     if (!array_key_exists($kind, gallery_branding_asset_types())) {
-        throw new InvalidArgumentException('Unknown gallery branding asset type.');
+        throw new InvalidArgumentException(t('gallery.branding.error_unknown_type'));
     }
     return $kind;
 }
@@ -274,14 +274,14 @@ function theme_branding_asset_types(): array
         'banner' => [
             'setting' => 'theme_branding_banner_path',
             'filename' => 'banner',
-            'label' => 'Fallback banner image',
-            'description' => 'Shown instead of the visible site title in the public header when the gallery has no custom banner.',
+            'label' => t('theme.branding.banner.label'),
+            'description' => t('theme.branding.banner.description'),
         ],
         'separator' => [
             'setting' => 'theme_branding_separator_path',
             'filename' => 'separator',
-            'label' => 'Fallback horizontal separator image',
-            'description' => 'Shown below the public site header when the gallery has no custom separator.',
+            'label' => t('theme.branding.separator.label'),
+            'description' => t('theme.branding.separator.description'),
         ],
     ];
 }
@@ -294,7 +294,7 @@ function theme_branding_asset_kind(string $kind): string
     // $kind stores an intermediate value used by the surrounding gallery workflow.
     $kind = strtolower(trim($kind));
     if (!array_key_exists($kind, theme_branding_asset_types())) {
-        throw new InvalidArgumentException('Unknown theme branding asset type.');
+        throw new InvalidArgumentException(t('theme.branding.error_unknown_type'));
     }
     return $kind;
 }
@@ -402,7 +402,7 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $uploadError stores an intermediate value used by the surrounding gallery workflow.
     $uploadError = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($uploadError === UPLOAD_ERR_NO_FILE) {
-        throw new RuntimeException('Choose a theme branding image to upload.');
+        throw new RuntimeException(t('theme.branding.error_choose_upload'));
     }
     if ($uploadError !== UPLOAD_ERR_OK) {
         throw new RuntimeException(upload_error_message($uploadError));
@@ -410,27 +410,27 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $tmpPath stores an intermediate value used by the surrounding gallery workflow.
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
-        throw new RuntimeException('Uploaded theme branding image is not available.');
+        throw new RuntimeException(t('theme.branding.error_upload_unavailable'));
     }
     // $originalName stores an intermediate value used by the surrounding gallery workflow.
     $originalName = (string) ($file['name'] ?? '');
     if (!gallery_branding_upload_extension_allowed($originalName)) {
-        throw new RuntimeException('Only JPG, PNG, GIF, and WebP theme branding images can be uploaded.');
+        throw new RuntimeException(t('theme.branding.error_unsupported_type'));
     }
     // $size stores an intermediate value used by the surrounding gallery workflow.
     $size = (int) ($file['size'] ?? 0);
     if ($size > gallery_branding_uploaded_asset_max_bytes()) {
-        throw new RuntimeException('The theme branding image is larger than 8 MB.');
+        throw new RuntimeException(t('theme.branding.error_too_large'));
     }
     // $info stores an intermediate value used by the surrounding gallery workflow.
     $info = @getimagesize($tmpPath);
     if ($info === false || empty($info['mime'])) {
-        throw new RuntimeException('The uploaded theme branding image is not a valid image.');
+        throw new RuntimeException(t('theme.branding.error_invalid_image'));
     }
     // $extension stores an intermediate value used by the surrounding gallery workflow.
     $extension = gallery_branding_mime_extension((string) $info['mime']);
     if ($extension === null) {
-        throw new RuntimeException('Only JPG, PNG, GIF, and WebP theme branding images can be uploaded.');
+        throw new RuntimeException(t('theme.branding.error_unsupported_type'));
     }
     // $storageDir stores an intermediate value used by the surrounding gallery workflow.
     $storageDir = theme_branding_storage_dir();
@@ -441,7 +441,7 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     // $stagedTarget stores the uploaded file before the previous asset is replaced.
     $stagedTarget = $storageDir . DIRECTORY_SEPARATOR . '.upload-' . $stem . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
     if (!move_uploaded_file($tmpPath, $stagedTarget)) {
-        throw new RuntimeException('Could not store theme branding image.');
+        throw new RuntimeException(t('theme.branding.error_store_failed'));
     }
     foreach (glob($storageDir . DIRECTORY_SEPARATOR . $stem . '.*') ?: [] as $oldFile) {
         if (is_file($oldFile)) {
@@ -450,7 +450,7 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
     }
     if (!@rename($stagedTarget, $target)) {
         @unlink($stagedTarget);
-        throw new RuntimeException('Could not finalize theme branding image.');
+        throw new RuntimeException(t('theme.branding.error_finalize_failed'));
     }
     // $relative stores an intermediate value used by the surrounding gallery workflow.
     $relative = 'cache/theme-branding/' . $stem . '.' . $extension;

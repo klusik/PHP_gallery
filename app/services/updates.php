@@ -112,6 +112,270 @@ function check_application_update(): array
     ];
 }
 
+
+/**
+ * Return parsed remote patch notes for the update page viewer.
+ */
+function application_patch_notes_viewer_data(?string $preferredBranch = null, int $ttlSeconds = 1800): array
+{
+    // $branch stores the trusted branch selected by the update checker or fallback candidates.
+    $branch = in_array($preferredBranch, application_update_branch_candidates(), true) ? (string) $preferredBranch : (string) application_update_branch_candidates()[0];
+    // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
+    $cachedData = application_patch_notes_read_cache($branch, max(300, $ttlSeconds));
+    if ($cachedData !== null) {
+        return $cachedData;
+    }
+
+    try {
+        // $markdown stores the remote PATCH_NOTES.md text fetched from GitHub.
+        $markdown = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 15);
+        // $versions stores the parsed version sections keyed by normalized version number.
+        $versions = application_patch_notes_parse_versions($markdown);
+        // $data stores the viewer payload cached for subsequent page views.
+        $data = [
+            'ok' => true,
+            'branch' => $branch,
+            'cached_at' => time(),
+            'source' => 'github',
+            'versions' => $versions,
+            'error' => '',
+        ];
+        application_patch_notes_write_cache($branch, $data);
+        return $data;
+    } catch (Throwable $exception) {
+        // $localPath stores the bundled patch notes file used when GitHub is unavailable.
+        $localPath = application_update_project_root() . '/PATCH_NOTES.md';
+        // $localMarkdown stores the bundled patch notes text when it can be read safely.
+        $localMarkdown = is_file($localPath) ? (string) file_get_contents($localPath) : '';
+        return [
+            'ok' => $localMarkdown !== '',
+            'branch' => $branch,
+            'cached_at' => time(),
+            'source' => 'local',
+            'versions' => $localMarkdown !== '' ? application_patch_notes_parse_versions($localMarkdown) : [],
+            'error' => $exception->getMessage(),
+        ];
+    }
+}
+
+/**
+ * Return the writable file-cache directory for remote patch notes payloads.
+ */
+function application_patch_notes_cache_dir(): string
+{
+    // $path stores the generated metadata cache directory outside the public asset path.
+    $path = application_update_project_root() . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'patch-notes';
+    if (!is_dir($path)) {
+        @mkdir($path, 0775, true);
+    }
+    return rtrim($path, DIRECTORY_SEPARATOR);
+}
+
+/**
+ * Return the cache file path for a trusted update branch.
+ */
+function application_patch_notes_cache_path(string $branch): string
+{
+    // $safeBranch stores a filesystem-safe representation of the trusted branch name.
+    $safeBranch = preg_replace('/[^a-z0-9_.-]+/i', '_', $branch) ?: 'main';
+    return application_patch_notes_cache_dir() . DIRECTORY_SEPARATOR . $safeBranch . '.json';
+}
+
+/**
+ * Read a fresh file-backed patch notes payload when available.
+ */
+function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?array
+{
+    // $path stores the cache file selected for the current GitHub branch.
+    $path = application_patch_notes_cache_path($branch);
+    if (!is_file($path)) {
+        return null;
+    }
+
+    // $modifiedAt stores the cache write timestamp reported by the filesystem.
+    $modifiedAt = filemtime($path);
+    if ($modifiedAt === false || time() - $modifiedAt > $ttlSeconds) {
+        return null;
+    }
+
+    // $json stores the cached JSON payload.
+    $json = (string) file_get_contents($path);
+    // $data stores the decoded payload when it matches the expected shape.
+    $data = json_decode($json, true);
+    if (!is_array($data) || !isset($data['versions']) || !is_array($data['versions'])) {
+        return null;
+    }
+
+    return $data;
+}
+
+/**
+ * Store a patch notes payload in the filesystem cache.
+ */
+function application_patch_notes_write_cache(string $branch, array $data): void
+{
+    // $path stores the cache file selected for the current GitHub branch.
+    $path = application_patch_notes_cache_path($branch);
+    // $json stores the payload without database column length constraints.
+    $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        return;
+    }
+
+    @file_put_contents($path, $json, LOCK_EX);
+}
+
+/**
+ * Parse PATCH_NOTES.md into normalized version sections.
+ */
+function application_patch_notes_parse_versions(string $markdown): array
+{
+    // $lines stores the source text split into individual Markdown lines.
+    $lines = preg_split('/\R/u', $markdown) ?: [];
+    // $versions stores parsed release-note sections keyed by version number.
+    $versions = [];
+    // $currentVersion stores the version currently being collected.
+    $currentVersion = null;
+    // $currentTitle stores the raw heading text for the current version.
+    $currentTitle = '';
+    // $buffer stores Markdown lines belonging to the current version section.
+    $buffer = [];
+
+    foreach ($lines as $line) {
+        if (preg_match('/^##\s+(?:Version\s+)?v?([0-9]+(?:\.[0-9]+){1,2})\b(.*)$/i', (string) $line, $match)) {
+            if ($currentVersion !== null) {
+                $versions[$currentVersion] = [
+                    'version' => $currentVersion,
+                    'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+                    'markdown' => trim(implode("\n", $buffer)),
+                    'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
+                ];
+            }
+            $currentVersion = application_update_normalize_version((string) $match[1]);
+            $currentTitle = trim((string) preg_replace('/^##\s+/', '', (string) $line));
+            $buffer = [];
+            continue;
+        }
+
+        if ($currentVersion !== null) {
+            $buffer[] = (string) $line;
+        }
+    }
+
+    if ($currentVersion !== null) {
+        $versions[$currentVersion] = [
+            'version' => $currentVersion,
+            'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+            'markdown' => trim(implode("\n", $buffer)),
+            'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
+        ];
+    }
+
+    uksort($versions, static fn (string $a, string $b): int => version_compare($b, $a));
+    return $versions;
+}
+
+/**
+ * Convert the limited PATCH_NOTES.md syntax into safe admin HTML.
+ */
+function application_patch_notes_markdown_to_html(string $markdown): string
+{
+    if ($markdown === '') {
+        return '<p class="muted">' . e(t('admin.updates.patch_notes_empty', 'No patch notes were found for this version.')) . '</p>';
+    }
+
+    // $html stores the generated safe HTML fragments.
+    $html = [];
+    // $inList tracks whether a Markdown list is currently open.
+    $inList = false;
+    // $inCode tracks whether a fenced code section is currently open.
+    $inCode = false;
+    // $codeLines stores raw lines inside a fenced code section.
+    $codeLines = [];
+
+    foreach (preg_split('/\R/u', $markdown) ?: [] as $line) {
+        // $rawLine stores the unmodified Markdown line for code fences.
+        $rawLine = (string) $line;
+        // $trimmed stores a whitespace-trimmed copy for syntax checks.
+        $trimmed = trim($rawLine);
+
+        if (str_starts_with($trimmed, '```')) {
+            if ($inCode) {
+                $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
+                $codeLines = [];
+                $inCode = false;
+            } else {
+                if ($inList) {
+                    $html[] = '</ul>';
+                    $inList = false;
+                }
+                $inCode = true;
+            }
+            continue;
+        }
+
+        if ($inCode) {
+            $codeLines[] = $rawLine;
+            continue;
+        }
+
+        if ($trimmed === '') {
+            if ($inList) {
+                $html[] = '</ul>';
+                $inList = false;
+            }
+            continue;
+        }
+
+        if (preg_match('/^(#{3,6})\s+(.+)$/', $trimmed, $headingMatch)) {
+            if ($inList) {
+                $html[] = '</ul>';
+                $inList = false;
+            }
+            // $level stores a bounded heading level suitable inside the update panel.
+            $level = min(5, max(3, strlen((string) $headingMatch[1])));
+            $html[] = '<h' . $level . '>' . application_patch_notes_inline_markdown((string) $headingMatch[2]) . '</h' . $level . '>';
+            continue;
+        }
+
+        if (preg_match('/^[-*]\s+(.+)$/', $trimmed, $listMatch)) {
+            if (!$inList) {
+                $html[] = '<ul>';
+                $inList = true;
+            }
+            $html[] = '<li>' . application_patch_notes_inline_markdown((string) $listMatch[1]) . '</li>';
+            continue;
+        }
+
+        if ($inList) {
+            $html[] = '</ul>';
+            $inList = false;
+        }
+        $html[] = '<p>' . application_patch_notes_inline_markdown($trimmed) . '</p>';
+    }
+
+    if ($inCode) {
+        $html[] = '<pre><code>' . e(implode("\n", $codeLines)) . '</code></pre>';
+    }
+    if ($inList) {
+        $html[] = '</ul>';
+    }
+
+    return implode("\n", $html);
+}
+
+/**
+ * Convert safe inline Markdown emphasis and code spans for patch notes.
+ */
+function application_patch_notes_inline_markdown(string $text): string
+{
+    // $escaped stores HTML-safe text before tiny Markdown replacements are applied.
+    $escaped = e($text);
+    $escaped = preg_replace('/`([^`]+)`/', '<code>$1</code>', $escaped) ?? $escaped;
+    $escaped = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $escaped) ?? $escaped;
+    return $escaped;
+}
+
 /**
  * Return a cached update check for small UI badges.
  */
@@ -436,7 +700,7 @@ function clean_reinstall_current_application_version(): array
  */
 function application_update_nav_label(bool $pending): string
 {
-    return $pending ? 'Update(1)' : 'Updates';
+    return $pending ? t('admin.menu.update_pending', 'Update(1)') : t('admin.menu.updates', 'Updates');
 }
 
 /**

@@ -83,17 +83,17 @@ function admin_log_column_exists(string $columnName): bool
 function admin_log_category_options(): array
 {
     return [
-        'system' => 'System',
-        'gallery' => 'Gallery',
-        'media' => 'Media',
-        'upload' => 'Upload',
-        'thumbnail' => 'Thumbnails',
-        'update' => 'Updates',
-        'security' => 'Security',
-        'database' => 'Database',
-        'telemetry' => 'Telemetry',
-        'admin' => 'Admin',
-        'other' => 'Other',
+        'system' => t('admin.logs.category.system', 'System'),
+        'gallery' => t('admin.logs.category.gallery', 'Gallery'),
+        'media' => t('admin.logs.category.media', 'Media'),
+        'upload' => t('admin.logs.category.upload', 'Upload'),
+        'thumbnail' => t('admin.logs.category.thumbnail', 'Thumbnails'),
+        'update' => t('admin.logs.category.update', 'Updates'),
+        'security' => t('admin.logs.category.security', 'Security'),
+        'database' => t('admin.logs.category.database', 'Database'),
+        'telemetry' => t('admin.logs.category.telemetry', 'Telemetry'),
+        'admin' => t('admin.logs.category.admin', 'Admin'),
+        'other' => t('admin.logs.category.other', 'Other'),
     ];
 }
 
@@ -103,12 +103,12 @@ function admin_log_category_options(): array
 function admin_log_severity_options(): array
 {
     return [
-        'debug' => 'Debug',
-        'info' => 'Info',
-        'notice' => 'Notice',
-        'warning' => 'Warning',
-        'error' => 'Error',
-        'critical' => 'Critical',
+        'debug' => t('admin.logs.severity.debug', 'Debug'),
+        'info' => t('admin.logs.severity.info', 'Info'),
+        'notice' => t('admin.logs.severity.notice', 'Notice'),
+        'warning' => t('admin.logs.severity.warning', 'Warning'),
+        'error' => t('admin.logs.severity.error', 'Error'),
+        'critical' => t('admin.logs.severity.critical', 'Critical'),
     ];
 }
 
@@ -255,10 +255,10 @@ function admin_log_event(string $level, string $eventKey, string $message, array
 function admin_log_status_options(): array
 {
     return [
-        'todo' => 'To be done',
-        'doing' => 'Will be done',
-        'waiting' => 'Waiting',
-        'done' => 'Done',
+        'todo' => t('admin.logs.status.todo', 'To be done'),
+        'doing' => t('admin.logs.status.doing', 'Will be done'),
+        'waiting' => t('admin.logs.status.waiting', 'Waiting'),
+        'done' => t('admin.logs.status.done', 'Done'),
     ];
 }
 
@@ -586,25 +586,25 @@ function admin_log_export_text(array $entry): string
     $context = admin_log_context_array($entry);
     // $lines stores the text report line by line to keep formatting predictable.
     $lines = [
-        'PHP Gallery admin log event',
+        t('admin.logs.export.title', 'PHP Gallery admin log event'),
         '',
         'ID: ' . (string) ($entry['id'] ?? ''),
-        'Created at: ' . (string) ($entry['created_at'] ?? ''),
-        'Status: ' . admin_log_status_label((string) ($entry['status'] ?? 'todo')),
-        'Level: ' . (string) ($entry['level'] ?? ''),
-        'Severity: ' . (string) ($entry['severity'] ?? ($entry['level'] ?? '')),
-        'Category: ' . (string) ($entry['category'] ?? 'other'),
-        'Event key: ' . (string) ($entry['event_key'] ?? ''),
-        'Message: ' . (string) ($entry['message'] ?? ''),
-        'Admin user: ' . (string) ($entry['username'] ?? ''),
-        'Subject: ' . trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? '')),
-        'Request ID: ' . (string) ($entry['request_id'] ?? ''),
-        'Route: ' . (string) ($entry['route_name'] ?? ''),
-        'Resolved at: ' . (string) ($entry['resolved_at'] ?? ''),
-        'Resolution note: ' . (string) ($entry['resolution_note'] ?? ''),
+        t('admin.logs.export.created_at', 'Created at: {value}', ['value' => (string) ($entry['created_at'] ?? '')]),
+        t('admin.logs.export.status', 'Status: {value}', ['value' => admin_log_status_label((string) ($entry['status'] ?? 'todo'))]),
+        t('admin.logs.export.level', 'Level: {value}', ['value' => (string) ($entry['level'] ?? '')]),
+        t('admin.logs.export.severity', 'Severity: {value}', ['value' => (string) ($entry['severity'] ?? ($entry['level'] ?? ''))]),
+        t('admin.logs.export.category', 'Category: {value}', ['value' => (string) ($entry['category'] ?? 'other')]),
+        t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
+        t('admin.logs.export.message', 'Message: {value}', ['value' => (string) ($entry['message'] ?? '')]),
+        t('admin.logs.export.admin_user', 'Admin user: {value}', ['value' => (string) ($entry['username'] ?? '')]),
+        t('admin.logs.export.subject', 'Subject: {value}', ['value' => trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? ''))]),
+        t('admin.logs.export.request_id', 'Request ID: {value}', ['value' => (string) ($entry['request_id'] ?? '')]),
+        t('admin.logs.export.route', 'Route: {value}', ['value' => (string) ($entry['route_name'] ?? '')]),
+        t('admin.logs.export.resolved_at', 'Resolved at: {value}', ['value' => (string) ($entry['resolved_at'] ?? '')]),
+        t('admin.logs.export.resolution_note', 'Resolution note: {value}', ['value' => (string) ($entry['resolution_note'] ?? '')]),
         '',
-        'Context:',
-        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '(none)',
+        t('admin.logs.export.context', 'Context:'),
+        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : t('admin.logs.export.none', '(none)'),
         '',
     ];
     return implode("\n", $lines);

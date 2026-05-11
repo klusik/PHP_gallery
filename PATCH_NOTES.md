@@ -1,5 +1,160 @@
 # Patch notes
 
+## Version 0.65
+
+Version 0.65 focuses on gallery metadata, public card presentation, translation coverage, admin diagnostics, update visibility, and access hardening.
+
+### Highlights
+
+#### Added configurable gallery description layouts
+
+- Added a Theme-level default gallery-card description layout.
+- Added per-gallery override support.
+- Added two public card systems:
+  - `Vertical system`
+  - `Horizontal system`
+- Existing galleries inherit the Theme default unless overridden.
+- Horizontal cards place the picture at the top, then title, date, tags, and a compact Markdown-capable description.
+- Added database support for `galleries.description_layout`.
+- Added sidecar support for gallery description layout metadata.
+
+#### Added manual gallery dates
+
+- Added optional manual gallery dates to galleries.
+- Dates are admin-entered and independent from upload dates or EXIF dates.
+- Existing galleries keep the date empty by default.
+- Empty dates are not displayed publicly.
+- Added date fields to create, edit, side-panel, and create-and-upload workflows.
+- Added public rendering for gallery dates in hero metadata and gallery cards.
+- Added database support for `galleries.gallery_date`.
+
+#### Improved gallery description formatting
+
+- Public gallery descriptions now preserve user-entered line breaks.
+- Added Markdown formatting hints in gallery description editors.
+- Added guidance for bold, italic, inline code, links, and paragraph spacing.
+- Improved description display in public gallery cards.
+
+#### Added admin login and password reset throttling
+
+- Added rate limiting for admin login attempts.
+- Added rate limiting for password reset requests.
+- Added visitor-level and identifier-level throttle buckets.
+- Stored only hashed throttle subjects.
+- Avoided storing raw submitted usernames, raw email addresses, or raw IP addresses in the throttle table.
+- Added database support for `auth_rate_limits`.
+
+#### Improved password reset and account localization
+
+- Converted account, login, forgot-password, reset-password, SMTP, and password reset messages to translation keys.
+- Localized password reset email subject and body.
+- Localized SMTP diagnostics and password reset delivery messages.
+- Localized account settings notices and validation errors.
+
+#### Expanded translation infrastructure
+
+- Added a dedicated translation service.
+- Added request language bootstrap during routing.
+- Added English fallback behavior for missing translation keys.
+- Added browser-side translated string export.
+- Added translation coverage diagnostics in Theme language settings.
+- Expanded Czech and English language packs.
+
+#### Added admin dashboard render profiling
+
+- Added an admin-only dashboard render profiler.
+- Added counters and timers for schema checks, DB queries, setting reads, gallery ordering, thumbnail maintenance summary reads, preview cover lookup, and rendered gallery rows.
+- Added diagnostic output for dashboard performance tuning.
+- Kept profiling admin-only.
+
+#### Optimized admin dashboard thumbnail maintenance checks
+
+- Dashboard thumbnail maintenance can now use cached summaries.
+- Expensive exact thumbnail scans can be deferred.
+- The dashboard can show that thumbnail status was not checked instead of forcing heavy work during first render.
+- Dedicated thumbnail actions remain available for exact scans and repairs.
+
+#### Added dynamic patch notes viewer to Updates
+
+- Added a collapsible patch notes panel on the Updates page.
+- Patch notes can be fetched from GitHub.
+- Parsed patch notes are cached locally.
+- Bundled local patch notes are used as fallback when GitHub cannot be reached.
+- Admins can select installed, pending, or other available versions.
+- Version switching loads dynamically without a full page reload.
+- The patch notes panel received modern admin styling.
+
+#### Hardened Apache access rules
+
+- Disabled directory indexes.
+- Blocked common sensitive file extensions.
+- Blocked `.git` access.
+- Blocked dotfiles except `.well-known/`.
+- Extended direct-access protection to additional private directories.
+- Hardened gallery directory access rules.
+
+#### Improved admin UI localization and polish
+
+- Converted more dashboard, gallery, upload, logs, telemetry, integrity, update, reset, theme, tag, media, and picture game UI strings to translation keys.
+- Improved dashboard action labels and notices.
+- Improved gallery editor labels, hints, and helper text.
+- Improved side-panel field layout for date, description, and layout controls.
+- Improved compact tag/date placement in horizontal gallery cards.
+
+### Technical Notes
+
+New or heavily updated areas include:
+
+- `app/services/translations.php`
+- `app/services/auth_throttle.php`
+- `app/services/admin_render_profiler.php`
+- `app/services/gallery_dates.php`
+- `app/services/gallery_description_layout.php`
+- `app/services/updates.php`
+- `database/migrations/202605110001_auth_rate_limits.php`
+- `database/migrations/202605110002_gallery_description_layout.php`
+- `database/migrations/202605110003_gallery_manual_date.php`
+- `app/controllers/admin_auth.php`
+- `app/controllers/admin_dashboard.php`
+- `app/controllers/admin_galleries.php`
+- `app/controllers/admin_theme.php`
+- `app/controllers/updates.php`
+- `app/controllers/public_gallery.php`
+- `app/lang/en.json`
+- `app/lang/cs.json`
+- `.htaccess`
+- `galleries/.htaccess`
+
+### User Impact
+
+#### For visitors
+
+- Gallery cards can use a new horizontal presentation.
+- Gallery dates appear only when admins set them.
+- Descriptions preserve intentional line breaks.
+- Public pages keep a cleaner metadata layout.
+- Protected and private content remains guarded by the same access model.
+
+#### For administrators
+
+- Theme settings can define the default gallery description layout.
+- Individual galleries can override that layout.
+- Gallery dates can be managed from normal and side-panel workflows.
+- Password reset delivery and SMTP diagnostics are easier to understand.
+- Login and reset endpoints are more resistant to repeated attempts.
+- The Updates page can show release notes before installing an update.
+- Dashboard performance is easier to diagnose.
+
+### Notes
+
+- Existing galleries do not display dates until an admin sets one.
+- Existing galleries inherit the Theme gallery-card layout default.
+- Login throttling requires the new `auth_rate_limits` migration.
+- Gallery dates require the new `gallery_date` migration.
+- Per-gallery layout overrides require the new `description_layout` migration.
+- The patch notes viewer caches fetched release notes under the application cache.
+- The core manifest was refreshed for the updated file set.
+
 ## Version 0.64
 
 Version 0.64 is a major public rendering performance and admin workflow refinement release focused on making large galleries faster, reducing unnecessary thumbnail work, improving dynamic refresh stability, and restoring the full create-and-upload gallery workflow from the public hero and gallery editor actions.

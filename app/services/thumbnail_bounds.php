@@ -146,18 +146,19 @@ function render_admin_thumbnail_bound_slider(string $prefix, ?int $storedMinSize
     }
 
     echo '<div class="admin-thumbnail-bound-control" data-thumbnail-bound-control data-thumbnail-bound-values="' . e(implode(',', $values)) . '">';
-    echo '<div class="admin-thumbnail-bound-header"><div><h3>' . e($label) . '</h3><p class="muted">' . e($description) . '</p></div><strong data-thumbnail-bound-summary>Auto</strong></div>';
+    echo '<div class="admin-thumbnail-bound-header"><div><h3>' . e($label) . '</h3><p class="muted">' . e($description) . '</p></div><strong data-thumbnail-bound-summary>' . e(t('thumbnail_bounds.auto', 'Auto')) . '</strong></div>';
+    echo '<div class="admin-thumbnail-bound-valuebar" aria-hidden="true">';
+    echo '<span><small>' . e(t('thumbnail_bounds.min', 'Min')) . '</small><b data-thumbnail-bound-min-display>' . e(t('thumbnail_bounds.auto_min', 'Auto min')) . '</b></span>';
+    echo '<span><small>' . e(t('thumbnail_bounds.max', 'Max')) . '</small><b data-thumbnail-bound-max-display>' . e(t('thumbnail_bounds.auto_max', 'Auto max')) . '</b></span>';
+    echo '</div>';
     echo '<div class="admin-thumbnail-bound-slider" aria-label="' . e($label) . '">';
-    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $minIndex . '" data-thumbnail-bound-min-index aria-label="Minimum thumbnail size">';
-    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $maxIndexValue . '" data-thumbnail-bound-max-index aria-label="Maximum thumbnail size">';
+    echo '<div class="admin-thumbnail-bound-rail" aria-hidden="true"></div>';
+    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $minIndex . '" data-thumbnail-bound-min-index aria-label="' . e(t('thumbnail_bounds.minimum_size', 'Minimum thumbnail size')) . '">';
+    echo '<input type="range" min="0" max="' . (int) $maxIndex . '" step="1" value="' . (int) $maxIndexValue . '" data-thumbnail-bound-max-index aria-label="' . e(t('thumbnail_bounds.maximum_size', 'Maximum thumbnail size')) . '">';
     echo '</div>';
     echo '<input type="hidden" name="' . e($prefix) . '_min_size" value="' . (int) $values[$minIndex] . '" data-thumbnail-bound-min-value>';
     echo '<input type="hidden" name="' . e($prefix) . '_max_size" value="' . (int) $values[$maxIndexValue] . '" data-thumbnail-bound-max-value>';
-    echo '<div class="admin-thumbnail-bound-scale" aria-hidden="true"><span>Auto</span>';
-    foreach (thumbnail_sizes() as $size) {
-        echo '<span>' . (int) $size . '</span>';
-    }
-    echo '<span>Auto</span></div></div>';
+    echo '</div>';
 }
 
 

@@ -12,6 +12,7 @@ rem
 rem Responsibilities:
 rem   - Forward command-line arguments to the main script
 rem   - Keep Windows invocation simple
+rem   - Ensure deployment packaging continues through the PowerShell workflow
 rem   - Avoid duplicating script logic
 rem
 rem Author:

@@ -324,21 +324,21 @@ function render_public_render_profile_panel(): void
     uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
 
     echo '<details class="public-render-profile" data-public-render-profile>'; 
-    echo '<summary>Public render profile';
+    echo '<summary>' . e(t('dev.public_render_profile.title', 'Public render profile'));
     if ($state['route'] !== '') {
         echo ' · ' . e((string) $state['route']);
     }
     if ($state['gallery_id'] !== null) {
-        echo ' · gallery #' . (int) $state['gallery_id'];
+        echo ' · ' . e(t('dev.public_render_profile.gallery_number', 'gallery #{id}', ['id' => (string) $state['gallery_id']]));
     }
     echo '</summary>';
     echo '<div class="public-render-profile-grid">';
-    echo '<section><h2>Counters</h2><table><tbody>';
+    echo '<section><h2>' . e(t('dev.public_render_profile.counters', 'Counters')) . '</h2><table><tbody>';
     foreach ($counters as $name => $value) {
         echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . number_format((float) $value, 0, '.', ' ') . '</td></tr>';
     }
     echo '</tbody></table></section>';
-    echo '<section><h2>Timers</h2><table><thead><tr><th>Name</th><th>Count</th><th>Total ms</th><th>Max ms</th></tr></thead><tbody>';
+    echo '<section><h2>' . e(t('dev.public_render_profile.timers', 'Timers')) . '</h2><table><thead><tr><th>' . e(t('dev.public_render_profile.name', 'Name')) . '</th><th>' . e(t('dev.public_render_profile.count', 'Count')) . '</th><th>' . e(t('dev.public_render_profile.total_ms', 'Total ms')) . '</th><th>' . e(t('dev.public_render_profile.max_ms', 'Max ms')) . '</th></tr></thead><tbody>';
     foreach ($timers as $name => $timer) {
         echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . (int) $timer['count'] . '</td><td>' . number_format((float) $timer['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $timer['max_ms'], 2, '.', ' ') . '</td></tr>';
     }
@@ -349,13 +349,13 @@ function render_public_render_profile_panel(): void
             return (($right['total_ms'] ?? 0.0) <=> ($left['total_ms'] ?? 0.0))
                 ?: (($right['calls'] ?? 0) <=> ($left['calls'] ?? 0));
         });
-        echo '<section class="public-render-profile-wide"><h2>Thumbnail lookup purposes</h2><table><thead><tr><th>Purpose</th><th>Size</th><th>Format</th><th>Lookups</th><th>Cache hits</th><th>Bundle calls</th><th>Total ms</th><th>Max ms</th></tr></thead><tbody>';
+        echo '<section class="public-render-profile-wide"><h2>' . e(t('dev.public_render_profile.thumbnail_lookup_purposes', 'Thumbnail lookup purposes')) . '</h2><table><thead><tr><th>' . e(t('dev.public_render_profile.purpose', 'Purpose')) . '</th><th>' . e(t('dev.public_render_profile.size', 'Size')) . '</th><th>' . e(t('dev.public_render_profile.format', 'Format')) . '</th><th>' . e(t('dev.public_render_profile.lookups', 'Lookups')) . '</th><th>' . e(t('dev.public_render_profile.cache_hits', 'Cache hits')) . '</th><th>' . e(t('dev.public_render_profile.bundle_calls', 'Bundle calls')) . '</th><th>' . e(t('dev.public_render_profile.total_ms', 'Total ms')) . '</th><th>' . e(t('dev.public_render_profile.max_ms', 'Max ms')) . '</th></tr></thead><tbody>';
         foreach ($thumbnailPurposes as $row) {
             echo '<tr><th>' . e((string) $row['purpose']) . '</th><td>' . (int) $row['size'] . '</td><td>' . e((string) $row['format']) . '</td><td>' . (int) $row['calls'] . '</td><td>' . (int) $row['cache_hits'] . '</td><td>' . (int) $row['bundle_calls'] . '</td><td>' . number_format((float) $row['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $row['max_ms'], 2, '.', ' ') . '</td></tr>';
         }
         echo '</tbody></table></section>';
     }
     echo '</div>';
-    echo '<p class="public-render-profile-note">Admin-only diagnostics. Anonymous visitors do not see this panel.</p>';
+    echo '<p class="public-render-profile-note">' . e(t('dev.public_render_profile.admin_only_note', 'Admin-only diagnostics. Anonymous visitors do not see this panel.')) . '</p>';
     echo '</details>';
 }

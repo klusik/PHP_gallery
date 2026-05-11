@@ -525,7 +525,7 @@ function gallery_bootstrap_render_locked(string $configFile, string $installLock
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bootstrap installer locked</title><style>' . gallery_bootstrap_css() . '</style></head><body><main class="card">';
     echo '<p class="eyebrow">PHP Gallery CMS</p><h1>Bootstrap installer locked</h1>';
     echo '<p>This gallery already appears to be installed. The bootstrap installer refuses to run when <code>config.php</code> or <code>cache/installed.lock</code> exists.</p>';
-    echo '<ul><li><code>' . gallery_bootstrap_e($configFile) . '</code></li><li><code>' . gallery_bootstrap_e($installLockFile) . '</code></li></ul>';
+    echo '<ul><li><code>config.php</code></li><li><code>cache/installed.lock</code></li></ul>';
     echo '<p><a class="buttonlike" href="index.php">Open gallery</a></p>';
     echo '</main></body></html>';
 }

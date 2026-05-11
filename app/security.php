@@ -175,7 +175,7 @@ function verify_vote_rate_limit(int $imageId): void
     if ($lastVote > 0 && ($now - $lastVote) < 2) {
         http_response_code(429);
         header('Content-Type: application/json');
-        exit(json_encode(['error' => 'Too many votes. Try again in a moment.']));
+        exit(json_encode(['error' => function_exists('t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
     }
     $_SESSION[$key] = $now;
 }

@@ -281,17 +281,18 @@ function pagination_home_gallery_clean_url(int $pageNumber): string
 /**
  * Render accessible public pagination controls for one listing.
  */
-function render_pagination_controls(array $pagination, string $label = 'Pagination'): void
+function render_pagination_controls(array $pagination, string $label = ''): void
 {
     if (empty($pagination['pagination_needed'])) {
         return;
     }
 
-    echo '<nav class="pagination" aria-label="' . e($label) . '">';
+    $navLabel = $label !== '' ? $label : t('pagination.label', 'Pagination');
+    echo '<nav class="pagination" aria-label="' . e($navLabel) . '">';
     if ((string) $pagination['previous_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['previous_url']) . '">Previous</a>';
+        echo '<a class="pagination-link" href="' . e((string) $pagination['previous_url']) . '">' . e(t('pagination.previous', 'Previous')) . '</a>';
     } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">Previous</span>';
+        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.previous', 'Previous')) . '</span>';
     }
 
     // $previousPage stores the last rendered page number so gaps can be shown.
@@ -311,10 +312,10 @@ function render_pagination_controls(array $pagination, string $label = 'Paginati
     }
 
     if ((string) $pagination['next_url'] !== '') {
-        echo '<a class="pagination-link" href="' . e((string) $pagination['next_url']) . '">Next</a>';
+        echo '<a class="pagination-link" href="' . e((string) $pagination['next_url']) . '">' . e(t('pagination.next', 'Next')) . '</a>';
     } else {
-        echo '<span class="pagination-link is-disabled" aria-disabled="true">Next</span>';
+        echo '<span class="pagination-link is-disabled" aria-disabled="true">' . e(t('pagination.next', 'Next')) . '</span>';
     }
-    echo '<span class="pagination-status">Page ' . (int) $pagination['current_page'] . ' of ' . (int) $pagination['total_pages'] . '</span>';
+    echo '<span class="pagination-status">' . e(t('pagination.status', 'Page {current} of {total}', ['current' => (string) $pagination['current_page'], 'total' => (string) $pagination['total_pages']])) . '</span>';
     echo '</nav>';
 }

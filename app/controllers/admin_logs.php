@@ -68,7 +68,7 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
         foreach (admin_log_status_options() as $status => $label) {
             $statusForm .= '<option value="' . e($status) . '"' . ((string) ($entry['status'] ?? '') === $status ? ' selected' : '') . '>' . e($label) . '</option>';
         }
-        $statusForm .= '</select><button type="submit">Update</button></form>';
+        $statusForm .= '</select><button type="submit">' . e(t('admin.logs.update', 'Update')) . '</button></form>';
     }
     return '<tr>'
         . '<td>' . e((string) $entry['created_at']) . '</td>'
@@ -148,15 +148,15 @@ function render_admin_log_table_rows(array $logs): string
         echo '<td><span class="log-severity log-severity-' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '">' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</span></td>';
         echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
         echo '<td><details class="log-entry-details"><summary><code>' . e((string) $entry['event_key']) . '</code></summary>';
-        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e(url_for('admin_log_export', ['id' => (int) $entry['id']])) . '">Save details as TXT</a></div>';
+        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e(url_for('admin_log_export', ['id' => (int) $entry['id']])) . '">' . e(t('admin.logs.save_details_txt', 'Save details as TXT')) . '</a></div>';
         echo '<dl class="log-detail-list">';
-        echo '<dt>Log ID</dt><dd>' . (int) $entry['id'] . '</dd>';
-        echo '<dt>Created at</dt><dd>' . e((string) $entry['created_at']) . '</dd>';
-        echo '<dt>Level</dt><dd>' . e((string) ($entry['level'] ?? '')) . '</dd>';
-        echo '<dt>Severity</dt><dd>' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</dd>';
-        echo '<dt>Category</dt><dd>' . e((string) ($entry['category'] ?? 'other')) . '</dd>';
-        echo '<dt>Route</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
-        echo '<dt>Request ID</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.log_id', 'Log ID')) . '</dt><dd>' . (int) $entry['id'] . '</dd>';
+        echo '<dt>' . e(t('admin.logs.created_at', 'Created at')) . '</dt><dd>' . e((string) $entry['created_at']) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.level', 'Level')) . '</dt><dd>' . e((string) ($entry['level'] ?? '')) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.severity', 'Severity')) . '</dt><dd>' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.category', 'Category')) . '</dt><dd>' . e((string) ($entry['category'] ?? 'other')) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.route', 'Route')) . '</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
+        echo '<dt>' . e(t('admin.logs.request_id', 'Request ID')) . '</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
         echo '</dl>';
         echo '<code>' . e((string) $entry['event_key']) . '</code>';
         if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
@@ -165,10 +165,10 @@ function render_admin_log_table_rows(array $logs): string
         echo '</details></td>';
         echo '<td>' . e((string) $entry['message']);
         if ($context) {
-            echo '<details class="log-context"><summary>Details</summary><pre>' . e(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre></details>';
+            echo '<details class="log-context"><summary>' . e(t('admin.logs.details', 'Details')) . '</summary><pre>' . e(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre></details>';
         }
         if (!empty($entry['request_id'])) {
-            echo '<div class="muted">Request ' . e((string) $entry['request_id']) . '</div>';
+            echo '<div class="muted">' . e(t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $entry['request_id']) . '</div>';
         }
         echo '</td>';
         echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
@@ -217,53 +217,53 @@ function cms_admin_logs(): void
             'rows_html' => render_admin_log_table_rows($logs),
             'count' => count($logs),
             'time_sort' => $timeSort,
-            'empty_html' => '<p>No log entries match the current filters.</p>',
+            'empty_html' => '<p>' . e(t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p>',
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
 
-    render_header('Admin log');
-    echo '<section class="hero"><h1>Admin log</h1><p>Operational events, failures, maintenance actions, and workflow states.</p><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">Anonymous telemetry</a>';
-    echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">Export all logs ZIP</a>';
+    render_header(t('admin.logs.title', 'Admin log'));
+    echo '<section class="hero"><h1>' . e(t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(t('admin.logs.intro', 'Operational events, failures, maintenance actions, and workflow states.')) . '</p><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
+    echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a>';
     echo '</nav></section>';
 
-    echo '<section class="panel"><h2>Filters</h2><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '">';
+    echo '<section class="panel"><h2>' . e(t('admin.logs.filters', 'Filters')) . '</h2><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(t('admin.logs.when', 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
-    echo '<label>Status<select name="status" data-admin-log-live-filter><option value="">All states</option>';
+    echo '<label>' . e(t('admin.logs.status', 'Status')) . '<select name="status" data-admin-log-live-filter><option value="">' . e(t('admin.logs.all_states', 'All states')) . '</option>';
     foreach (admin_log_status_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($status === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>Category<select name="category" data-admin-log-live-filter><option value="">All categories</option>';
+    echo '<label>' . e(t('admin.logs.category', 'Category')) . '<select name="category" data-admin-log-live-filter><option value="">' . e(t('admin.logs.all_categories', 'All categories')) . '</option>';
     foreach (admin_log_category_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($category === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>Severity<select name="severity" data-admin-log-live-filter><option value="">All severities</option>';
+    echo '<label>' . e(t('admin.logs.severity', 'Severity')) . '<select name="severity" data-admin-log-live-filter><option value="">' . e(t('admin.logs.all_severities', 'All severities')) . '</option>';
     foreach (admin_log_severity_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($severity === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>Time order<select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>Newest first</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>Oldest first</option></select></label>';
-    echo '<label>Search<input name="q" value="' . e($query) . '" placeholder="Event key, message, context, request, or route" autocomplete="off" data-admin-log-live-search></label>';
-    echo '<div class="bulk-row"><button type="submit">Apply filters</button><a class="button secondary" href="' . e(url_for('admin_logs')) . '">Clear</a><span class="muted" data-admin-log-live-state aria-live="polite"></span></div>';
+    echo '<label>' . e(t('admin.logs.time_order', 'Time order')) . '<select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e(t('admin.logs.newest_first', 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e(t('admin.logs.oldest_first', 'Oldest first')) . '</option></select></label>';
+    echo '<label>' . e(t('admin.logs.search', 'Search')) . '<input name="q" value="' . e($query) . '" placeholder="' . e(t('admin.logs.search_placeholder', 'Event key, message, context, request, or route')) . '" autocomplete="off" data-admin-log-live-search></label>';
+    echo '<div class="bulk-row"><button type="submit">' . e(t('admin.logs.apply_filters', 'Apply filters')) . '</button><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.logs.clear', 'Clear')) . '</a><span class="muted" data-admin-log-live-state aria-live="polite"></span></div>';
     echo '</form></section>';
 
-    echo '<section class="panel" data-admin-log-results><h2>Entries <span class="muted" data-admin-log-count>(' . count($logs) . ' shown)</span></h2>';
+    echo '<section class="panel" data-admin-log-results><h2>' . e(t('admin.logs.entries', 'Entries')) . ' <span class="muted" data-admin-log-count>(' . count($logs) . ' ' . e(t('admin.logs.shown_suffix', 'shown')) . ')</span></h2>';
     if (!$logs) {
-        echo '<div data-admin-log-empty><p>No log entries match the current filters.</p></div>';
+        echo '<div data-admin-log-empty><p>' . e(t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p></div>';
     }
     echo '<div class="admin-log-table-wrap">';
-    echo '<table class="admin-log-table"><thead><tr><th>Select</th><th><a href="' . e(admin_log_filter_url(['time_sort' => $timeSort === 'desc' ? 'asc' : 'desc'])) . '" data-admin-log-time-sort-link data-next-sort="' . e($timeSort === 'desc' ? 'asc' : 'desc') . '">When ' . e($timeSort === 'desc' ? '↓' : '↑') . '</a></th><th>State</th><th>Severity</th><th>Category</th><th>Event</th><th>Message</th><th>By</th><th>Set state</th></tr></thead><tbody data-admin-log-tbody>';
+    echo '<table class="admin-log-table"><thead><tr><th>' . e(t('admin.logs.select', 'Select')) . '</th><th><a href="' . e(admin_log_filter_url(['time_sort' => $timeSort === 'desc' ? 'asc' : 'desc'])) . '" data-admin-log-time-sort-link data-next-sort="' . e($timeSort === 'desc' ? 'asc' : 'desc') . '">' . e(t('admin.logs.when', 'When')) . ' ' . e($timeSort === 'desc' ? '↓' : '↑') . '</a></th><th>' . e(t('admin.logs.state', 'State')) . '</th><th>' . e(t('admin.logs.severity', 'Severity')) . '</th><th>' . e(t('admin.logs.category', 'Category')) . '</th><th>' . e(t('admin.logs.event', 'Event')) . '</th><th>' . e(t('admin.logs.message', 'Message')) . '</th><th>' . e(t('admin.logs.by', 'By')) . '</th><th>' . e(t('admin.logs.set_state', 'Set state')) . '</th></tr></thead><tbody data-admin-log-tbody>';
     echo render_admin_log_table_rows($logs);
     echo '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="' . e(url_for('admin_log_update')) . '">' . csrf_field();
-    echo '<div class="bulk-row"><label>Bulk set selected<select name="status">';
+    echo '<div class="bulk-row"><label>' . e(t('admin.logs.bulk_set_selected', 'Bulk set selected')) . '<select name="status">';
     foreach (admin_log_status_options() as $value => $label) {
         echo '<option value="' . e($value) . '">' . e($label) . '</option>';
     }
-    echo '</select></label><button type="submit" name="action" value="bulk">Apply to selected</button></div></form></section>';
+    echo '</select></label><button type="submit" name="action" value="bulk">' . e(t('admin.logs.apply_to_selected', 'Apply to selected')) . '</button></div></form></section>';
     render_footer();
 }
 
@@ -391,6 +391,6 @@ function cms_admin_logs_export_zip(): void
         http_response_code(500);
         header('Content-Type: text/plain; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
-        echo 'Unable to export admin logs.';
+        echo t('admin.logs.export_failed_plain', 'Unable to export admin logs.');
     }
 }

@@ -51,6 +51,7 @@ const responsiveThumbnailState = {
     frameId: 0,
     idleTimer: 0,
     idleHandle: 0,
+    upgradeTimers: new Set(),
     visibleImages: new Set(),
     observedElements: new Set(),
 };
@@ -73,6 +74,8 @@ export function teardownResponsiveThumbnailSizes() {
         window.clearTimeout(responsiveThumbnailState.idleTimer);
         responsiveThumbnailState.idleTimer = 0;
     }
+    responsiveThumbnailState.upgradeTimers.forEach((timerId) => window.clearTimeout(timerId));
+    responsiveThumbnailState.upgradeTimers.clear();
     if (responsiveThumbnailState.observer) {
         responsiveThumbnailState.observer.disconnect();
         responsiveThumbnailState.observer = null;
@@ -96,6 +99,15 @@ export function teardownResponsiveThumbnailSizes() {
  * @returns {void}
  */
 function scheduleIdleThumbnailWork(callback) {
+    const delayMs = Number.parseInt(String(callback.progressiveDelayMs || '0'), 10);
+    if (Number.isFinite(delayMs) && delayMs > 0) {
+        const timerId = window.setTimeout(() => {
+            responsiveThumbnailState.upgradeTimers.delete(timerId);
+            scheduleIdleThumbnailWork(Object.assign(callback, {progressiveDelayMs: 0}));
+        }, Math.min(Math.max(delayMs, 0), 500));
+        responsiveThumbnailState.upgradeTimers.add(timerId);
+        return;
+    }
     if ('requestIdleCallback' in window) {
         responsiveThumbnailState.idleHandle = window.requestIdleCallback(() => {
             responsiveThumbnailState.idleHandle = 0;
@@ -143,11 +155,16 @@ function upgradeProgressiveThumbnail(image, sizesValue) {
         image.dataset.progressiveUpgraded = '1';
     };
 
+    const delayMs = Number.parseInt(image.dataset.progressiveDelayMs || '0', 10);
+    const scheduledUpgrade = Object.assign(runUpgrade, {
+        progressiveDelayMs: Number.isFinite(delayMs) ? delayMs : 0,
+    });
+
     if (image.complete && image.naturalWidth > 0) {
-        scheduleIdleThumbnailWork(runUpgrade);
+        scheduleIdleThumbnailWork(scheduledUpgrade);
         return;
     }
-    image.addEventListener('load', () => scheduleIdleThumbnailWork(runUpgrade), {
+    image.addEventListener('load', () => scheduleIdleThumbnailWork(scheduledUpgrade), {
         once: true,
         signal: responsiveThumbnailState.controller?.signal,
     });

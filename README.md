@@ -73,7 +73,7 @@ No WordPress, Composer packages, npm build step, or framework is required.
 
 ## Experienced-User Installation
 
-Use this path if you prefer uploading the complete package yourself, you are installing locally, or your hosting environment blocks the one-file bootstrap installer.
+Use this path if you prefer uploading the complete package yourself, you are installing locally, or your hosting environment prevents the one-file bootstrap installer from running.
 
 ### Browser Installer After Full Upload
 
@@ -195,13 +195,46 @@ admins can filter events and mark them as `To be done`, `Will be done`,
 
 Logged-in admins can use `Admin dashboard -> Updates` to check GitHub for newer
 versions. The updater reads `CMS_VERSION` from `app/bootstrap.php` as the
-source of truth, downloads
-the configured GitHub branch archive, backs up overwritten files under
-`cache/updates/backups`, and leaves local `config.php`, galleries, cache files,
-and active custom CSS untouched. One-button installation requires outbound HTTPS
-from the server and PHP `ZipArchive`. When a newer version is available, the
-admin Updates button shows `Update(1)` with a fixed warning style that does
-not use the selected theme colors.
+source of truth, downloads the configured GitHub branch archive, backs up
+overwritten files under `cache/updates/backups`, and leaves local `config.php`,
+galleries, cache files, and active custom CSS untouched. One-button
+installation requires outbound HTTPS from the server and PHP `ZipArchive`. When
+a newer version is available, the admin Updates button shows `Update(1)` with a
+fixed warning style that does not use the selected theme colors.
+
+The Updates page also includes a collapsible patch notes viewer. It can fetch
+`PATCH_NOTES.md` from the configured GitHub branch, cache parsed release notes
+under `cache/updates/patch-notes`, fall back to the bundled local notes when
+GitHub is unavailable, and switch versions dynamically without reloading the
+whole admin page.
+
+
+## Admin Account And Password Recovery
+
+Admin accounts can be managed from `Admin dashboard -> Profile` or directly at
+`index.php?page=admin_account`. The account page controls the username,
+optional recovery email, password changes, and password reset email delivery.
+Changing identity fields or the password requires the current password.
+
+Password reset delivery is optional and disabled until configured. The account
+page supports:
+
+- PHP `mail()` transport
+- SMTP transport
+- STARTTLS, implicit TLS / SSL, or no SMTP encryption
+- sender email and sender name settings
+- reset link lifetime from 15 to 1440 minutes
+- a test email that does not create a reset token
+
+The public login flow has `Forgot password`, reset-link creation, and reset-link
+completion pages. Reset links require the password reset token schema, an admin
+account recovery email, enabled delivery settings, and a configured sender
+address.
+
+Login and reset requests are rate-limited after the `auth_rate_limits` migration
+has run. The throttling service stores hashed subjects only. Raw IP addresses
+and raw submitted usernames or email addresses are not stored in the throttle
+table.
 
 ## Local Run
 
@@ -258,15 +291,16 @@ Admin workflow:
 
 9. Use the gallery or image thumbnail buttons when you need to rebuild generated
    thumbnails after replacing source files.
-10. Edit gallery title, description, slug, folder name, visibility, sort order,
-    parent gallery, title picture, and tags. Changing the folder name or parent
-    gallery moves the real folder subtree on disk and updates database paths for
-    all descendants.
+10. Edit gallery title, description, optional manual gallery date, slug, folder
+    name, visibility, sort order, parent gallery, title picture, description
+    layout, and tags. Changing the folder name or parent gallery moves the real
+    folder subtree on disk and updates database paths for all descendants.
 11. Edit image title, description, visibility, sort order, and tags.
-12. When logged in, use the inline public-page controls to rename galleries,
-   rename photo titles, edit descriptions, publish, hide, or remove CMS records
-   without leaving the gallery view. Removing a record does not delete the
-   underlying folder or image file from disk.
+12. When logged in, use compact public-page admin actions to open the side-panel
+    editor for galleries and photos. These actions can edit metadata, upload
+    photos, create child galleries, publish, hide, or remove CMS records without
+    navigating away from the public gallery view. Removing a record does not
+    delete the underlying folder or image file from disk.
 13. Opt selected galleries or whole gallery branches into the picture game when
     you want visitors to compare images side by side.
 14. Enable EXIF GPS maps on gallery branches where you want public photo pins
@@ -280,6 +314,42 @@ Discovery is explicit and does not run on public requests.
 Nested folders become subgalleries. Public visitors get breadcrumb navigation,
 subgallery cards, lightbox image browsing, keyboard left/right navigation, and
 visible keyboard up/down voting controls in the lightbox.
+
+
+## Gallery Descriptions, Dates, And Card Layouts
+
+Gallery descriptions support a small safe Markdown subset for public display.
+The editor shows formatting hints for common syntax such as bold text, italic
+text, inline code, and links. Single line breaks are preserved, and empty lines
+create separate paragraphs.
+
+Galleries can also store an optional manual date. This is not the upload date
+and is not derived from image metadata. It is intended for an event date, trip
+date, shooting date, or any other admin-chosen gallery date. Existing galleries
+keep the value empty after migration and do not display a placeholder.
+
+Manual gallery dates are available in:
+
+- the create gallery page
+- the create-and-upload workflow
+- the side-panel gallery creation UI
+- the gallery editor identity section
+- public gallery hero metadata
+- public gallery cards, when a date is set
+
+The date value is stored in the `galleries.gallery_date` column and can also be
+written to `gallery.json` sidecar metadata. Invalid dates are rejected before
+saving.
+
+Public subgallery cards support two description layout systems:
+
+- `Vertical system`: the existing image-left card layout
+- `Horizontal system`: image on top, then title, date, tags, and a shortened
+  Markdown-capable description
+
+The default card layout is configured in Theme settings and applies to all
+galleries. Individual galleries can override the Theme default from the gallery
+editor. A gallery with no override inherits the Theme default.
 
 ## Public SEO
 
@@ -303,7 +373,7 @@ without adding a separate content store.
 - Each public gallery page emits one `<h1>` that matches the gallery title.
 - Image `alt` text resolves from caption metadata, then filename, then a
   gallery-based fallback.
-- `robots.txt` allows public crawling, blocks admin routes, and advertises the
+- `robots.txt` allows public crawling, disallows admin routes, and advertises the
   sitemap.
 - `sitemap.xml` lists public, non-protected galleries with absolute URLs.
 - Public gallery pages also emit Open Graph, Twitter card, and JSON-LD data.
@@ -388,6 +458,7 @@ size:
 ```text
 some_picture.jpg
 thumbs/some_picture_thumb300.jpg
+thumbs/some_picture_thumb600.jpg
 thumbs/some_picture_thumb800.jpg
 ```
 
@@ -412,6 +483,10 @@ source image. Dashboard and import thumbnail actions run in AJAX batches when
 JavaScript is enabled, showing a progress bar with checked images plus created
 and skipped file counts. Gallery row and edit-page thumbnail buttons still
 submit normally without JavaScript.
+
+The dashboard uses a cached thumbnail maintenance summary when possible and can
+defer expensive thumbnail scans during the first admin render. Use the dedicated
+thumbnail actions when an exact repair or full rebuild is needed.
 
 ## Tags
 
@@ -443,6 +518,8 @@ editing code. The current theme controls include:
 - serif or sans-serif font mode
 - selectable custom CSS skins from `custom_css/`
 - optional custom CSS upload
+- default public gallery-card description layout
+- admin/public language settings and language coverage diagnostics
 
 Uploaded custom CSS is saved as `public/assets/custom.css` and loaded after the
 built-in stylesheet. The form controls read their defaults from the active CSS
@@ -458,6 +535,15 @@ The `custom_css/` folder contains selectable skins and examples. Use
 
 The site name in the header and browser title is also managed from the Theme
 screen, so the default `Gallery CMS` label can be replaced without editing code.
+
+Theme settings also control the default public subgallery description layout.
+Use the vertical system for the existing image-left presentation, or the
+horizontal system when gallery cards should show the image on top followed by
+title, date, tags, and a compact description.
+
+The Language area lets admins select separate languages for the public zone and
+admin zone. Translation strings are loaded from language files with English
+fallbacks, and the language coverage table helps identify missing translations.
 
 ## Naming And Design Conventions
 
@@ -647,6 +733,14 @@ ZIP files are cached under `zip_cache_path`. The cache key is derived from image
 
 Public image voting posts to `index.php?page=vote` and returns JSON. Logged-in admins are associated by user ID. Anonymous visitors are associated by a SHA-256 hash of IP address, user agent, and `visitor_vote_secret`. Existing votes can be changed. The public UI marks the current visitor's selected up/down vote.
 
+## Admin Dashboard Diagnostics
+
+When dev mode or admin diagnostics are enabled, the dashboard can show an
+admin-only render profile with counters and timers for schema checks, database
+queries, setting reads, gallery preview lookup, thumbnail maintenance summary
+reads, gallery ordering, and row rendering. This is intended for development and
+performance tuning only and is not visible to anonymous visitors.
+
 ## Admin Gallery Tree
 
 The admin gallery table is hierarchical. Subgalleries can be collapsed or
@@ -702,7 +796,9 @@ configuration on the target server through `install.php` or by copying
 
 ## Security Notes
 
-- `config.php`, `app/`, `database/`, `scripts/`, and cache paths should not be publicly accessible.
+- `config.php`, `app/`, `database/`, `scripts/`, `tests/`, `deploy/`, cache paths, logs, temporary files, and local development artifacts should not be publicly accessible.
+- Apache installs use `Options -Indexes` and deny common sensitive file extensions such as `.md`, `.sql`, `.zip`, `.log`, `.env`, `.yml`, `.yaml`, `.lock`, backups, and old/original copies.
+- Dot-directories and dotfiles are blocked except the standard `.well-known/` path.
 - Media is served through `index.php?page=media&id=...`, not by raw folder path.
 - Protected gallery checks also apply to thumbnails, media, downloads, maps,
   votes, tags, and the picture game.
@@ -711,6 +807,7 @@ configuration on the target server through `install.php` or by copying
 - Image MIME data is validated with `getimagesize` during scans and uploads.
 - Admin uploads are stored inside `galleries_root` with collision-safe filenames.
 - Admin POST actions use CSRF tokens.
+- Admin login and password reset requests are rate-limited after the `auth_rate_limits` migration has run.
 - SQL access uses PDO prepared statements.
 - User and database output is escaped with `htmlspecialchars`.
 - Passwords use `password_hash` and `password_verify`.
