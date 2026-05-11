@@ -150,26 +150,26 @@ function cms_save_password_reset_settings(array $input): array
     $errors = [];
 
     if ($fromEmail !== '' && !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Enter a valid password reset sender email address.';
+        $errors[] = t('admin.account.error_password_reset_sender_email_invalid');
     }
     if ($enabled && $fromEmail === '') {
-        $errors[] = 'Password reset email cannot be enabled until a sender email address is set.';
+        $errors[] = t('admin.account.error_password_reset_sender_required_when_enabled');
     }
     if ($fromName === '') {
         $fromName = site_name();
     }
     if ($lifetimeMinutes < 15 || $lifetimeMinutes > 1440) {
-        $errors[] = 'Reset links must expire between 15 and 1440 minutes.';
+        $errors[] = t('admin.account.error_password_reset_lifetime_range');
     }
     if ($transport === 'smtp') {
         if ($smtpHost === '') {
-            $errors[] = 'SMTP host is required when SMTP transport is selected.';
+            $errors[] = t('admin.account.error_smtp_host_required');
         }
         if ($smtpPort < 1 || $smtpPort > 65535) {
-            $errors[] = 'SMTP port must be between 1 and 65535.';
+            $errors[] = t('admin.account.error_smtp_port_range');
         }
         if ($smtpUsername !== '' && $smtpPassword === '') {
-            $errors[] = 'SMTP password is required when an SMTP username is set.';
+            $errors[] = t('admin.account.error_smtp_password_required_with_username');
         }
     }
     if ($errors !== []) {
@@ -187,7 +187,7 @@ function cms_save_password_reset_settings(array $input): array
     set_app_setting('password_reset_smtp_username', $smtpUsername);
     set_app_setting('password_reset_smtp_password', $smtpPassword);
 
-    admin_log_event('info', 'auth.password_reset_settings_updated', 'Admin updated password reset email settings.', [
+    admin_log_event('info', 'auth.password_reset_settings_updated', t('admin.account.log_password_reset_settings_updated'), [
         'enabled' => $enabled,
         'transport' => $transport,
         'from_email_set' => $fromEmail !== '',
@@ -359,7 +359,7 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     // $socket stores the active SMTP connection.
     $socket = @stream_socket_client($remoteHost . ':' . $port, $errno, $errstr, 20, STREAM_CLIENT_CONNECT, $context);
     if (!$socket) {
-        $details['reason'] = 'SMTP connection failed: ' . $errstr;
+        $details['reason'] = t('admin.account.smtp_connection_failed', ['error' => $errstr]);
         $details['smtp_errno'] = $errno;
         return false;
     }
@@ -372,7 +372,7 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     $details['smtp_last_response'] = array_slice($greeting['lines'], -3);
     if ((int) $greeting['code'] !== 220) {
         fclose($socket);
-        $details['reason'] = 'SMTP server did not return a 220 greeting.';
+        $details['reason'] = t('admin.account.smtp_greeting_failed');
         return false;
     }
 
@@ -380,24 +380,24 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     $helloName = $_SERVER['SERVER_NAME'] ?? 'localhost';
     if (!cms_smtp_command($socket, 'EHLO ' . $helloName, [250], $details, 'ehlo')) {
         fclose($socket);
-        $details['reason'] = 'SMTP EHLO failed.';
+        $details['reason'] = t('admin.account.smtp_ehlo_failed');
         return false;
     }
 
     if ($encryption === 'tls') {
         if (!cms_smtp_command($socket, 'STARTTLS', [220], $details, 'starttls')) {
             fclose($socket);
-            $details['reason'] = 'SMTP STARTTLS failed.';
+            $details['reason'] = t('admin.account.smtp_starttls_failed');
             return false;
         }
         if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
             fclose($socket);
-            $details['reason'] = 'SMTP TLS negotiation failed.';
+            $details['reason'] = t('admin.account.smtp_tls_failed');
             return false;
         }
         if (!cms_smtp_command($socket, 'EHLO ' . $helloName, [250], $details, 'ehlo_after_starttls')) {
             fclose($socket);
-            $details['reason'] = 'SMTP EHLO after STARTTLS failed.';
+            $details['reason'] = t('admin.account.smtp_ehlo_after_starttls_failed');
             return false;
         }
     }
@@ -405,17 +405,17 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     if ((string) $settings['smtp_username'] !== '') {
         if (!cms_smtp_command($socket, 'AUTH LOGIN', [334], $details, 'auth_login')) {
             fclose($socket);
-            $details['reason'] = 'SMTP AUTH LOGIN was rejected.';
+            $details['reason'] = t('admin.account.smtp_auth_login_rejected');
             return false;
         }
         if (!cms_smtp_command($socket, base64_encode((string) $settings['smtp_username']), [334], $details, 'auth_username')) {
             fclose($socket);
-            $details['reason'] = 'SMTP username was rejected.';
+            $details['reason'] = t('admin.account.smtp_username_rejected');
             return false;
         }
         if (!cms_smtp_command($socket, base64_encode((string) $settings['smtp_password']), [235], $details, 'auth_password')) {
             fclose($socket);
-            $details['reason'] = 'SMTP password was rejected.';
+            $details['reason'] = t('admin.account.smtp_password_rejected');
             return false;
         }
     }
@@ -426,17 +426,17 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     $fromName = cms_mail_header_value((string) $settings['from_name']);
     if (!cms_smtp_command($socket, 'MAIL FROM:<' . $fromEmail . '>', [250], $details, 'mail_from')) {
         fclose($socket);
-        $details['reason'] = 'SMTP MAIL FROM was rejected.';
+        $details['reason'] = t('admin.account.smtp_mail_from_rejected');
         return false;
     }
     if (!cms_smtp_command($socket, 'RCPT TO:<' . $recipient . '>', [250, 251], $details, 'rcpt_to')) {
         fclose($socket);
-        $details['reason'] = 'SMTP recipient was rejected.';
+        $details['reason'] = t('admin.account.smtp_recipient_rejected');
         return false;
     }
     if (!cms_smtp_command($socket, 'DATA', [354], $details, 'data')) {
         fclose($socket);
-        $details['reason'] = 'SMTP DATA command was rejected.';
+        $details['reason'] = t('admin.account.smtp_data_rejected');
         return false;
     }
 
@@ -460,11 +460,11 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
     fclose($socket);
 
     if ((int) $response['code'] !== 250) {
-        $details['reason'] = 'SMTP server rejected the completed message.';
+        $details['reason'] = t('admin.account.smtp_message_rejected');
         return false;
     }
 
-    $details['reason'] = 'SMTP server accepted the message.';
+    $details['reason'] = t('admin.account.smtp_message_accepted');
     return true;
 }
 
@@ -487,21 +487,21 @@ function cms_send_configured_password_reset_mail(string $recipient, string $subj
     ];
 
     if (!$settings['enabled']) {
-        $details['reason'] = 'Password reset email is disabled in Admin -> Account.';
+        $details['reason'] = t('admin.account.password_reset_email_disabled');
         return $details;
     }
     if ($recipient === '') {
-        $details['reason'] = 'The account has no recovery email.';
+        $details['reason'] = t('admin.account.no_recovery_email');
         return $details;
     }
     if ($settings['from_email'] === '') {
-        $details['reason'] = 'The password reset sender email is empty.';
+        $details['reason'] = t('admin.account.password_reset_sender_empty');
         return $details;
     }
 
     if ($settings['transport'] === 'smtp') {
         if ($settings['smtp_host'] === '') {
-            $details['reason'] = 'SMTP host is empty.';
+            $details['reason'] = t('admin.account.smtp_host_empty');
             return $details;
         }
         $details['sent'] = cms_send_smtp_email($settings, $recipient, $subject, $body, $details);
@@ -509,7 +509,7 @@ function cms_send_configured_password_reset_mail(string $recipient, string $subj
     }
 
     if (!function_exists('mail')) {
-        $details['reason'] = 'PHP mail() is not available on this server.';
+        $details['reason'] = t('admin.account.php_mail_unavailable');
         return $details;
     }
 
@@ -528,7 +528,7 @@ function cms_send_configured_password_reset_mail(string $recipient, string $subj
     $details['sent'] = $extraParameters !== ''
         ? mail($recipient, $subject, $body, $headers, $extraParameters)
         : mail($recipient, $subject, $body, $headers);
-    $details['reason'] = $details['sent'] ? 'PHP mail() accepted the message. This does not guarantee mailbox delivery.' : 'PHP mail() returned false.';
+    $details['reason'] = $details['sent'] ? t('admin.account.php_mail_accepted') : t('admin.account.php_mail_failed');
     return $details;
 }
 
@@ -540,13 +540,12 @@ function cms_send_password_reset_email(array $user, string $resetUrl, string $ex
     // $recipient stores an intermediate value used by the surrounding gallery workflow.
     $recipient = trim((string) ($user['email'] ?? ''));
     // $subject stores an intermediate value used by the surrounding gallery workflow.
-    $subject = site_name() . ' password reset';
+    $subject = t('admin.auth.password_reset_subject', ['site' => site_name()]);
     // $body stores an intermediate value used by the surrounding gallery workflow.
-    $body = "A password reset was requested for your gallery admin account.\n\n"
-        . "Open this link to set a new password:\n"
-        . $resetUrl . "\n\n"
-        . "This link expires at " . $expiresAt . ".\n\n"
-        . "If you did not request this, ignore this email.";
+    $body = t('admin.auth.password_reset_body', [
+        'reset_url' => $resetUrl,
+        'expires_at' => $expiresAt,
+    ]);
     return cms_send_configured_password_reset_mail($recipient, $subject, $body, $expiresAt);
 }
 
@@ -584,21 +583,21 @@ function cms_admin_login(): void
             redirect_to(url_for('admin'));
         }
         // Variable $error stores this steps working value.
-        $error = 'Invalid username, email, or password.';
+        $error = t('admin.auth.invalid_login');
     }
-    render_header('Admin login');
+    render_header(t('admin.auth.login_title'));
     if (isset($_GET['reset'])) {
-        echo '<div class="notice">Password reset completed. You can now log in with your new password.</div>';
+        echo '<div class="notice">' . e(t('admin.auth.password_reset_completed')) . '</div>';
     }
     if (isset($error)) {
         echo '<div class="notice">' . e($error) . '</div>';
     }
-    echo '<section class="panel"><h1>Admin login</h1><form method="post" class="form-grid">';
+    echo '<section class="panel"><h1>' . e(t('admin.auth.login_title')) . '</h1><form method="post" class="form-grid">';
     echo csrf_field();
-    echo '<label>Username or email<input name="identifier" required autocomplete="username"></label>';
-    echo '<label>Password<input name="password" type="password" required autocomplete="current-password"></label>';
-    echo '<button type="submit">Log in</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('admin_forgot_password')) . '">Forgot password?</a></p></section>';
+    echo '<label>' . e(t('admin.auth.username_or_email')) . '<input name="identifier" required autocomplete="username"></label>';
+    echo '<label>' . e(t('admin.auth.password')) . '<input name="password" type="password" required autocomplete="current-password"></label>';
+    echo '<button type="submit">' . e(t('admin.auth.login_button')) . '</button></form>';
+    echo '<p class="muted"><a href="' . e(url_for('admin_forgot_password')) . '">' . e(t('admin.auth.forgot_password_link')) . '</a></p></section>';
     render_footer();
 }
 
@@ -627,7 +626,7 @@ function cms_admin_forgot_password(): void
                 $resetUrl = cms_password_reset_url((string) $token['selector'], (string) $token['token']);
                 // $delivery stores safe mail diagnostics for the admin log without storing the submitted identifier or token value.
                 $delivery = cms_send_password_reset_email($user, $resetUrl, (string) $token['expires_at']);
-                admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? 'Password reset email sent.' : 'Password reset token created, but email was not sent.', [
+                admin_log_event(!empty($delivery['sent']) ? 'info' : 'warning', 'auth.password_reset_requested', !empty($delivery['sent']) ? t('admin.auth.log_password_reset_email_sent') : t('admin.auth.log_password_reset_token_created_no_email'), [
                     'identifier_sha256' => hash('sha256', cms_normalize_account_email($identifier)),
                     'identifier_looks_like_email' => filter_var(trim($identifier), FILTER_VALIDATE_EMAIL) !== false,
                     'visitor_hash' => visitor_hash(),
@@ -639,19 +638,19 @@ function cms_admin_forgot_password(): void
                 ]);
             }
         }
-        $notice = 'If the account exists, has a recovery email, and password reset email is enabled, a reset link has been sent.';
+        $notice = t('admin.auth.reset_link_sent_if_possible');
     }
 
-    render_header('Forgot password');
+    render_header(t('admin.auth.forgot_password_title'));
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
-    echo '<section class="panel"><h1>Forgot password</h1>';
-    echo '<p class="muted">Enter your username or recovery email. A reset email is sent only when the admin has enabled password reset delivery in Account settings and the account has a recovery email.</p>';
+    echo '<section class="panel"><h1>' . e(t('admin.auth.forgot_password_title')) . '</h1>';
+    echo '<p class="muted">' . e(t('admin.auth.forgot_password_help')) . '</p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<label>Username or recovery email<input name="identifier" required autocomplete="username"></label>';
-    echo '<button type="submit">Request reset link</button></form>';
-    echo '<p class="muted"><a href="' . e(url_for('admin_login')) . '">Back to login</a></p></section>';
+    echo '<label>' . e(t('admin.auth.username_or_recovery_email')) . '<input name="identifier" required autocomplete="username"></label>';
+    echo '<button type="submit">' . e(t('admin.auth.request_reset_link')) . '</button></form>';
+    echo '<p class="muted"><a href="' . e(url_for('admin_login')) . '">' . e(t('admin.auth.back_to_login')) . '</a></p></section>';
     render_footer();
 }
 
@@ -673,9 +672,9 @@ function cms_admin_reset_password(): void
     $error = '';
 
     if (!$resetRow) {
-        render_header('Reset password');
-        echo '<section class="panel"><h1>Reset password</h1><div class="notice">This reset link is invalid or expired.</div>';
-        echo '<p><a class="button secondary" href="' . e(url_for('admin_forgot_password')) . '">Request a new reset link</a></p></section>';
+        render_header(t('admin.auth.reset_password_title'));
+        echo '<section class="panel"><h1>' . e(t('admin.auth.reset_password_title')) . '</h1><div class="notice">' . e(t('admin.auth.reset_link_invalid')) . '</div>';
+        echo '<p><a class="button secondary" href="' . e(url_for('admin_forgot_password')) . '">' . e(t('admin.auth.request_new_reset_link')) . '</a></p></section>';
         render_footer();
         return;
     }
@@ -687,9 +686,9 @@ function cms_admin_reset_password(): void
         // $confirmPassword stores an intermediate value used by the surrounding gallery workflow.
         $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
         if (strlen($newPassword) < 8) {
-            $error = 'New password must be at least 8 characters long.';
+            $error = t('admin.auth.password_min_length');
         } elseif ($newPassword !== $confirmPassword) {
-            $error = 'New password confirmation does not match.';
+            $error = t('admin.auth.password_confirmation_mismatch');
         } else {
             // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?');
@@ -697,25 +696,25 @@ function cms_admin_reset_password(): void
             // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE password_reset_tokens SET used_at = ? WHERE id = ?');
             $stmt->execute([now_sql(), (int) $resetRow['id']]);
-            admin_log_event('info', 'auth.password_reset_completed', 'Admin password was reset using a recovery token.', [
+            admin_log_event('info', 'auth.password_reset_completed', t('admin.auth.log_password_reset_completed'), [
                 'user_id' => (int) $resetRow['user_id'],
             ]);
             redirect_to(url_for('admin_login', ['reset' => 1]));
         }
     }
 
-    render_header('Reset password');
+    render_header(t('admin.auth.reset_password_title'));
     if ($error !== '') {
         echo '<div class="notice">' . e($error) . '</div>';
     }
-    echo '<section class="panel"><h1>Reset password</h1>';
-    echo '<p class="muted">Set a new password for admin account ' . e((string) $resetRow['username']) . '.</p>';
+    echo '<section class="panel"><h1>' . e(t('admin.auth.reset_password_title')) . '</h1>';
+    echo '<p class="muted">' . e(t('admin.auth.set_new_password_for', ['username' => (string) $resetRow['username']])) . '</p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="selector" value="' . e($selector) . '">';
     echo '<input type="hidden" name="token" value="' . e($token) . '">';
-    echo '<label>New password<input name="new_password" type="password" required minlength="8" autocomplete="new-password"></label>';
-    echo '<label>Confirm new password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label>';
-    echo '<button type="submit">Save new password</button></form></section>';
+    echo '<label>' . e(t('admin.auth.new_password')) . '<input name="new_password" type="password" required minlength="8" autocomplete="new-password"></label>';
+    echo '<label>' . e(t('admin.auth.confirm_new_password')) . '<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label>';
+    echo '<button type="submit">' . e(t('admin.auth.save_new_password')) . '</button></form></section>';
     render_footer();
 }
 
@@ -759,20 +758,16 @@ function cms_admin_account(): void
             // $testRecipient stores the current account recovery email used for a live delivery test.
             $testRecipient = trim((string) ($user['email'] ?? ''));
             if ($testRecipient === '') {
-                $error = 'Add a recovery email to your account before sending a test email.';
+                $error = t('admin.account.error_test_email_needs_recovery');
             } else {
                 // $testDelivery stores safe diagnostics from the configured mail transport.
                 $testDelivery = cms_send_configured_password_reset_mail(
                     $testRecipient,
-                    site_name() . ' password reset email test',
-                    "This is a test message from your gallery password reset settings.
-
-If this message arrived, the selected mail transport accepted delivery to your mailbox.
-
-No password reset token was created.",
+                    t('admin.account.test_email_subject', ['site' => site_name()]),
+                    t('admin.account.test_email_body'),
                     ''
                 );
-                admin_log_event(!empty($testDelivery['sent']) ? 'info' : 'warning', 'auth.password_reset_test_email', !empty($testDelivery['sent']) ? 'Password reset test email was accepted by the configured transport.' : 'Password reset test email failed.', [
+                admin_log_event(!empty($testDelivery['sent']) ? 'info' : 'warning', 'auth.password_reset_test_email', !empty($testDelivery['sent']) ? t('admin.account.log_test_email_sent') : t('admin.account.log_test_email_failed'), [
                     'user_id' => (int) $user['id'],
                     'username' => (string) $user['username'],
                     'email_delivery' => $testDelivery,
@@ -799,26 +794,26 @@ No password reset token was created.",
             // Variable $account stores this steps working value.
             $account = $stmt->fetch();
             if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
-                $errors[] = 'Current password is required to save account identity changes.';
+                $errors[] = t('admin.account.error_current_password_required');
             }
             if ($newUsername === '') {
-                $errors[] = 'Username is required.';
+                $errors[] = t('admin.account.error_username_required');
             }
             if ($newEmail !== '' && !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
-                $errors[] = 'Enter a valid recovery email address, or leave it empty for now.';
+                $errors[] = t('admin.account.error_recovery_email_invalid');
             }
             if ($newPassword !== '' && $newPassword !== $confirmPassword) {
-                $errors[] = 'New password confirmation does not match.';
+                $errors[] = t('admin.account.error_password_confirmation');
             }
             if ($newPassword !== '' && strlen($newPassword) < 8) {
-                $errors[] = 'New password must be at least 8 characters long.';
+                $errors[] = t('admin.account.error_password_length');
             }
             if ($newUsername !== '') {
                 // Variable $stmt stores this steps working value.
                 $stmt = db()->prepare('SELECT id FROM users WHERE username = ? AND id <> ?');
                 $stmt->execute([$newUsername, (int) $user['id']]);
                 if ($stmt->fetch()) {
-                    $errors[] = 'That username is already in use.';
+                    $errors[] = t('admin.account.error_username_taken');
                 }
             }
             if ($newEmail !== '') {
@@ -826,7 +821,7 @@ No password reset token was created.",
                 $stmt = db()->prepare('SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) AND id <> ?');
                 $stmt->execute([$newEmail, (int) $user['id']]);
                 if ($stmt->fetch()) {
-                    $errors[] = 'That recovery email is already in use.';
+                    $errors[] = t('admin.account.error_recovery_email_taken');
                 }
             }
             if (!$errors) {
@@ -861,15 +856,15 @@ No password reset token was created.",
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
     $resetReady = cms_password_reset_schema_ready() && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
 
-    render_header('Account');
+    render_header(t('admin.account.title'));
     if (isset($_GET['saved'])) {
-        echo '<div class="notice">Account updated.</div>';
+        echo '<div class="notice">' . e(t('admin.account.notice_saved')) . '</div>';
     }
     if (isset($_GET['reset_settings_saved'])) {
-        echo '<div class="notice">Password reset email settings updated.</div>';
+        echo '<div class="notice">' . e(t('admin.account.notice_reset_settings_saved')) . '</div>';
     }
     if (isset($_GET['test_email'])) {
-        echo '<div class="notice">' . ($_GET['test_email'] === 'sent' ? 'Test email was accepted by the configured transport. Check the detailed admin log event if it still does not arrive.' : 'Test email failed. Open the detailed admin log event for SMTP or PHP mail diagnostics.') . '</div>';
+        echo '<div class="notice">' . e($_GET['test_email'] === 'sent' ? t('admin.account.notice_test_email_sent') : t('admin.account.notice_test_email_failed')) . '</div>';
     }
     if (isset($error)) {
         echo '<div class="notice">' . e($error) . '</div>';
@@ -877,65 +872,65 @@ No password reset token was created.",
 
     echo '<section class="panel account-settings-page">';
     echo '<div class="account-settings-hero">';
-    echo '<div><p class="account-settings-kicker">Admin profile</p><h1>Account settings</h1><p class="muted">Manage your sign-in identity, recovery email, password, and password reset delivery from one place.</p></div>';
+    echo '<div><p class="account-settings-kicker">' . e(t('admin.account.kicker')) . '</p><h1>' . e(t('admin.account.title')) . '</h1><p class="muted">' . e(t('admin.account.description')) . '</p></div>';
     echo '<div class="account-settings-status ' . ($resetReady ? 'is-ready' : 'is-incomplete') . '">';
-    echo '<span class="account-settings-status-label">Password reset</span>';
-    echo '<strong>' . ($resetReady ? 'Ready' : 'Needs setup') . '</strong>';
-    echo '<small>' . ($resetReady ? 'This account can receive reset links.' : 'Enable delivery, set sender details, and keep a recovery email on this account.') . '</small>';
+    echo '<span class="account-settings-status-label">' . e(t('admin.account.password_reset')) . '</span>';
+    echo '<strong>' . e($resetReady ? t('admin.account.status_ready') : t('admin.account.status_needs_setup')) . '</strong>';
+    echo '<small>' . e($resetReady ? t('admin.account.status_ready_help') : t('admin.account.status_needs_setup_help')) . '</small>';
     echo '</div></div>';
     echo '<div class="account-settings-grid">';
 
     echo '<article class="account-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>Profile and sign-in</h2><p class="muted">Username and recovery email are used for admin login and account recovery.</p></div></div>';
+    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.account.profile_title')) . '</h2><p class="muted">' . e(t('admin.account.profile_description')) . '</p></div></div>';
     echo '<form method="post" class="form-grid account-settings-form">';
     echo csrf_field();
     echo '<input type="hidden" name="account_action" value="profile">';
-    echo '<label>Username<input name="username" required autocomplete="username" value="' . e((string) $user['username']) . '"></label>';
-    echo '<label>Recovery email<input name="email" type="email" autocomplete="email" value="' . e($accountEmail) . '" placeholder="admin@example.com"></label>';
-    echo '<p class="account-settings-help">Recovery email is optional for now, but it is required for password reset emails and can also be used on the login screen.</p>';
-    echo '<div class="account-settings-callout"><strong>Before you save:</strong> current password is required when changing username, recovery email, or password. This protects the account if an admin session is left open.</div>';
-    echo '<label>Current password<input name="current_password" type="password" required autocomplete="current-password"></label>';
+    echo '<label>' . e(t('admin.account.username')) . '<input name="username" required autocomplete="username" value="' . e((string) $user['username']) . '"></label>';
+    echo '<label>' . e(t('admin.account.recovery_email')) . '<input name="email" type="email" autocomplete="email" value="' . e($accountEmail) . '" placeholder="admin@example.com"></label>';
+    echo '<p class="account-settings-help">' . e(t('admin.account.recovery_email_help')) . '</p>';
+    echo '<div class="account-settings-callout"><strong>' . e(t('admin.account.before_save')) . '</strong> ' . e(t('admin.account.before_save_help')) . '</div>';
+    echo '<label>' . e(t('admin.account.current_password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
     echo '<div class="account-settings-two-column">';
-    echo '<label>New password<input name="new_password" type="password" autocomplete="new-password" placeholder="Leave empty to keep current password"></label>';
-    echo '<label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" placeholder="Repeat only when changing password"></label>';
+    echo '<label>' . e(t('admin.account.new_password')) . '<input name="new_password" type="password" autocomplete="new-password" placeholder="' . e(t('admin.account.new_password_placeholder')) . '"></label>';
+    echo '<label>' . e(t('admin.account.confirm_new_password')) . '<input name="confirm_password" type="password" autocomplete="new-password" placeholder="' . e(t('admin.account.confirm_new_password_placeholder')) . '"></label>';
     echo '</div>';
-    echo '<p class="account-settings-help">Password changes are optional here. Leave both new password fields empty to keep your current password.</p>';
-    echo '<div class="account-settings-actions"><button type="submit">Save account</button></div></form></article>';
+    echo '<p class="account-settings-help">' . e(t('admin.account.password_optional_help')) . '</p>';
+    echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.account.save_account')) . '</button></div></form></article>';
 
     echo '<article class="account-settings-card">';
-    echo '<div class="account-settings-card-header"><div><h2>Password reset email</h2><p class="muted">Controls the Forgot password page. Settings are stored in the application settings table, not in config.php.</p></div></div>';
+    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.account.reset_email_title')) . '</h2><p class="muted">' . e(t('admin.account.reset_email_description')) . '</p></div></div>';
     echo '<div class="account-settings-readiness">';
-    echo '<strong>Recovery status:</strong> ' . ($resetReady ? 'Password reset email is active for this account.' : 'Password reset email is not fully active. Make sure delivery is enabled, a sender email is set, and this account has a recovery email.') . '</div>';
+    echo '<strong>' . e(t('admin.account.recovery_status')) . '</strong> ' . e($resetReady ? t('admin.account.recovery_status_ready') : t('admin.account.recovery_status_incomplete')) . '</div>';
     echo '<form method="post" class="form-grid account-settings-form account-settings-reset-form">' . csrf_field();
     echo '<input type="hidden" name="account_action" value="password_reset_settings">';
-    echo '<label class="account-settings-toggle"><input type="checkbox" name="password_reset_enabled" value="1"' . ($resetSettings['enabled'] ? ' checked' : '') . '> <span><strong>Enable password reset emails</strong><small>When disabled, reset tokens can be created for logging, but no reset email is sent.</small></span></label>';
+    echo '<label class="account-settings-toggle"><input type="checkbox" name="password_reset_enabled" value="1"' . ($resetSettings['enabled'] ? ' checked' : '') . '> <span><strong>' . e(t('admin.account.enable_reset_emails')) . '</strong><small>' . e(t('admin.account.enable_reset_emails_help')) . '</small></span></label>';
     echo '<div class="account-settings-two-column">';
-    echo '<label>Mail transport<select name="password_reset_transport"><option value="php_mail"' . ($resetSettings['transport'] === 'php_mail' ? ' selected' : '') . '>PHP mail()</option><option value="smtp"' . ($resetSettings['transport'] === 'smtp' ? ' selected' : '') . '>SMTP server</option></select></label>';
-    echo '<label>Reset link lifetime<input name="password_reset_token_lifetime_minutes" type="number" min="15" max="1440" step="1" value="' . e((string) $resetSettings['token_lifetime_minutes']) . '"></label>';
+    echo '<label>' . e(t('admin.account.mail_transport')) . '<select name="password_reset_transport"><option value="php_mail"' . ($resetSettings['transport'] === 'php_mail' ? ' selected' : '') . '>' . e(t('admin.account.transport_php_mail')) . '</option><option value="smtp"' . ($resetSettings['transport'] === 'smtp' ? ' selected' : '') . '>' . e(t('admin.account.transport_smtp')) . '</option></select></label>';
+    echo '<label>' . e(t('admin.account.reset_link_lifetime')) . '<input name="password_reset_token_lifetime_minutes" type="number" min="15" max="1440" step="1" value="' . e((string) $resetSettings['token_lifetime_minutes']) . '"></label>';
     echo '</div>';
     echo '<div class="account-settings-two-column">';
-    echo '<label>Sender email<input name="password_reset_from_email" type="email" autocomplete="email" value="' . e((string) $resetSettings['from_email']) . '" placeholder="no-reply@example.com"></label>';
-    echo '<label>Sender name<input name="password_reset_from_name" value="' . e((string) $resetSettings['from_name']) . '" placeholder="' . e(site_name()) . '"></label>';
+    echo '<label>' . e(t('admin.account.sender_email')) . '<input name="password_reset_from_email" type="email" autocomplete="email" value="' . e((string) $resetSettings['from_email']) . '" placeholder="no-reply@example.com"></label>';
+    echo '<label>' . e(t('admin.account.sender_name')) . '<input name="password_reset_from_name" value="' . e((string) $resetSettings['from_name']) . '" placeholder="' . e(site_name()) . '"></label>';
     echo '</div>';
-    echo '<details class="account-settings-details" open><summary>SMTP settings</summary>';
-    echo '<p class="account-settings-help">Use SMTP when PHP mail() reports success but messages never arrive. Typical shared-hosting values are port 587 with STARTTLS, or port 465 with implicit TLS.</p>';
+    echo '<details class="account-settings-details" open><summary>' . e(t('admin.account.smtp_settings')) . '</summary>';
+    echo '<p class="account-settings-help">' . e(t('admin.account.smtp_help')) . '</p>';
     echo '<div class="account-settings-two-column">';
-    echo '<label>SMTP host<input name="password_reset_smtp_host" value="' . e((string) $resetSettings['smtp_host']) . '" placeholder="smtp.example.com"></label>';
-    echo '<label>SMTP port<input name="password_reset_smtp_port" type="number" min="1" max="65535" step="1" value="' . e((string) $resetSettings['smtp_port']) . '"></label>';
+    echo '<label>' . e(t('admin.account.smtp_host')) . '<input name="password_reset_smtp_host" value="' . e((string) $resetSettings['smtp_host']) . '" placeholder="smtp.example.com"></label>';
+    echo '<label>' . e(t('admin.account.smtp_port')) . '<input name="password_reset_smtp_port" type="number" min="1" max="65535" step="1" value="' . e((string) $resetSettings['smtp_port']) . '"></label>';
     echo '</div>';
-    echo '<label>SMTP encryption<select name="password_reset_smtp_encryption"><option value="tls"' . ($resetSettings['smtp_encryption'] === 'tls' ? ' selected' : '') . '>STARTTLS</option><option value="ssl"' . ($resetSettings['smtp_encryption'] === 'ssl' ? ' selected' : '') . '>Implicit TLS / SSL</option><option value="none"' . ($resetSettings['smtp_encryption'] === 'none' ? ' selected' : '') . '>None</option></select></label>';
+    echo '<label>' . e(t('admin.account.smtp_encryption')) . '<select name="password_reset_smtp_encryption"><option value="tls"' . ($resetSettings['smtp_encryption'] === 'tls' ? ' selected' : '') . '>STARTTLS</option><option value="ssl"' . ($resetSettings['smtp_encryption'] === 'ssl' ? ' selected' : '') . '>' . e(t('admin.account.smtp_implicit_tls')) . '</option><option value="none"' . ($resetSettings['smtp_encryption'] === 'none' ? ' selected' : '') . '>' . e(t('admin.common.none')) . '</option></select></label>';
     echo '<div class="account-settings-two-column">';
-    echo '<label>SMTP username<input name="password_reset_smtp_username" autocomplete="username" value="' . e((string) $resetSettings['smtp_username']) . '"></label>';
-    echo '<label>SMTP password<input name="password_reset_smtp_password" type="password" autocomplete="new-password" placeholder="' . (!empty($resetSettings['smtp_password']) ? 'Stored password will be kept if left empty' : '') . '"></label>';
+    echo '<label>' . e(t('admin.account.smtp_username')) . '<input name="password_reset_smtp_username" autocomplete="username" value="' . e((string) $resetSettings['smtp_username']) . '"></label>';
+    echo '<label>' . e(t('admin.account.smtp_password')) . '<input name="password_reset_smtp_password" type="password" autocomplete="new-password" placeholder="' . e(!empty($resetSettings['smtp_password']) ? t('admin.account.smtp_password_placeholder_keep') : '') . '"></label>';
     echo '</div>';
     echo '<input type="hidden" name="keep_existing_smtp_password" value="1">';
-    echo '<p class="account-settings-help">Leave the SMTP password field empty to keep the existing stored value. Detailed transport diagnostics are written to Admin logs.</p>';
+    echo '<p class="account-settings-help">' . e(t('admin.account.smtp_password_help')) . '</p>';
     echo '</details>';
-    echo '<div class="account-settings-actions"><button type="submit">Save password reset settings</button></div></form>';
+    echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.account.save_reset_settings')) . '</button></div></form>';
     echo '<form method="post" class="account-settings-test-form">' . csrf_field();
     echo '<input type="hidden" name="account_action" value="password_reset_test_email">';
-    echo '<div><strong>Delivery test</strong><p class="muted">Send a test message to your recovery email without creating a reset token.</p></div>';
-    echo '<button type="submit" class="button secondary">Send test email</button></form></article>';
+    echo '<div><strong>' . e(t('admin.account.delivery_test')) . '</strong><p class="muted">' . e(t('admin.account.delivery_test_help')) . '</p></div>';
+    echo '<button type="submit" class="button secondary">' . e(t('admin.account.send_test_email')) . '</button></form></article>';
 
     echo '</div></section>';
     render_footer();
@@ -958,32 +953,32 @@ function cms_admin_reset(): void
         try {
             // $result stores an intermediate value used by the surrounding gallery workflow.
             $result = restore_application_stable_release();
-            admin_log_event('info', 'update.stable_restored', 'Admin restored the stable branch head from the reset page.', $result);
+            admin_log_event('info', 'update.stable_restored', t('admin.reset.log_stable_restored'), $result);
             // $notice stores an intermediate value used by the surrounding gallery workflow.
-            $notice = 'Restored the stable branch head. Copied ' . (int) $result['files_copied'] . ' files.';
+            $notice = t('admin.reset.restored_notice', ['files' => (string) (int) $result['files_copied']]);
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'update.reset_failed', 'Stable branch reset failed.', ['error' => $exception->getMessage()]);
+            admin_log_event('warning', 'update.reset_failed', t('admin.reset.log_reset_failed'), ['error' => $exception->getMessage()]);
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
         }
     }
 
-    render_header('Reset application');
-    echo '<section class="hero"><h1>Reset application</h1><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">Open updates</a>';
+    render_header(t('admin.reset.title'));
+    echo '<section class="hero"><h1>' . e(t('admin.reset.title')) . '</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
+    echo '<a class="button secondary" href="' . e(url_for('admin_update')) . '">' . e(t('admin.reset.open_updates')) . '</a>';
     echo '</nav></section>';
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
     if ($error !== null) {
-        echo '<div class="notice">Reset failed: ' . e($error) . '</div>';
+        echo '<div class="notice">' . e(t('admin.reset.failed_value', ['error' => $error])) . '</div>';
     }
-    echo '<section class="panel"><h2>Restore stable branch head</h2>';
-    echo '<p>This replaces the application files with the current `main` branch head from GitHub, which is useful if a beta build broke the site.</p>';
-    echo '<p class="muted">You must be logged in as an administrator. The action uses the same restore logic as the admin update screen.</p>';
+    echo '<section class="panel"><h2>' . e(t('admin.reset.restore_stable_title')) . '</h2>';
+    echo '<p>' . e(t('admin.reset.restore_stable_description')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.reset.restore_stable_help')) . '</p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
-    echo '<button type="submit" class="button danger">Reset to stable branch head</button>';
+    echo '<button type="submit" class="button danger">' . e(t('admin.reset.button')) . '</button>';
     echo '</form></section>';
     render_footer();
 }

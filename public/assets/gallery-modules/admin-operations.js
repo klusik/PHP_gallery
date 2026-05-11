@@ -64,6 +64,25 @@ function normalizedAdminTabHash(hash) {
 }
 
 // Function `setupAdminTabs` executes this focused behavior.
+
+/**
+ * Return a translated browser string with simple placeholder replacement.
+ *
+ * @param {string} key Translation key emitted by the server.
+ * @param {string} fallback Safe English fallback.
+ * @param {Object<string, string|number>} parameters Placeholder values.
+ * @returns {string} Browser-facing translated text.
+ */
+function i18n(key, fallback, parameters = {}) {
+    const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
+    const strings = root.strings && typeof root.strings === 'object' ? root.strings : {};
+    let text = typeof strings[key] === 'string' ? strings[key] : fallback;
+    Object.entries(parameters).forEach(([name, value]) => {
+        text = text.split(`{${name}}`).join(String(value));
+    });
+    return text;
+}
+
 export function setupAdminTabs(root = document) {
     setupAdminTabsInRoot(root);
 }
@@ -217,7 +236,7 @@ export function setupGalleryRefreshProgress() {
                 if ('value' in button && button.tagName === 'INPUT') {
                     button.value = 'Scanning...';
                 } else {
-                    button.textContent = 'Scanning...';
+                    button.textContent = i18n('admin.operations.scanning', 'Scanning...');
                 }
             }
             // progress stores state or configuration for the gallery front-end flow.
@@ -240,7 +259,7 @@ function ensureGalleryRefreshProgress(form) {
     progress = document.createElement('div');
     progress.className = 'thumbnail-progress';
     progress.dataset.galleryRefreshProgress = 'true';
-    progress.innerHTML = '<progress class="thumbnail-progress-bar"></progress><p class="muted">Scanning existing galleries and checking for new gallery folders...</p>';
+    progress.innerHTML = `<progress class="thumbnail-progress-bar"></progress><p class="muted">${i18n('admin.operations.scan_detail', 'Scanning existing galleries and checking for new gallery folders...')}</p>`;
     // target stores state or configuration for the gallery front-end flow.
     const target = form.closest('.hero') || form;
     target.insertAdjacentElement('afterend', progress);
@@ -273,7 +292,7 @@ async function runGalleryUpload(form) {
         button.disabled = true;
         if (button instanceof HTMLButtonElement) {
             button.dataset.originalText = button.dataset.originalText || button.textContent || '';
-            button.textContent = 'Working...';
+            button.textContent = i18n('admin.operations.working', 'Working...');
         }
     });
     try {
@@ -283,10 +302,10 @@ async function runGalleryUpload(form) {
         const result = await runGalleryUploadFiles(form, progress, createThumbnails);
         if (createThumbnails) {
             const failed = Number(result.thumbnail_failed || 0);
-            const message = failed > 0 ? `Upload finished, but ${failed} thumbnail or DNG display derivative(s) failed.` : 'Upload and thumbnail job complete.';
+            const message = failed > 0 ? i18n('admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.', {count: failed}) : i18n('admin.operations.upload_complete', 'Upload and thumbnail job complete.');
             updateThumbnailProgress(progress, result.uploaded || 0, result.total_files || 0, result.thumbnails || 0, result.thumbnail_skipped || 0, message);
         } else {
-            updateBasicProgress(progress, 100, `Uploaded ${result.uploaded || 0} images. Scanning complete.`);
+            updateBasicProgress(progress, 100, i18n('admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.', {count: result.uploaded || 0}));
         }
         if (galleryUploadShouldClosePanel(form)) {
             dispatchAdminSidePanelSuccess(form, result);
@@ -294,7 +313,7 @@ async function runGalleryUpload(form) {
         }
         window.location.href = result.redirect_url || adminUrlWithParams({uploaded: result.uploaded || 0, scanned: result.scanned || 0, thumbnails: result.thumbnails || 0});
     } catch (error) {
-        updateBasicProgress(progress, 100, error.message || 'Upload failed.');
+        updateBasicProgress(progress, 100, error.message || i18n('admin.operations.upload_failed', 'Upload failed.'));
     } finally {
         form.classList.remove('is-uploading');
         const panel = form.closest('[data-admin-side-panel]');
@@ -2538,6 +2557,15 @@ export function setupAdminLogLiveFilters() {
     // Variable `activeRequest` stores this steps working value.
     let activeRequest = null;
 
+    // Variable `liveText` stores translated labels passed from the server-rendered form.
+    const liveText = {
+        searching: form.dataset.adminLogSearchingText || 'Searching...',
+        updated: form.dataset.adminLogUpdatedText || 'Updated.',
+        failed: form.dataset.adminLogFailedText || 'Live search failed. Use Apply filters.',
+        shown: form.dataset.adminLogShownText || 'shown',
+        when: form.dataset.adminLogWhenText || 'When',
+    };
+
     // Function `setLiveState` writes compact search progress text for screen readers and admins.
     const setLiveState = (message) => {
         if (stateLabel) {
@@ -2585,7 +2613,7 @@ export function setupAdminLogLiveFilters() {
             activeRequest.abort();
         }
         activeRequest = new AbortController();
-        setLiveState('Searching...');
+        setLiveState(liveText.searching);
         try {
             // Variable `response` stores this steps working value.
             const response = await fetch(buildUrl(true), {
@@ -2593,19 +2621,19 @@ export function setupAdminLogLiveFilters() {
                 signal: activeRequest.signal,
             });
             if (!response.ok) {
-                setLiveState('Live search failed. Use Apply filters.');
+                setLiveState(liveText.failed);
                 return;
             }
             // Variable `result` stores this steps working value.
             const result = await response.json();
             if (!result.ok) {
-                setLiveState('Live search failed. Use Apply filters.');
+                setLiveState(liveText.failed);
                 return;
             }
             tbody.innerHTML = result.rows_html || '';
             setupAdminLogStatusForms();
             if (countLabel) {
-                countLabel.textContent = `(${Number(result.count || 0)} shown)`;
+                countLabel.textContent = `(${Number(result.count || 0)} ${liveText.shown})`;
             }
             const noResults = Number(result.count || 0) === 0;
             const empty = ensureEmptyContainer();
@@ -2615,16 +2643,16 @@ export function setupAdminLogLiveFilters() {
                 const currentSort = result.time_sort === 'asc' ? 'asc' : 'desc';
                 const nextSort = currentSort === 'desc' ? 'asc' : 'desc';
                 timeSortLink.dataset.nextSort = nextSort;
-                timeSortLink.textContent = `When ${currentSort === 'desc' ? '↓' : '↑'}`;
+                timeSortLink.textContent = `${liveText.when} ${currentSort === 'desc' ? '↓' : '↑'}`;
                 const linkUrl = new URL(buildUrl(false), window.location.href);
                 linkUrl.searchParams.set('time_sort', nextSort);
                 timeSortLink.href = linkUrl.toString();
             }
             window.history.replaceState(null, '', buildUrl(false));
-            setLiveState('Updated.');
+            setLiveState(liveText.updated);
         } catch (error) {
             if (error.name !== 'AbortError') {
-                setLiveState('Live search failed. Use Apply filters.');
+                setLiveState(liveText.failed);
             }
         }
     };

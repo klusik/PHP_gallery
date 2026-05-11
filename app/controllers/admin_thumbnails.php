@@ -53,24 +53,24 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
     echo '<div class="notice admin-thumbnail-maintenance-notice">';
     echo '<div class="admin-thumbnail-maintenance-copy">';
     if (($summary['images_with_missing'] ?? 0) > 0) {
-        echo '<strong>Thumbnail maintenance required.</strong> ';
-        echo e((string) $summary['images_with_missing']) . ' image(s) are missing optimized thumbnails or have stale thumbnail files. ';
-        echo e((string) $summary['missing_variants']) . ' thumbnail variant(s) need to be created. ';
+        echo '<strong>' . e(t('admin.thumbnails.maintenance_required', 'Thumbnail maintenance required.')) . '</strong> ';
+        echo e(t('admin.thumbnails.missing_images_value', '{count} image(s) are missing optimized thumbnails or have stale thumbnail files.', ['count' => (string) $summary['images_with_missing']])) . ' ';
+        echo e(t('admin.thumbnails.missing_variants_value', '{count} thumbnail variant(s) need to be created.', ['count' => (string) $summary['missing_variants']])) . ' ';
         if (!empty($summary['limited'])) {
-            echo 'Only the first ' . e((string) $summary['images_scanned']) . ' image(s) were checked, so more may be pending. ';
+            echo e(t('admin.thumbnails.limited_scan_value', 'Only the first {count} image(s) were checked, so more may be pending.', ['count' => (string) $summary['images_scanned']])) . ' ';
         }
-        echo 'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.';
+        echo t('admin.thumbnails.public_visitors_do_not_generate', 'Public visitors will not generate these thumbnails while browsing. Use <strong>Create all thumbnails</strong> in the admin toolbar.');
     }
     if (($summary['webp_skipped'] ?? 0) > 0) {
         echo (($summary['images_with_missing'] ?? 0) > 0 ? '<br>' : '');
-        echo 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.';
+        echo e(t('admin.thumbnails.webp_skipped_exif', 'Some WebP variants are intentionally skipped because the source images contain EXIF metadata and this server cannot preserve EXIF during WebP conversion.'));
     }
     echo '</div>';
     echo '<form method="post" action="' . e(url_for('admin_dismiss_thumbnail_notice')) . '" class="admin-thumbnail-maintenance-dismiss" data-thumbnail-maintenance-form>';
     echo csrf_field();
     echo '<input type="hidden" name="thumbnail_inventory_fingerprint" value="' . e((string) ($summary['inventory_fingerprint'] ?? '')) . '">';
-    echo '<button type="submit" class="secondary" formaction="' . e(url_for('admin_create_thumbnails')) . '" name="scope" value="missing" data-create-missing-thumbnails>Create missing thumbnails</button>';
-    echo '<button type="submit" class="secondary">Dismiss for 7 days</button>';
+    echo '<button type="submit" class="secondary" formaction="' . e(url_for('admin_create_thumbnails')) . '" name="scope" value="missing" data-create-missing-thumbnails>' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.dismiss_7_days', 'Dismiss for 7 days')) . '</button>';
     echo '</form>';
     echo '</div>';
 }
@@ -97,10 +97,10 @@ function cms_admin_dismiss_thumbnail_notice(): void
     if ($fingerprint !== '' && hash_equals($currentFingerprint, $fingerprint)) {
         set_app_setting('thumbnail_notice_dismissed_until', gmdate('Y-m-d H:i:s', time() + 7 * 86400));
         set_app_setting('thumbnail_notice_dismissed_inventory', $currentFingerprint);
-        flash_message('admin_notice', 'Thumbnail maintenance warning dismissed for 7 days. It will appear again sooner if new images are added.');
+        flash_message('admin_notice', t('admin.thumbnails.dismissed_notice', 'Thumbnail maintenance warning dismissed for 7 days. It will appear again sooner if new images are added.'));
     } else {
         delete_app_settings(['thumbnail_notice_dismissed_until', 'thumbnail_notice_dismissed_inventory']);
-        flash_message('admin_notice', 'Thumbnail maintenance warning was not dismissed because the image list changed.');
+        flash_message('admin_notice', t('admin.thumbnails.dismiss_changed_notice', 'Thumbnail maintenance warning was not dismissed because the image list changed.'));
     }
 
     redirect_to(url_for('admin') . '#admin-tab-maintenance');
@@ -155,7 +155,7 @@ function cms_admin_create_thumbnails(): void
         // Variable $count stores this steps working value.
         $count = create_all_thumbnails();
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        flash_message('admin_notice', t('admin.thumbnails.created_count', 'Created {count} thumbnail(s).', ['count' => (string) $count]));
         redirect_to(url_for('admin'));
     }
     if (($_POST['scope'] ?? '') === 'missing') {
@@ -182,7 +182,7 @@ function cms_admin_create_thumbnails(): void
             }
         }
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s) for images with missing or stale thumbnails.');
+        flash_message('admin_notice', t('admin.thumbnails.created_missing_count', 'Created {count} thumbnail(s) for images with missing or stale thumbnails.', ['count' => (string) $count]));
         redirect_to(url_for('admin'));
     }
     // Variable $galleryId stores this steps working value.
@@ -198,14 +198,14 @@ function cms_admin_create_thumbnails(): void
             }
         }
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        flash_message('admin_notice', t('admin.thumbnails.created_count', 'Created {count} thumbnail(s).', ['count' => (string) $count]));
         redirect_to(url_for('admin_edit_gallery', ['id' => $galleryId]));
     }
     if ($gallery) {
         // Variable $count stores this steps working value.
         $count = create_gallery_thumbnails($galleryId);
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        flash_message('admin_notice', t('admin.thumbnails.created_count', 'Created {count} thumbnail(s).', ['count' => (string) $count]));
         redirect_to(url_for('admin'));
     }
     redirect_to(url_for('admin'));
@@ -375,7 +375,7 @@ function cms_admin_create_thumbnails_batch(): void
         header('Content-Type: application/json');
         echo json_encode([
             'ok' => false,
-            'error' => 'Thumbnail request failed. Check the admin logs or PHP error log for details.',
+            'error' => t('admin.thumbnails.request_failed', 'Thumbnail request failed. Check the admin logs or PHP error log for details.'),
         ]);
         return;
     }
@@ -405,7 +405,7 @@ function cms_admin_delete_thumbnails(): void
     $allowedWords = thumbnail_delete_confirmation_words();
 
     if ($expectedWord === '' || $typedWord === '' || $expectedWord !== $typedWord || !in_array($expectedWord, $allowedWords, true)) {
-        flash_message('admin_notice', 'Thumbnail deletion was not confirmed. No thumbnail files were deleted.');
+        flash_message('admin_notice', t('admin.thumbnails.delete_not_confirmed', 'Thumbnail deletion was not confirmed. No thumbnail files were deleted.'));
         redirect_to(url_for('admin') . '#admin-tab-maintenance');
     }
 
@@ -418,12 +418,12 @@ function cms_admin_delete_thumbnails(): void
             'directories_removed' => (int) $result['directories_removed'],
             'directories_scanned' => (int) $result['directories_scanned'],
         ]);
-        flash_message('admin_notice', 'Deleted ' . (int) $result['files_deleted'] . ' thumbnail file(s) and removed ' . (int) $result['directories_removed'] . ' thumbnail folder(s).');
+        flash_message('admin_notice', t('admin.thumbnails.deleted_count', 'Deleted {files} thumbnail file(s) and removed {directories} thumbnail folder(s).', ['files' => (string) (int) $result['files_deleted'], 'directories' => (string) (int) $result['directories_removed']]));
     } catch (Throwable $exception) {
         admin_log_event('error', 'thumbnail.cache_delete_failed', 'Admin thumbnail cache deletion failed.', [
             'error' => $exception->getMessage(),
         ]);
-        flash_message('admin_notice', 'Thumbnail deletion failed: ' . $exception->getMessage());
+        flash_message('admin_notice', t('admin.thumbnails.delete_failed_value', 'Thumbnail deletion failed: {error}', ['error' => $exception->getMessage()]));
     }
 
     redirect_to(url_for('admin') . '#admin-tab-maintenance');

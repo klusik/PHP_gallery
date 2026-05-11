@@ -800,42 +800,42 @@ function admin_menu_structure(): array
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
     $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
-    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : 'Updates';
+    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
     return [
         [
-            'label' => 'Dashboard',
+            'label' => t('admin.menu.dashboard', 'Dashboard'),
             'items' => [
-                ['label' => 'Overview', 'page' => 'admin', 'url' => url_for('admin')],
+                ['label' => t('admin.menu.overview', 'Overview'), 'page' => 'admin', 'url' => url_for('admin')],
             ],
         ],
         [
-            'label' => 'Galleries',
+            'label' => t('admin.menu.galleries', 'Galleries'),
             'items' => [
-                ['label' => 'All galleries', 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
-                ['label' => 'Create gallery', 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
-                ['label' => 'Upload photos', 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
+                ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
+                ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
             ],
         ],
         [
-            'label' => 'Appearance',
+            'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
-                ['label' => 'Theme', 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
+                ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
             ],
         ],
         [
-            'label' => 'Maintenance',
+            'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
-                ['label' => 'Logs', 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
-                ['label' => 'Telemetry', 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
-                ['label' => 'Integrity', 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
+                ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
+                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
+                ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],
         ],
         [
-            'label' => 'Account',
+            'label' => t('admin.menu.account', 'Account'),
             'items' => [
-                ['label' => 'Profile', 'page' => 'admin_account', 'url' => url_for('admin_account')],
-                ['label' => 'Logout', 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
+                ['label' => t('admin.menu.profile', 'Profile'), 'page' => 'admin_account', 'url' => url_for('admin_account')],
+                ['label' => t('admin.menu.logout', 'Logout'), 'page' => 'admin_logout', 'url' => url_for('admin_logout')],
             ],
         ],
     ];
@@ -890,7 +890,7 @@ function render_admin_tabs(array $tabs, string $activeId = ''): void
         $resolvedActiveId = (string) $tabs[0]['id'];
     }
 
-    echo '<nav class="admin-tabs" data-admin-tabs aria-label="Admin sections">';
+    echo '<nav class="admin-tabs" data-admin-tabs aria-label="' . e(t('admin.tabs.aria_sections', 'Admin sections')) . '">';
     echo '<div class="admin-tab-list" role="tablist">';
     foreach ($tabs as $tab) {
         // $tabId stores the panel id controlled by this tab.
@@ -942,8 +942,8 @@ function render_admin_tab_panel(string $id, string $contentHtml, bool $active = 
  */
 function render_admin_sidebar(string $currentPage): void
 {
-    echo '<aside class="admin-sidebar" aria-label="Admin navigation">';
-    echo '<div class="admin-sidebar-title">Admin</div>';
+    echo '<aside class="admin-sidebar" aria-label="' . e(t('admin.menu.aria_navigation', 'Admin navigation')) . '">';
+    echo '<div class="admin-sidebar-title">' . e(t('admin.menu.title', 'Admin')) . '</div>';
     foreach (admin_menu_structure() as $group) {
         echo '<section class="admin-menu-group">';
         echo '<h2>' . e((string) $group['label']) . '</h2>';
@@ -974,8 +974,9 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
     }
 
     echo '<div class="notice admin-account-notice">';
-    echo '<strong>Recovery email missing.</strong> Add an email address to your account so username-or-email login works and the app is ready for future account recovery.';
-    echo ' <a href="' . e(url_for('admin_account')) . '">Open account settings</a>';
+    echo '<strong>' . e(t('admin.account.notice_recovery_email_missing_title', 'Recovery email missing.')) . '</strong> ';
+    echo e(t('admin.account.notice_recovery_email_missing_body', 'Add an email address to your account so username-or-email login works and the app is ready for future account recovery.'));
+    echo ' <a href="' . e(url_for('admin_account')) . '">' . e(t('admin.account.open_account_settings', 'Open account settings')) . '</a>';
     echo '</div>';
 }
 
@@ -1029,7 +1030,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     // $pageWidthClass stores a public layout class selected in Theme settings.
     // Admin pages intentionally keep their own workspace width so dense tables remain practical.
     $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
-    echo '<!doctype html><html lang="cs" translate="no"><head><meta charset="utf-8">';
+    echo '<!doctype html><html lang="' . e(function_exists('translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     // Variable $faviconUrl stores this steps working value.
@@ -1077,7 +1078,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
-    echo '<a href="' . e(url_for('home')) . '">Galleries</a>';
+    echo '<a href="' . e(url_for('home')) . '">' . e(t('nav.galleries', 'Galleries')) . '</a>';
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             // $updatePending stores an intermediate value used by the surrounding gallery workflow.
@@ -1086,12 +1087,12 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
             $updateClass = $updatePending ? ' class="is-update-pending"' : '';
             // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
             $updateLabel = application_update_nav_label($updatePending);
-            echo '<a href="' . e(url_for('admin')) . '">Admin</a>';
+            echo '<a href="' . e(url_for('admin')) . '">' . e(t('nav.admin', 'Admin')) . '</a>';
             echo '<a' . $updateClass . ' href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
         }
-        echo '<a href="' . e(url_for('admin_logout')) . '">Logout</a>';
+        echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
     } else {
-        echo '<a href="' . e(url_for('admin_login')) . '">Admin login</a>';
+        echo '<a href="' . e(url_for('admin_login')) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
     }
     echo '</nav></header>';
     if ($headerBranding['separator_url'] !== '') {
@@ -1198,6 +1199,75 @@ function cms_current_version(): string
     return $version = CMS_VERSION;
 }
 
+
+/**
+ * Return translated strings used by browser-side modules.
+ */
+function cms_browser_i18n_strings(): array
+{
+    return [
+        'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
+        'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
+        'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
+        'admin.bulk.gallery_fallback' => t('js.admin.bulk.gallery_fallback', 'Gallery {id}'),
+        'admin.bulk.image_fallback' => t('js.admin.bulk.image_fallback', 'Image {id}'),
+        'admin.bulk.selected_photo_fallback' => t('js.admin.bulk.selected_photo_fallback', 'Selected photo'),
+        'admin.bulk.photo_selected_one' => t('js.admin.bulk.photo_selected_one', '1 photo selected'),
+        'admin.bulk.photo_selected_many' => t('js.admin.bulk.photo_selected_many', '{count} photos selected'),
+        'admin.bulk.select_photos_first' => t('js.admin.bulk.select_photos_first', 'Select one or more photos first.'),
+        'admin.bulk.choose_move_action_summary' => t('js.admin.bulk.choose_move_action_summary', '{count} selected. Choose one of the move actions above.'),
+        'admin.bulk.choose_destination_summary' => t('js.admin.bulk.choose_destination_summary', '{count} selected. Choose the destination gallery.'),
+        'admin.bulk.enter_new_gallery_summary' => t('js.admin.bulk.enter_new_gallery_summary', '{count} selected. Enter the new gallery title.'),
+        'admin.bulk.existing_gallery' => t('js.admin.bulk.existing_gallery', 'existing gallery'),
+        'admin.bulk.new_gallery' => t('js.admin.bulk.new_gallery', 'new gallery'),
+        'admin.bulk.move_summary' => t('js.admin.bulk.move_summary', '{count} selected. Move originals, thumbnails, and generated display files to the {target_type}: {target}.'),
+        'admin.bulk.choose_move_type' => t('js.admin.bulk.choose_move_type', 'Choose whether to move to an existing gallery or a new gallery.'),
+        'admin.bulk.select_photo_move' => t('js.admin.bulk.select_photo_move', 'Select at least one photo to move.'),
+        'admin.bulk.select_photo_delete' => t('js.admin.bulk.select_photo_delete', 'Select at least one photo to delete.'),
+        'admin.bulk.choose_destination' => t('js.admin.bulk.choose_destination', 'Choose the destination gallery.'),
+        'admin.bulk.enter_new_gallery' => t('js.admin.bulk.enter_new_gallery', 'Enter the new gallery title.'),
+        'admin.bulk.move_photo_one' => t('js.admin.bulk.move_photo_one', 'Move this photo?'),
+        'admin.bulk.move_photo_many' => t('js.admin.bulk.move_photo_many', 'Move these photos?'),
+        'admin.bulk.move_photo_detail' => t('js.admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.'),
+        'admin.bulk.delete_photo_one' => t('js.admin.bulk.delete_photo_one', 'Delete this photo from the gallery?'),
+        'admin.bulk.delete_photo_many' => t('js.admin.bulk.delete_photo_many', 'Delete these photos from the gallery?'),
+        'admin.bulk.delete_photo_detail' => t('js.admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.'),
+        'admin.thumbnails.delete_not_configured' => t('js.admin.thumbnails.delete_not_configured', 'Thumbnail deletion is not configured correctly. No files were deleted.'),
+        'admin.thumbnails.delete_prompt_intro' => t('js.admin.thumbnails.delete_prompt_intro', 'This will delete all generated thumbnail files for every gallery.'),
+        'admin.thumbnails.delete_prompt_originals' => t('js.admin.thumbnails.delete_prompt_originals', 'Original photos and gallery records will not be deleted.'),
+        'admin.thumbnails.delete_prompt_regenerate' => t('js.admin.thumbnails.delete_prompt_regenerate', 'The next public/admin view can regenerate thumbnails when needed.'),
+        'admin.thumbnails.delete_prompt_confirm' => t('js.admin.thumbnails.delete_prompt_confirm', 'Type {word} to confirm.'),
+        'admin.thumbnails.delete_cancelled' => t('js.admin.thumbnails.delete_cancelled', 'Thumbnail deletion cancelled. No thumbnail files were deleted.'),
+        'admin.operations.scanning' => t('js.admin.operations.scanning', 'Scanning...'),
+        'admin.operations.scan_detail' => t('js.admin.operations.scan_detail', 'Scanning existing galleries and checking for new gallery folders...'),
+        'admin.operations.working' => t('js.admin.operations.working', 'Working...'),
+        'admin.operations.upload_thumbnail_failed' => t('js.admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.'),
+        'admin.operations.upload_complete' => t('js.admin.operations.upload_complete', 'Upload and thumbnail job complete.'),
+        'admin.operations.uploaded_scanning_complete' => t('js.admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.'),
+        'admin.operations.upload_failed' => t('js.admin.operations.upload_failed', 'Upload failed.'),
+        'votes.liked' => t('js.votes.liked', 'Liked'),
+        'votes.no_like' => t('js.votes.no_like', 'No like'),
+        'thumbnail_bounds.auto_min' => t('thumbnail_bounds.auto_min', 'Auto min'),
+        'thumbnail_bounds.auto_max' => t('thumbnail_bounds.auto_max', 'Auto max'),
+    ];
+}
+
+/**
+ * Render translated strings for browser-side modules before the ES module entrypoint loads.
+ */
+function render_browser_i18n_script(): void
+{
+    $payload = [
+        'language' => translation_active_language(),
+        'strings' => cms_browser_i18n_strings(),
+    ];
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json)) {
+        $json = '{"language":"en","strings":{}}';
+    }
+    echo '<script>window.PHP_GALLERY_I18N = ' . $json . ';</script>';
+}
+
 /**
  * Render the shared footer and JavaScript include.
  */
@@ -1212,6 +1282,7 @@ function render_footer(): void
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
+    render_browser_i18n_script();
     echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';

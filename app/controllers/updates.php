@@ -59,30 +59,30 @@ function cms_admin_update(): void
             if ($action === 'beta_install') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
-                admin_log_event('info', 'update.beta_installed', 'Admin installed a beta application build.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Installed beta code ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.beta_installed', t('admin.updates.log_beta_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_installed', 'Installed beta code {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             } elseif ($action === 'beta_revert') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = restore_application_stable_release();
-                admin_log_event('info', 'update.beta_reverted', 'Admin restored beta application build from the stable branch head.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Restored the stable release from the GitHub branch head. Copied ' . (int) $result['files_copied'] . ' files and removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s).';
+                admin_log_event('info', 'update.beta_reverted', t('admin.updates.log_beta_reverted'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_beta_reverted', 'Restored the stable release from the GitHub branch head. Copied {files} files and removed {removed} obsolete path(s).', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0)]);
             } elseif ($action === 'clean_reinstall') {
                 if (strtoupper(trim((string) ($_POST['clean_reinstall_confirm'] ?? ''))) !== 'REINSTALL') {
-                    throw new RuntimeException('Type REINSTALL to confirm the clean reinstall.');
+                    throw new RuntimeException(t('admin.updates.confirm_reinstall_error'));
                 }
                 // $result stores clean reinstall diagnostics for the admin log and user-facing notice.
                 $result = clean_reinstall_current_application_version();
-                admin_log_event('info', 'update.clean_reinstalled', 'Admin performed a clean reinstall of the stable branch head.', $result, ['category' => 'update', 'severity' => 'warning']);
-                $_SESSION['admin_update_notice'] = 'Clean reinstall finished. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' unexpected path(s), removed ' . (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0) . ' cached ZIP file(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.clean_reinstalled', t('admin.updates.log_clean_reinstalled'), $result, ['category' => 'update', 'severity' => 'warning']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_clean_reinstalled', 'Clean reinstall finished. Copied {files} files, removed {removed} unexpected path(s), removed {zips} cached ZIP file(s), and applied {migrations} migrations.', ['files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'zips' => (string) (int) ($result['cache_cleanup']['zip_files_removed'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             } else {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_update();
-                admin_log_event('info', 'update.installed', 'Admin installed an application update.', $result, ['category' => 'update', 'severity' => 'notice']);
-                $_SESSION['admin_update_notice'] = 'Updated to version ' . (string) $result['version'] . '. Copied ' . (int) $result['files_copied'] . ' files, removed ' . (int) ($result['removed_count'] ?? 0) . ' obsolete path(s), and applied ' . count((array) $result['migrations']) . ' migrations.';
+                admin_log_event('info', 'update.installed', t('admin.updates.log_installed'), $result, ['category' => 'update', 'severity' => 'notice']);
+                $_SESSION['admin_update_notice'] = t('admin.updates.notice_updated', 'Updated to version {version}. Copied {files} files, removed {removed} obsolete path(s), and applied {migrations} migrations.', ['version' => (string) $result['version'], 'files' => (string) (int) $result['files_copied'], 'removed' => (string) (int) ($result['removed_count'] ?? 0), 'migrations' => (string) count((array) $result['migrations'])]);
             }
             redirect_to(url_for('admin_update'));
         } catch (Throwable $exception) {
-            admin_log_event('warning', 'update.failed', 'Application update failed.', [
+            admin_log_event('warning', 'update.failed', t('admin.updates.log_failed'), [
                 'action' => (string) ($_POST['update_action'] ?? 'stable_update'),
                 'error' => $exception->getMessage(),
                 'current_version' => cms_current_version(),
@@ -101,64 +101,64 @@ function cms_admin_update(): void
     $status = check_application_update();
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
-    render_header('Application updates');
-    echo '<section class="hero"><h1>Application updates</h1><nav class="nav">';
-    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a>';
-    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">Open GitHub</a>';
+    render_header(t('admin.updates.title'));
+    echo '<section class="hero"><h1>' . e(t('admin.updates.title')) . '</h1><nav class="nav">';
+    echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
+    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
     echo '</nav></section>';
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
     if ($error !== null) {
-        echo '<div class="notice">Update failed: ' . e($error) . '</div>';
+        echo '<div class="notice">' . e(t('admin.updates.failed_value', ['error' => $error])) . '</div>';
     }
-    echo '<section class="panel"><h2>Status</h2>';
-    echo '<p>Installed version: <strong>' . e(cms_current_version()) . '</strong></p>';
+    echo '<section class="panel"><h2>' . e(t('admin.updates.status')) . '</h2>';
+    echo '<p>' . e(t('admin.updates.installed_version')) . ': <strong>' . e(cms_current_version()) . '</strong></p>';
     if ($betaActive) {
-        echo '<p>Active channel: <strong>beta</strong></p>';
-        echo '<p>Installed beta code: <code>' . e(application_update_beta_commit()) . '</code></p>';
+        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_beta')) . '</strong></p>';
+        echo '<p>' . e(t('admin.updates.installed_beta_code')) . ': <code>' . e(application_update_beta_commit()) . '</code></p>';
     } else {
-        echo '<p>Active channel: <strong>stable</strong></p>';
+        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_stable')) . '</strong></p>';
     }
-    echo '<p>Repository: <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
+    echo '<p>' . e(t('admin.updates.repository')) . ': <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
     if (!empty($status['error'])) {
-        echo '<p class="muted">Could not check for updates: ' . e((string) $status['error']) . '</p>';
+        echo '<p class="muted">' . e(t('admin.updates.check_failed_value', ['error' => (string) $status['error']])) . '</p>';
     } else {
-        echo '<p>Latest version on GitHub: <strong>' . e((string) $status['latest_version']) . '</strong></p>';
-        echo '<p class="muted">Checked branch: ' . e((string) $status['branch']) . '</p>';
+        echo '<p>' . e(t('admin.updates.latest_version')) . ': <strong>' . e((string) $status['latest_version']) . '</strong></p>';
+        echo '<p class="muted">' . e(t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</p>';
         if (!empty($status['version_source'])) {
-            echo '<p class="muted">Version source: ' . e((string) $status['version_source']) . '</p>';
+            echo '<p class="muted">' . e(t('admin.updates.version_source_value', ['source' => (string) $status['version_source']])) . '</p>';
         }
         if (!empty($status['update_available'])) {
             echo '<form method="post" class="form-grid">' . csrf_field();
             echo '<input type="hidden" name="update_action" value="stable_update">';
-            echo '<p>A newer version is available. The updater will download the GitHub branch archive, back up overwritten files under <code>cache/updates/backups</code>, and keep local config, galleries, cache, and custom CSS untouched.</p>';
-            echo '<button type="submit" class="is-update-pending">Update(1)</button></form>';
+            echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
+            echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
         } else {
-            echo '<p class="muted">This installation is current.</p>';
+            echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
         }
     }
-    echo '<hr><h3>Beta build</h3>';
+    echo '<hr><h3>' . e(t('admin.updates.beta_build')) . '</h3>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="beta_install">';
-    echo '<label>Beta code<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
-    echo '<p class="muted">Enter the beta code for the snapshot you want to install.</p>';
-    echo '<button type="submit">Install beta snapshot</button>';
+    echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
+    echo '<p class="muted">' . e(t('admin.updates.beta_code_help')) . '</p>';
+    echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
     echo '</form>';
     if ($betaActive) {
         echo '<form method="post" class="form-grid form-grid-spaced">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
-        echo '<p class="muted">This downloads the stable branch head from GitHub and restores application files from that release. Database changes from the beta are not rolled back automatically.</p>';
-        echo '<button type="submit" class="button secondary">Restore stable release</button>';
+        echo '<p class="muted">' . e(t('admin.updates.restore_stable_help')) . '</p>';
+        echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
         echo '</form>';
     }
-    echo '<hr><h3>Clean reinstall current version</h3>';
+    echo '<hr><h3>' . e(t('admin.updates.clean_reinstall_title')) . '</h3>';
     echo '<form method="post" class="form-grid form-grid-spaced danger-zone">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="clean_reinstall">';
-    echo '<p>This downloads a clean copy of the stable branch, backs up replaced files, removes application files that do not belong to the release, clears generated ZIP files from cache, runs migrations, and invalidates PHP OPcache.</p>';
-    echo '<p class="muted">Protected data is kept: <code>config.php</code>, <code>galleries/</code>, <code>custom_css/</code>, <code>cache/</code> metadata, and <code>public/assets/custom.css</code>. This is intended for broken design or partial update recovery.</p>';
-    echo '<label>Type REINSTALL to confirm<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
-    echo '<button type="submit" class="button danger">Clean reinstall current version</button>';
+    echo '<p>' . e(t('admin.updates.clean_reinstall_description')) . '</p>';
+    echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
+    echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
+    echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
     echo '</form>';
     echo '</section>';
     render_footer();

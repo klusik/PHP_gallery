@@ -436,7 +436,7 @@ function clean_reinstall_current_application_version(): array
  */
 function application_update_nav_label(bool $pending): string
 {
-    return $pending ? 'Update(1)' : 'Updates';
+    return $pending ? t('admin.menu.update_pending', 'Update(1)') : t('admin.menu.updates', 'Updates');
 }
 
 /**

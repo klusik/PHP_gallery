@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 // Load DB-backed application settings before any feature module reads app_setting().
 require_once __DIR__ . '/services/app_settings.php';
+// Load translation helpers early so controllers can use t() for visible text.
+require_once __DIR__ . '/services/translations.php';
 // Load schema helpers before feature modules perform optional-column checks.
 require_once __DIR__ . '/services/database_helpers.php';
 // Load public render profiling helpers before public gallery services can record timings.

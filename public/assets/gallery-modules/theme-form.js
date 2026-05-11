@@ -147,7 +147,7 @@ function setupThumbnailBoundControls() {
          */
         const formatSize = (value, side) => {
             if (value === 0) {
-                return side === 'min' ? 'Auto min' : 'Auto max';
+                return side === 'min' ? i18n('thumbnail_bounds.auto_min', 'Auto min') : i18n('thumbnail_bounds.auto_max', 'Auto max');
             }
             return `${value}px`;
         };
@@ -425,6 +425,25 @@ function setupThemeLivePreview(form) {
         });
     });
     syncPreview();
+}
+
+
+/**
+ * Return a translated browser string with simple placeholder replacement.
+ *
+ * @param {string} key Translation key emitted by the server.
+ * @param {string} fallback Safe English fallback.
+ * @param {Object<string, string|number>} parameters Placeholder values.
+ * @returns {string} Browser-facing translated text.
+ */
+function i18n(key, fallback, parameters = {}) {
+    const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
+    const strings = root.strings && typeof root.strings === 'object' ? root.strings : {};
+    let text = typeof strings[key] === 'string' ? strings[key] : fallback;
+    Object.entries(parameters).forEach(([name, value]) => {
+        text = text.split(`{${name}}`).join(String(value));
+    });
+    return text;
 }
 
 export function setupThemeOverrideForm() {

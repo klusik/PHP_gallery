@@ -109,9 +109,9 @@ function gallery_visibility_schema_supports_unpublished(): bool
 function gallery_visibility_label(string $visibility): string
 {
     return match (normalize_gallery_visibility($visibility)) {
-        'public' => 'public',
-        'private' => 'private',
-        default => 'unpublished',
+        'public' => t('gallery.visibility.public', 'public'),
+        'private' => t('gallery.visibility.private', 'private'),
+        default => t('gallery.visibility.unpublished', 'unpublished'),
     };
 }
 

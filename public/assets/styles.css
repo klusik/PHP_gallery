@@ -5,3 +5,42 @@
 @import url('styles/side-panel.css');
 @import url('styles/utilities.css');
 
+
+.admin-language-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #d7dee8;
+    font-size: 0.9rem;
+}
+
+.admin-language-selector > span {
+    padding-left: 0.45rem;
+    font-size: 0.82rem;
+    opacity: 0.82;
+}
+
+.admin-language-selector-options {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.admin-page .site-header .nav .admin-language-option {
+    padding: 0.32rem 0.55rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #f4f7fa;
+    font-size: 0.86rem;
+}
+
+.admin-page .site-header .nav .admin-language-option.is-active {
+    background: #f4f7fa;
+    color: #101820;
+    font-weight: 800;
+}

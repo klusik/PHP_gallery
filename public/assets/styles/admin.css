@@ -3422,3 +3422,118 @@ button.gallery-row-action.secondary {
 }
 
 
+
+.admin-language-tab-grid {
+    margin-bottom: 1rem;
+}
+
+.admin-language-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.admin-language-table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: collapse;
+}
+
+.admin-language-table th,
+.admin-language-table td {
+    padding: 0.75rem 0.85rem;
+    border-bottom: 1px solid var(--admin-border, #e5ebf2);
+    text-align: left;
+    vertical-align: top;
+}
+
+.admin-language-table th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--admin-muted, #64748b);
+    background: #f8fafc;
+}
+
+.admin-language-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-language-table code {
+    white-space: nowrap;
+}
+
+.admin-language-editor {
+    margin-top: 1rem;
+}
+
+.admin-language-json-editor {
+    width: 100%;
+    min-height: 26rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    tab-size: 2;
+    white-space: pre;
+}
+
+.admin-language-coverage-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin: 0.25rem 0 0.85rem;
+}
+
+.admin-language-coverage-summary span {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.4rem 0.65rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 999px;
+    background: #fff;
+}
+
+.admin-language-key-details {
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.admin-language-key-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.admin-language-key-list {
+    display: block;
+    max-height: 14rem;
+    overflow: auto;
+    padding: 0.75rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 12px;
+    background: #fff;
+    white-space: pre-wrap;
+}
+
+.admin-language-conventions {
+    margin-top: 1rem;
+}
+
+.admin-language-convention-list {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.75rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.admin-language-convention-list code {
+    display: inline-flex;
+    margin-right: 0.35rem;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid var(--admin-border, #d4dde7);
+    border-radius: 999px;
+    background: #fff;
+}

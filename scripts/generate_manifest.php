@@ -150,6 +150,7 @@ function manifest_allowed_extensions(): array
         'md' => true,
         'bat' => true,
         'ps1' => true,
+        'json' => true,
         'htaccess' => true,
     ];
 }

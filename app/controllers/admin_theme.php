@@ -160,8 +160,64 @@ declare(strict_types=1);
 function cms_admin_theme(): void
 {
     require_admin();
+
+    if (isset($_GET['download_language_pack'])) {
+        // $downloadLanguage stores the normalized language code requested for export.
+        $downloadLanguage = translation_normalize_language_code((string) $_GET['download_language_pack']);
+        if ($downloadLanguage !== '' && translation_language_allowed($downloadLanguage)) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $downloadLanguage . '.json"');
+            echo translation_language_pack_json_text($downloadLanguage);
+            return;
+        }
+        redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
+    }
+
     if (request_method() === 'POST') {
         verify_csrf();
+        if (isset($_POST['cms_language'])) {
+            translation_set_active_language((string) $_POST['cms_language']);
+        }
+        if (isset($_POST['public_language'])) {
+            translation_set_public_language((string) $_POST['public_language']);
+        }
+        if (!empty($_POST['save_language_pack'])) {
+            // $languageEditCode stores the language pack currently edited in the admin UI.
+            $languageEditCode = translation_normalize_language_code((string) ($_POST['language_pack_code'] ?? ''));
+            // $languageJson stores the submitted editable JSON dictionary.
+            $languageJson = (string) ($_POST['language_pack_json'] ?? '');
+            if ($languageEditCode === '' || !translation_language_allowed($languageEditCode)) {
+                redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
+            }
+            $saveResult = translation_save_language_json($languageEditCode, $languageJson);
+            if (empty($saveResult['saved'])) {
+                $_SESSION['cms_language_editor_errors'] = $saveResult['errors'] ?? [t('admin.theme.language.error_save_failed', 'Language pack could not be saved.')];
+                redirect_to(url_for('admin_theme', ['language_error' => 'save_failed', 'edit_language' => $languageEditCode]) . '#admin-theme-tab-language');
+            }
+            redirect_to(url_for('admin_theme', ['language_saved' => 1, 'edit_language' => $languageEditCode]) . '#admin-theme-tab-language');
+        }
+        if (!empty($_POST['import_language_pack'])) {
+            // $languageImportCode stores the target language pack for uploaded JSON.
+            $languageImportCode = translation_normalize_language_code((string) ($_POST['language_pack_code'] ?? ''));
+            if ($languageImportCode === '' || !translation_language_allowed($languageImportCode)) {
+                redirect_to(url_for('admin_theme', ['language_error' => 'invalid_language']) . '#admin-theme-tab-language');
+            }
+            if (empty($_FILES['language_pack_file']['tmp_name']) || !is_uploaded_file($_FILES['language_pack_file']['tmp_name'])) {
+                $_SESSION['cms_language_editor_errors'] = [t('admin.theme.language.error_import_missing', 'Choose a JSON file before importing.')];
+                redirect_to(url_for('admin_theme', ['language_error' => 'import_missing', 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+            }
+            $importJson = (string) file_get_contents((string) $_FILES['language_pack_file']['tmp_name']);
+            $importResult = translation_save_language_json($languageImportCode, $importJson);
+            if (empty($importResult['saved'])) {
+                $_SESSION['cms_language_editor_errors'] = $importResult['errors'] ?? [t('admin.theme.language.error_import_failed', 'Language pack import failed.')];
+                redirect_to(url_for('admin_theme', ['language_error' => 'import_failed', 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+            }
+            redirect_to(url_for('admin_theme', ['language_imported' => 1, 'edit_language' => $languageImportCode]) . '#admin-theme-tab-language');
+        }
+        if (!empty($_POST['clear_translation_diagnostics'])) {
+            translation_clear_missing_diagnostics();
+            redirect_to(url_for('admin_theme', ['saved' => 1]) . '#admin-theme-tab-language');
+        }
         if (!empty($_POST['reset_custom_css'])) {
             if (is_file(custom_css_path())) {
                 unlink(custom_css_path());
@@ -309,23 +365,24 @@ function cms_admin_theme(): void
     $paginationSettings = pagination_global_settings();
     // Variable $homeGridSettings stores the separate public home-page gallery grid.
     $homeGridSettings = main_page_gallery_grid_settings();
-    render_header('Theme');
+    render_header(t('admin.theme.page_title', 'Theme'));
     if (!empty($_GET['grid_reset'])) {
         // $databaseRows stores how many database gallery rows reported a custom-grid reset.
         $databaseRows = max(0, (int) ($_GET['db_rows'] ?? 0));
         // $sidecars stores how many gallery.json files had stale custom-grid metadata removed.
         $sidecars = max(0, (int) ($_GET['sidecars'] ?? 0));
-        echo '<section class="panel notice"><p>Custom gallery grid settings were reset. Database rows changed: ' . $databaseRows . '. Sidecar files cleaned: ' . $sidecars . '.</p></section>';
+        echo '<section class="panel notice"><p>' . e(t('admin.theme.grid_reset_notice', 'Custom gallery grid settings were reset. Database rows changed: {db_rows}. Sidecar files cleaned: {sidecars}.', ['db_rows' => $databaseRows, 'sidecars' => $sidecars])) . '</p></section>';
     }
     // $themeBackgroundUrl stores the current global background asset so the live preview can mirror the public page before saving.
     $themeBackgroundUrl = theme_background_asset_url();
-    echo '<section class="panel admin-theme-hero" id="admin-theme"><div><h1>Theme</h1><p class="muted">Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.</p></div><div class="bulk-row"><button type="submit" form="admin-theme-form">Save theme</button></div></section>';
+    echo '<section class="panel admin-theme-hero" id="admin-theme"><div><h1>' . e(t('admin.theme.title', 'Theme')) . '</h1><p class="muted">' . e(t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.')) . '</p></div><div class="bulk-row"><button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button></div></section>';
 
     $themeTabs = [
-        ['id' => 'admin-theme-tab-appearance', 'label' => 'Appearance'],
-        ['id' => 'admin-theme-tab-media', 'label' => 'Media'],
-        ['id' => 'admin-theme-tab-layout', 'label' => 'Layout'],
-        ['id' => 'admin-theme-tab-custom-css', 'label' => 'Custom CSS'],
+        ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
+        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Media')],
+        ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
+        ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
+        ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
     ];
     render_admin_tabs($themeTabs, 'admin-theme-tab-appearance');
 
@@ -333,20 +390,20 @@ function cms_admin_theme(): void
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Appearance</p><h2>Visual appearance</h2></div><p class="muted">Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.appearance.kicker', 'Appearance')) . '</p><h2>' . e(t('admin.theme.appearance.title', 'Visual appearance')) . '</h2></div><p class="muted">' . e(t('admin.theme.appearance.description', 'Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.')) . '</p></div>';
     echo '<fieldset class="theme-appearance-editor" data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
-    echo '<legend>Visual appearance</legend>';
+    echo '<legend>' . e(t('admin.theme.appearance.legend', 'Visual appearance')) . '</legend>';
     echo '<div class="theme-appearance-controls">';
-    echo '<label>Site name<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required data-theme-preview-site-name></label>';
-    echo '<label class="theme-color-control">Accent color<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control data-theme-preview-color="accent"><span class="muted">Buttons, selected pagination, and important links.</span></label>';
-    echo '<label class="theme-color-control">Dark accent<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '" data-theme-override-control data-theme-preview-color="accent_dark"><span class="muted">Hover states, outlines, and secondary actions.</span></label>';
-    echo '<label class="theme-color-control">Page background<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '" data-theme-override-control data-theme-preview-color="paper"><span class="muted">The base page tone behind all content.</span></label>';
-    echo '<label class="theme-color-control">Panel background<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '" data-theme-override-control data-theme-preview-color="panel"><span class="muted">Cards, panels, and normal gallery tiles.</span></label>';
-    echo '<label class="theme-color-control">Open gallery panel<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control data-theme-preview-color="gallery_panel"><span class="muted">Gallery-specific cards and image panels.</span></label>';
-    echo '<label class="theme-color-control">Header title color<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control data-theme-preview-color="header_text"><span class="muted">Main site title in the public header.</span></label>';
-    echo '<label class="theme-color-control">Gallery title color<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">Open gallery title and hero text.</span></label>';
-    echo '<label>Rounded corners <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
-    echo '<label>Font style<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>Classic serif</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>Clean sans-serif</option></select></label>';
+    echo '<label>' . e(t('admin.theme.appearance.site_name', 'Site name')) . '<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required data-theme-preview-site-name></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.accent_color', 'Accent color')) . '<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control data-theme-preview-color="accent"><span class="muted">' . e(t('admin.theme.appearance.accent_color_hint', 'Buttons, selected pagination, and important links.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.dark_accent', 'Dark accent')) . '<input type="color" name="theme_accent_dark" value="' . e((string) $theme['accent_dark']) . '" data-theme-override-control data-theme-preview-color="accent_dark"><span class="muted">' . e(t('admin.theme.appearance.dark_accent_hint', 'Hover states, outlines, and secondary actions.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.page_background', 'Page background')) . '<input type="color" name="theme_paper" value="' . e((string) $theme['paper']) . '" data-theme-override-control data-theme-preview-color="paper"><span class="muted">' . e(t('admin.theme.appearance.page_background_hint', 'The base page tone behind all content.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.panel_background', 'Panel background')) . '<input type="color" name="theme_panel" value="' . e((string) $theme['panel']) . '" data-theme-override-control data-theme-preview-color="panel"><span class="muted">' . e(t('admin.theme.appearance.panel_background_hint', 'Cards, panels, and normal gallery tiles.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.open_gallery_panel', 'Open gallery panel')) . '<input type="color" name="theme_gallery_panel" value="' . e((string) $theme['gallery_panel']) . '" data-theme-override-control data-theme-preview-color="gallery_panel"><span class="muted">' . e(t('admin.theme.appearance.open_gallery_panel_hint', 'Gallery-specific cards and image panels.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.header_title_color', 'Header title color')) . '<input type="color" name="theme_header_text" value="' . e((string) $theme['header_text']) . '" data-theme-override-control data-theme-preview-color="header_text"><span class="muted">' . e(t('admin.theme.appearance.header_title_color_hint', 'Main site title in the public header.')) . '</span></label>';
+    echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.gallery_title_color', 'Gallery title color')) . '<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">' . e(t('admin.theme.appearance.gallery_title_color_hint', 'Open gallery title and hero text.')) . '</span></label>';
+    echo '<label>' . e(t('admin.theme.appearance.rounded_corners', 'Rounded corners')) . ' <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
+    echo '<label>' . e(t('admin.theme.appearance.font_style', 'Font style')) . '<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_serif', 'Classic serif')) . '</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_sans', 'Clean sans-serif')) . '</option></select></label>';
     // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
     $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
     // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
@@ -355,80 +412,80 @@ function cms_admin_theme(): void
     $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
     // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
     $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
-    echo '<fieldset class="theme-gps-pin-settings"><legend>GPS pin</legend>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> Show GPS pin on photo cards</label>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> Show pin background underlay</label>';
-    echo '<label>Pin size <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
-    echo '<label>Background size <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
-    echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="GPS pin preview"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">Live preview of the photo pin.</span></div>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>Reset pin size</button></div>';
+    echo '<fieldset class="theme-gps-pin-settings"><legend>' . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin')) . '</legend>';
+    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> ' . e(t('admin.theme.appearance.show_gps_pin', 'Show GPS pin on photo cards')) . '</label>';
+    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> ' . e(t('admin.theme.appearance.show_pin_background', 'Show pin background underlay')) . '</label>';
+    echo '<label>' . e(t('admin.theme.appearance.pin_size', 'Pin size')) . ' <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
+    echo '<label>' . e(t('admin.theme.appearance.pin_background_size', 'Background size')) . ' <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
+    echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="' . e(t('admin.theme.appearance.gps_pin_preview_label', 'GPS pin preview')) . '"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">' . e(t('admin.theme.appearance.gps_pin_preview_hint', 'Live preview of the photo pin.')) . '</span></div>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>' . e(t('admin.theme.appearance.reset_pin_size', 'Reset pin size')) . '</button></div>';
     echo '</fieldset>';
     // $pageWidthMode stores the normalized layout preset selected for the public page container.
     $pageWidthMode = theme_page_width_mode((string) ($theme['page_width'] ?? 'default'));
     // $customPageWidth stores the saved custom container width in pixels. It is always rendered so switching presets does not discard it.
     $customPageWidth = theme_page_width_custom_value($theme['page_width_custom'] ?? null);
-    echo '<label>Page width<select name="theme_page_width" data-theme-preview-width data-theme-page-width-select><option value="default"' . ($pageWidthMode === 'default' ? ' selected' : '') . '>Default</option><option value="wide"' . ($pageWidthMode === 'wide' ? ' selected' : '') . '>Wider</option><option value="custom"' . ($pageWidthMode === 'custom' ? ' selected' : '') . '>Custom</option><option value="full"' . ($pageWidthMode === 'full' ? ' selected' : '') . '>Full width</option></select><span class="muted">Controls the public page container. Full width follows the available screen width dynamically.</span></label>';
+    echo '<label>' . e(t('admin.theme.appearance.page_width', 'Page width')) . '<select name="theme_page_width" data-theme-preview-width data-theme-page-width-select><option value="default"' . ($pageWidthMode === 'default' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.page_width_default', 'Default')) . '</option><option value="wide"' . ($pageWidthMode === 'wide' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.page_width_wide', 'Wider')) . '</option><option value="custom"' . ($pageWidthMode === 'custom' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.page_width_custom', 'Custom')) . '</option><option value="full"' . ($pageWidthMode === 'full' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.page_width_full', 'Full width')) . '</option></select><span class="muted">' . e(t('admin.theme.appearance.page_width_hint', 'Controls the public page container. Full width follows the available screen width dynamically.')) . '</span></label>';
     echo '<div class="theme-custom-width-control" data-theme-custom-width-control' . ($pageWidthMode === 'custom' ? '' : ' hidden') . '>';
-    echo '<label>Custom page width <span class="muted" data-theme-custom-width-display>' . $customPageWidth . 'px</span><input type="range" name="theme_page_width_custom_slider" min="1024" max="2048" step="1" value="' . $customPageWidth . '" data-theme-custom-width-slider></label>';
-    echo '<label>Custom width in pixels<input type="number" name="theme_page_width_custom" min="1024" max="2048" step="1" value="' . $customPageWidth . '" inputmode="numeric" data-theme-preview-custom-width data-theme-custom-width-number><span class="muted">Allowed range: 1024 to 2048 px.</span></label>';
+    echo '<label>' . e(t('admin.theme.appearance.custom_page_width', 'Custom page width')) . ' <span class="muted" data-theme-custom-width-display>' . $customPageWidth . 'px</span><input type="range" name="theme_page_width_custom_slider" min="1024" max="2048" step="1" value="' . $customPageWidth . '" data-theme-custom-width-slider></label>';
+    echo '<label>' . e(t('admin.theme.appearance.custom_width_pixels', 'Custom width in pixels')) . '<input type="number" name="theme_page_width_custom" min="1024" max="2048" step="1" value="' . $customPageWidth . '" inputmode="numeric" data-theme-preview-custom-width data-theme-custom-width-number><span class="muted">' . e(t('admin.theme.appearance.custom_width_pixels_hint', 'Allowed range: 1024 to 2048 px.')) . '</span></label>';
     echo '</div>';
     echo '</div>';
-    echo '<aside class="theme-live-preview" aria-label="Live theme preview" data-theme-live-preview>';
+    echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';
     // The preview starts from the saved page-width mode and custom pixel value before JavaScript runs.
     echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
     echo '<div class="theme-preview-background"><span data-theme-preview-background-image></span></div>';
-    echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e(site_name()) . '</strong><nav><span class="theme-preview-link">Home</span><span class="theme-preview-link">Galleries</span></nav></header>';
-    echo '<section class="theme-preview-hero"><p>Open gallery</p><h2 data-theme-preview-hero-title>Aircraft Weekend</h2><span class="theme-preview-tag">travel</span></section>';
-    echo '<div class="theme-preview-grid"><article class="theme-preview-card"><div></div><h3>Subgallery card</h3><p>Panel background</p></article><article class="theme-preview-card theme-preview-gallery-card"><div></div><h3>Photo card</h3><p>Open gallery panel</p></article></div>';
+    echo '<header class="theme-preview-header"><strong data-theme-preview-brand>' . e(site_name()) . '</strong><nav><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_home', 'Home')) . '</span><span class="theme-preview-link">' . e(t('admin.theme.appearance.preview_galleries', 'Galleries')) . '</span></nav></header>';
+    echo '<section class="theme-preview-hero"><p>' . e(t('admin.theme.appearance.preview_open_gallery', 'Open gallery')) . '</p><h2 data-theme-preview-hero-title>' . e(t('admin.theme.appearance.preview_gallery_title', 'Aircraft Weekend')) . '</h2><span class="theme-preview-tag">' . e(t('admin.theme.appearance.preview_tag', 'travel')) . '</span></section>';
+    echo '<div class="theme-preview-grid"><article class="theme-preview-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_subgallery_card', 'Subgallery card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_panel_background', 'Panel background')) . '</p></article><article class="theme-preview-card theme-preview-gallery-card"><div></div><h3>' . e(t('admin.theme.appearance.preview_photo_card', 'Photo card')) . '</h3><p>' . e(t('admin.theme.appearance.preview_open_gallery_panel', 'Open gallery panel')) . '</p></article></div>';
     echo '<div class="theme-preview-pagination"><span>1</span><span>2</span><span>3</span></div>';
     echo '</div>';
-    echo '<p class="muted">Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.</p>';
+    echo '<p class="muted">' . e(t('admin.theme.appearance.preview_hint', 'Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.')) . '</p>';
     echo '</aside>';
     echo '</fieldset>';
     $appearanceHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Media</p><h2>Favicon and backgrounds</h2></div><p class="muted">Manage browser identity and the global gallery background fallback.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Favicon and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage browser identity and the global gallery background fallback.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
-    echo '<fieldset class="form-grid" id="admin-favicon"><legend>Favicon</legend>';
+    echo '<fieldset class="form-grid" id="admin-favicon"><legend>' . e(t('admin.theme.media.favicon_legend', 'Favicon')) . '</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
     if ($faviconUrl !== '') {
         // $faviconVersion stores an intermediate value used by the surrounding gallery workflow.
         $faviconVersion = (string) app_setting('favicon_version', '1');
-        echo '<div class="favicon-current"><img src="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '" alt="Current favicon"><p class="muted">Current favicon is generated as 32px, 48px, and 180px PNG variants.</p></div>';
+        echo '<div class="favicon-current"><img src="' . e($faviconUrl) . '&s=48&v=' . e($faviconVersion) . '" alt="' . e(t('admin.theme.media.current_favicon_alt', 'Current favicon')) . '"><p class="muted">' . e(t('admin.theme.media.current_favicon_hint', 'Current favicon is generated as 32px, 48px, and 180px PNG variants.')) . '</p></div>';
     } else {
-        echo '<p class="muted">No favicon is stored yet. Browsers will use their default icon until one is saved.</p>';
+        echo '<p class="muted">' . e(t('admin.theme.media.no_favicon', 'No favicon is stored yet. Browsers will use their default icon until one is saved.')) . '</p>';
     }
-    echo '<label>Favicon source image<input type="file" name="favicon_source" accept="image/png,image/jpeg,image/gif,image/webp,image/*" data-favicon-input><span class="muted">Upload a square-friendly photo or logo. The cropper saves a browser-ready square PNG favicon.</span></label>';
+    echo '<label>' . e(t('admin.theme.media.favicon_source_image', 'Favicon source image')) . '<input type="file" name="favicon_source" accept="image/png,image/jpeg,image/gif,image/webp,image/*" data-favicon-input><span class="muted">' . e(t('admin.theme.media.favicon_source_hint', 'Upload a square-friendly photo or logo. The cropper saves a browser-ready square PNG favicon.')) . '</span></label>';
     echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
-    echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>Zoom<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">Drag the image to place the square crop. The small preview shows the browser icon scale.</span></div></div>';
+    echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>' . e(t('admin.theme.media.zoom', 'Zoom')) . '<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">' . e(t('admin.theme.media.favicon_crop_hint', 'Drag the image to place the square crop. The small preview shows the browser icon scale.')) . '</span></div></div>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-backgrounds"><legend>Background</legend>';
-    echo '<label>Theme background image<input type="file" name="theme_background" accept="image/*"></label>';
+    echo '<fieldset class="form-grid" id="admin-backgrounds"><legend>' . e(t('admin.theme.media.background_legend', 'Background')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.media.theme_background_image', 'Theme background image')) . '<input type="file" name="theme_background" accept="image/*"></label>';
     if ($themeBackgroundUrl !== '') {
-        echo '<p class="muted">Current theme background: <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">view stored image</a></p>';
+        echo '<p class="muted">' . e(t('admin.theme.media.current_theme_background', 'Current theme background:')) . ' <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">' . e(t('admin.theme.media.view_stored_image', 'view stored image')) . '</a></p>';
     } else {
-        echo '<p class="muted">No global theme background image is stored yet.</p>';
+        echo '<p class="muted">' . e(t('admin.theme.media.no_theme_background', 'No global theme background image is stored yet.')) . '</p>';
     }
-    echo '<label>Background transparency <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">Higher means more visible image, lower means more of the color underneath.</span></label>';
-    echo '<label>Gallery background fallback<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>No fallback set</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">Used when a gallery does not set its own background source.</span></label>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>Reset all gallery backgrounds</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>Remove theme background</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>Remove favicon</button></div>';
+    echo '<label>' . e(t('admin.theme.media.background_transparency', 'Background transparency')) . ' <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">' . e(t('admin.theme.media.background_transparency_hint', 'Higher means more visible image, lower means more of the color underneath.')) . '</span></label>';
+    echo '<label>' . e(t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback')) . '<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_none', 'No fallback set')) . '</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_upload', 'Upload new image')) . '</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images')) . '</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.')) . '</span></label>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>' . e(t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds')) . '</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>' . e(t('admin.theme.media.remove_theme_background', 'Remove theme background')) . '</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>' . e(t('admin.theme.media.remove_favicon', 'Remove favicon')) . '</button></div>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>Public header branding</legend>';
-    echo '<p class="muted">These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.</p>';
+    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>' . e(t('admin.theme.media.public_header_branding', 'Public header branding')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.media.public_header_branding_hint', 'These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.')) . '</p>';
     foreach (theme_branding_asset_types() as $themeBrandingKind => $definition) {
         // $assetUrl stores the current global fallback asset URL for one branding type.
         $assetUrl = theme_branding_asset_url((string) $themeBrandingKind);
         echo '<div class="admin-branding-asset">';
         echo '<div class="admin-branding-copy"><strong>' . e((string) $definition['label']) . '</strong><span class="muted">' . e((string) $definition['description']) . '</span></div>';
         if ($assetUrl !== '') {
-            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="Current ' . e((string) $definition['label']) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>Remove ' . e((string) $definition['label']) . '</button></div>';
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $definition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $definition['label']])) . '</button></div>';
         } else {
-            echo '<p class="muted">No fallback image is stored yet.</p>';
+            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
         }
-        echo '<label>Upload replacement<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.</span></label>';
+        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
         echo '</div>';
     }
     echo '</fieldset>';
@@ -437,43 +494,195 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-media', $mediaHtml, false);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Layout</p><h2>Pagination and gallery grids</h2></div><p class="muted">Tune the default public grid while keeping per-gallery overrides available from gallery editing.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
-    echo '<fieldset class="form-grid" id="admin-pagination"><legend>Pagination</legend>';
-    echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> Enable pagination</label>';
-    echo '<label>Columns per page <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
-    echo '<label>Rows per page <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
-    echo '<p class="muted">Items per page preview: <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
-    echo '<p class="muted">These values remain the fallback for galleries that do not define or inherit a custom grid.</p>';
+    echo '<fieldset class="form-grid" id="admin-pagination"><legend>' . e(t('admin.theme.layout.pagination_legend', 'Pagination')) . '</legend>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> ' . e(t('admin.theme.layout.enable_pagination', 'Enable pagination')) . '</label>';
+    echo '<label>' . e(t('admin.theme.layout.columns_per_page', 'Columns per page')) . ' <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
+    echo '<label>' . e(t('admin.theme.layout.rows_per_page', 'Rows per page')) . ' <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.items_per_page_preview', 'Items per page preview:')) . ' <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.')) . '</p>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-home-grid"><legend>Main page gallery grid</legend>';
-    echo '<label>Main page columns <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
-    echo '<label>Main page rows <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';
-    echo '<p class="muted">This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.</p>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.&quot;);">Reset all custom gallery grids</button></div>';
-    echo '<p class="muted">This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.</p>';
+    echo '<fieldset class="form-grid" id="admin-home-grid"><legend>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.layout.main_page_columns', 'Main page columns')) . ' <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
+    echo '<label>' . e(t('admin.theme.layout.main_page_rows', 'Main page rows')) . ' <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.main_page_grid_hint', 'This affects only the front page where top-level galleries are listed. It can use a different grid than gallery pages and inherited subgallery pages.')) . '</p>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;' . e(t('admin.theme.layout.reset_gallery_grids_confirm', 'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.')) . '&quot;);">' . e(t('admin.theme.layout.reset_all_gallery_grids', 'Reset all custom gallery grids')) . '</button></div>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.reset_gallery_grids_hint', 'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.')) . '</p>';
     echo '</fieldset>';
     echo '</div>';
     $layoutHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-layout', $layoutHtml, false);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Custom CSS</p><h2>Skins and manual CSS</h2></div><p class="muted">Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.</p></div>';
+    // $languagePacks stores language files detected from the app/lang directory.
+    $languagePacks = translation_detected_language_packs();
+    // $adminLanguage stores the language selected for the admin interface.
+    $adminLanguage = translation_admin_language();
+    // $publicLanguage stores the saved default language for anonymous public visitors.
+    $publicLanguage = translation_public_language();
+    // $activeLanguage stores the current admin language used for this admin request.
+    $activeLanguage = $adminLanguage;
+    // $defaultLanguage stores the configured fallback language.
+    $defaultLanguage = translation_default_language();
+    // $missingTranslations stores missing translation diagnostics collected for the current admin session.
+    $missingTranslations = translation_missing_diagnostics();
+    // $languageEditCode stores which language pack is shown in the editor.
+    $languageEditCode = translation_normalize_language_code((string) ($_GET['edit_language'] ?? $activeLanguage));
+    if ($languageEditCode === '' || !translation_language_allowed($languageEditCode)) {
+        $languageEditCode = $defaultLanguage;
+    }
+    // $languageEditorErrors stores validation errors from the last language editor submit.
+    $languageEditorErrors = $_SESSION['cms_language_editor_errors'] ?? [];
+    unset($_SESSION['cms_language_editor_errors']);
+    if (!is_array($languageEditorErrors)) {
+        $languageEditorErrors = [];
+    }
+    // $languageCoverage stores the key coverage comparison against the default language.
+    $languageCoverage = translation_language_coverage($languageEditCode);
+
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.language.kicker', 'Language')) . '</p><h2>' . e(t('admin.theme.language.title', 'Language and translation packs')) . '</h2></div><p class="muted">' . e(t('admin.theme.language.description', 'Choose the admin interface language, choose the public visitor language, and inspect installed language packs before translating more areas.')) . '</p></div>';
+    if (!empty($_GET['language_saved'])) {
+        echo '<section class="panel notice"><p>' . e(t('admin.theme.language.saved_notice', 'Language pack saved.')) . '</p></section>';
+    }
+    if (!empty($_GET['language_imported'])) {
+        echo '<section class="panel notice"><p>' . e(t('admin.theme.language.imported_notice', 'Language pack imported.')) . '</p></section>';
+    }
+    if (!empty($languageEditorErrors)) {
+        echo '<section class="panel warning"><strong>' . e(t('admin.theme.language.validation_failed', 'Language pack validation failed.')) . '</strong><ul>';
+        foreach ($languageEditorErrors as $languageEditorError) {
+            echo '<li>' . e((string) $languageEditorError) . '</li>';
+        }
+        echo '</ul></section>';
+    }
+    echo '<div class="theme-tab-card-grid admin-language-tab-grid">';
+    echo '<fieldset class="form-grid admin-language-settings"><legend>' . e(t('admin.theme.language.settings_legend', 'Language settings')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.language.admin_label', 'Admin interface language')) . '<select name="cms_language">';
+    foreach ($languagePacks as $languagePack) {
+        // $languageCode stores one selectable language code.
+        $languageCode = (string) ($languagePack['code'] ?? '');
+        if ($languageCode === '') {
+            continue;
+        }
+        // $languageName stores the human-readable language pack name.
+        $languageName = (string) ($languagePack['name'] ?? strtoupper($languageCode));
+        echo '<option value="' . e($languageCode) . '"' . ($adminLanguage === $languageCode ? ' selected' : '') . '>' . e($languageName) . ' (' . e($languageCode) . ')</option>';
+    }
+    echo '</select><span class="muted">' . e(t('admin.theme.language.admin_hint', 'Saved to your admin session and admin browser cookie. It does not force the public visitor language.')) . '</span></label>';
+    echo '<label>' . e(t('admin.theme.language.public_label', 'Public visitor language')) . '<select name="public_language">';
+    foreach ($languagePacks as $languagePack) {
+        // $languageCode stores one public language option value.
+        $languageCode = (string) ($languagePack['code'] ?? '');
+        if ($languageCode === '') {
+            continue;
+        }
+        // $languageName stores the human-readable public language option label.
+        $languageName = (string) ($languagePack['name'] ?? strtoupper($languageCode));
+        echo '<option value="' . e($languageCode) . '"' . ($publicLanguage === $languageCode ? ' selected' : '') . '>' . e($languageName) . ' (' . e($languageCode) . ')</option>';
+    }
+    echo '</select><span class="muted">' . e(t('admin.theme.language.public_hint', 'Saved globally. Anonymous users and public gallery pages use this language by default.')) . '</span></label>';
+    echo '<p class="muted"><strong>' . e(t('admin.theme.language.default_label', 'Default language')) . ':</strong> ' . e($defaultLanguage) . '</p>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid admin-language-packs"><legend>' . e(t('admin.theme.language.detected_legend', 'Detected language packs')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.language.detected_hint', 'Language packs are loaded from app/lang/*.json first. Legacy app/lang/*.php files still work as fallback.')) . '</p>';
+    echo '<div class="admin-language-table-wrap"><table class="admin-table admin-language-table"><thead><tr><th>' . e(t('admin.theme.language.pack_language', 'Language')) . '</th><th>' . e(t('admin.theme.language.pack_code', 'Code')) . '</th><th>' . e(t('admin.theme.language.pack_format', 'Format')) . '</th><th>' . e(t('admin.theme.language.pack_strings', 'Strings')) . '</th><th>' . e(t('admin.theme.language.coverage', 'Coverage')) . '</th><th>' . e(t('admin.theme.language.pack_status', 'Status')) . '</th></tr></thead><tbody>';
+    foreach ($languagePacks as $languagePack) {
+        // $hasJson stores whether the editable JSON dictionary exists.
+        $hasJson = !empty($languagePack['has_json']);
+        // $hasPhp stores whether the legacy PHP dictionary exists.
+        $hasPhp = !empty($languagePack['has_php']);
+        // $packCode stores the language code for coverage display.
+        $packCode = (string) ($languagePack['code'] ?? '');
+        // $packCoverage stores default-key coverage for one language pack.
+        $packCoverage = translation_language_coverage($packCode);
+        // $formatLabel stores the display label for available dictionary files.
+        $formatLabel = $hasJson && $hasPhp ? t('admin.theme.language.format_mixed', 'JSON + PHP fallback') : ($hasJson ? t('admin.theme.language.format_json', 'JSON') : t('admin.theme.language.format_php', 'PHP fallback'));
+        // $statusLabel stores whether the language dictionary loaded at least one key.
+        $statusLabel = !empty($languagePack['loaded']) ? t('admin.theme.language.status_loaded', 'Loaded') : t('admin.theme.language.status_empty', 'Empty or invalid');
+        echo '<tr><td>' . e((string) ($languagePack['name'] ?? '')) . '</td><td><code>' . e($packCode) . '</code></td><td>' . e($formatLabel) . '</td><td>' . (int) ($languagePack['string_count'] ?? 0) . '</td><td>' . e(t('admin.theme.language.coverage_ratio', '{translated} / {total}', ['translated' => (int) $packCoverage['translated_count'], 'total' => (int) $packCoverage['default_count']])) . '</td><td>' . e($statusLabel) . '</td></tr>';
+    }
+    echo '</tbody></table></div></fieldset>';
+    echo '</div>';
+
+    echo '<fieldset class="form-grid admin-language-conventions"><legend>' . e(t('admin.theme.language.conventions_legend', 'Key naming conventions')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.language.conventions_hint', 'Use stable dotted keys grouped by UI area. Keep wording editable in JSON and keep variable placeholders wrapped in braces.')) . '</p>';
+    echo '<ul class="admin-language-convention-list">';
+    echo '<li><code>gallery.*</code> ' . e(t('admin.theme.language.convention_gallery', 'public gallery pages and visitor-facing gallery actions')) . '</li>';
+    echo '<li><code>admin.*</code> ' . e(t('admin.theme.language.convention_admin', 'shared admin labels and actions')) . '</li>';
+    echo '<li><code>theme.*</code> ' . e(t('admin.theme.language.convention_theme', 'theme controls outside the language tab')) . '</li>';
+    echo '<li><code>language.*</code> ' . e(t('admin.theme.language.convention_language', 'language-pack editing and diagnostics')) . '</li>';
+    echo '<li><code>telemetry.*</code> ' . e(t('admin.theme.language.convention_telemetry', 'anonymous telemetry pages and reports')) . '</li>';
+    echo '<li><code>logs.*</code> ' . e(t('admin.theme.language.convention_logs', 'operational logs and log export')) . '</li>';
+    echo '</ul></fieldset>';
+
+    echo '<fieldset class="form-grid admin-language-editor"><legend>' . e(t('admin.theme.language.editor_legend', 'Language pack editor')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.language.editor_hint', 'Edit the JSON language pack directly. The save action validates JSON and accepts only string values.')) . '</p>';
+    echo '<label>' . e(t('admin.theme.language.editor_select', 'Language pack to edit')) . '<select name="language_pack_code" onchange="if (this.value) window.location.href=\'' . e(url_for('admin_theme')) . '?edit_language=\' + encodeURIComponent(this.value) + \'#admin-theme-tab-language\';">';
+    foreach ($languagePacks as $languagePack) {
+        // $languageCode stores one editor-select option value.
+        $languageCode = (string) ($languagePack['code'] ?? '');
+        if ($languageCode === '') {
+            continue;
+        }
+        // $languageName stores one editor-select option label.
+        $languageName = (string) ($languagePack['name'] ?? strtoupper($languageCode));
+        echo '<option value="' . e($languageCode) . '"' . ($languageEditCode === $languageCode ? ' selected' : '') . '>' . e($languageName) . ' (' . e($languageCode) . ')</option>';
+    }
+    echo '</select></label>';
+    echo '<div class="admin-language-coverage-summary">';
+    echo '<span><strong>' . e(t('admin.theme.language.coverage_translated', 'Translated')) . ':</strong> ' . e(t('admin.theme.language.coverage_ratio', '{translated} / {total}', ['translated' => (int) $languageCoverage['translated_count'], 'total' => (int) $languageCoverage['default_count']])) . '</span>';
+    echo '<span><strong>' . e(t('admin.theme.language.coverage_missing', 'Missing')) . ':</strong> ' . e(t('admin.theme.language.count_value', '{count}', ['count' => (int) $languageCoverage['missing_count']])) . '</span>';
+    echo '<span><strong>' . e(t('admin.theme.language.coverage_extra', 'Extra')) . ':</strong> ' . e(t('admin.theme.language.count_value', '{count}', ['count' => (int) $languageCoverage['extra_count']])) . '</span>';
+    echo '</div>';
+    if (!empty($languageCoverage['missing_keys']) || !empty($languageCoverage['extra_keys'])) {
+        echo '<details class="admin-language-key-details"><summary>' . e(t('admin.theme.language.show_key_differences', 'Show missing and extra keys')) . '</summary>';
+        if (!empty($languageCoverage['missing_keys'])) {
+            echo '<p class="muted"><strong>' . e(t('admin.theme.language.missing_keys', 'Missing keys')) . '</strong></p><code class="admin-language-key-list">' . e(implode("\n", array_slice((array) $languageCoverage['missing_keys'], 0, 80))) . '</code>';
+        }
+        if (!empty($languageCoverage['extra_keys'])) {
+            echo '<p class="muted"><strong>' . e(t('admin.theme.language.extra_keys', 'Extra keys')) . '</strong></p><code class="admin-language-key-list">' . e(implode("\n", array_slice((array) $languageCoverage['extra_keys'], 0, 80))) . '</code>';
+        }
+        echo '</details>';
+    }
+    echo '<label>' . e(t('admin.theme.language.json_label', 'JSON language data')) . '<textarea name="language_pack_json" class="admin-language-json-editor" spellcheck="false" rows="20">' . e(translation_language_pack_json_text($languageEditCode)) . '</textarea></label>';
+    echo '<div class="bulk-row"><button type="submit" name="save_language_pack" value="1" formnovalidate>' . e(t('admin.theme.language.save_pack', 'Save language pack')) . '</button><a class="button secondary" href="' . e(url_for('admin_theme', ['download_language_pack' => $languageEditCode])) . '">' . e(t('admin.theme.language.export_pack', 'Export JSON')) . '</a></div>';
+    echo '<label>' . e(t('admin.theme.language.import_label', 'Import replacement JSON')) . '<input type="file" name="language_pack_file" accept="application/json,.json"></label>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="import_language_pack" value="1" formnovalidate onclick="return confirm(&quot;' . e(t('admin.theme.language.import_confirm', 'Replace this language pack with the uploaded JSON file?')) . '&quot;);">' . e(t('admin.theme.language.import_pack', 'Import JSON')) . '</button></div>';
+    echo '</fieldset>';
+
+    echo '<fieldset class="form-grid admin-language-diagnostics"><legend>' . e(t('admin.theme.language.diagnostics_legend', 'Missing translation diagnostics')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.language.diagnostics_hint', 'These diagnostics are visible only to admins and help find strings that still need language keys.')) . '</p>';
+    if (!$missingTranslations) {
+        echo '<p class="muted">' . e(t('admin.theme.language.diagnostics_empty', 'No missing translations have been recorded in this admin session.')) . '</p>';
+    } else {
+        echo '<div class="admin-language-table-wrap"><table class="admin-table admin-language-table"><thead><tr><th>' . e(t('admin.theme.language.diagnostics_key', 'Key')) . '</th><th>' . e(t('admin.theme.language.diagnostics_active', 'Active language')) . '</th><th>' . e(t('admin.theme.language.diagnostics_fallback', 'Fallback used')) . '</th><th>' . e(t('admin.theme.language.diagnostics_seen', 'Last seen')) . '</th></tr></thead><tbody>';
+        foreach ($missingTranslations as $missingTranslation) {
+            echo '<tr><td><code>' . e((string) ($missingTranslation['key'] ?? '')) . '</code></td><td>' . e((string) ($missingTranslation['active_language'] ?? '')) . '</td><td>' . e((string) ($missingTranslation['fallback_used'] ?? '')) . '</td><td>' . e((string) ($missingTranslation['last_seen'] ?? '')) . '</td></tr>';
+        }
+        echo '</tbody></table></div>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="clear_translation_diagnostics" value="1" formnovalidate>' . e(t('admin.theme.language.clear_diagnostics', 'Clear diagnostics')) . '</button></div>';
+    }
+    echo '</fieldset>';
+    $languageHtml = ob_get_clean();
+    render_admin_tab_panel('admin-theme-tab-language', $languageHtml, false);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.custom_css.kicker', 'Custom CSS')) . '</p><h2>' . e(t('admin.theme.custom_css.title', 'Skins and manual CSS')) . '</h2></div><p class="muted">' . e(t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.')) . '</p></div>';
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
-    echo '<div id="admin-custom-css"></div><fieldset class="form-grid"><legend>Custom CSS</legend><label>Custom CSS skin<select name="custom_css_preset"><option value="">Keep current custom CSS</option>';
+    echo '<div id="admin-custom-css"></div><fieldset class="form-grid"><legend>' . e(t('admin.theme.custom_css.legend', 'Custom CSS')) . '</legend><label>' . e(t('admin.theme.custom_css.skin_label', 'Custom CSS skin')) . '<select name="custom_css_preset"><option value="">' . e(t('admin.theme.custom_css.keep_current', 'Keep current custom CSS')) . '</option>';
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
         $label = ucwords(str_replace(['-', '_'], ' ', pathinfo((string) $filename, PATHINFO_FILENAME)));
         echo '<option value="' . e((string) $filename) . '"' . ($selectedPreset === $filename ? ' selected' : '') . '>' . e($label) . '</option>';
     }
-    echo '</select><span class="muted">Selecting a skin copies it from <code>custom_css/</code> into the active custom stylesheet.</span></label>';
-    echo '<label>Custom CSS file<input type="file" name="custom_css" accept=".css,text/css"></label>';
-    echo '<p class="muted">Uploaded CSS is saved as <code>public/assets/custom.css</code> and loaded after the built-in stylesheet and theme controls.</p>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>Reset custom CSS</button></div></fieldset>';
+    echo '</select><span class="muted">' . e(t('admin.theme.custom_css.skin_hint', 'Selecting a skin copies it from custom_css/ into the active custom stylesheet.')) . '</span></label>';
+    echo '<label>' . e(t('admin.theme.custom_css.file_label', 'Custom CSS file')) . '<input type="file" name="custom_css" accept=".css,text/css"></label>';
+    echo '<p class="muted">' . e(t('admin.theme.custom_css.file_hint', 'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.')) . '</p>';
+    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_to_css', 'Reset to CSS')) . '</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_custom_css', 'Reset custom CSS')) . '</button></div></fieldset>';
     $customCssHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-custom-css', $customCssHtml, false);
 
-    echo '<div class="panel admin-theme-save-panel"><div><strong>Save changes</strong><p class="muted">All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.</p></div><div class="bulk-row"><button type="submit">Save theme</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>Reset to CSS</button></div></div></form>';
+    echo '<div class="panel admin-theme-save-panel"><div><strong>' . e(t('admin.theme.save_panel_title', 'Save changes')) . '</strong><p class="muted">' . e(t('admin.theme.save_panel_hint', 'All Theme tabs are saved together, so hidden tab settings are preserved when you submit the form.')) . '</p></div><div class="bulk-row"><button type="submit">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_to_css', 'Reset to CSS')) . '</button></div></div></form>';
     render_footer();
 }

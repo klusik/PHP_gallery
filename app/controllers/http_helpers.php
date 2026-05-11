@@ -68,7 +68,7 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
  */
 function render_back_to_top_button(): void
 {
-    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="Go back to top" title="Go back to top"><span aria-hidden="true">↑</span><span>Top</span></button>';
+    echo '<button type="button" class="back-to-top-button" data-back-to-top-button hidden aria-label="' . e(t('public.back_to_top_label', 'Go back to top')) . '" title="' . e(t('public.back_to_top_label', 'Go back to top')) . '"><span aria-hidden="true">↑</span><span>' . e(t('public.back_to_top_short', 'Top')) . '</span></button>';
 }
 
 /**
@@ -78,8 +78,8 @@ function render_back_to_top_button(): void
 function cms_not_found(): void
 {
     http_response_code(404);
-    render_header('Not found');
-    echo '<section class="panel"><h1>Not found</h1><p>The requested page was not found.</p></section>';
+    render_header(t('public.not_found_title', 'Not found'));
+    echo '<section class="panel"><h1>' . e(t('public.not_found_title', 'Not found')) . '</h1><p>' . e(t('public.not_found_message', 'The requested page was not found.')) . '</p></section>';
     render_footer();
 }
 

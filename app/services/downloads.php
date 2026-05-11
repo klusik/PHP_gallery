@@ -213,7 +213,7 @@ function build_gallery_zip(int $galleryId, bool $publicOnly): string
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
-        throw new RuntimeException('Gallery not found.');
+        throw new RuntimeException(t('gallery.error.not_found', 'Gallery not found.'));
     }
     // Variable $signature stores this steps working value.
     $signature = gallery_zip_signature($galleryId, $publicOnly);
@@ -380,12 +380,12 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
 function create_zip(string $filePath, array $entries): void
 {
     if (!class_exists(ZipArchive::class)) {
-        throw new RuntimeException('ZipArchive is not available.');
+        throw new RuntimeException(t('download.error.zip_unavailable', 'ZipArchive is not available.'));
     }
     // Variable $zip stores this steps working value.
     $zip = new ZipArchive();
     if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        throw new RuntimeException('Unable to create ZIP archive.');
+        throw new RuntimeException(t('download.error.zip_create_failed', 'Unable to create ZIP archive.'));
     }
     foreach ($entries as $entry) {
         // Variable $zipPath stores this steps working value.
@@ -406,7 +406,7 @@ function create_zip(string $filePath, array $entries): void
     }
     $zip->close();
     if (!is_file($filePath)) {
-        throw new RuntimeException('Unable to finalize ZIP archive.');
+        throw new RuntimeException(t('download.error.zip_finalize_failed', 'Unable to finalize ZIP archive.'));
     }
 }
 
@@ -417,7 +417,7 @@ function send_download(string $filePath, string $downloadName): never
 {
     if (!is_file($filePath) || !path_inside(zip_cache_dir(), $filePath)) {
         http_response_code(404);
-        exit('Download not found.');
+        exit(t('download.error.not_found', 'Download not found.'));
     }
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="' . str_replace('"', '', $downloadName) . '"');

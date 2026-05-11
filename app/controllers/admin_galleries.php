@@ -49,26 +49,26 @@ function cms_admin_discover(): void
         verify_csrf();
         // $refresh stores an intermediate value used by the surrounding gallery workflow.
         $refresh = scan_all_imported_gallery_images();
-        admin_log_event('info', 'galleries.refresh_scanned', 'Admin refreshed imported galleries from filesystem.', $refresh);
+        admin_log_event('info', 'galleries.refresh_scanned', t('admin.galleries.log_refreshed_imported'), $refresh);
     }
     // Variable $candidates stores this steps working value.
     $candidates = discover_gallery_candidates();
-    render_header('New gallery folders');
-    echo '<section class="panel"><h1>New gallery folders</h1>';
-    echo '<p><a class="button secondary" href="' . e(url_for('admin')) . '">Back to admin dashboard</a></p>';
+    render_header(t('admin.galleries.discover_title'));
+    echo '<section class="panel"><h1>' . e(t('admin.galleries.discover_title')) . '</h1>';
+    echo '<p><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a></p>';
     if ($refresh !== null) {
-        echo '<div class="notice">Scanned ' . (int) $refresh['galleries'] . ' existing galleries and imported or updated ' . (int) $refresh['images'] . ' images.</div>';
+        echo '<div class="notice">' . e(t('admin.galleries.discover_refresh_notice', 'Scanned {galleries} existing galleries and imported or updated {images} images.', ['galleries' => (int) $refresh['galleries'], 'images' => (int) $refresh['images']])) . '</div>';
     }
     if (!$candidates) {
-        echo '<p>No new gallery folders found.</p>';
+        echo '<p>' . e(t('admin.galleries.discover_none_found')) . '</p>';
     } else {
         echo '<form method="post" action="' . e(url_for('admin_import')) . '" data-import-galleries-form>' . csrf_field();
-        echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> Create optimized thumbnails during import</label></p>';
-        echo '<table><thead><tr><th>Import</th><th>Folder</th><th>Title</th><th>Visibility</th></tr></thead><tbody>';
+        echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.galleries.discover_create_thumbnails')) . '</label></p>';
+        echo '<table><thead><tr><th>' . e(t('admin.galleries.discover_column_import')) . '</th><th>' . e(t('admin.galleries.discover_column_folder')) . '</th><th>' . e(t('admin.galleries.discover_column_title')) . '</th><th>' . e(t('admin.galleries.discover_column_visibility')) . '</th></tr></thead><tbody>';
         foreach ($candidates as $candidate) {
             echo '<tr><td><input type="checkbox" name="folders[]" value="' . e($candidate['folder_path']) . '"></td><td>' . e($candidate['folder_path']) . '</td><td>' . e($candidate['title']) . '</td><td>' . e($candidate['visibility']) . '</td></tr>';
         }
-        echo '</tbody></table><button type="submit">Import selected detected galleries</button></form>';
+        echo '</tbody></table><button type="submit">' . e(t('admin.galleries.discover_import_selected')) . '</button></form>';
     }
     echo '</section>';
     render_footer();
@@ -91,7 +91,7 @@ function cms_admin_import(): void
     }
     // Variable $result stores this steps working value.
     $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
-    flash_message('admin_notice', 'Imported ' . (int) ($result['imported'] ?? 0) . ' gallery folder(s) and created ' . (int) ($result['thumbnails'] ?? 0) . ' thumbnail(s).');
+    flash_message('admin_notice', t('admin.galleries.import_result', 'Imported {galleries} gallery folder(s) and created {thumbnails} thumbnail(s).', ['galleries' => (int) ($result['imported'] ?? 0), 'thumbnails' => (int) ($result['thumbnails'] ?? 0)]));
     redirect_to(url_for('admin'));
 }
 
@@ -115,7 +115,7 @@ function cms_admin_new_gallery(): void
         try {
             // $gallery stores an intermediate value used by the surrounding gallery workflow.
             $gallery = create_empty_gallery(admin_new_gallery_input_from_post());
-            admin_log_event('info', 'gallery.folder_created', 'Admin created an empty gallery folder.', [
+            admin_log_event('info', 'gallery.folder_created', t('admin.galleries.log_empty_folder_created'), [
                 'gallery_id' => (int) $gallery['id'],
                 'folder_path' => (string) $gallery['folder_path'],
             ]);
@@ -124,12 +124,12 @@ function cms_admin_new_gallery(): void
                 echo json_encode(admin_new_gallery_success_response($gallery));
                 return;
             }
-            flash_message('admin_notice', 'Gallery folder created.');
+            flash_message('admin_notice', t('admin.galleries.folder_created'));
             redirect_to(url_for('admin_edit_gallery', ['id' => $gallery['id'], 'created' => 1]));
         } catch (Throwable $exception) {
             // $error stores an intermediate value used by the surrounding gallery workflow.
             $error = $exception->getMessage();
-            admin_log_event('error', 'gallery.folder_create_failed', 'Admin empty gallery creation failed.', ['error' => $error]);
+            admin_log_event('error', 'gallery.folder_create_failed', t('admin.galleries.log_empty_folder_failed'), ['error' => $error]);
             if (admin_wants_json()) {
                 http_response_code(422);
                 header('Content-Type: application/json');
@@ -145,17 +145,17 @@ function cms_admin_new_gallery(): void
         return;
     }
 
-    render_header('Create empty gallery');
-    echo '<section class="hero"><h1>Create empty gallery</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">Back to dashboard</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">Upload photos</a></nav></section>';
+    render_header(t('admin.galleries.create_empty_title'));
+    echo '<section class="hero"><h1>' . e(t('admin.galleries.create_empty_title')) . '</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.upload.title')) . '</a></nav></section>';
     if ($prefillParentGallery) {
-        echo '<div class="notice">New gallery will be created inside: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+        echo '<div class="notice">' . e(t('admin.galleries.create_inside_notice', 'New gallery will be created inside: {gallery}.', ['gallery' => (string) $prefillParentGallery['title']])) . '</div>';
     }
     if ($error !== '') {
-        echo '<div class="notice">Create failed: ' . e($error) . '</div>';
+        echo '<div class="notice">' . e(t('admin.galleries.create_failed', ['error' => $error])) . '</div>';
     }
     echo '<section class="panel"><form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="form-grid">' . csrf_field();
     render_admin_new_gallery_fields($prefillParentId, false);
-    echo '<button type="submit">Create gallery folder</button></form></section>';
+    echo '<button type="submit">' . e(t('admin.galleries.create_folder_button')) . '</button></form></section>';
     render_footer();
 }
 
@@ -205,7 +205,7 @@ function admin_new_gallery_success_response(array $gallery): array
 
     return [
         'ok' => true,
-        'message' => 'Gallery folder created.',
+        'message' => t('admin.galleries.folder_created'),
         'gallery_id' => (int) $gallery['id'],
         'gallery_title' => (string) ($gallery['title'] ?? ''),
         'gallery_url' => gallery_public_url($gallery),
@@ -226,25 +226,25 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
         echo '<input type="hidden" name="panel" value="1">';
     }
     if ($panelMode) {
-        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">New gallery</p><h3>Gallery identity</h3></div><p class="muted">Only the gallery is created here.</p></div><div class="admin-side-panel-field-grid">';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Gallery name</span><input name="title" required></label>';
-        echo '<label class="admin-side-panel-field"><span>Folder name</span><input name="folder_name" autocomplete="off"><small>Leave empty to derive it from the gallery name.</small></label>';
-        echo '<label class="admin-side-panel-field"><span>Visibility</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Parent gallery</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>Description</span><textarea name="description" rows="4"></textarea></label>';
+        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.new_gallery_kicker', 'New gallery')) . '</p><h3>' . e(t('admin.gallery_editor.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e(t('admin.gallery_editor.only_gallery_created_here', 'Only the gallery is created here.')) . '</p></div><div class="admin-side-panel-field-grid">';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
+        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
+        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
+        echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
         echo '</div><div class="admin-side-panel-toggle-row">';
-        echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>Enable image voting</span></label>';
-        echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>Show file names</span></label>';
+        echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.gallery_editor.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
+        echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</span></label>';
         echo '</div></div>';
         return;
     }
-    echo '<label>Gallery name<input name="title" required></label>';
-    echo '<label>Folder name<input name="folder_name" autocomplete="off"><span class="muted">Leave empty to derive it from the gallery name.</span></label>';
-    echo '<label>Parent gallery<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>No parent</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-    echo '<label>Visibility<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    echo '<label><input type="checkbox" name="voting_enabled" value="1"> Enable image voting for this gallery</label>';
-    echo '<label><input type="checkbox" name="show_filenames" value="1"> Show file names</label>';
-    echo '<label>Description<textarea name="description"></textarea></label>';
+    echo '<label>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '<input name="title" required></label>';
+    echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
+    echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
+    echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
+    echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
+    echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
+    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
 }
 
 /**
@@ -253,17 +253,17 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
-    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">Gallery workflow</p><h2>Create gallery</h2><p class="muted">Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.</p></div>';
+    echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.gallery_editor.gallery_workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.create_gallery_empty_help', 'Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.')) . '</p></div>';
     if ($prefillParentGallery) {
-        echo '<div class="notice">Target parent: ' . e((string) $prefillParentGallery['title']) . '.</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.target_parent', 'Target parent: {title}.', ['title' => (string) $prefillParentGallery['title']])) . '</div>';
     }
     if ($error !== '') {
-        echo '<div class="notice">Create failed: ' . e($error) . '</div>';
+        echo '<div class="notice">' . e(t('admin.galleries.create_failed', ['error' => $error])) . '</div>';
     }
     echo '<section class="admin-side-panel-workflow" data-gallery-panel-workflow>';
     echo '<form method="post" action="' . e(url_for('admin_new_gallery')) . '" class="admin-side-panel-form" data-gallery-panel-create-form>' . csrf_field();
     render_admin_new_gallery_fields($prefillParentId, true);
-    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>Create gallery</button><p class="muted">The new gallery is created empty. Use Upload photos for media.</p></div>';
+    echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</button><p class="muted">' . e(t('admin.gallery_editor.new_gallery_empty_help', 'The new gallery is created empty. Use Upload photos for media.')) . '</p></div>';
     echo '</form></section>';
     echo '</div>';
 }
@@ -286,33 +286,33 @@ function cms_admin_bulk_galleries(): void
         foreach ($galleryIds as $galleryId) {
             $count += scan_gallery_images($galleryId);
         }
-        flash_message('admin_notice', 'Scanned ' . $count . ' image record(s).');
+        flash_message('admin_notice', t('admin.galleries.scan_result', ['count' => $count]));
         redirect_to(url_for('admin'));
     }
     if ($action === 'thumbs') {
         foreach ($galleryIds as $galleryId) {
             $count += create_gallery_thumbnails($galleryId);
         }
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        flash_message('admin_notice', t('admin.galleries.thumbnail_result', ['count' => $count]));
         redirect_to(url_for('admin'));
     }
     if ($action === 'delete' && $galleryIds) {
         try {
             // $deleted stores an intermediate value used by the surrounding gallery workflow.
             $deleted = delete_gallery_subtrees($galleryIds);
-            admin_log_event('warning', 'gallery.bulk_deleted', 'Admin deleted selected gallery folders.', [
+            admin_log_event('warning', 'gallery.bulk_deleted', t('admin.galleries.log_bulk_deleted'), [
                 'gallery_ids' => $galleryIds,
                 'deleted_roots' => (int) $deleted['root_count'],
                 'deleted_rows' => (int) $deleted['row_count'],
             ]);
-            flash_message('admin_notice', 'Deleted ' . (int) $deleted['root_count'] . ' gallery folder(s).');
+            flash_message('admin_notice', t('admin.galleries.deleted_result', 'Deleted {count} gallery folder(s).', ['count' => (int) $deleted['root_count']]));
             redirect_to(url_for('admin'));
         } catch (Throwable $exception) {
-            admin_log_event('error', 'gallery.bulk_delete_failed', 'Bulk gallery delete failed.', [
+            admin_log_event('error', 'gallery.bulk_delete_failed', t('admin.galleries.log_bulk_delete_failed'), [
                 'gallery_ids' => $galleryIds,
                 'exception' => $exception->getMessage(),
             ]);
-            flash_message('admin_notice', 'Gallery delete failed: ' . $exception->getMessage());
+            flash_message('admin_notice', t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]));
             redirect_to(url_for('admin'));
         }
     }
@@ -334,11 +334,11 @@ function cms_admin_bulk_galleries(): void
     }
     if (in_array($action, ['maps_on', 'maps_off'], true) && $galleryIds) {
         if (!exif_gps_schema_ready()) {
-            admin_log_event('warning', 'gps_maps.schema_missing', 'Attempted to change GPS maps before migration was applied.', [
+            admin_log_event('warning', 'gps_maps.schema_missing', t('admin.galleries.log_gps_maps_schema_missing'), [
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            flash_message('admin_notice', 'GPS maps require the latest database migration.');
+            flash_message('admin_notice', t('admin.galleries.gps_requires_migration'));
             redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
@@ -361,11 +361,11 @@ function cms_admin_bulk_galleries(): void
     }
     if (in_array($action, ['vote_on', 'vote_off'], true) && $galleryIds) {
         if (!gallery_voting_schema_ready()) {
-            admin_log_event('warning', 'votes.schema_missing', 'Attempted to change gallery voting before migration was applied.', [
+            admin_log_event('warning', 'votes.schema_missing', t('admin.galleries.log_voting_schema_missing'), [
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            flash_message('admin_notice', 'Voting requires the latest database migration.');
+            flash_message('admin_notice', t('admin.galleries.voting_requires_migration'));
             redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
@@ -393,11 +393,11 @@ function cms_admin_bulk_galleries(): void
     }
     if (in_array($action, ['filenames_on', 'filenames_off'], true) && $galleryIds) {
         if (!gallery_filename_display_schema_ready()) {
-            admin_log_event('warning', 'gallery_filenames.schema_missing', 'Attempted to change file name display before migration was applied.', [
+            admin_log_event('warning', 'gallery_filenames.schema_missing', t('admin.galleries.log_filename_schema_missing'), [
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            flash_message('admin_notice', 'Filename display requires the latest database migration.');
+            flash_message('admin_notice', t('admin.galleries.filename_requires_migration'));
             redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
@@ -427,11 +427,11 @@ function cms_admin_bulk_galleries(): void
     }
     if (in_array($action, ['game_on', 'game_off'], true) && $galleryIds) {
         if (!admin_feature_schema_ready()) {
-            admin_log_event('warning', 'picture_game.schema_missing', 'Attempted to change picture game before migration was applied.', [
+            admin_log_event('warning', 'picture_game.schema_missing', t('admin.galleries.log_picture_game_schema_missing'), [
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
             ]);
-            flash_message('admin_notice', 'Picture game requires the latest database migration.');
+            flash_message('admin_notice', t('admin.galleries.picture_game_requires_migration'));
             redirect_to(url_for('admin'));
         }
         // Variable $expandedIds stores this steps working value.
@@ -475,10 +475,10 @@ function cms_admin_regenerate_paths(): void
     try {
         // $result stores an intermediate value used by the surrounding gallery workflow.
         $result = regenerate_public_paths();
-        flash_message('admin_notice', 'Regenerated clean public paths. Updated ' . (int) $result['galleries'] . ' gallery path(s) and ' . (int) $result['images'] . ' image path(s).');
+        flash_message('admin_notice', t('admin.galleries.public_paths_regenerated', 'Regenerated clean public paths. Updated {galleries} gallery path(s) and {images} image path(s).', ['galleries' => (int) $result['galleries'], 'images' => (int) $result['images']]));
         redirect_to(url_for('admin'));
     } catch (Throwable $exception) {
-        flash_message('admin_notice', 'Path regeneration failed: ' . $exception->getMessage());
+        flash_message('admin_notice', t('admin.galleries.public_paths_failed', 'Path regeneration failed: {error}', ['error' => $exception->getMessage()]));
         redirect_to(url_for('admin'));
     }
 }
@@ -528,7 +528,7 @@ function cms_admin_reorder_galleries(): void
     // Variable $decodedTree stores the decoded row list before it is normalized.
     $decodedTree = json_decode($rawTree, true);
     if (!is_array($decodedTree)) {
-        admin_reorder_galleries_response(false, 'The submitted gallery tree was not valid JSON.', $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_json'), $jsonResponseBufferStarted);
         return;
     }
 
@@ -536,7 +536,7 @@ function cms_admin_reorder_galleries(): void
     $submittedEntries = [];
     foreach ($decodedTree as $entry) {
         if (!is_array($entry)) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid row.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_row'), $jsonResponseBufferStarted);
             return;
         }
         // Variable $galleryId stores the gallery id from one submitted tree row.
@@ -544,20 +544,20 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id for one submitted tree row.
         $parentId = (int) ($entry['parent_id'] ?? 0);
         if ($galleryId <= 0 || $parentId < 0) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree contained an invalid gallery id.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(false, t('admin.galleries.reorder_invalid_gallery_id'), $jsonResponseBufferStarted);
             return;
         }
         $submittedEntries[] = ['id' => $galleryId, 'parent_id' => $parentId];
     }
     if (!$submittedEntries) {
-        admin_reorder_galleries_response(false, 'No galleries were submitted for reordering.', $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(false, t('admin.galleries.reorder_empty'), $jsonResponseBufferStarted);
         return;
     }
 
     // Variable $submittedIds stores the submitted gallery id list for set validation.
     $submittedIds = array_map(static fn (array $entry): int => (int) $entry['id'], $submittedEntries);
     if (count($submittedIds) !== count(array_unique($submittedIds))) {
-        admin_reorder_galleries_response(false, 'The submitted gallery tree contained duplicate galleries.', $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(false, t('admin.galleries.reorder_duplicates'), $jsonResponseBufferStarted);
         return;
     }
 
@@ -571,7 +571,7 @@ function cms_admin_reorder_galleries(): void
     sort($sortedSubmittedIds);
     sort($currentIds);
     if ($sortedSubmittedIds !== $currentIds) {
-        admin_reorder_galleries_response(false, 'The gallery list changed while you were reordering. Reload the page and try again.', $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(false, t('admin.galleries.reorder_changed'), $jsonResponseBufferStarted);
         return;
     }
 
@@ -585,15 +585,15 @@ function cms_admin_reorder_galleries(): void
         // Variable $parentId stores the requested parent id being validated.
         $parentId = (int) $entry['parent_id'];
         if ($parentId === $galleryId) {
-            admin_reorder_galleries_response(false, 'A gallery cannot be moved under itself.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(false, t('admin.galleries.reorder_self_parent'), $jsonResponseBufferStarted);
             return;
         }
         if ($parentId > 0 && !isset($validIds[$parentId])) {
-            admin_reorder_galleries_response(false, 'The submitted gallery tree referenced a missing parent gallery.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(false, t('admin.galleries.reorder_missing_parent'), $jsonResponseBufferStarted);
             return;
         }
         if ($parentId > 0 && !isset($seenIds[$parentId])) {
-            admin_reorder_galleries_response(false, 'A subgallery must appear below its parent in the submitted tree.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(false, t('admin.galleries.reorder_child_before_parent'), $jsonResponseBufferStarted);
             return;
         }
         $seenIds[$galleryId] = true;
@@ -675,26 +675,26 @@ function cms_admin_reorder_galleries(): void
             }
         }
 
-        admin_log_event('info', 'gallery.reordered', 'Admin reordered gallery tree.', [
+        admin_log_event('info', 'gallery.reordered', t('admin.galleries.log_reordered_tree'), [
             'galleries' => count($submittedEntries),
             'moved_folders' => $movedCount,
             'maintenance_warnings' => array_values(array_unique($maintenanceWarnings)),
         ]);
 
         if ($maintenanceWarnings) {
-            admin_log_event('warning', 'gallery.reorder_maintenance_warning', 'Gallery reorder was saved, but a follow-up refresh reported a warning.', [
+            admin_log_event('warning', 'gallery.reorder_maintenance_warning', t('admin.galleries.log_reorder_refresh_warning'), [
                 'warnings' => array_values(array_unique($maintenanceWarnings)),
             ]);
-            admin_reorder_galleries_response(true, 'Gallery moved. The visible order is saved. Some gallery metadata will be refreshed during the next maintenance scan.', $jsonResponseBufferStarted);
+            admin_reorder_galleries_response(true, t('admin.galleries.reorder_saved_with_warning'), $jsonResponseBufferStarted);
             return;
         }
 
-        admin_reorder_galleries_response(true, $movedCount > 0 ? 'Gallery moved and saved.' : 'Gallery order saved.', $jsonResponseBufferStarted);
+        admin_reorder_galleries_response(true, $movedCount > 0 ? t('admin.galleries.reorder_moved_saved') : t('admin.galleries.reorder_order_saved'), $jsonResponseBufferStarted);
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        admin_log_event('error', 'gallery.reorder_failed', 'Admin gallery reorder failed.', [
+        admin_log_event('error', 'gallery.reorder_failed', t('admin.galleries.log_reorder_failed'), [
             'error' => $exception->getMessage(),
             'exception_class' => get_class($exception),
             'previous_error' => $exception->getPrevious() ? $exception->getPrevious()->getMessage() : null,
@@ -774,28 +774,28 @@ function admin_reorder_galleries_user_error_message(Throwable $exception): strin
     $message = $exception->getMessage();
 
     if (str_contains($message, 'outside the configured root')) {
-        return 'This gallery could not be moved because one of its folders is not inside the configured gallery storage folder. The gallery was left in its previous safe location.';
+        return t('admin.galleries.reorder_error_folder_outside_root');
     }
     if (str_contains($message, 'target parent is outside the configured root or does not exist')) {
-        return 'This gallery could not be moved because the destination folder is not available. Refresh the page and try again.';
+        return t('admin.galleries.reorder_error_destination_unavailable');
     }
     if (str_contains($message, 'Gallery target path is outside the configured root')) {
-        return 'This gallery could not be moved because the requested destination is outside the gallery storage folder. The gallery was left in its previous safe location.';
+        return t('admin.galleries.reorder_error_destination_outside_root');
     }
     if (str_contains($message, 'Current gallery folder does not exist on disk')) {
-        return 'This gallery could not be moved because its folder is missing on disk. Run a gallery scan before reordering it.';
+        return t('admin.galleries.reorder_error_folder_missing');
     }
     if (str_contains($message, 'Destination folder already exists on disk') || str_contains($message, 'Another gallery already uses the destination folder path')) {
-        return 'This gallery could not be moved because another folder already uses that destination. Rename one of the galleries and try again.';
+        return t('admin.galleries.reorder_error_destination_exists');
     }
     if (str_contains($message, 'own subgalleries')) {
-        return 'This gallery cannot be moved into one of its own subgalleries.';
+        return t('admin.galleries.reorder_error_own_child');
     }
     if (str_contains($message, 'A subgallery must appear below its parent')) {
-        return 'The gallery order was not saved because the submitted tree was incomplete. Refresh the page and try again.';
+        return t('admin.galleries.reorder_error_incomplete_tree');
     }
 
-    return 'Gallery order could not be saved. Refresh the page and try again.';
+    return t('admin.galleries.reorder_error_generic');
 }
 
 /**
@@ -925,7 +925,7 @@ function cms_admin_reorder_public_galleries(): void
     // $submittedIds stores the visible subgallery ids in their new browser order.
     $submittedIds = admin_decode_reorder_id_list((string) ($_POST['gallery_order'] ?? '[]'));
     if ($submittedIds === null) {
-        admin_reorder_public_page_response(false, 'The submitted subgallery order was not valid.');
+        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_reorder_invalid'));
         return;
     }
 
@@ -940,7 +940,7 @@ function cms_admin_reorder_public_galleries(): void
     // $nextIds stores the full direct-child order with only the current visible page rearranged.
     $nextIds = admin_visible_page_reordered_ids($currentIds, $submittedIds, $visibleOffset, $visibleCount);
     if ($nextIds === null) {
-        admin_reorder_public_page_response(false, 'The visible subgallery page changed while you were reordering. Reload the page and try again.');
+        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_page_changed'));
         return;
     }
 
@@ -959,22 +959,22 @@ function cms_admin_reorder_public_galleries(): void
         }
         $pdo->commit();
 
-        admin_log_event('info', 'gallery.public_page_reordered', 'Admin reordered visible public-page subgalleries.', [
+        admin_log_event('info', 'gallery.public_page_reordered', t('admin.galleries.log_public_page_reordered'), [
             'parent_gallery_id' => $parentGalleryId,
             'visible_offset' => $visibleOffset,
             'visible_count' => $visibleCount,
             'submitted_gallery_ids' => $submittedIds,
         ]);
-        admin_reorder_public_page_response(true, 'Visible subgallery order saved.');
+        admin_reorder_public_page_response(true, t('admin.galleries.public_subgallery_order_saved'));
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        admin_log_event('error', 'gallery.public_page_reorder_failed', 'Public-page subgallery reorder failed.', [
+        admin_log_event('error', 'gallery.public_page_reorder_failed', t('admin.galleries.log_public_page_reorder_failed'), [
             'parent_gallery_id' => $parentGalleryId,
             'error' => $exception->getMessage(),
         ]);
-        admin_reorder_public_page_response(false, 'Subgallery order could not be saved: ' . $exception->getMessage());
+        admin_reorder_public_page_response(false, t('admin.galleries.public_subgallery_reorder_failed_with_error', ['error' => $exception->getMessage()]));
     }
 }
 
@@ -1010,7 +1010,7 @@ function cms_admin_scan_images(): void
     foreach ($galleryIds as $galleryId) {
         $count += scan_gallery_images((int) $galleryId);
     }
-    flash_message('admin_notice', 'Scanned ' . $count . ' image record(s).');
+    flash_message('admin_notice', t('admin.galleries.scan_result', ['count' => $count]));
     redirect_to(url_for('admin'));
 }
 
@@ -1099,7 +1099,7 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
     }
     if (!$ownedIds) {
         if (admin_wants_json()) {
-            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'));
             return;
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
@@ -1116,7 +1116,7 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
         write_gallery_sidecar($updated);
     }
     // $notice stores the message returned to the direct page or side-panel workflow.
-    $notice = 'Gallery title picture saved.';
+    $notice = t('admin.gallery_editor.title_picture_saved');
     if (admin_wants_json()) {
         header('Content-Type: application/json');
         echo json_encode(admin_bulk_images_success_response($updated, $notice, $returnTab, 'cover', $ownedIds));
@@ -1136,7 +1136,7 @@ function admin_edit_image_success_response(array $image): array
     return [
         'ok' => true,
         'type' => 'image',
-        'message' => 'Image saved.',
+        'message' => t('admin.gallery_editor.image_saved'),
         'image_id' => (int) $image['id'],
         'gallery_id' => (int) ($image['gallery_id'] ?? 0),
         'image_title' => (string) ($image['title'] ?? ''),
@@ -1271,11 +1271,11 @@ function cms_admin_edit_gallery(): void
                     'error' => $exception->getMessage(),
                 ]);
                 if (admin_wants_json()) {
-                    admin_panel_error_response('Gallery folder move failed: ' . $exception->getMessage());
+                    admin_panel_error_response(t('admin.gallery_editor.folder_move_failed', ['error' => $exception->getMessage()]));
                     return;
                 }
                 $_SESSION['admin_gallery_error_' . (int) $gallery['id']] = $exception->getMessage();
-                flash_message('admin_notice', 'Gallery folder move failed: ' . $exception->getMessage());
+                flash_message('admin_notice', t('admin.gallery_editor.folder_move_failed', ['error' => $exception->getMessage()]));
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
             }
         }
@@ -1309,12 +1309,12 @@ function cms_admin_edit_gallery(): void
                 // $tmpName stores an intermediate value used by the surrounding gallery workflow.
                 $tmpName = (string) ($_FILES['cover_upload']['tmp_name'] ?? '');
                 if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-                    throw new RuntimeException('Uploaded thumbnail is not available.');
+                    throw new RuntimeException(t('admin.gallery_editor.uploaded_thumbnail_unavailable'));
                 }
                 // $info stores an intermediate value used by the surrounding gallery workflow.
                 $info = @getimagesize($tmpName);
                 if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-                    throw new RuntimeException('The uploaded gallery thumbnail is not a valid image.');
+                    throw new RuntimeException(t('admin.gallery_editor.uploaded_thumbnail_invalid'));
                 }
                 // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
                 $coverImagePath = store_uploaded_gallery_cover((int) $gallery['id'], $_FILES['cover_upload']);
@@ -1342,10 +1342,10 @@ function cms_admin_edit_gallery(): void
                 }
             } catch (RuntimeException $exception) {
                 if (admin_wants_json()) {
-                    admin_panel_error_response('Gallery branding update failed: ' . $exception->getMessage());
+                    admin_panel_error_response(t('admin.gallery_editor.branding_update_failed', ['error' => $exception->getMessage()]));
                     return;
                 }
-                flash_message('admin_notice', 'Gallery branding update failed: ' . $exception->getMessage());
+                flash_message('admin_notice', t('admin.gallery_editor.branding_update_failed', ['error' => $exception->getMessage()]));
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], $returnTab));
             }
         }
@@ -1452,10 +1452,10 @@ function cms_admin_edit_gallery(): void
             write_gallery_sidecar($gallery);
         }
         // $notice stores an intermediate value used by the surrounding gallery workflow.
-        $notice = 'Gallery saved.';
+        $notice = t('admin.gallery_editor.notice_saved', 'Gallery saved.');
         if (!empty($moveResult['moved'])) {
             // $notice stores an intermediate value used by the surrounding gallery workflow.
-            $notice = 'Gallery saved and folder moved.';
+            $notice = t('admin.gallery_editor.notice_saved_and_moved', 'Gallery saved and folder moved.');
         }
         if (admin_wants_json()) {
             header('Content-Type: application/json');
@@ -1467,12 +1467,12 @@ function cms_admin_edit_gallery(): void
     }
     // Variable $images stores this steps working value.
     $images = gallery_images((int) $gallery['id'], false);
-    render_header('Edit gallery');
+    render_header(t('admin.gallery_editor.page_title'));
     // $galleryError stores an intermediate value used by the surrounding gallery workflow.
     $galleryError = (string) ($_SESSION['admin_gallery_error_' . (int) $gallery['id']] ?? '');
     unset($_SESSION['admin_gallery_error_' . (int) $gallery['id']]);
     if ($galleryError !== '') {
-        echo '<div class="notice">Gallery folder move failed: ' . e($galleryError) . '</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_move_failed', ['error' => $galleryError])) . '</div>';
     }
     // $galleryNotice stores an intermediate value used by the surrounding gallery workflow.
     $galleryNotice = (string) flash_message('admin_notice');
@@ -1480,28 +1480,28 @@ function cms_admin_edit_gallery(): void
         echo '<div class="notice">' . e($galleryNotice) . '</div>';
     }
     if (isset($_GET['created'])) {
-        echo '<div class="notice">Gallery folder created.</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_created')) . '</div>';
     } elseif (isset($_GET['uploaded'])) {
         // $thumbnailFailed stores required derivatives that failed during upload thumbnail generation.
         $thumbnailFailed = (int) ($_GET['thumbnail_failed'] ?? 0);
         // $scanFailed stores files that were stored on disk but not imported into image rows.
         $scanFailed = (int) ($_GET['scan_failed'] ?? 0);
         // $uploadNotice stores the upload result message shown after redirect.
-        $uploadNotice = 'Uploaded ' . (int) $_GET['uploaded'] . ' images, scanned or updated ' . (int) ($_GET['scanned'] ?? 0) . ' image records, and created ' . (int) ($_GET['thumbnails'] ?? 0) . ' thumbnails.';
+        $uploadNotice = t('admin.gallery_editor.upload_notice', 'Uploaded {uploaded} images, scanned or updated {scanned} image records, and created {thumbnails} thumbnails.', ['uploaded' => (int) $_GET['uploaded'], 'scanned' => (int) ($_GET['scanned'] ?? 0), 'thumbnails' => (int) ($_GET['thumbnails'] ?? 0)]);
         if ($scanFailed > 0) {
-            $uploadNotice .= ' Warning: ' . $scanFailed . ' uploaded file(s) were stored on disk but could not be imported into image records. Check the admin logs for filenames and decoder diagnostics.';
+            $uploadNotice .= ' ' . t('admin.gallery_editor.upload_scan_warning', 'Warning: {count} uploaded file(s) were stored on disk but could not be imported into image records. Check the admin logs for filenames and decoder diagnostics.', ['count' => $scanFailed]);
         }
         if ($thumbnailFailed > 0) {
-            $uploadNotice .= ' Warning: ' . $thumbnailFailed . ' thumbnail or DNG display derivative(s) failed. Use Create gallery thumbnails or check the admin logs for details.';
+            $uploadNotice .= ' ' . t('admin.gallery_editor.upload_thumbnail_warning', 'Warning: {count} thumbnail or DNG display derivative(s) failed. Use Create gallery thumbnails or check the admin logs for details.', ['count' => $thumbnailFailed]);
         }
         echo '<div class="notice">' . e($uploadNotice) . '</div>';
     } elseif (isset($_GET['moved'])) {
-        echo '<div class="notice">Gallery folder moved on disk and database paths were updated.</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.folder_moved')) . '</div>';
     } elseif (isset($_GET['saved'])) {
-        echo '<div class="notice">Gallery saved.</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.gallery_saved')) . '</div>';
     }
     if (!$pictureGameReady) {
-        render_admin_migration_notice('Picture game settings are hidden until the latest database migration is applied.');
+        render_admin_migration_notice(t('admin.gallery_editor.picture_game_migration_hidden'));
     }
     // $imageCount stores the number of images currently attached to this gallery.
     $imageCount = count($images);
@@ -1511,23 +1511,23 @@ function cms_admin_edit_gallery(): void
     $activeEditTab = admin_edit_gallery_tab_id((string) ($_GET['tab'] ?? '')) ?: 'admin-edit-identity';
     // $adminTabs stores the edit-gallery sections shown by the shared admin tab controller.
     $adminTabs = [
-        ['id' => 'admin-edit-identity', 'label' => 'Identity'],
-        ['id' => 'admin-edit-access', 'label' => 'Access'],
-        ['id' => 'admin-edit-display', 'label' => 'Display'],
-        ['id' => 'admin-edit-media', 'label' => 'Media'],
-        ['id' => 'admin-edit-images', 'label' => 'Images', 'badge' => $imageCount],
+        ['id' => 'admin-edit-identity', 'label' => t('admin.gallery_editor.tab_identity')],
+        ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
+        ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
+        ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
+        ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
     ];
 
     echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
-    echo '<div><p class="admin-kicker">Gallery editor</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">Edit identity, access, presentation, media assets, and photo ordering from one focused workspace.</p></div>';
-    echo '<nav class="admin-hero-actions" aria-label="Gallery actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><a class="button secondary" href="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Gallery workflow" data-admin-side-panel-title="Create gallery here" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1])) . '">Create gallery here</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">View gallery</a><a class="button secondary" href="' . e(url_for('admin')) . '">Back to galleries</a></nav>';
+    echo '<div><p class="admin-kicker">' . e(t('admin.gallery_editor.kicker')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">' . e(t('admin.gallery_editor.intro')) . '</p></div>';
+    echo '<nav class="admin-hero-actions" aria-label="' . e(t('admin.gallery_editor.hero_actions_label')) . '"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.upload_workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.upload_photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.create_here')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.create_gallery_here')) . '</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.gallery_editor.view_gallery')) . '</a><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.gallery_editor.back_to_galleries')) . '</a></nav>';
     echo '</section>';
 
     echo '<div class="admin-metric-grid admin-edit-gallery-summary">';
-    echo '<div class="admin-metric-card"><span>Visibility</span><strong>' . e(ucfirst($activeVisibility)) . '</strong><small>Listing and direct URL behavior</small></div>';
-    echo '<div class="admin-metric-card"><span>Images</span><strong>' . (int) $imageCount . '</strong><small>Photos in this gallery</small></div>';
-    echo '<div class="admin-metric-card"><span>Folder</span><strong>' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '</strong><small>Filesystem folder name</small></div>';
-    echo '<div class="admin-metric-card"><span>Parent</span><strong>' . ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : 'Root') . '</strong><small>Gallery tree position</small></div>';
+    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><strong>' . e(ucfirst($activeVisibility)) . '</strong><small>' . e(t('admin.gallery_editor.metric_visibility_help')) . '</small></div>';
+    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_images')) . '</span><strong>' . (int) $imageCount . '</strong><small>' . e(t('admin.gallery_editor.metric_images_help')) . '</small></div>';
+    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_folder')) . '</span><strong>' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '</strong><small>' . e(t('admin.gallery_editor.metric_folder_help')) . '</small></div>';
+    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_parent')) . '</span><strong>' . ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')) . '</strong><small>' . e(t('admin.gallery_editor.metric_parent_help')) . '</small></div>';
     echo '</div>';
 
     render_admin_tabs($adminTabs, $activeEditTab);
@@ -1537,20 +1537,20 @@ function cms_admin_edit_gallery(): void
     echo '<input type="hidden" name="return_tab" value="admin-edit-identity">';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Identity</p><h2>Names and placement</h2></div><p class="muted">Controls the public title, URL slug, disk folder, and gallery tree position.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.identity_kicker', 'Identity')) . '</p><h2>' . e(t('admin.gallery_editor.names_and_placement', 'Names and placement')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>Title<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>Description<textarea name="description">' . e($gallery['description']) . '</textarea></label></div>';
-    echo '<div class="admin-edit-card"><label>Slug<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">Used in the public gallery URL.</span></label><label>Folder name<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">Changing this renames the folder on disk.</span></label></div>';
-    echo '<div class="admin-edit-card"><label>Parent gallery<select name="parent_id"><option value="0">No parent</option>' . gallery_parent_options($gallery) . '</select></label><label>Sort order<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
-    echo '<div class="admin-edit-card is-wide"><label>Tags<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label></div>';
+    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label><label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label></div>';
+    echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
+    echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options($gallery) . '</select></label><label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
+    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('gallery', (int) $gallery['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</span></label></div>';
     echo '</div>';
     render_tag_datalist();
     render_admin_tab_panel('admin-edit-identity', (string) ob_get_clean(), $activeEditTab === 'admin-edit-identity');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Access</p><h2>Visibility and protection</h2></div><p class="muted">Visibility decides discoverability. Passwords and generated links are optional on top of it.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.access_kicker', 'Access')) . '</p><h2>' . e(t('admin.gallery_editor.visibility_and_protection', 'Visibility and protection')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.access_help', 'Visibility decides discoverability. Passwords and generated links are optional on top of it.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card"><label>Visibility<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label><p class="muted">Public galleries are listed. Unpublished galleries are hidden but open from their normal URL. Private galleries are admin-only except for supported direct-token access.</p></div>';
+    echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label><p class="muted">' . e(t('admin.gallery_editor.visibility_help', 'Public galleries are listed. Unpublished galleries are hidden but open from their normal URL. Private galleries are admin-only except for supported direct-token access.')) . '</p></div>';
     if ($accessReady) {
         // $newShareToken stores an intermediate value used by the surrounding gallery workflow.
         $newShareToken = (string) ($_SESSION['new_gallery_share_token_' . (int) $gallery['id']] ?? '');
@@ -1561,12 +1561,12 @@ function cms_admin_edit_gallery(): void
             // $currentAccessType stores an intermediate value used by the surrounding gallery workflow.
             $currentAccessType = 'password';
         }
-        echo '<div class="admin-edit-card"><label>Password lock<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>No password</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>Require password</option></select><span class="muted">Password locking is independent of public, unpublished, or private visibility.</span></label><label>New gallery password<input name="access_password" type="password" autocomplete="new-password"><span class="muted">Leave empty to keep the current gallery password.</span></label>';
+        echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.password_lock', 'Password lock')) . '<select name="access_type"><option value="normal"' . ($currentAccessType === 'normal' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_password', 'No password')) . '</option><option value="password"' . ($currentAccessType === 'password' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.require_password', 'Require password')) . '</option></select><span class="muted">' . e(t('admin.gallery_editor.password_lock_help', 'Password locking is independent of public, unpublished, or private visibility.')) . '</span></label><label>' . e(t('admin.gallery_editor.new_gallery_password', 'New gallery password')) . '<input name="access_password" type="password" autocomplete="new-password"><span class="muted">' . e(t('admin.gallery_editor.keep_password_help', 'Leave empty to keep the current gallery password.')) . '</span></label>';
         if (!empty($gallery['access_password_hash'])) {
             echo '<label class="checkbox-label"><input type="checkbox" name="clear_access_password" value="1"> Clear current gallery password</label>';
         }
         echo '</div>';
-        echo '<div class="admin-edit-card is-wide"><label>Share link expiry<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">Leave empty for a non-expiring generated link.</span></label>';
+        echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.share_link_expiry', 'Share link expiry')) . '<input name="access_token_expires_at" type="datetime-local" value="' . e(!empty($gallery['access_token_expires_at']) ? date('Y-m-d\TH:i', strtotime((string) $gallery['access_token_expires_at'])) : '') . '"><span class="muted">' . e(t('admin.gallery_editor.non_expiring_link_help', 'Leave empty for a non-expiring generated link.')) . '</span></label>';
         // $visibleShareToken stores an intermediate value used by the surrounding gallery workflow.
         $visibleShareToken = $newShareToken !== '' ? $newShareToken : gallery_share_token_for_admin($gallery);
         if ($visibleShareToken !== null && $visibleShareToken !== '') {
@@ -1578,34 +1578,34 @@ function cms_admin_edit_gallery(): void
         } else {
             echo '<p class="muted">No share link is active.</p>';
         }
-        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">Generate/regenerate share link</button><button type="submit" class="secondary" name="access_action" value="revoke_link">Revoke share link</button></div><p class="muted">Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.</p></div>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="access_action" value="generate_link">' . e(t('admin.gallery_editor.generate_regenerate_share_link', 'Generate/regenerate share link')) . '</button><button type="submit" class="secondary" name="access_action" value="revoke_link">' . e(t('admin.gallery_editor.revoke_share_link', 'Revoke share link')) . '</button></div><p class="muted">' . e(t('admin.gallery_editor.share_link_help', 'Generated direct links use the existing hash-token path. They remain useful for private galleries without making them appear in listings.')) . '</p></div>';
     } else {
-        echo '<div class="notice">Protected gallery settings are hidden until the v0.13 database migration is applied.</div>';
+        echo '<div class="notice">' . e(t('admin.gallery_editor.protected_settings_migration_hidden', 'Protected gallery settings are hidden until the v0.13 database migration is applied.')) . '</div>';
     }
     if (nsfw_guard_schema_ready()) {
-        echo '<div class="admin-edit-card is-wide"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this gallery as NSFW / 18+</label><p class="muted">When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it.</p></div>';
+        echo '<div class="admin-edit-card is-wide"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($gallery['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.mark_nsfw', 'Mark as NSFW / 18+')) . '</label><p class="muted">' . e(t('admin.gallery_editor.nsfw_help', 'When enabled, this gallery and all subgalleries require an 18+ confirmation before anonymous visitors can view photos or media files. Before publishing NSFW content, make sure your hosting provider or web hosting terms allow it.')) . '</p></div>';
     } else {
-        echo '<div class="admin-edit-card is-wide"><p class="muted">NSFW Guard controls will be available after the database migration is applied.</p></div>';
+        echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.nsfw_migration_hidden', 'NSFW Guard controls will be available after the database migration is applied.')) . '</p></div>';
     }
     echo '</div>';
     render_admin_tab_panel('admin-edit-access', (string) ob_get_clean(), $activeEditTab === 'admin-edit-access');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Display</p><h2>Gallery behavior</h2></div><p class="muted">Feature toggles and grid overrides affecting this gallery branch.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.display_kicker', 'Display')) . '</p><h2>' . e(t('admin.gallery_editor.gallery_behavior', 'Gallery behavior')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.gallery_behavior_help', 'Feature toggles and grid overrides affecting this gallery branch.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
     if ($pictureGameReady) {
-        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable picture game for this gallery branch</label></div>';
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_picture_game', 'Enable picture game for this gallery branch')) . '</label></div>';
     }
     if (gallery_voting_schema_ready()) {
-        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable image voting for this gallery</label><p class="muted">When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.</p></div>';
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label><p class="muted">' . e(t('admin.gallery_editor.image_voting_help', 'When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.')) . '</p></div>';
     }
     if (gallery_filename_display_schema_ready()) {
-        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> Show file names</label><p class="muted">Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.</p></div>';
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label><p class="muted">' . e(t('admin.gallery_editor.show_file_names_help', 'Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.')) . '</p></div>';
     } else {
-        echo '<div class="admin-edit-card"><p class="muted">File name display control will be available after the database migration is applied.</p></div>';
+        echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.filename_display_migration_hidden', 'File name display control will be available after the database migration is applied.')) . '</p></div>';
     }
     if ($gpsMapReady) {
-        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Enable EXIF GPS maps for this gallery branch</label><p class="muted">When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.</p></div>';
+        echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch')) . '</label><p class="muted">' . e(t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.')) . '</p></div>';
     }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
@@ -1616,30 +1616,30 @@ function cms_admin_edit_gallery(): void
         $gridColumns = gallery_grid_form_columns($gallery);
         // $gridRows stores the form value. In inherit mode it previews the currently effective inherited/default value.
         $gridRows = gallery_grid_form_rows($gallery);
-        echo '<div class="admin-edit-card is-wide"><h3>Display grid</h3><label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> Use a custom grid for this gallery</label><div class="admin-edit-range-grid"><label>Columns <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label><label>Rows <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label></div><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> Use for subgalleries</label><p class="muted">Current source: ' . e((string) ($effectiveGridSettings['grid_source'] ?? 'global')) . '. If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.</p></div>';
+        echo '<div class="admin-edit-card is-wide"><h3>' . e(t('admin.gallery_editor.display_grid', 'Display grid')) . '</h3><label class="checkbox-label"><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled' . ($galleryUsesCustomGrid ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.use_custom_grid', 'Use a custom grid for this gallery')) . '</label><div class="admin-edit-range-grid"><label>' . e(t('admin.gallery_editor.columns', 'Columns')) . ' <span class="muted" data-gallery-grid-columns-display>' . (int) $gridColumns . '</span><input type="range" name="grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $gridColumns . '" data-gallery-grid-columns></label><label>' . e(t('admin.gallery_editor.rows', 'Rows')) . ' <span class="muted" data-gallery-grid-rows-display>' . (int) $gridRows . '</span><input type="range" name="grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $gridRows . '" data-gallery-grid-rows></label></div><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"' . ((int) ($gallery['grid_use_for_subgalleries'] ?? 1) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.use_for_subgalleries', 'Use for subgalleries')) . '</label><p class="muted">' . e(t('admin.gallery_editor.current_source', 'Current source: {source}.', ['source' => (string) ($effectiveGridSettings['grid_source'] ?? 'global')])) . ' ' . e(t('admin.gallery_editor.grid_inheritance_help', 'If this gallery does not use a custom grid, it inherits the nearest parent grid that allows subgallery inheritance, otherwise it uses the Theme fallback.')) . '</p></div>';
     } else {
-        echo '<div class="admin-edit-card is-wide"><p class="muted">Gallery display-grid overrides will be available after the database migration is applied.</p></div>';
+        echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.grid_migration_hidden', 'Gallery display-grid overrides will be available after the database migration is applied.')) . '</p></div>';
     }
     if (thumbnail_bounds_schema_ready()) {
         echo '<div class="admin-edit-card is-wide">';
-        render_admin_thumbnail_bound_slider('gallery_thumbnail', isset($gallery['thumbnail_min_size']) ? (int) $gallery['thumbnail_min_size'] : null, isset($gallery['thumbnail_max_size']) ? (int) $gallery['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.');
-        echo '<label class="checkbox-label"><input type="checkbox" name="gallery_thumbnail_bounds_recursive" value="1"> Save these bounds recursively to subgalleries</label>';
-        echo '<p class="muted">Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.</p>';
+        render_admin_thumbnail_bound_slider('gallery_thumbnail', isset($gallery['thumbnail_min_size']) ? (int) $gallery['thumbnail_min_size'] : null, isset($gallery['thumbnail_max_size']) ? (int) $gallery['thumbnail_max_size'] : null, t('admin.gallery_editor.thumbnail_quality_bounds', 'Responsive thumbnail quality bounds'), t('admin.gallery_editor.thumbnail_quality_bounds_help', 'Optional guardrails for automatic thumbnail selection. Leave both sides on Auto to keep the current behavior.'));
+        echo '<label class="checkbox-label"><input type="checkbox" name="gallery_thumbnail_bounds_recursive" value="1"> ' . e(t('admin.gallery_editor.save_bounds_recursively', 'Save these bounds recursively to subgalleries')) . '</label>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.recursive_bounds_help', 'Recursive save is intentionally off by default. It copies the selected bounds to every descendant gallery, but does not change individual photo overrides.')) . '</p>';
         echo '</div>';
     } else {
-        echo '<div class="admin-edit-card is-wide"><p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p></div>';
+        echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.thumbnail_bounds_migration_hidden', 'Thumbnail quality bounds will be available after the database migration is applied.')) . '</p></div>';
     }
     echo '</div>';
     render_admin_tab_panel('admin-edit-display', (string) ob_get_clean(), $activeEditTab === 'admin-edit-display');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Media</p><h2>Thumbnail, branding, and background</h2></div><p class="muted">Optional visual assets override theme fallbacks only for this gallery.</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.media_kicker', 'Media')) . '</p><h2>' . e(t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card is-wide"><label>Title picture<select name="cover_image_id"><option value="0">Automatic</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">Includes images from subgalleries.</span></label>';
+    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title_picture', t('admin.gallery_editor.title_picture_current', 'Title picture'))) . '<select name="cover_image_id"><option value="0">' . e(t('admin.gallery_editor.automatic', 'Automatic')) . '</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">' . e(t('admin.gallery_editor.includes_subgallery_images', 'Includes images from subgalleries.')) . '</span></label>';
     if (gallery_cover_asset_schema_ready()) {
-        echo '<label>Upload gallery thumbnail<input type="file" name="cover_upload" accept="image/*"><span class="muted">This is stored separately from gallery images.</span></label>';
+        echo '<label>' . e(t('admin.gallery_editor.upload_gallery_thumbnail', 'Upload gallery thumbnail')) . '<input type="file" name="cover_upload" accept="image/*"><span class="muted">' . e(t('admin.gallery_editor.gallery_thumbnail_upload_help', 'This is stored separately from gallery images.')) . '</span></label>';
     } else {
-        echo '<p class="muted">Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_thumbnail_migration_hidden', 'Uploadable gallery thumbnails will be available after the gallery thumbnail migration is applied.')) . '</p>';
     }
     echo '</div>';
     echo '<div class="admin-edit-card is-wide">';
@@ -1649,30 +1649,30 @@ function cms_admin_edit_gallery(): void
     if (gallery_background_source_schema_ready()) {
         // $backgroundSource stores an intermediate value used by the surrounding gallery workflow.
         $backgroundSource = gallery_background_source($gallery);
-        echo '<label>Background source<select name="background_source"><option value=""' . ($backgroundSource === null ? ' selected' : '') . '>Use theme background</option><option value="upload"' . ($backgroundSource === 'upload' ? ' selected' : '') . '>Upload new image</option><option value="existing"' . ($backgroundSource === 'existing' ? ' selected' : '') . '>Pick from existing gallery images</option><option value="collage"' . ($backgroundSource === 'collage' ? ' selected' : '') . '>Generate collage from public galleries</option></select><span class="muted">If unset, the gallery inherits the Theme background.</span></label>';
+        echo '<label>' . e(t('admin.gallery_editor.background_source', 'Background source')) . '<select name="background_source"><option value=""' . ($backgroundSource === null ? ' selected' : '') . '>' . e(t('admin.gallery_editor.use_theme_background', 'Use theme background')) . '</option><option value="upload"' . ($backgroundSource === 'upload' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.upload_new_image', 'Upload new image')) . '</option><option value="existing"' . ($backgroundSource === 'existing' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.pick_existing_gallery_images', 'Pick from existing gallery images')) . '</option><option value="collage"' . ($backgroundSource === 'collage' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.generate_collage_public', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.gallery_editor.background_source_help', 'If unset, the gallery inherits the Theme background.')) . '</span></label>';
     } else {
-        echo '<p class="muted">Background source selection will be available after the background migration is applied.</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.background_migration_hidden', 'Background source selection will be available after the background migration is applied.')) . '</p>';
     }
     echo '</div></div>';
     render_admin_tab_panel('admin-edit-media', (string) ob_get_clean(), $activeEditTab === 'admin-edit-media');
 
-    echo '<div class="admin-edit-gallery-savebar"><button type="submit">Save gallery</button><span class="muted">Saves all settings from Identity, Access, Display, and Media.</span></div>';
+    echo '<div class="admin-edit-gallery-savebar"><button type="submit">' . e(t('admin.gallery_editor.save_gallery', 'Save gallery')) . '</button><span class="muted">' . e(t('admin.gallery_editor.savebar_help', 'Saves all settings from Identity, Access, Display, and Media.')) . '</span></div>';
     echo '</form>';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">Images</p><h2>Photos and ordering</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="Upload workflow" data-admin-side-panel-title="Upload photos" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">Upload photos here</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">Scan/import images</button></form></div></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.tab_images', 'Images')) . '</p><h2>' . e(t('admin.gallery_editor.images_title', 'Photos and ordering')) . '</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.upload_workflow', 'Upload workflow')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.upload_photos', 'Upload photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here', 'Upload photos here')) . '</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form></div></div>';
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
     render_admin_image_bulk_toolbar($gallery);
-    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">Order unchanged.</span></div>';
-    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>Move</th><th>Select</th><th>Preview</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="Sort photos by name from A to Z">Name <span aria-hidden="true">↕</span></button></th><th title="File names shown">N</th><th>Status</th><th>Cover</th><th>Actions</th></tr></thead><tbody>';
+    echo '<div class="admin-image-order-toolbar" data-admin-image-order-toolbar data-reorder-url="' . e(url_for('admin_reorder_images')) . '"><p class="muted">' . e(t('admin.gallery_editor.drag_photos_help', 'Drag photos by the handle to change their gallery order, or click the Name column header to sort the gallery by filename. Each change is saved immediately.')) . '</p><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">' . e(t('admin.gallery_editor.order_unchanged', 'Order unchanged.')) . '</span></div>';
+    echo '<table class="admin-image-order-table" data-admin-image-order-table><thead><tr><th>' . e(t('admin.gallery_editor.move', 'Move')) . '</th><th>' . e(t('admin.gallery_editor.select', 'Select')) . '</th><th>' . e(t('admin.gallery_editor.preview', 'Preview')) . '</th><th aria-sort="none"><button type="button" class="admin-image-name-sort" data-admin-image-name-sort data-sort-direction="asc" aria-label="' . e(t('admin.gallery_editor.sort_photos_a_z', 'Sort photos by name from A to Z')) . '">' . e(t('admin.gallery_editor.name', 'Name')) . ' <span aria-hidden="true">↕</span></button></th><th title="' . e(t('admin.gallery_editor.file_names_shown', 'File names shown')) . '">N</th><th>' . e(t('admin.gallery_editor.status', 'Status')) . '</th><th>' . e(t('admin.gallery_editor.cover', 'Cover')) . '</th><th>' . e(t('admin.gallery_editor.actions', 'Actions')) . '</th></tr></thead><tbody>';
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
         echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? 'Title picture' : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="Photo editor" data-admin-side-panel-title="Edit photo" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">Edit</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">Delete</button></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? t('admin.gallery_editor.title_picture_current', 'Title picture') : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.edit', 'Edit')) . '</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">' . e(t('admin.gallery_editor.delete', 'Delete')) . '</button></td></tr>';
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
@@ -1700,32 +1700,32 @@ function render_admin_image_bulk_toolbar(array $gallery): void
 
     echo '<div class="bulk-row admin-edit-image-toolbar" data-admin-image-move-toolbar>';
     echo '<div class="admin-image-bulk-primary">';
-    echo '<label class="admin-image-select-all"><input type="checkbox" data-select-all="image_ids[]"> Select all images</label>';
-    echo '<span class="admin-image-selection-count" data-admin-image-selected-count>0 selected</span>';
-    echo '<label>Bulk action<select name="action" data-admin-image-bulk-action><option value="public">Set public</option><option value="draft">Set draft</option><option value="private">Set private</option><option value="cover">Set as title picture</option><option value="thumbs">Create thumbnails</option><option value="nsfw_on">Mark as NSFW / 18+</option><option value="nsfw_off">Remove NSFW mark</option><option value="delete">Delete selected photos</option><option value="move_existing" hidden>Move to existing gallery</option><option value="move_new" hidden>Move to new gallery</option></select></label>';
-    echo '<button type="submit">Apply to selected</button>';
-    echo '<button type="button" class="secondary" data-admin-image-move-open>Move selected photos</button>';
-    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">Create gallery thumbnails</button>';
+    echo '<label class="admin-image-select-all"><input type="checkbox" data-select-all="image_ids[]"> ' . e(t('admin.gallery_editor.select_all_images')) . '</label>';
+    echo '<span class="admin-image-selection-count" data-admin-image-selected-count>' . e(t('admin.gallery_editor.selected_count_zero')) . '</span>';
+    echo '<label>' . e(t('admin.gallery_editor.bulk_action')) . '<select name="action" data-admin-image-bulk-action><option value="public">' . e(t('admin.gallery_editor.set_public')) . '</option><option value="draft">' . e(t('admin.gallery_editor.set_draft')) . '</option><option value="private">' . e(t('admin.gallery_editor.set_private')) . '</option><option value="cover">' . e(t('admin.gallery_editor.set_as_title_picture')) . '</option><option value="thumbs">' . e(t('admin.gallery_editor.create_thumbnails')) . '</option><option value="nsfw_on">' . e(t('admin.gallery_editor.mark_nsfw')) . '</option><option value="nsfw_off">' . e(t('admin.gallery_editor.remove_nsfw')) . '</option><option value="delete">' . e(t('admin.gallery_editor.delete_selected_photos')) . '</option><option value="move_existing" hidden>' . e(t('admin.gallery_editor.move_existing')) . '</option><option value="move_new" hidden>' . e(t('admin.gallery_editor.move_new')) . '</option></select></label>';
+    echo '<button type="submit">' . e(t('admin.gallery_editor.apply_to_selected')) . '</button>';
+    echo '<button type="button" class="secondary" data-admin-image-move-open>' . e(t('admin.gallery_editor.move_selected_photos')) . '</button>';
+    echo '<button type="submit" class="secondary" name="thumbnail_gallery_id" value="' . $galleryId . '" formaction="' . e(url_for('admin_create_thumbnails')) . '">' . e(t('admin.gallery_editor.create_gallery_thumbnails')) . '</button>';
     echo '</div>';
 
-    echo '<section class="admin-image-move-panel" data-admin-image-move-panel hidden aria-label="Move selected photos">';
-    echo '<div class="admin-image-move-panel-head"><div class="admin-image-move-title"><span class="admin-image-move-title-icon" aria-hidden="true">⇄</span><div><h3>Move selected photos</h3><span class="admin-image-move-count-pill" data-admin-image-selected-count>0 selected</span></div></div><button type="button" class="admin-image-move-close" data-admin-image-move-cancel aria-label="Close move photos panel">×</button></div>';
-    echo '<div class="admin-image-move-steps" aria-label="Move progress">';
-    echo '<div class="admin-image-move-step is-active" data-admin-image-move-step="action"><span>1</span><div><strong>Choose action</strong><p>Pick what you want to do</p></div></div>';
-    echo '<div class="admin-image-move-step" data-admin-image-move-step="target"><span>2</span><div><strong>Target</strong><p>Choose or create gallery</p></div></div>';
-    echo '<div class="admin-image-move-step" data-admin-image-move-step="confirm"><span>3</span><div><strong>Confirm</strong><p>Review and confirm</p></div></div>';
-    echo '<div class="admin-image-move-step" data-admin-image-move-step="complete"><span>4</span><div><strong>Complete</strong><p>Move photos</p></div></div>';
+    echo '<section class="admin-image-move-panel" data-admin-image-move-panel hidden aria-label="' . e(t('admin.gallery_editor.move_selected_photos')) . '">';
+    echo '<div class="admin-image-move-panel-head"><div class="admin-image-move-title"><span class="admin-image-move-title-icon" aria-hidden="true">⇄</span><div><h3>' . e(t('admin.gallery_editor.move_selected_photos')) . '</h3><span class="admin-image-move-count-pill" data-admin-image-selected-count>' . e(t('admin.gallery_editor.selected_count_zero')) . '</span></div></div><button type="button" class="admin-image-move-close" data-admin-image-move-cancel aria-label="' . e(t('admin.gallery_editor.close_move_panel')) . '">×</button></div>';
+    echo '<div class="admin-image-move-steps" aria-label="' . e(t('admin.gallery_editor.move_progress')) . '">';
+    echo '<div class="admin-image-move-step is-active" data-admin-image-move-step="action"><span>1</span><div><strong>' . e(t('admin.gallery_editor.step_choose_action')) . '</strong><p>' . e(t('admin.gallery_editor.step_choose_action_help')) . '</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="target"><span>2</span><div><strong>' . e(t('admin.gallery_editor.step_target')) . '</strong><p>' . e(t('admin.gallery_editor.step_target_help')) . '</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="confirm"><span>3</span><div><strong>' . e(t('admin.gallery_editor.step_confirm')) . '</strong><p>' . e(t('admin.gallery_editor.step_confirm_help')) . '</p></div></div>';
+    echo '<div class="admin-image-move-step" data-admin-image-move-step="complete"><span>4</span><div><strong>' . e(t('admin.gallery_editor.step_complete')) . '</strong><p>' . e(t('admin.gallery_editor.step_complete_help')) . '</p></div></div>';
     echo '</div>';
-    echo '<p class="admin-image-move-lead">Choose where you want to move the selected photos.</p>';
-    echo '<div class="admin-image-move-choice-grid" role="group" aria-label="Move action">';
-    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>Move to existing gallery</strong><small>Pick a gallery that already exists. Its title picture is kept unless it is missing or invalid.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
-    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>Move to new gallery</strong><small>Create a new gallery under the selected parent, then move only the selected photos into it.</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '<p class="admin-image-move-lead">' . e(t('admin.gallery_editor.move_lead')) . '</p>';
+    echo '<div class="admin-image-move-choice-grid" role="group" aria-label="' . e(t('admin.gallery_editor.move_action')) . '">';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_existing" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_existing')) . '</strong><small>' . e(t('admin.gallery_editor.move_existing_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
+    echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_new')) . '</strong><small>' . e(t('admin.gallery_editor.move_new_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
     echo '</div>';
     echo '<div class="admin-image-move-targets">';
-    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>Destination gallery</span><select name="destination_gallery_id"><option value="0">Choose existing gallery</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> The selected photos, thumbnails, and generated display files will be moved into this gallery folder.</small></label>';
-    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>Parent gallery</span><select name="new_gallery_parent_id"><option value="0">No parent</option>' . $newGalleryParentOptions . '</select></label><label><span>New gallery title</span><input type="text" name="new_gallery_title" placeholder="Example: Prague evening walk"></label><label><span>Optional folder/slug</span><input type="text" name="new_gallery_folder_name" placeholder="Leave empty to derive it from the title"></label><small><span aria-hidden="true">ⓘ</span> The new gallery is created under the selected parent and receives only the selected photos.</small></div>';
+    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span><select name="destination_gallery_id"><option value="0">' . e(t('admin.gallery_editor.choose_existing_gallery')) . '</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
+    echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>' . e(t('admin.gallery_editor.parent_gallery')) . '</span><select name="new_gallery_parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent')) . '</option>' . $newGalleryParentOptions . '</select></label><label><span>' . e(t('admin.gallery_editor.new_gallery_title')) . '</span><input type="text" name="new_gallery_title" placeholder="' . e(t('admin.gallery_editor.example_gallery_title')) . '"></label><label><span>' . e(t('admin.gallery_editor.optional_folder_slug')) . '</span><input type="text" name="new_gallery_folder_name" placeholder="' . e(t('admin.gallery_editor.derive_from_title')) . '"></label><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.new_gallery_move_help')) . '</small></div>';
     echo '</div>';
-    echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>Cancel</button><div><strong>Move summary</strong><p data-admin-image-move-summary>Select photos and choose a target to continue.</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>Move selected photos now →</button></div>';
+    echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>' . e(t('admin.gallery_editor.cancel')) . '</button><div><strong>' . e(t('admin.gallery_editor.move_summary')) . '</strong><p data-admin-image-move-summary>' . e(t('admin.gallery_editor.move_summary_empty')) . '</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>' . e(t('admin.gallery_editor.move_selected_now')) . '</button></div>';
     echo '</section>';
     echo '</div>';
 }
@@ -1744,7 +1744,7 @@ function render_admin_gallery_branding_fields(array $gallery): void
         return;
     }
 
-    echo '<fieldset class="form-grid admin-branding-assets"><legend>Gallery branding</legend>';
+    echo '<fieldset class="form-grid admin-branding-assets"><legend>' . e(t('admin.gallery_editor.gallery_branding', 'Gallery branding')) . '</legend>';
     echo '<p class="muted">All branding images are optional. Existing galleries render exactly as before until one of these assets is uploaded.</p>';
     foreach (gallery_branding_asset_types() as $kind => $definition) {
         // $label stores the user-facing asset label.
@@ -1923,7 +1923,7 @@ function render_admin_image_reorder_script(): void
         bodyData.set('csrf_token', csrfInput.value);
         bodyData.set('gallery_id', galleryInput.value);
         bodyData.set('image_order', JSON.stringify(readImageOrder(tableBody)));
-        bodyData.set('ajax', '1');
+        bodyData.set('ajax');
         setImageOrderStatus('Saving new image order...', 'saving');
 
         return fetch(reorderUrl, {
@@ -2402,7 +2402,7 @@ function cms_admin_bulk_images(): void
     }
     if (!$ownedIds) {
         if (admin_wants_json()) {
-            admin_panel_error_response('The selected photo is no longer available in this gallery.');
+            admin_panel_error_response(t('admin.gallery_editor.selected_photo_unavailable'));
             return;
         }
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
@@ -2593,7 +2593,7 @@ function cms_admin_bulk_images(): void
             }
         }
         thumbnail_maintenance_summary_cache_clear();
-        flash_message('admin_notice', 'Created ' . $count . ' thumbnail(s).');
+        flash_message('admin_notice', t('admin.galleries.thumbnail_result', ['count' => $count]));
         redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
     }
     flash_message('admin_notice', 'Updated ' . count($ownedIds) . ' image(s).');
@@ -2789,34 +2789,34 @@ function cms_admin_edit_image(): void
         redirect_to(url_for('admin_edit_image', ['id' => $image['id'], 'saved' => 1]));
     }
     render_header('Edit image');
-    echo '<section class="panel"><h1>Edit image</h1><p><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
+    echo '<section class="panel"><h1>' . e(t('admin.gallery_editor.edit_image', 'Edit image')) . '</h1><p><img decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 800)) . '" alt=""></p>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
-    echo '<label>Title<input name="title" value="' . e($image['title']) . '"></label>';
-    echo '<label>Description<textarea name="description">' . e($image['description']) . '</textarea></label>';
-    echo '<label>Visibility<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
+    echo '<label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($image['title']) . '"></label>';
+    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($image['description']) . '</textarea></label>';
+    echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';
     if (nsfw_guard_schema_ready()) {
         echo '<label><input type="checkbox" name="nsfw_enabled" value="1"' . ((int) ($image['nsfw_enabled'] ?? 0) === 1 ? ' checked' : '') . '> Mark this photo as NSFW / 18+</label>';
         echo '<p class="muted">When enabled, anonymous visitors must confirm they are 18+ before this photo, thumbnail, or original media file is served. Before using NSFW content, please verify that your hosting provider or web hosting plan permits it, as adult content may violate their policies.</p>';
     }
-    echo '<label>Sort order<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
+    echo '<label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $image['sort_order'] . '"></label>';
     if (thumbnail_bounds_schema_ready()) {
         render_admin_thumbnail_bound_slider('image_thumbnail', isset($image['thumbnail_min_size']) ? (int) $image['thumbnail_min_size'] : null, isset($image['thumbnail_max_size']) ? (int) $image['thumbnail_max_size'] : null, 'Responsive thumbnail quality bounds', 'Optional per-photo guardrails. These can override gallery-level guardrails when the public selection logic is wired in the next step.');
     } else {
         echo '<p class="muted">Thumbnail quality bounds will be available after the database migration is applied.</p>';
     }
-    echo '<label>Tags<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">Separate tags with commas.</span></label>';
+    echo '<label>' . e(t('admin.gallery_editor.tags', 'Tags')) . '<input name="tags" value="' . e(tag_names_for_entity('image', (int) $image['id'])) . '" list="tag-suggestions" data-tag-input><span class="muted">' . e(t('admin.gallery_editor.tags_help', 'Separate tags with commas.')) . '</span></label>';
     render_tag_datalist();
     if (exif_gps_schema_ready()) {
-        echo '<div class="exif-admin-summary"><h2>EXIF / GPS</h2><dl>';
-        echo '<dt>Taken</dt><dd>' . e((string) ($image['exif_taken_at'] ?? '')) . '</dd>';
-        echo '<dt>Camera</dt><dd>' . e(trim((string) ($image['exif_camera_make'] ?? '') . ' ' . (string) ($image['exif_camera_model'] ?? ''))) . '</dd>';
-        echo '<dt>Lens</dt><dd>' . e((string) ($image['exif_lens_model'] ?? '')) . '</dd>';
-        echo '<dt>Exposure</dt><dd>' . e(trim((string) ($image['exif_focal_length'] ?? '') . ' ' . (string) ($image['exif_aperture'] ?? '') . ' ' . (string) ($image['exif_exposure_time'] ?? '') . ' ISO ' . (string) ($image['exif_iso'] ?? ''))) . '</dd>';
-        echo '<dt>GPS</dt><dd>' . (image_has_gps($image) ? e((string) $image['gps_lat'] . ', ' . (string) $image['gps_lng']) : 'No GPS coordinates found') . '</dd>';
+        echo '<div class="exif-admin-summary"><h2>' . e(t('admin.gallery_editor.exif_gps', 'EXIF / GPS')) . '</h2><dl>';
+        echo '<dt>' . e(t('admin.gallery_editor.taken', 'Taken')) . '</dt><dd>' . e((string) ($image['exif_taken_at'] ?? '')) . '</dd>';
+        echo '<dt>' . e(t('admin.gallery_editor.camera', 'Camera')) . '</dt><dd>' . e(trim((string) ($image['exif_camera_make'] ?? '') . ' ' . (string) ($image['exif_camera_model'] ?? ''))) . '</dd>';
+        echo '<dt>' . e(t('admin.gallery_editor.lens', 'Lens')) . '</dt><dd>' . e((string) ($image['exif_lens_model'] ?? '')) . '</dd>';
+        echo '<dt>' . e(t('admin.gallery_editor.exposure', 'Exposure')) . '</dt><dd>' . e(trim((string) ($image['exif_focal_length'] ?? '') . ' ' . (string) ($image['exif_aperture'] ?? '') . ' ' . (string) ($image['exif_exposure_time'] ?? '') . ' ISO ' . (string) ($image['exif_iso'] ?? ''))) . '</dd>';
+        echo '<dt>' . e(t('admin.gallery_editor.gps', 'GPS')) . '</dt><dd>' . (image_has_gps($image) ? e((string) $image['gps_lat'] . ', ' . (string) $image['gps_lng']) : t('admin.gallery_editor.no_gps', 'No GPS coordinates found')) . '</dd>';
         echo '</dl><p class="muted">EXIF and GPS values are refreshed when the image is scanned again.</p></div>';
     }
-    echo '<button type="submit">Save image</button></form></section>';
+    echo '<button type="submit">' . e(t('admin.gallery_editor.save_image', 'Save image')) . '</button></form></section>';
     render_footer();
 }
 
