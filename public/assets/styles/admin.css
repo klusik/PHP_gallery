@@ -3592,3 +3592,88 @@ button.gallery-row-action.secondary {
     color: var(--theme-muted, #64748b);
     font-size: 0.8rem;
 }
+
+.patch-notes-viewer {
+    margin-top: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.62);
+    overflow: hidden;
+}
+
+.patch-notes-viewer > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem;
+    cursor: pointer;
+    font-weight: 750;
+}
+
+.patch-notes-viewer > summary small {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.patch-notes-viewer[open] > summary {
+    border-bottom: 1px solid var(--line);
+}
+
+.patch-notes-toolbar {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.1rem 0.5rem;
+    flex-wrap: wrap;
+}
+
+.patch-notes-select-form,
+.patch-notes-shortcuts {
+    display: flex;
+    align-items: end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.patch-notes-select-form label {
+    display: grid;
+    gap: 0.35rem;
+    min-width: min(100%, 20rem);
+}
+
+.patch-notes-content {
+    margin: 0.5rem 1.1rem 1.1rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.7);
+}
+
+.patch-notes-content h3,
+.patch-notes-content h4,
+.patch-notes-content h5 {
+    margin-top: 1rem;
+    margin-bottom: 0.45rem;
+}
+
+.patch-notes-content h3:first-child {
+    margin-top: 0;
+}
+
+.patch-notes-content ul {
+    margin-top: 0.35rem;
+    padding-left: 1.35rem;
+}
+
+.patch-notes-content li + li {
+    margin-top: 0.25rem;
+}
+
+.patch-notes-content pre {
+    overflow: auto;
+    padding: 0.85rem;
+    border-radius: calc(var(--radius, 16px) * 0.75);
+    background: rgba(15, 23, 42, 0.08);
+}
