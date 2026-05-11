@@ -1,6 +1,6 @@
 {
     "version": "0.64",
-    "generated_at": "2026-05-11T18:41:24+00:00",
+    "generated_at": "2026-05-11T19:12:00+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -23,7 +23,7 @@
         "app/controllers/exif.php": "sha256:945f73f51408044262f8d58c03e19e25bdb26597cd8efc3f1686d796490bc612",
         "app/controllers/http_helpers.php": "sha256:5e685f35d83c6e5dff8f2cb0d7882adf0206aa00988af7af3493bfbf5ac42c71",
         "app/controllers/picture_game.php": "sha256:ee1ba08e60167c4de311d18489ed6818ac93e21f2cec3a0e8e10696170719f97",
-        "app/controllers/public_gallery.php": "sha256:a146230c19c7bb352dd9c6ce57bddfe120eeeb28a4088675523cb649676512a7",
+        "app/controllers/public_gallery.php": "sha256:77f520f47493995c24ca4c2ad02983fb1719e2795463be83e3f464e978c804da",
         "app/controllers/public_media.php": "sha256:a0ffa07e1d781a534578eaf711f041e5eefafb855b1ca283f3dd1be56b7c2809",
         "app/controllers/setup.php": "sha256:4fac4b63b875d31af4d94509d13c9ca652e32ac02a026542795f9211cdd9e2ba",
         "app/controllers/tags.php": "sha256:739d2103245e00e9f3affc2582e0330ba542975c6f1c8e95d2ed9e8005b19f7b",
@@ -112,7 +112,7 @@
         "public/assets/gallery-modules/favicon-cropper.js": "sha256:a933b3c13c0ff01dfbdfb2357adda8af07e41848cf52ceb56ff4dd206c449610",
         "public/assets/gallery-modules/lightbox-deferred.js": "sha256:14cb88aacc7a3b4bb34dafd0bd245ddf8a7a7430a7930b9dbf3bc2cc4514af41",
         "public/assets/gallery-modules/lightbox.js": "sha256:56d640e8a2013e4d16b092f2f2f9160793340e6e8d4e9e550994b5aa9d17373f",
-        "public/assets/gallery-modules/responsive-thumbnails.js": "sha256:a7a2b89006d0388b0c06c3a1eb249b1ea4ff4f272fac548b736a9209aa8728e5",
+        "public/assets/gallery-modules/responsive-thumbnails.js": "sha256:45f244b3abc18b0faf2accd7958f79124cdb2f901ea06b3bee10fe50e42b466c",
         "public/assets/gallery-modules/theme-form.js": "sha256:37707e63efa7447f28bcd04c714657b00dfa85833b66064a27ffdcf846f8f043",
         "public/assets/gallery-modules/votes.js": "sha256:e1373e3f61a42daf3a6d31af635b44756a28452c5a97646884780e847b1027f0",
         "public/assets/gallery.js": "sha256:af959dadcdfee24b09798597f3c45f2907650879d7e98ee77b34f0c639543d3a",

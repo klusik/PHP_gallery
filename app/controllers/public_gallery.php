@@ -682,14 +682,17 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     } elseif ($coverAsset !== '') {
         echo '<img decoding="async" loading="lazy" src="' . e($coverAsset) . '" alt="">';
     } elseif ($cover) {
-        echo public_render_profile_with_thumbnail_purpose('subgallery cover progressive picture', static fn (): string => thumbnail_progressive_picture_html($cover, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail'));
+        $coverThumbnailBundle = public_render_profile_span('subgallery_cover_thumbnail_bundle', static fn (): array => thumbnail_bundle($cover));
+        echo public_render_profile_with_thumbnail_purpose('subgallery cover progressive picture', static fn (): string => thumbnail_progressive_picture_html($cover, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail', $coverThumbnailBundle));
     } else {
         // Variable $collage stores this steps working value.
         $collage = public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
-                echo public_render_profile_with_thumbnail_purpose('subgallery collage progressive picture', static fn (): string => thumbnail_progressive_picture_html($image, 300, [300, 800, 960], '300px', '(max-width: 299px) 300px, 800px', '', 'loading="lazy" fetchpriority="low" data-responsive-thumbnail'));
+                // Collage images must not use progressive replacement. A metagallery card contains several child covers, and independent delayed srcset upgrades make the card repaint in visible waves. Render a stable srcset immediately and let the browser choose the best candidate once.
+                $collageThumbnailBundle = public_render_profile_span('subgallery_collage_thumbnail_bundle', static fn (): array => thumbnail_bundle($image));
+                echo public_render_profile_with_thumbnail_purpose('subgallery collage stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800], '(max-width: 520px) 300px, 420px', '', 'loading="lazy" fetchpriority="low"', $collageThumbnailBundle));
             }
             echo '</span>';
         }
