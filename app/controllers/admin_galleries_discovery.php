@@ -114,11 +114,7 @@ function cms_admin_new_gallery(): void
         verify_csrf();
         try {
             // $gallery stores an intermediate value used by the surrounding gallery workflow.
-            $gallery = create_empty_gallery(admin_new_gallery_input_from_post());
-            admin_log_event('info', 'gallery.folder_created', t('admin.galleries.log_empty_folder_created'), [
-                'gallery_id' => (int) $gallery['id'],
-                'folder_path' => (string) $gallery['folder_path'],
-            ]);
+            $gallery = admin_create_gallery_from_input($_POST);
             if (admin_wants_json()) {
                 header('Content-Type: application/json');
                 echo json_encode(admin_new_gallery_success_response($gallery));
@@ -176,21 +172,48 @@ function admin_side_panel_request(): bool
 }
 
 /**
+ * Normalize create-gallery input for every admin workflow.
+ */
+function admin_new_gallery_input_from_array(array $input): array
+{
+    // $normalized stores the create-gallery input contract used by all admin workflows.
+    $normalized = [
+        'title' => $input['title'] ?? '',
+        'folder_name' => $input['folder_name'] ?? '',
+        'description' => $input['description'] ?? '',
+        'gallery_date' => $input['gallery_date'] ?? '',
+        'visibility' => gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished')),
+        'parent_id' => $input['parent_id'] ?? 0,
+        'voting_enabled' => $input['voting_enabled'] ?? 0,
+        'show_filenames' => $input['show_filenames'] ?? 0,
+        'count_badge_visibility' => $input['count_badge_visibility'] ?? 'inherit',
+    ];
+    if (array_key_exists('sort_order', $input)) {
+        $normalized['sort_order'] = $input['sort_order'];
+    }
+    return $normalized;
+}
+
+/**
  * Read create-gallery POST values through the same input contract used by the direct admin page.
  */
 function admin_new_gallery_input_from_post(): array
 {
-    return [
-        'title' => $_POST['title'] ?? '',
-        'folder_name' => $_POST['folder_name'] ?? '',
-        'description' => $_POST['description'] ?? '',
-        'gallery_date' => $_POST['gallery_date'] ?? '',
-        'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
-        'parent_id' => $_POST['parent_id'] ?? 0,
-        'voting_enabled' => $_POST['voting_enabled'] ?? 0,
-        'show_filenames' => $_POST['show_filenames'] ?? 0,
-        'count_badge_visibility' => $_POST['count_badge_visibility'] ?? 'inherit',
-    ];
+    return admin_new_gallery_input_from_array($_POST);
+}
+
+/**
+ * Create a gallery through the shared admin create implementation.
+ */
+function admin_create_gallery_from_input(array $input): array
+{
+    // $gallery stores the persisted gallery returned by the service layer.
+    $gallery = create_empty_gallery(admin_new_gallery_input_from_array($input));
+    admin_log_event('info', 'gallery.folder_created', t('admin.galleries.log_empty_folder_created'), [
+        'gallery_id' => (int) $gallery['id'],
+        'folder_path' => (string) $gallery['folder_path'],
+    ]);
+    return $gallery;
 }
 
 /**
@@ -220,10 +243,6 @@ function admin_new_gallery_success_response(array $gallery): array
 }
 
 /**
- * Render create-gallery fields shared by the full admin page and the side-panel fragment.
- */
-
-/**
  * Render compact Markdown formatting guidance for gallery description fields.
  */
 function render_gallery_description_formatting_hint(): void
@@ -239,13 +258,20 @@ function render_gallery_description_formatting_hint(): void
     echo '</ul></div></details>';
 }
 
-function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode): void
+/**
+ * Render create-gallery fields shared by full admin pages and panel fragments.
+ */
+function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
+    // $isUploadWorkflow stores whether the shared create fields are embedded in the upload workflow.
+    $isUploadWorkflow = $workflow === 'upload';
     if ($panelMode) {
         echo '<input type="hidden" name="panel" value="1">';
     }
     if ($panelMode) {
-        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.new_gallery_kicker', 'New gallery')) . '</p><h3>' . e(t('admin.gallery_editor.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e(t('admin.gallery_editor.only_gallery_created_here', 'Only the gallery is created here.')) . '</p></div><div class="admin-side-panel-field-grid">';
+        $panelHelp = $isUploadWorkflow ? t('admin.upload.gallery_identity_help', 'Create an empty gallery, or select photos and upload them immediately.') : t('admin.gallery_editor.only_gallery_created_here', 'Only the gallery is created here.');
+        $panelKicker = $isUploadWorkflow ? t('admin.upload.new_child_gallery', 'New child gallery') : t('admin.gallery_editor.new_gallery_kicker', 'New gallery');
+        echo '<div class="admin-side-panel-card admin-side-panel-primary-card"><div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e($panelKicker) . '</p><h3>' . e(t('admin.gallery_editor.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e($panelHelp) . '</p></div><div class="admin-side-panel-field-grid">';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';

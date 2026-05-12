@@ -68,18 +68,8 @@ function cms_admin_upload(): void
             // $entries stores an intermediate value used by the surrounding gallery workflow.
             $entries = $mode === 'new' ? gallery_upload_entries_or_empty($_FILES['images'] ?? null) : gallery_upload_entries($_FILES['images'] ?? null);
             if ($mode === 'new') {
-                // $gallery stores an intermediate value used by the surrounding gallery workflow.
-                $gallery = create_empty_gallery([
-                    'title' => $_POST['title'] ?? '',
-                    'folder_name' => $_POST['folder_name'] ?? '',
-                    'description' => $_POST['description'] ?? '',
-                    'visibility' => gallery_visibility_storage_value((string) ($_POST['visibility'] ?? 'unpublished')),
-                    'gallery_date' => $_POST['gallery_date'] ?? '',
-                    'parent_id' => $_POST['parent_id'] ?? 0,
-                    'voting_enabled' => $_POST['voting_enabled'] ?? 0,
-                    'show_filenames' => $_POST['show_filenames'] ?? 0,
-                    'count_badge_visibility' => $_POST['count_badge_visibility'] ?? 'inherit',
-                ]);
+                // $gallery stores an intermediate value used by the shared create-gallery workflow.
+                $gallery = admin_create_gallery_from_input($_POST);
             } else {
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
                 $gallery = find_gallery((int) ($_POST['gallery_id'] ?? 0));
@@ -361,25 +351,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
         echo '<section class="panel"><h2>' . e(t('admin.upload.create_and_upload_title', 'Create gallery and upload photos')) . '</h2>';
         echo '<form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="form-grid" data-gallery-upload-form>' . csrf_field();
         echo '<input type="hidden" name="upload_mode" value="new">';
-        echo '<label>' . e(t('admin.upload.gallery_name', 'Gallery name')) . '<input name="title" required></label>';
-        echo '<label>' . e(t('admin.upload.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.upload.folder_name_help', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
-        echo '<label>' . e(t('admin.upload.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.upload.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-        echo '<label>' . e(t('admin.upload.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        if (gallery_date_schema_ready()) {
-            echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
-        } else {
-            echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
-        }
-        echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.upload.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
-        echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.upload.show_file_names', 'Show file names')) . '</label>';
-        if (gallery_count_badge_schema_ready()) {
-            echo '<label>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '<select name="count_badge_visibility">';
-            foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-                echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
-            }
-            echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</span></label>';
-        }
-        echo '<label>' . e(t('admin.upload.description', 'Description')) . '<textarea name="description"></textarea></label>';
+        render_admin_new_gallery_fields($prefillParentId, false, 'upload');
         echo '<label>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
         echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
         echo '<button type="submit">' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
@@ -390,35 +362,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
     echo '<div class="admin-side-panel-progress-anchor" data-gallery-panel-progress-anchor></div>';
     echo '<form method="post" action="' . e(url_for('admin_upload')) . '" enctype="multipart/form-data" class="admin-side-panel-form" data-gallery-upload-form data-gallery-panel-close-on-success="1">' . csrf_field();
     echo '<input type="hidden" name="upload_mode" value="new">';
-    echo '<input type="hidden" name="panel" value="1">';
-
-    echo '<div class="admin-side-panel-card admin-side-panel-primary-card">';
-    echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.new_child_gallery', 'New child gallery')) . '</p><h3>' . e(t('admin.upload.gallery_identity', 'Gallery identity')) . '</h3></div><p class="muted">' . e(t('admin.upload.gallery_identity_help', 'Create an empty gallery, or select photos and upload them immediately.')) . '</p></div>';
-    echo '<div class="admin-side-panel-field-grid">';
-    echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
-    echo '<label class="admin-side-panel-field"><span>' . e(t('admin.upload.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.upload.folder_name_help', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
-    echo '<label class="admin-side-panel-field"><span>' . e(t('admin.upload.visibility', 'Visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    if (gallery_date_schema_ready()) {
-        echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
-    } else {
-        echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
-    }
-    echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.upload.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
-    echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.upload.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
-    echo '</div>';
-    echo '<div class="admin-side-panel-toggle-row">';
-    echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.upload.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
-    echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.upload.show_file_names', 'Show file names')) . '</span></label>';
-    echo '</div>';
-    echo '</div>';
-
-    if (gallery_count_badge_schema_ready()) {
-        echo '<div class="admin-side-panel-card"><label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
-        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
-            echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
-        }
-        echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</small></label></div>';
-    }
+    render_admin_new_gallery_fields($prefillParentId, true, 'upload');
 
     echo '<div class="admin-side-panel-card admin-side-panel-upload-card">';
     echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';

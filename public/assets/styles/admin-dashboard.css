@@ -357,3 +357,10 @@
     .admin-tabs {
         position: static;
     }
+
+    .admin-metric-grid,
+    .admin-action-grid,
+    .admin-maintenance-grid {
+        grid-template-columns: 1fr;
+    }
+}

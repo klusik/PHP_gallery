@@ -52,14 +52,6 @@ function cms_admin_public_update_gallery(): void
         cms_not_found();
         return;
     }
-    // Variable $title stores this steps working value.
-    $title = trim((string) ($_POST['title'] ?? ''));
-    if ($title === '') {
-        // $title stores an intermediate value used by the surrounding gallery workflow.
-        $title = (string) $gallery['title'];
-    }
-    // Variable $visibility stores this steps working value.
-    $visibility = gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished'));
     // Variable $action stores this steps working value.
     $action = (string) ($_POST['action'] ?? 'save');
     if ($action === 'delete') {
@@ -78,6 +70,21 @@ function cms_admin_public_update_gallery(): void
         $stmt->execute([(int) $gallery['id']]);
         redirect_to($redirect);
     }
+
+    // $input stores the partial edit data accepted by public contextual admin actions.
+    $input = $_POST;
+    // Variable $title stores this steps working value.
+    $title = trim((string) ($input['title'] ?? ''));
+    if ($title === '') {
+        // $title stores an intermediate value used by the surrounding gallery workflow.
+        $title = (string) $gallery['title'];
+    }
+    $input['title'] = $title;
+    if (!array_key_exists('description', $input)) {
+        $input['description'] = (string) ($gallery['description'] ?? '');
+    }
+    // Variable $visibility stores this steps working value.
+    $visibility = gallery_visibility_storage_value((string) ($gallery['visibility'] ?? 'unpublished'));
     if ($action === 'publish') {
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = 'public';
@@ -90,42 +97,11 @@ function cms_admin_public_update_gallery(): void
         // $visibility stores an intermediate value used by the surrounding gallery workflow.
         $visibility = gallery_visibility_storage_value($action);
     }
+    $input['visibility'] = $visibility;
     try {
-        // $galleryDate stores the optional manual date submitted from inline admin editing.
-        $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($_POST['gallery_date'] ?? ($gallery['gallery_date'] ?? '')) : null;
-    } catch (InvalidArgumentException $exception) {
+        admin_save_gallery_from_input($gallery, $input, $_FILES, 'admin-edit-identity', false);
+    } catch (Throwable $exception) {
         flash_message('admin_notice', $exception->getMessage());
-        redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
-    }
-    // Variable $fields stores this steps working value.
-    $fields = [
-        'title = ?' => $title,
-        'description = ?' => (string) ($_POST['description'] ?? ''),
-        'visibility = ?' => $visibility,
-    ];
-    if (gallery_date_schema_ready()) {
-        $fields['gallery_date = ?'] = $galleryDate;
-    }
-    if (gallery_filename_display_schema_ready()) {
-        $fields['show_filenames = ?'] = !empty($_POST['show_filenames']) ? 1 : 0;
-    }
-    if (gallery_count_badge_schema_ready() && array_key_exists('count_badge_visibility', $_POST)) {
-        $fields['count_badge_visibility = ?'] = gallery_count_badge_storage_value($_POST['count_badge_visibility'] ?? 'inherit');
-    }
-    if (nsfw_guard_schema_ready()) {
-        $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;
-    }
-    $fields['updated_at = ?'] = now_sql();
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
-    $stmt->execute(array_merge(array_values($fields), [(int) $gallery['id']]));
-    if (public_path_schema_ready()) {
-        regenerate_public_paths();
-    }
-    // Variable $updated stores this steps working value.
-    $updated = find_gallery((int) $gallery['id']);
-    if ($updated) {
-        write_gallery_sidecar($updated);
     }
     redirect_to((string) ($_SERVER['HTTP_REFERER'] ?? gallery_public_url($gallery)));
 }

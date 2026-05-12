@@ -4,16 +4,6 @@
  * Split from admin.css on 2026-05-12 to keep admin styling modular.
  */
 
-.admin-tab-intro {
-        flex-direction: column;
-    }
-
-    .admin-metric-grid,
-    .admin-action-grid,
-    .admin-maintenance-grid {
-        grid-template-columns: 1fr;
-    }
-}
 
 /* Styles the Admin edit-gallery image order toolbar above the draggable photo table. */
 .admin-image-order-toolbar {

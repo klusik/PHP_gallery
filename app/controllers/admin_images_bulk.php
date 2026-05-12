@@ -131,7 +131,7 @@ function cms_admin_bulk_images(): void
                 $newGallerySortStmt->execute([$newGalleryParentId]);
                 $newGallerySortOrder = (int) $newGallerySortStmt->fetchColumn();
                 // $newGallery stores the newly created destination gallery under the selected parent.
-                $newGallery = create_empty_gallery([
+                $newGallery = admin_create_gallery_from_input([
                     'title' => $newGalleryTitle,
                     'folder_name' => trim((string) ($_POST['new_gallery_folder_name'] ?? '')),
                     'description' => '',
