@@ -1049,20 +1049,24 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    // Main stylesheet gets a build-busting version so structural CSS changes
-    // are not masked by browser cache.
-    $stylesPath = dirname(__DIR__) . '/public/assets/styles.css';
-    $stylesVersionPaths = [
-        $stylesPath,
-        dirname(__DIR__) . '/public/assets/styles/lightbox.css',
+    // Built-in stylesheets are linked directly with per-file cache keys.
+    // This avoids stale browser caches for CSS files that were previously loaded through @import.
+    $styleFiles = [
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/admin.css',
+        'assets/styles/side-panel.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
     ];
-    $stylesVersion = 0;
-    foreach ($stylesVersionPaths as $versionPath) {
-        if (is_file($versionPath)) {
-            $stylesVersion = max($stylesVersion, filemtime($versionPath));
+    foreach ($styleFiles as $styleFile) {
+        $stylePath = dirname(__DIR__) . '/public/' . $styleFile;
+        if (!is_file($stylePath)) {
+            continue;
         }
+        echo '<link rel="stylesheet" href="' . e(asset_url($styleFile)) . '?v=' . filemtime($stylePath) . '">';
     }
-    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '?v=' . ($stylesVersion > 0 ? $stylesVersion : time()) . '">';
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {

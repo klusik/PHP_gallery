@@ -1,11 +1,3 @@
-﻿@import url('styles/base.css');
-@import url('styles/public.css');
-@import url('styles/lightbox.css');
-@import url('styles/admin.css');
-@import url('styles/side-panel.css');
-@import url('styles/utilities.css');
-
-
 .admin-language-selector {
     display: inline-flex;
     align-items: center;
