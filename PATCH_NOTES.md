@@ -1,5 +1,14 @@
 # Patch notes
 
+## Version 0.65.4
+
+### Updates page layout refresh
+
+  - Reworked the Updates page into a dashboard-style layout with summary cards and clearer primary actions.
+  - Added a dedicated advanced tools section for beta installs, restores, and clean reinstalls.
+  - Added matching admin styling for the new hero, metric cards, and responsive layout.
+  - Regenerated the integrity manifest for the updated controller and stylesheet.
+
 ## Version 0.65.3
 
 ### Updates page patch notes picker
