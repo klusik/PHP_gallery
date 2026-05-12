@@ -153,8 +153,9 @@ function cms_admin_update(): void
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
-    // $status stores an intermediate value used by the surrounding gallery workflow.
+    // $status stores the fresh update check used by the page and reused by navigation badges.
     $status = check_application_update();
+    cache_application_update_check($status);
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
     // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.

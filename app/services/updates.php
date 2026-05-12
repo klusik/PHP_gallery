@@ -414,8 +414,32 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
  */
 function cache_application_update_check(array $status): void
 {
-    set_app_setting('application_update_check_status_json', json_encode($status, JSON_UNESCAPED_SLASHES));
+    // $json stores the compact update status used by navigation badges.
+    $json = json_encode($status, JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return;
+    }
+
+    set_app_setting('application_update_check_status_json', $json);
     set_app_setting('application_update_check_cached_at', (string) time());
+}
+
+/**
+ * Return true when an update status really points past the installed version.
+ */
+function application_update_status_is_pending(array $status): bool
+{
+    if (!empty($status['error'])) {
+        return false;
+    }
+
+    // $latestVersion stores the remote version reported by the status payload.
+    $latestVersion = trim((string) ($status['latest_version'] ?? ''));
+    if ($latestVersion === '') {
+        return false;
+    }
+
+    return version_compare($latestVersion, cms_current_version(), '>');
 }
 
 /**
@@ -425,7 +449,7 @@ function application_update_pending(): bool
 {
     // $status stores an intermediate value used by the surrounding gallery workflow.
     $status = cached_application_update_check(3600);
-    return empty($status['error']) && !empty($status['update_available']);
+    return application_update_status_is_pending($status);
 }
 
 /**
