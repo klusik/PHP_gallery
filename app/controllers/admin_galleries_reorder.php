@@ -98,8 +98,8 @@ function cms_admin_reorder_galleries(): void
     }
 
     sync_gallery_parent_ids();
-    // Variable $currentRows stores current database ids and parent ids for validation and change detection.
-    $currentRows = db()->query('SELECT id, parent_id FROM galleries ORDER BY id')->fetchAll();
+    // Variable $currentRows stores current database state for validation and change detection.
+    $currentRows = db()->query('SELECT id, parent_id, sort_order, title, folder_path FROM galleries ORDER BY id')->fetchAll();
     // Variable $currentIds stores all gallery ids currently known by the database.
     $currentIds = array_map(static fn (array $row): int => (int) $row['id'], $currentRows);
     // Variable $sortedSubmittedIds stores the submitted id set in sorted order.
@@ -137,8 +137,24 @@ function cms_admin_reorder_galleries(): void
 
     // Variable $currentParentById stores current parent ids keyed by gallery id.
     $currentParentById = [];
+    // Variable $currentSortOrderById stores current sort order values keyed by gallery id.
+    $currentSortOrderById = [];
+    // Variable $currentTitleById stores gallery titles for readable delta diagnostics.
+    $currentTitleById = [];
+    // Variable $currentFolderPathById stores gallery paths before any filesystem move.
+    $currentFolderPathById = [];
     foreach ($currentRows as $row) {
-        $currentParentById[(int) $row['id']] = (int) ($row['parent_id'] ?? 0);
+        $galleryId = (int) $row['id'];
+        $currentParentById[$galleryId] = (int) ($row['parent_id'] ?? 0);
+        $currentSortOrderById[$galleryId] = (int) ($row['sort_order'] ?? 0);
+        $currentTitleById[$galleryId] = (string) ($row['title'] ?? '');
+        $currentFolderPathById[$galleryId] = normalize_relative_path((string) ($row['folder_path'] ?? ''));
+    }
+
+    // Variable $submittedParentById stores requested parent ids keyed by gallery id.
+    $submittedParentById = [];
+    foreach ($submittedEntries as $entry) {
+        $submittedParentById[(int) $entry['id']] = (int) $entry['parent_id'];
     }
 
     // Variable $pdo stores the active database connection used for sibling order updates.
@@ -170,6 +186,8 @@ function cms_admin_reorder_galleries(): void
 
         // Variable $siblingPositionByParent stores the next sort index for each parent id.
         $siblingPositionByParent = [];
+        // Variable $nextSortOrderById stores the calculated persisted sort order for each submitted gallery.
+        $nextSortOrderById = [];
         $pdo->beginTransaction();
         // Variable $stmt stores the prepared update reused for each reordered gallery row.
         $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ?');
@@ -181,6 +199,7 @@ function cms_admin_reorder_galleries(): void
             $siblingPositionByParent[$parentId] = $position;
             // Variable $sortOrder stores a spaced integer so future maintenance can insert between rows if needed.
             $sortOrder = $position * 10;
+            $nextSortOrderById[(int) $entry['id']] = $sortOrder;
             $stmt->execute([$sortOrder, $now, (int) $entry['id']]);
         }
         $pdo->commit();
@@ -211,10 +230,52 @@ function cms_admin_reorder_galleries(): void
             }
         }
 
+        // Variable $parentChanges stores only parent deltas, so the log explains real tree moves.
+        $parentChanges = [];
+        // Variable $sortOrderChanges stores only order deltas, so the log stays readable after drag operations.
+        $sortOrderChanges = [];
+        // Variable $changedGalleryIds stores the unique gallery ids changed by parent or sort order deltas.
+        $changedGalleryIds = [];
+        foreach ($submittedEntries as $entry) {
+            $galleryId = (int) $entry['id'];
+            $oldParentId = (int) ($currentParentById[$galleryId] ?? 0);
+            $newParentId = (int) ($submittedParentById[$galleryId] ?? 0);
+            $oldSortOrder = (int) ($currentSortOrderById[$galleryId] ?? 0);
+            $newSortOrder = (int) ($nextSortOrderById[$galleryId] ?? 0);
+            if ($oldParentId !== $newParentId) {
+                $parentChanges[] = [
+                    'gallery_id' => $galleryId,
+                    'gallery_title' => $currentTitleById[$galleryId] ?? '',
+                    'old_parent_id' => $oldParentId,
+                    'new_parent_id' => $newParentId,
+                    'old_folder_path' => $currentFolderPathById[$galleryId] ?? '',
+                ];
+                $changedGalleryIds[$galleryId] = true;
+            }
+            if ($oldSortOrder !== $newSortOrder) {
+                $sortOrderChanges[] = [
+                    'gallery_id' => $galleryId,
+                    'gallery_title' => $currentTitleById[$galleryId] ?? '',
+                    'parent_id' => $newParentId,
+                    'old_sort_order' => $oldSortOrder,
+                    'new_sort_order' => $newSortOrder,
+                ];
+                $changedGalleryIds[$galleryId] = true;
+            }
+        }
+
         admin_log_event('info', 'gallery.reordered', t('admin.galleries.log_reordered_tree'), [
-            'galleries' => count($submittedEntries),
+            'submitted_entries' => count($submittedEntries),
+            'persisted_galleries' => count($submittedEntries),
+            'changed_galleries' => count($changedGalleryIds),
+            'changed_gallery_ids' => array_map('intval', array_keys($changedGalleryIds)),
+            'parent_changes' => $parentChanges,
+            'order_changes' => $sortOrderChanges,
             'moved_folders' => $movedCount,
             'maintenance_warnings' => array_values(array_unique($maintenanceWarnings)),
+        ], [
+            'subject_type' => 'gallery_tree',
+            'subject_id' => 0,
         ]);
 
         if ($maintenanceWarnings) {
