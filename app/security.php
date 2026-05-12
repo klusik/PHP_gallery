@@ -148,10 +148,22 @@ function send_security_headers(): void
     $page = (string) ($_GET['page'] ?? 'home');
     // $isAnonymousGet stores an intermediate value used by the surrounding gallery workflow.
     $isAnonymousGet = request_method() === 'GET' && current_user() === null;
-    // $isPublicCacheCandidate stores an intermediate value used by the surrounding gallery workflow.
-    $isPublicCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game', 'robots', 'sitemap', 'theme_css'], true);
+    // $isPublicHtmlCacheCandidate stores public pages whose rendered HTML depends on DB-backed theme and gallery settings.
+    $isPublicHtmlCacheCandidate = in_array($page, ['home', 'gallery', 'share', 'tag', 'picture_game'], true);
+    // $isStaticPublicCacheCandidate stores public routes that do not render gallery-card HTML.
+    $isStaticPublicCacheCandidate = in_array($page, ['robots', 'sitemap', 'theme_css'], true);
 
-    if ($isAnonymousGet && $isPublicCacheCandidate) {
+    if ($isAnonymousGet && $isPublicHtmlCacheCandidate) {
+        // Public gallery pages include theme-controlled HTML classes, for example the horizontal/vertical
+        // gallery description layout. Require revalidation so a Theme save is visible on a normal refresh.
+        header('Cache-Control: no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        header('X-Theme-Content-Revision: ' . (string) app_setting('theme_public_content_revision', '0'));
+        return;
+    }
+
+    if ($isAnonymousGet && $isStaticPublicCacheCandidate) {
         header('Cache-Control: public, max-age=120, stale-while-revalidate=600');
         return;
     }

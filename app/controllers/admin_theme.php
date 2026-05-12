@@ -337,7 +337,16 @@ function cms_admin_theme(): void
             $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
-            set_app_setting('theme_gallery_description_layout', gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical'));
+            // $previousDescriptionLayout stores the rendered public-card layout before this save.
+            $previousDescriptionLayout = theme_gallery_description_layout();
+            // $nextDescriptionLayout stores the submitted public-card layout after validation.
+            $nextDescriptionLayout = gallery_description_layout_normalize($_POST['theme_gallery_description_layout'] ?? 'vertical');
+            set_app_setting('theme_gallery_description_layout', $nextDescriptionLayout);
+            if ($nextDescriptionLayout !== $previousDescriptionLayout) {
+                // The description layout changes public-card HTML classes, not only CSS.
+                // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
+                set_app_setting('theme_public_content_revision', (string) time());
+            }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
