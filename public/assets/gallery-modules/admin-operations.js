@@ -43,7 +43,7 @@
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260509-image-move-v2';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
-import { setupGalleryLightbox, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260510-lazy-map-v1';
+import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260512-tag-whisperer-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 
 const legacyAdminTabHashes = new Map([
@@ -694,6 +694,7 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupAdminTabsInRoot(body);
     setupAdminPanelRangeDisplays(body);
     setupAdminPanelThumbnailBoundControls(body);
+    setupTagSuggestions(body);
     setupImageBulkMoveFields();
     if (workflow.name === 'gallery-edit') {
         prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
@@ -1200,14 +1201,15 @@ async function reflectGalleryImageBulkInCurrentView(result) {
  */
 async function reflectSavedGalleryInCurrentView(result) {
     const galleryTitle = String(result.gallery_title || 'Gallery');
-    const refreshed = await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
+    await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
+    const refreshed = await refreshCurrentGalleryContextFromServer('');
     if (!refreshed) {
         const heading = document.querySelector('.hero h1, .gallery-branding-title');
         if (heading instanceof HTMLElement && galleryTitle) {
             heading.textContent = galleryTitle;
         }
     }
-    showAdminGallerySidePanelResultNotice(`${galleryTitle} saved`, String(result.gallery_url || ''));
+    showAdminGallerySidePanelResultNotice(String(result.message || `${galleryTitle} saved`), String(result.gallery_url || ''));
 }
 
 /**
@@ -1236,7 +1238,11 @@ async function reflectUploadedGalleryInCurrentView(result) {
     const targetUrl = String(result.gallery_url || '');
     const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
     showAdminGallerySidePanelResultNotice(message, targetUrl);
-    await refreshAdminSidePanelFromServer();
+    if (Boolean(result.created_gallery) && String(result.edit_url || '') !== '') {
+        await switchAdminSidePanelToCreatedGalleryEditor(result);
+    } else {
+        await refreshAdminSidePanelFromServer();
+    }
     if (refreshUrl === '' || adminSidePanelSamePageUrl(refreshUrl, window.location.href) || document.querySelector('main.site-main .admin-edit-gallery-hero')) {
         await refreshCurrentGalleryContextFromServer(refreshUrl);
     }
@@ -1448,6 +1454,29 @@ function adminSidePanelSamePageUrl(left, right) {
  * @param {Record<string, *>} result Server response for the created gallery.
  * @returns {void}
  */
+
+/**
+ * Switch the open side panel from create/upload mode to the editor for the newly created gallery.
+ *
+ * @param {Record<string, *>} result Server response containing the created gallery edit URL.
+ * @returns {Promise<boolean>} True when the editor was loaded into the side panel.
+ */
+async function switchAdminSidePanelToCreatedGalleryEditor(result) {
+    const panel = document.querySelector('[data-admin-side-panel]');
+    const editUrl = String(result.edit_url || '');
+    if (!(panel instanceof HTMLElement) || editUrl === '') {
+        return false;
+    }
+    panel.dataset.adminSidePanelWorkflow = 'gallery-edit';
+    panel.dataset.adminSidePanelSourceUrl = editUrl;
+    panel.classList.add('is-edit-panel');
+    setAdminGallerySidePanelHeading(panel, 'Gallery editor', String(result.gallery_title || 'Edit gallery'));
+    writeAdminGallerySidePanelStatus(panel, 'Loading created gallery editor...', false);
+    const refreshed = await refreshAdminSidePanelFromServer(editUrl);
+    writeAdminGallerySidePanelStatus(panel, '', false);
+    return refreshed;
+}
+
 async function reflectCreatedGalleryInCurrentView(result) {
     const galleryUrl = String(result.gallery_url || '');
     const galleryTitle = String(result.gallery_title || 'New gallery');
@@ -1458,6 +1487,10 @@ async function reflectCreatedGalleryInCurrentView(result) {
         return;
     }
 
+    if (String(result.edit_url || '') !== '') {
+        await switchAdminSidePanelToCreatedGalleryEditor(result);
+    }
+
     if (refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
         showAdminGallerySidePanelResultNotice(galleryTitle, galleryUrl);
         return;
@@ -1465,6 +1498,7 @@ async function reflectCreatedGalleryInCurrentView(result) {
 
     const refreshed = await refreshPublicSubgallerySectionFromServer(galleryId);
     if (refreshed) {
+        showAdminGallerySidePanelResultNotice(String(result.message || galleryTitle), galleryUrl);
         return;
     }
 

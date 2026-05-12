@@ -66,51 +66,154 @@ function i18n(key, fallback, parameters = {}) {
     return text;
 }
 
-export function setupTagSuggestions() {
-    // Tag fields still store comma-separated text, but this small helper makes
-    // reused tags discoverable while the admin types.
-    document.querySelectorAll('[data-tag-input]').forEach((input) => {
+export function setupTagSuggestions(root = document) {
+    // Tag fields still store comma-separated text, but this helper makes reused
+    // tags discoverable while the admin types each comma-separated value.
+    const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+    scope.querySelectorAll('[data-tag-input]').forEach((input) => {
+        if (!(input instanceof HTMLInputElement) || input.dataset.tagSuggestionsBound === '1') {
+            return;
+        }
+        input.dataset.tagSuggestionsBound = '1';
         // Variable `list` stores this steps working value.
-        const list = document.querySelector(`#${input.getAttribute('list')}`);
+        const listId = input.getAttribute('list') || '';
+        // Variable `list` stores this steps working value.
+        const list = listId !== '' ? document.getElementById(listId) : null;
         // Variable `names` stores this steps working value.
-        const names = list ? Array.from(list.options).map((option) => option.value) : [];
+        const names = list instanceof HTMLDataListElement
+            ? Array.from(list.options).map((option) => option.value.trim()).filter(Boolean)
+            : [];
+        // Variable `uniqueNames` stores this steps working value.
+        const uniqueNames = Array.from(new Set(names));
         // Variable `suggestions` stores this steps working value.
         const suggestions = document.createElement('div');
         suggestions.className = 'tag-suggestions';
+        suggestions.setAttribute('role', 'listbox');
+        suggestions.hidden = true;
         input.insertAdjacentElement('afterend', suggestions);
 
-        // Function `currentPrefix` executes this focused behavior.
-        function currentPrefix() {
+        /**
+         * Return the text fragment currently being edited after the last separator.
+         *
+         * @returns {string} Lower-cased partial tag name.
+         */
+        function currentFragment() {
             // Variable `parts` stores this steps working value.
-            const parts = input.value.split(',');
-            return parts[parts.length - 1].trim().toLowerCase();
+            const parts = input.value.split(/[,;\n]/);
+            return String(parts[parts.length - 1] || '').trim().toLowerCase();
         }
 
-        // Function `choose` executes this focused behavior.
+        /**
+         * Return the already selected tag names so suggestions do not repeat them.
+         *
+         * @returns {Set<string>} Lower-cased chosen tag names.
+         */
+        function selectedTagNames() {
+            return new Set(input.value.split(/[,;\n]/).map((part) => part.trim().toLowerCase()).filter(Boolean));
+        }
+
+        /**
+         * Score a suggestion against the current fragment.
+         *
+         * @param {string} name Existing tag name.
+         * @param {string} fragment Current user-entered partial tag.
+         * @returns {number} Lower score means stronger match. -1 means no match.
+         */
+        function suggestionScore(name, fragment) {
+            const normalized = name.toLowerCase();
+            if (normalized.startsWith(fragment)) {
+                return 0;
+            }
+            if (normalized.includes(fragment)) {
+                return 1;
+            }
+            const compactName = normalized.replace(/[\s_-]+/g, '');
+            const compactFragment = fragment.replace(/[\s_-]+/g, '');
+            if (compactFragment !== '' && compactName.includes(compactFragment)) {
+                return 2;
+            }
+            let cursor = 0;
+            for (const character of compactFragment) {
+                cursor = compactName.indexOf(character, cursor);
+                if (cursor === -1) {
+                    return -1;
+                }
+                cursor += 1;
+            }
+            return compactFragment.length >= 2 ? 3 : -1;
+        }
+
+        /**
+         * Replace the edited fragment with the selected reused tag.
+         *
+         * @param {string} name Existing tag name selected by the admin.
+         * @returns {void}
+         */
         function choose(name) {
             // Variable `parts` stores this steps working value.
-            const parts = input.value.split(',');
-            parts[parts.length - 1] = ` ${name}`;
-            input.value = parts.map((part) => part.trim()).filter(Boolean).join(', ');
+            const parts = input.value.split(/([,;\n])/);
+            let valueIndex = parts.length - 1;
+            while (valueIndex >= 0 && /^[,;\n]$/.test(parts[valueIndex])) {
+                valueIndex -= 1;
+            }
+            if (valueIndex < 0) {
+                parts.push(name);
+            } else {
+                parts[valueIndex] = name;
+            }
+            input.value = parts.join('').split(/[,;\n]/).map((part) => part.trim()).filter(Boolean).join(', ');
             suggestions.innerHTML = '';
+            suggestions.hidden = true;
+            input.dispatchEvent(new Event('change', {bubbles: true}));
             input.focus();
         }
 
-        input.addEventListener('input', () => {
-            // Variable `prefix` stores this steps working value.
-            const prefix = currentPrefix();
+        /**
+         * Redraw suggestion buttons for the current input value.
+         *
+         * @returns {void}
+         */
+        function renderSuggestions() {
+            // Variable `fragment` stores this steps working value.
+            const fragment = currentFragment();
+            // Variable `selected` stores this steps working value.
+            const selected = selectedTagNames();
             suggestions.innerHTML = '';
-            if (!prefix) {
+            suggestions.hidden = true;
+            if (fragment === '') {
                 return;
             }
-            names.filter((name) => name.toLowerCase().startsWith(prefix)).slice(0, 6).forEach((name) => {
-                // Variable `button` stores this steps working value.
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.textContent = name;
-                button.addEventListener('click', () => choose(name));
-                suggestions.append(button);
-            });
+            uniqueNames
+                .map((name) => ({name, score: suggestionScore(name, fragment)}))
+                .filter((entry) => entry.score >= 0 && !selected.has(entry.name.toLowerCase()))
+                .sort((left, right) => left.score - right.score || left.name.localeCompare(right.name))
+                .slice(0, 8)
+                .forEach((entry) => {
+                    // Variable `button` stores this steps working value.
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = entry.name;
+                    button.setAttribute('role', 'option');
+                    button.addEventListener('mousedown', (event) => event.preventDefault());
+                    button.addEventListener('click', () => choose(entry.name));
+                    suggestions.append(button);
+                });
+            suggestions.hidden = suggestions.children.length === 0;
+        }
+
+        input.addEventListener('input', renderSuggestions);
+        input.addEventListener('focus', renderSuggestions);
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                suggestions.innerHTML = '';
+                suggestions.hidden = true;
+            }
+        });
+        document.addEventListener('click', (event) => {
+            if (event.target === input || suggestions.contains(event.target)) {
+                return;
+            }
+            suggestions.hidden = true;
         });
     });
 }
