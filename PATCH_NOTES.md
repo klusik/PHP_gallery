@@ -1,5 +1,15 @@
 # Patch notes
 
+## Version 0.65.5
+
+### Theme content revision caching
+
+  - Bumped the public content revision when the gallery description layout changes so public HTML caches see the new
+  card class right after a Theme save.
+  - Split anonymous cache handling so gallery pages that render DB-backed card HTML revalidate on refresh.
+  - Kept short public caching for static routes such as robots, sitemap, and theme_css.
+  - Refreshed the integrity manifest for the revised theme and security code.
+
 ## Version 0.65.4
 
 ### Updates page layout refresh
