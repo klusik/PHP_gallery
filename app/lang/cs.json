@@ -1374,5 +1374,9 @@
     "admin.gallery_editor.count_badge_new_gallery_help": "Ovládá ikonu vrstev a počet obrázků na této kartě galerie.",
     "admin.gallery_editor.count_badge_source_gallery": "přepis galerie",
     "admin.gallery_editor.count_badge_source_theme": "výchozí nastavení motivu",
-    "admin.gallery_editor.count_badge_title": "Odznak počtu obrázků"
+    "admin.gallery_editor.count_badge_title": "Odznak počtu obrázků",
+    "admin.updates.patch_notes_one_release": "1 vydání",
+    "admin.updates.patch_notes_release_count": "{count} vydání",
+    "admin.updates.patch_notes_installed_badge": "Nainstalováno",
+    "admin.updates.patch_notes_latest_badge": "Nejnovější"
 }

@@ -212,17 +212,67 @@ function cms_admin_update(): void
     }
     echo '<details class="patch-notes-viewer" data-patch-notes-viewer data-fragment-url="' . e(url_for('admin_update', ['patch_notes_fragment' => '1'])) . '">';
     echo '<summary><span>' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</span><small>' . e(t('admin.updates.patch_notes_summary', 'Show release notes from GitHub')) . '</small></summary>';
+    // $patchVersionGroups stores release-note versions grouped by the main minor stream.
+    $patchVersionGroups = [];
+    foreach ($patchNotesVersions as $version => $entry) {
+        $versionString = (string) $version;
+        $groupKey = $versionString;
+        if (preg_match('/^(\d+\.\d+)(?:\.\d+)?(?:[-+].*)?$/', $versionString, $match)) {
+            $groupKey = (string) $match[1];
+        }
+        if (!isset($patchVersionGroups[$groupKey])) {
+            $patchVersionGroups[$groupKey] = [];
+        }
+        $patchVersionGroups[$groupKey][$versionString] = (array) $entry;
+    }
+    $selectedPatchEntry = (array) ($patchNotesVersions[$selectedPatchVersion] ?? []);
+    $selectedPatchLabel = (string) ($selectedPatchEntry['title'] ?? ('Version ' . $selectedPatchVersion));
     echo '<div class="patch-notes-toolbar">';
     echo '<form method="get" class="patch-notes-select-form" data-patch-notes-form>';
     echo '<input type="hidden" name="page" value="admin_update">';
-    echo '<label>' . e(t('admin.updates.patch_notes_version_label', 'Displayed version'));
-    echo '<select name="patch_version" data-patch-notes-select>';
+    echo '<input type="hidden" name="patch_version" value="' . e($selectedPatchVersion) . '" data-patch-notes-input>';
+    echo '<label class="patch-notes-picker-label" for="patch-notes-picker-button">' . e(t('admin.updates.patch_notes_version_label', 'Displayed version')) . '</label>';
+    echo '<div class="patch-notes-picker" data-patch-notes-picker>';
+    echo '<button type="button" id="patch-notes-picker-button" class="patch-notes-picker-button" data-patch-notes-picker-button aria-haspopup="listbox" aria-expanded="false">';
+    echo '<span data-patch-notes-picker-text>' . e($selectedPatchLabel) . '</span>';
+    echo '<span class="patch-notes-picker-chevron" aria-hidden="true">&#9662;</span>';
+    echo '</button>';
+    echo '<div class="patch-notes-picker-menu" data-patch-notes-picker-menu role="listbox" aria-label="' . e(t('admin.updates.patch_notes_version_label', 'Displayed version')) . '">';
+    foreach ($patchVersionGroups as $groupVersion => $groupEntries) {
+        $groupCount = count($groupEntries);
+        echo '<div class="patch-notes-version-group">';
+        echo '<div class="patch-notes-version-heading">';
+        echo '<span>Version ' . e((string) $groupVersion) . '</span>';
+        echo '<small>' . e(t($groupCount === 1 ? 'admin.updates.patch_notes_one_release' : 'admin.updates.patch_notes_release_count', $groupCount === 1 ? '1 release' : '{count} releases', ['count' => (string) $groupCount])) . '</small>';
+        echo '</div>';
+        foreach ($groupEntries as $version => $entry) {
+            $isSelected = (string) $version === $selectedPatchVersion;
+            $isInstalled = (string) $version === cms_current_version();
+            $isLatest = empty($status['error']) && !empty($status['latest_version']) && (string) $version === (string) $status['latest_version'];
+            $itemClass = 'patch-notes-version-option' . ($isSelected ? ' is-selected' : '') . ($isInstalled ? ' is-installed' : '') . ($isLatest ? ' is-latest' : '');
+            echo '<button type="button" class="' . e($itemClass) . '" role="option" aria-selected="' . ($isSelected ? 'true' : 'false') . '" data-patch-version="' . e((string) $version) . '" data-patch-label="' . e((string) ($entry['title'] ?? ('Version ' . $version))) . '">';
+            echo '<span class="patch-notes-version-number">' . e((string) $version) . '</span>';
+            echo '<span class="patch-notes-version-meta">';
+            if ($isInstalled) {
+                echo '<small>' . e(t('admin.updates.patch_notes_installed_badge', 'Installed')) . '</small>';
+            }
+            if ($isLatest) {
+                echo '<small>' . e(t('admin.updates.patch_notes_latest_badge', 'Latest')) . '</small>';
+            }
+            echo '</span>';
+            echo '</button>';
+        }
+        echo '</div>';
+    }
+    echo '</div>';
+    echo '</div>';
+    echo '<select class="patch-notes-native-select" data-patch-notes-select aria-hidden="true" tabindex="-1">';
     foreach ($patchNotesVersions as $version => $entry) {
-        // $selected stores the select state for the currently displayed patch notes version.
+        // $selected stores the native select state for the currently displayed patch notes version.
         $selected = (string) $version === $selectedPatchVersion ? ' selected' : '';
         echo '<option value="' . e((string) $version) . '"' . $selected . '>' . e((string) ($entry['title'] ?? ('Version ' . $version))) . '</option>';
     }
-    echo '</select></label>';
+    echo '</select>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.updates.patch_notes_show_button', 'Show')) . '</button>';
     echo '</form>';
     echo '<div class="patch-notes-shortcuts">';
@@ -241,13 +291,20 @@ function cms_admin_update(): void
     echo '<script>';
     echo '(function(){';
     echo 'var viewer=document.querySelector("[data-patch-notes-viewer]");if(!viewer||!window.fetch){return;}';
-    echo 'var form=viewer.querySelector("[data-patch-notes-form]");var select=viewer.querySelector("[data-patch-notes-select]");var target=viewer.querySelector("[data-patch-notes-fragment]");';
+    echo 'var form=viewer.querySelector("[data-patch-notes-form]");var select=viewer.querySelector("[data-patch-notes-select]");var input=viewer.querySelector("[data-patch-notes-input]");var target=viewer.querySelector("[data-patch-notes-fragment]");';
+    echo 'var picker=viewer.querySelector("[data-patch-notes-picker]");var pickerButton=viewer.querySelector("[data-patch-notes-picker-button]");var pickerMenu=viewer.querySelector("[data-patch-notes-picker-menu]");var pickerText=viewer.querySelector("[data-patch-notes-picker-text]");';
     echo 'var endpoint=viewer.getAttribute("data-fragment-url")||"";';
     echo 'function setLoading(active){viewer.classList.toggle("is-loading",!!active);if(target){target.setAttribute("aria-busy",active?"true":"false");}}';
-    echo 'function loadVersion(version,pushState){if(!endpoint||!target||!version){return;}var url=new URL(endpoint,window.location.href);url.searchParams.set("patch_notes_fragment","1");url.searchParams.set("patch_version",version);setLoading(true);fetch(url.toString(),{headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"}}).then(function(response){if(!response.ok){throw new Error("HTTP "+response.status);}return response.json();}).then(function(payload){if(!payload||!payload.ok){throw new Error("Invalid response");}target.innerHTML=payload.html||"";if(select&&payload.version){select.value=payload.version;}if(pushState&&window.history&&window.history.replaceState){var pageUrl=new URL(window.location.href);pageUrl.searchParams.set("patch_version",payload.version||version);window.history.replaceState(null,"",pageUrl.toString());}}).catch(function(){var fallbackUrl=new URL(' . json_encode(url_for('admin_update')) . ',window.location.href);fallbackUrl.searchParams.set("patch_version",version);window.location.href=fallbackUrl.toString();}).finally(function(){setLoading(false);});}';
-    echo 'if(form){form.addEventListener("submit",function(event){event.preventDefault();viewer.open=true;loadVersion(select?select.value:"",true);});}';
-    echo 'if(select){select.addEventListener("change",function(){viewer.open=true;loadVersion(select.value,true);});}';
-    echo 'viewer.querySelectorAll("[data-patch-version]").forEach(function(link){link.addEventListener("click",function(event){event.preventDefault();viewer.open=true;loadVersion(link.getAttribute("data-patch-version")||"",true);});});';
+    echo 'function setPickerOpen(open){if(!picker||!pickerButton){return;}picker.classList.toggle("is-open",!!open);pickerButton.setAttribute("aria-expanded",open?"true":"false");}';
+    echo 'function syncSelection(version,label){if(!version){return;}if(select){select.value=version;}if(input){input.value=version;}if(pickerText&&label){pickerText.textContent=label;}viewer.querySelectorAll(".patch-notes-version-option").forEach(function(option){var selected=option.getAttribute("data-patch-version")===version;option.classList.toggle("is-selected",selected);option.setAttribute("aria-selected",selected?"true":"false");});}';
+    echo 'function loadVersion(version,pushState,label){if(!endpoint||!target||!version){return;}syncSelection(version,label||"");var url=new URL(endpoint,window.location.href);url.searchParams.set("patch_notes_fragment","1");url.searchParams.set("patch_version",version);setLoading(true);fetch(url.toString(),{headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"}}).then(function(response){if(!response.ok){throw new Error("HTTP "+response.status);}return response.json();}).then(function(payload){if(!payload||!payload.ok){throw new Error("Invalid response");}target.innerHTML=payload.html||"";if(payload.version){var active=viewer.querySelector("[data-patch-version=\""+CSS.escape(payload.version)+"\"]");syncSelection(payload.version,active?active.getAttribute("data-patch-label")||"":"");}if(pushState&&window.history&&window.history.replaceState){var pageUrl=new URL(window.location.href);pageUrl.searchParams.set("patch_version",payload.version||version);window.history.replaceState(null,"",pageUrl.toString());}}).catch(function(){var fallbackUrl=new URL(' . json_encode(url_for('admin_update')) . ',window.location.href);fallbackUrl.searchParams.set("patch_version",version);window.location.href=fallbackUrl.toString();}).finally(function(){setLoading(false);});}';
+    echo 'if(pickerButton){pickerButton.addEventListener("click",function(){setPickerOpen(!picker.classList.contains("is-open"));});}';
+    echo 'if(pickerMenu){pickerMenu.addEventListener("click",function(event){var option=event.target.closest("[data-patch-version]");if(!option){return;}event.preventDefault();viewer.open=true;setPickerOpen(false);loadVersion(option.getAttribute("data-patch-version")||"",true,option.getAttribute("data-patch-label")||"");});}';
+    echo 'document.addEventListener("click",function(event){if(picker&&!picker.contains(event.target)){setPickerOpen(false);}});';
+    echo 'document.addEventListener("keydown",function(event){if(event.key==="Escape"){setPickerOpen(false);}});';
+    echo 'if(form){form.addEventListener("submit",function(event){event.preventDefault();viewer.open=true;loadVersion(input?input.value:(select?select.value:""),true);});}';
+    echo 'if(select){select.addEventListener("change",function(){viewer.open=true;loadVersion(select.value,true,select.options[select.selectedIndex]?select.options[select.selectedIndex].textContent:"");});}';
+    echo 'viewer.querySelectorAll(".patch-notes-shortcuts [data-patch-version]").forEach(function(link){link.addEventListener("click",function(event){event.preventDefault();viewer.open=true;loadVersion(link.getAttribute("data-patch-version")||"",true);});});';
     echo '})();';
     echo '</script>';
 

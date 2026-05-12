@@ -1374,5 +1374,9 @@
     "admin.gallery_editor.count_badge_new_gallery_help": "Controls the stacked-picture icon and image count on this gallery card.",
     "admin.gallery_editor.count_badge_source_gallery": "gallery override",
     "admin.gallery_editor.count_badge_source_theme": "Theme default",
-    "admin.gallery_editor.count_badge_title": "Contained-picture badge"
+    "admin.gallery_editor.count_badge_title": "Contained-picture badge",
+    "admin.updates.patch_notes_one_release": "1 release",
+    "admin.updates.patch_notes_release_count": "{count} releases",
+    "admin.updates.patch_notes_installed_badge": "Installed",
+    "admin.updates.patch_notes_latest_badge": "Latest"
 }
