@@ -1,5 +1,15 @@
 # Patch notes
 
+## Version 0.65.7
+
+### Tag normalization and autocomplete sanitizing
+
+  - Added canonical tag normalization so stored tag names and slugs are forced into a safe lowercase form.
+  - Existing tags are merged when they resolve to the same canonical value.
+  - Gallery sidecar tag lists now stay normalized in the same format as database tags.
+  - Browser tag autocomplete now mirrors the server-side normalization instead of preserving raw tag text.
+  - Tag helper text was expanded to explain the lowercase safe-tag behavior to admins.
+
 ## Version 0.65.6
 
 ### Tag suggestion autocomplete refresh
