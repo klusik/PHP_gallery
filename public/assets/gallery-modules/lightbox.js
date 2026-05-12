@@ -65,212 +65,8 @@ function i18n(key, fallback, parameters = {}) {
     });
     return text;
 }
-
-export function setupTagSuggestions(root = document) {
-    // Tag fields still store comma-separated text, but this helper makes reused
-    // tags discoverable while the admin types each comma-separated value.
-    const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
-    scope.querySelectorAll('[data-tag-input]').forEach((input) => {
-        if (!(input instanceof HTMLInputElement) || input.dataset.tagSuggestionsBound === '1') {
-            return;
-        }
-        input.dataset.tagSuggestionsBound = '1';
-        // Variable `list` stores this steps working value.
-        const listId = input.getAttribute('list') || '';
-        // Variable `list` stores this steps working value.
-        const list = listId !== '' ? document.getElementById(listId) : null;
-        // Variable `names` stores this steps working value.
-        const names = list instanceof HTMLDataListElement
-            ? Array.from(list.options).map((option) => normalizeTagName(option.value)).filter(Boolean)
-            : [];
-        // Variable `uniqueNames` stores this steps working value.
-        const uniqueNames = Array.from(new Set(names));
-        // Variable `suggestions` stores this steps working value.
-        const suggestions = document.createElement('div');
-        suggestions.className = 'tag-suggestions';
-        suggestions.setAttribute('role', 'listbox');
-        suggestions.hidden = true;
-        input.insertAdjacentElement('afterend', suggestions);
-
-        /**
-         * Convert a tag to the same canonical lowercase safe form used on the server.
-         *
-         * @param {string} value Raw tag name.
-         * @returns {string} Safe lowercase tag name.
-         */
-        function normalizeTagName(value) {
-            return String(value || '')
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^a-zA-Z0-9]+/g, '-')
-                .replace(/^-+|-+$/g, '')
-                .toLowerCase()
-                .slice(0, 100);
-        }
-
-        /**
-         * Normalize comma-separated tag text without losing separators while the admin types.
-         *
-         * @param {string} value Raw input value.
-         * @returns {string} Sanitized input value.
-         */
-        function normalizeTagText(value) {
-            return String(value || '')
-                .split(/([,;\n])/)
-                .map((part) => /^[,;\n]$/.test(part) ? part : normalizeTagName(part))
-                .join('')
-                .replace(/[;\n]+/g, ', ');
-        }
-
-        /**
-         * Sanitize the current field value and keep the cursor as stable as possible.
-         *
-         * @returns {void}
-         */
-        function sanitizeInputValue() {
-            const before = input.value;
-            const cursor = input.selectionStart;
-            const after = normalizeTagText(before);
-            if (after === before) {
-                return;
-            }
-            input.value = after;
-            if (typeof cursor === 'number') {
-                const nextCursor = Math.min(after.length, cursor);
-                input.setSelectionRange(nextCursor, nextCursor);
-            }
-        }
-
-        /**
-         * Return the text fragment currently being edited after the last separator.
-         *
-         * @returns {string} Lower-cased partial tag name.
-         */
-        function currentFragment() {
-            // Variable `parts` stores this steps working value.
-            const parts = input.value.split(/[,;\n]/);
-            return normalizeTagName(String(parts[parts.length - 1] || ''));
-        }
-
-        /**
-         * Return the already selected tag names so suggestions do not repeat them.
-         *
-         * @returns {Set<string>} Lower-cased chosen tag names.
-         */
-        function selectedTagNames() {
-            return new Set(input.value.split(/[,;\n]/).map((part) => normalizeTagName(part)).filter(Boolean));
-        }
-
-        /**
-         * Score a suggestion against the current fragment.
-         *
-         * @param {string} name Existing tag name.
-         * @param {string} fragment Current user-entered partial tag.
-         * @returns {number} Lower score means stronger match. -1 means no match.
-         */
-        function suggestionScore(name, fragment) {
-            const normalized = normalizeTagName(name);
-            if (normalized.startsWith(fragment)) {
-                return 0;
-            }
-            if (normalized.includes(fragment)) {
-                return 1;
-            }
-            const compactName = normalized.replace(/[\s_-]+/g, '');
-            const compactFragment = fragment.replace(/[\s_-]+/g, '');
-            if (compactFragment !== '' && compactName.includes(compactFragment)) {
-                return 2;
-            }
-            let cursor = 0;
-            for (const character of compactFragment) {
-                cursor = compactName.indexOf(character, cursor);
-                if (cursor === -1) {
-                    return -1;
-                }
-                cursor += 1;
-            }
-            return compactFragment.length >= 2 ? 3 : -1;
-        }
-
-        /**
-         * Replace the edited fragment with the selected reused tag.
-         *
-         * @param {string} name Existing tag name selected by the admin.
-         * @returns {void}
-         */
-        function choose(name) {
-            // Variable `parts` stores this steps working value.
-            const parts = input.value.split(/([,;\n])/);
-            let valueIndex = parts.length - 1;
-            while (valueIndex >= 0 && /^[,;\n]$/.test(parts[valueIndex])) {
-                valueIndex -= 1;
-            }
-            if (valueIndex < 0) {
-                parts.push(name);
-            } else {
-                parts[valueIndex] = name;
-            }
-            input.value = parts.join('').split(/[,;\n]/).map((part) => normalizeTagName(part)).filter(Boolean).join(', ');
-            suggestions.innerHTML = '';
-            suggestions.hidden = true;
-            input.dispatchEvent(new Event('change', {bubbles: true}));
-            input.focus();
-        }
-
-        /**
-         * Redraw suggestion buttons for the current input value.
-         *
-         * @returns {void}
-         */
-        function renderSuggestions() {
-            // Variable `fragment` stores this steps working value.
-            const fragment = currentFragment();
-            // Variable `selected` stores this steps working value.
-            const selected = selectedTagNames();
-            suggestions.innerHTML = '';
-            suggestions.hidden = true;
-            if (fragment === '') {
-                return;
-            }
-            uniqueNames
-                .map((name) => ({name, score: suggestionScore(name, fragment)}))
-                .filter((entry) => entry.score >= 0 && !selected.has(normalizeTagName(entry.name)))
-                .sort((left, right) => left.score - right.score || left.name.localeCompare(right.name))
-                .slice(0, 8)
-                .forEach((entry) => {
-                    // Variable `button` stores this steps working value.
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.textContent = entry.name;
-                    button.setAttribute('role', 'option');
-                    button.addEventListener('mousedown', (event) => event.preventDefault());
-                    button.addEventListener('click', () => choose(entry.name));
-                    suggestions.append(button);
-                });
-            suggestions.hidden = suggestions.children.length === 0;
-        }
-
-        input.addEventListener('input', () => {
-            sanitizeInputValue();
-            renderSuggestions();
-        });
-        input.addEventListener('change', sanitizeInputValue);
-        input.addEventListener('blur', sanitizeInputValue);
-        input.addEventListener('focus', renderSuggestions);
-        input.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') {
-                suggestions.innerHTML = '';
-                suggestions.hidden = true;
-            }
-        });
-        document.addEventListener('click', (event) => {
-            if (event.target === input || suggestions.contains(event.target)) {
-                return;
-            }
-            suggestions.hidden = true;
-        });
-    });
-}
+export { setupTagSuggestions } from './tag-suggestions.js?v=20260512-modular-lightbox-v1';
+import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 
 const galleryLightboxState = {
     controller: null,
@@ -497,102 +293,6 @@ export function setupGalleryLightbox() {
         }
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
     };
-
-    // Function `currentLightboxVoteForm` returns the injected shared vote form.
-    function currentLightboxVoteForm() {
-        return lightboxVotePanel?.querySelector('[data-vote-form]') || null;
-    }
-
-    // Function `visibleVoteFormForImage` finds the already-rendered gallery-card vote form for an image.
-    function visibleVoteFormForImage(imageId) {
-        if (!imageId) {
-            return null;
-        }
-
-        for (const candidate of document.querySelectorAll('[data-lightbox-image][data-image-id]')) {
-            if (!(candidate instanceof HTMLElement) || candidate.dataset.imageId !== String(imageId)) {
-                continue;
-            }
-            const form = candidate.querySelector('[data-vote-form]');
-            if (form instanceof HTMLFormElement) {
-                return form;
-            }
-        }
-        return null;
-    }
-
-    // Function `templateVoteFormForCard` returns the inert vote form for hidden source-only images.
-    function templateVoteFormForCard(card) {
-        const template = card.querySelector('[data-lightbox-vote-template]');
-        if (template instanceof HTMLTemplateElement) {
-            const form = template.content.querySelector('[data-vote-form]');
-            if (form instanceof HTMLFormElement) {
-                return form;
-            }
-        }
-
-        // Older cached markup stored the shared form in a data attribute. Keeping
-        // this fallback prevents a half-updated browser cache from losing voting.
-        const voteFormHtml = card.dataset.voteFormHtml || '';
-        if (voteFormHtml.trim() === '') {
-            return null;
-        }
-        const scratch = document.createElement('template');
-        scratch.innerHTML = voteFormHtml;
-        const form = scratch.content.querySelector('[data-vote-form]');
-        return form instanceof HTMLFormElement ? form : null;
-    }
-
-    // Function `clonedVoteFormForCard` clones the same server-rendered widget used by gallery cards.
-    function clonedVoteFormForCard(card) {
-        const imageId = card.dataset.imageId || '';
-        const form = card.querySelector('[data-vote-form]') || visibleVoteFormForImage(imageId) || templateVoteFormForCard(card);
-        return form instanceof HTMLFormElement ? form.cloneNode(true) : null;
-    }
-
-    // Function `syncLightboxVote` injects the same server-rendered vote widget used by gallery cards.
-    function syncLightboxVote(card) {
-        if (!lightboxVotePanel) {
-            return;
-        }
-
-        lightboxVotePanel.replaceChildren();
-        lightboxVotePanel.hidden = true;
-
-        const form = clonedVoteFormForCard(card);
-        if (!(form instanceof HTMLFormElement)) {
-            return;
-        }
-
-        lightboxVotePanel.appendChild(form);
-        lightboxVotePanel.hidden = false;
-        form.dataset.lightboxVoteForm = '1';
-        form.classList.add('lightbox-vote');
-        const imageIdInput = form.querySelector('input[name="image_id"]');
-        if (imageIdInput instanceof HTMLInputElement) {
-            imageIdInput.value = card.dataset.imageId || '';
-        }
-
-        form.querySelectorAll('[data-score-for]').forEach((node) => {
-            node.dataset.scoreFor = card.dataset.imageId || '';
-            node.textContent = card.dataset.score || '0';
-        });
-        updateLightboxVoteButtons(card.dataset.userVote === '1' ? '1' : '0');
-    }
-
-    // Function `updateLightboxVoteButtons` executes this focused behavior.
-    function updateLightboxVoteButtons(vote) {
-        const form = currentLightboxVoteForm();
-        if (!(form instanceof HTMLFormElement)) {
-            return;
-        }
-        form.querySelectorAll('button[name="vote"]').forEach((button) => {
-            // Variable `active` stores this steps working value.
-            const active = button.value === vote;
-            button.classList.toggle('is-active', active);
-            button.setAttribute('aria-pressed', active ? 'true' : 'false');
-        });
-    }
 
     /**
      * Handles clear lightbox stage focus behavior for the gallery UI.
@@ -1465,7 +1165,7 @@ export function setupGalleryLightbox() {
         }
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
-        syncLightboxVote(card);
+        syncLightboxVote(card, lightboxVotePanel);
         if (lightboxMapButton) {
             // hasMapPoint stores state or configuration for the gallery front-end flow.
             const hasMapPoint = Boolean(card.dataset.mapPoint && card.dataset.mapPoint.trim());
@@ -1730,7 +1430,7 @@ export function setupGalleryLightbox() {
 
     // Function `submitLightboxVote` executes this focused behavior.
     function submitLightboxVote(value) {
-        const form = currentLightboxVoteForm();
+        const form = currentLightboxVoteForm(lightboxVotePanel);
         if (!(form instanceof HTMLFormElement) || form.closest('[hidden]')) {
             return;
         }
@@ -2634,7 +2334,7 @@ export function setupGalleryLightbox() {
                     node.textContent = String(result.score);
                 });
             }
-            updateLightboxVoteButtons(String(result.vote));
+            updateLightboxVoteButtons(lightboxVotePanel, String(result.vote));
         }
     }, {signal: controller.signal});
 }

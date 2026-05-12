@@ -1,0 +1,67 @@
+/*
+ * admin-theme-editor.css
+ * Theme editor layout styles.
+ * Split from admin.css on 2026-05-12 to keep admin styling modular.
+ */
+
+.admin-theme-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-theme-hero h1 {
+    margin-bottom: 0.25rem;
+    font-size: 2rem;
+    letter-spacing: -0.035em;
+}
+
+.admin-theme-hero p {
+    margin: 0;
+}
+
+.admin-theme-form {
+    margin-top: 0;
+}
+
+.admin-theme-form > .admin-tab-panel {
+    margin-top: 0;
+}
+
+.theme-tab-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.theme-tab-card-grid > fieldset,
+.admin-theme-form > .admin-tab-panel > fieldset {
+    margin: 0;
+}
+
+.admin-theme-save-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0;
+}
+
+.admin-theme-save-panel p {
+    margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+    .admin-theme-hero,
+    .admin-theme-save-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .theme-tab-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

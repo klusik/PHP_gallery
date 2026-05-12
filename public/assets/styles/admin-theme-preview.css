@@ -1,0 +1,680 @@
+/*
+ * admin-theme-preview.css
+ * Theme preview, color controls, and related admin theme UI.
+ * Split from admin.css on 2026-05-12 to keep admin styling modular.
+ */
+
+.admin-tab-intro {
+        flex-direction: column;
+    }
+
+    .admin-metric-grid,
+    .admin-action-grid,
+    .admin-maintenance-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Styles the Admin edit-gallery image order toolbar above the draggable photo table. */
+.admin-image-order-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0.65rem 0 0.5rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--admin-border, #c3c4c7);
+    border-radius: 4px;
+    background: #f8fafc;
+}
+
+/* Keeps the reorder instruction compact so it does not dominate the edit-gallery workflow. */
+.admin-image-order-toolbar .muted {
+    margin: 0;
+}
+
+/* Styles the live save-state text used by the drag-and-drop image ordering feature. */
+.admin-image-order-status {
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: #646970;
+}
+
+/* Marks that the reordered table state is currently being persisted. */
+.admin-image-order-status[data-state="saving"] {
+    color: #8a5a00;
+}
+
+/* Marks a successfully persisted image order. */
+.admin-image-order-status[data-state="saved"] {
+    color: #1f8a3b;
+}
+
+/* Marks a failed image-order save so the admin knows to reload before trusting the visible order. */
+.admin-image-order-status[data-state="error"] {
+    color: #b42318;
+}
+
+/* Keeps the drag-handle column narrow and visually separated from bulk selection. */
+.admin-image-order-cell {
+    width: 2.4rem;
+    text-align: center;
+}
+
+/* Makes the image-name header look like a sortable table title rather than a form submit control. */
+.admin-image-name-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Keeps keyboard focus visible when sorting the image table from the Name header. */
+.admin-image-name-sort:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 3px;
+}
+
+/* Gives pointer users clear feedback that the Name header can apply an immediate saved sort. */
+.admin-image-name-sort:hover {
+    text-decoration: underline;
+}
+
+/* Styles the dedicated pointer handle used to move image rows without interfering with checkboxes or links. */
+.admin-image-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    min-height: 1.75rem;
+    padding: 0;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    background: #fff;
+    color: #1d2327;
+    cursor: grab;
+    font-size: 14px;
+    touch-action: none;
+    user-select: none;
+    line-height: 1;
+}
+
+/* Provides immediate pointer feedback while the row is being moved. */
+.admin-image-drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Makes the moved row obvious and slightly translucent while pointer-based ordering is active. */
+.admin-image-order-table tr.is-dragging td {
+    background: #e8f2ff;
+    opacity: 0.72;
+}
+
+/* Prevents text selection during pointer-based image ordering, especially when moving across filenames. */
+body.admin-image-order-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
+@media (max-width: 720px) {
+    /* Stacks the reorder toolbar on narrow screens while preserving the live save status. */
+    .admin-image-order-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    /* Allows the save-state label to wrap rather than forcing horizontal scrolling on mobile admin screens. */
+    .admin-image-order-status {
+        white-space: normal;
+    }
+}
+
+/* Shows the exact insertion point while an Admin image row is being reordered. */
+.admin-image-order-placeholder td {
+    padding: 0;
+    border: 2px dashed #2271b1;
+    background: rgba(34, 113, 177, 0.08);
+}
+
+/* Keeps the real row in the table model while the visible ghost follows the pointer. */
+.admin-image-order-table tr.is-reorder-hidden {
+    visibility: hidden;
+}
+
+/* Displays a fixed visual copy of the image row during pointer-based Admin ordering. */
+.admin-image-order-ghost {
+    position: fixed;
+    z-index: 100000;
+    pointer-events: none;
+    border-collapse: collapse;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    opacity: 0.94;
+    background: #fff;
+}
+
+/* Keeps the ghost row readable while clearly marking it as a temporary drag preview. */
+.admin-image-order-ghost td {
+    background: #fff;
+    border-bottom: 1px solid #dcdcde;
+}
+
+/* Makes the cloned drag handle visually consistent inside the ghost row. */
+.admin-image-order-ghost .admin-image-drag-handle {
+    cursor: grabbing;
+}
+
+/* Styles public pagination controls for gallery and photo listings. */
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.75rem 0 1rem;
+}
+
+/* Styles one public pagination link or inactive pagination item. */
+.pagination-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid rgba(122, 83, 45, 0.22);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 250, 240, 0.78);
+    color: var(--text);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+/* Styles the current pagination page. */
+.pagination-link.is-current {
+    background: var(--accent);
+    color: #fffdf8;
+    border-color: var(--accent);
+}
+
+/* Styles disabled pagination controls. */
+.pagination-link.is-disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+/* Styles compact pagination gaps between page-number ranges. */
+.pagination-gap {
+    color: var(--muted);
+    padding: 0 0.15rem;
+}
+
+/* Styles the current page text next to pagination controls. */
+.pagination-status {
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+/* Styles compact checkbox labels used by small admin options. */
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Enforces configured pagination columns on desktop gallery grids. */
+.grid.pagination-grid-columns-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-6 { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-7 { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-8 { grid-template-columns: repeat(8, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-9 { grid-template-columns: repeat(9, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-10 { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-11 { grid-template-columns: repeat(11, minmax(0, 1fr)) !important; }
+.grid.pagination-grid-columns-12 { grid-template-columns: repeat(12, minmax(0, 1fr)) !important; }
+
+@media (max-width: 48rem) {
+    .grid.pagination-grid-columns-2,
+    .grid.pagination-grid-columns-3,
+    .grid.pagination-grid-columns-4,
+    .grid.pagination-grid-columns-5,
+    .grid.pagination-grid-columns-6,
+    .grid.pagination-grid-columns-7,
+    .grid.pagination-grid-columns-8,
+    .grid.pagination-grid-columns-9,
+    .grid.pagination-grid-columns-10,
+    .grid.pagination-grid-columns-11,
+    .grid.pagination-grid-columns-12 {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+.admin-log-filter-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    align-items: end;
+}
+
+.admin-log-table code {
+    font-size: 0.85rem;
+    word-break: break-word;
+}
+
+.log-context summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+}
+
+.log-context pre {
+    max-width: 42rem;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+.log-severity {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: rgba(15, 118, 110, 0.12);
+}
+
+.log-severity-warning,
+.log-severity-error,
+.log-severity-critical {
+    background: rgba(217, 119, 6, 0.16);
+}
+
+.log-severity-error,
+.log-severity-critical {
+    color: #991b1b;
+}
+
+.metric-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.metric-card {
+    border: 1px solid rgba(93, 104, 116, 0.18);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.55);
+}
+
+.metric-card strong {
+    display: block;
+    font-size: 1.55rem;
+    line-height: 1.2;
+}
+
+.metric-card span,
+.metric-card small {
+    display: block;
+    color: var(--muted);
+}
+
+.telemetry-privacy-note {
+    border-left: 4px solid var(--accent);
+    padding-left: 1rem;
+}
+
+.telemetry-settings-panel .checkbox-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.telemetry-split {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/* Splits the Admin Appearance editor into editable controls and a live public-page preview. */
+.theme-appearance-editor {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
+    gap: 1.25rem;
+    align-items: stretch;
+    border: 1px solid rgba(93, 104, 116, 0.22);
+    border-radius: 1rem;
+    padding: 1rem;
+}
+
+/* Keeps the left side dense enough for many color controls without making the preview cramped. */
+.theme-appearance-controls {
+    display: grid;
+    gap: 0.95rem;
+    align-content: start;
+    padding-right: 1.25rem;
+    border-right: 1px solid rgba(93, 104, 116, 0.22);
+}
+
+/* Makes color controls read like deliberate theme rows instead of thin browser strips. */
+.theme-color-control {
+    display: grid;
+    grid-template-columns: minmax(9rem, 1fr) minmax(8rem, 12rem);
+    gap: 0.4rem 0.75rem;
+    align-items: center;
+}
+
+/* Places helper text under the full color-control row. */
+.theme-color-control .muted {
+    grid-column: 1 / -1;
+}
+
+/* Enlarges the native color picker target while keeping browser color-picker behavior. */
+.theme-color-control input[type="color"] {
+    width: 100%;
+    min-height: 2.8rem;
+    padding: 0.25rem;
+    cursor: pointer;
+}
+
+/* Improves the visible color well in Chromium/WebKit browsers. */
+.theme-color-control input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+/* Improves the visible color well in Chromium/WebKit browsers. */
+.theme-color-control input[type="color"]::-webkit-color-swatch {
+    border: 0;
+    border-radius: 8px;
+}
+
+/* Improves the visible color well in Firefox. */
+.theme-color-control input[type="color"]::-moz-color-swatch {
+    border: 0;
+    border-radius: 8px;
+}
+
+/* Hosts the right-side live preview and separates it from the editable form controls. */
+.theme-live-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+/* Miniature public page driven by JavaScript-managed preview variables. */
+.theme-preview-page {
+    --preview-accent: var(--accent, #a5481c);
+    --preview-accent-dark: var(--accent-dark, #713414);
+    --preview-paper: var(--paper, #f8f4ec);
+    --preview-panel: var(--panel, #fffaf0);
+    --preview-gallery-panel: var(--gallery-panel, var(--panel, #fffaf0));
+    --preview-header-text: var(--header-text, #0f172a);
+    --preview-hero-text: var(--hero-text, #0f172a);
+    --preview-radius: var(--radius, 16px);
+    --preview-font-family: var(--font-family, Georgia, Times New Roman, serif);
+    --preview-background-opacity: 0.65;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    overflow: hidden;
+    box-sizing: border-box;
+    max-width: 100%;
+    border: 1px solid rgba(93, 104, 116, 0.26);
+    border-radius: var(--preview-radius);
+    padding: 0.85rem;
+    background: var(--preview-paper);
+    color: #17212b;
+    font-family: var(--preview-font-family);
+    box-shadow: 0 16px 45px rgba(15, 23, 42, 0.10);
+}
+
+/* Shows the selected public page width in the compact admin preview. */
+.theme-preview-page[data-preview-width="default"] {
+    width: 82%;
+    margin-right: auto;
+}
+
+/* Represents the wider public container without depending on the real browser viewport. */
+.theme-preview-page[data-preview-width="wide"] {
+    width: 92%;
+    margin-right: auto;
+}
+
+/* Represents a custom public container width in the fixed-size preview column. */
+.theme-preview-page[data-preview-width="custom"] {
+    width: calc(82% + (18% * var(--preview-custom-width-scale, 0.4063)));
+    margin-right: auto;
+}
+
+/* Represents the full-width public container inside the fixed-size preview column. */
+.theme-preview-page[data-preview-width="full"] {
+    width: 100%;
+}
+
+/* Keeps the conditional custom-width controls visually grouped without introducing extra layout logic. */
+.theme-custom-width-control {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.theme-custom-width-control[hidden] {
+    display: none;
+}
+
+/* Keeps the explanatory text below the preview in normal document flow. */
+.theme-live-preview > .muted {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+}
+
+/* Simulates the same layered public background model used by the real theme CSS. */
+.theme-preview-background,
+.theme-preview-background span {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Shows the saved background image with the same opacity slider semantics as the public page. */
+.theme-preview-background span {
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    opacity: var(--preview-background-opacity);
+}
+
+/* Makes preview header chrome resemble the public header without using the real page header. */
+.theme-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.7rem;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: var(--preview-radius);
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+}
+
+/* Displays the configured header title color in the preview header. */
+.theme-preview-header strong {
+    color: var(--preview-header-text);
+    font-size: 1rem;
+    line-height: 1.15;
+}
+
+/* Keeps preview navigation compact enough for the right column. */
+.theme-preview-header nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
+/* Mirrors button and navigation color behavior inside the preview. */
+.theme-preview-link,
+.theme-preview-pagination span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.9rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--preview-accent-dark);
+    border-radius: var(--preview-radius);
+    background: var(--preview-accent);
+    color: #fffdf8;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+/* Shows the public gallery hero styling and the configured gallery title color. */
+.theme-preview-hero {
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: var(--preview-radius);
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px) saturate(1.05);
+    -webkit-backdrop-filter: blur(8px) saturate(1.05);
+}
+
+/* Keeps the simulated hero label subtle while still reflecting the hero text color. */
+.theme-preview-hero p {
+    margin: 0 0 0.2rem;
+    color: var(--preview-hero-text);
+    font-size: 0.78rem;
+    opacity: 0.82;
+}
+
+/* Displays the gallery title color using a realistic title size for the small preview. */
+.theme-preview-hero h2 {
+    margin: 0 0 0.45rem;
+    color: var(--preview-hero-text);
+    font-size: 1.25rem;
+    line-height: 1.1;
+}
+
+/* Mirrors the public tag style using accent colors. */
+.theme-preview-tag {
+    display: inline-flex;
+    border: 1px solid var(--preview-accent);
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    background: rgba(255, 255, 255, 0.68);
+    color: var(--preview-accent-dark);
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+/* Shows two representative gallery cards so panel colors are immediately visible. */
+.theme-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Displays the generic panel color on the first card. */
+.theme-preview-card {
+    overflow: hidden;
+    min-width: 0;
+    border: 1px solid rgba(122, 83, 45, 0.18);
+    border-radius: var(--preview-radius);
+    background: var(--preview-panel);
+}
+
+/* Displays the open-gallery panel color on the second card. */
+.theme-preview-gallery-card {
+    background: var(--preview-gallery-panel);
+}
+
+/* Creates a tiny image placeholder whose gradient uses the current accent color. */
+.theme-preview-card div {
+    min-height: 4.3rem;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+        linear-gradient(135deg, var(--preview-accent), var(--preview-accent-dark));
+}
+
+/* Keeps preview card captions readable at thumbnail scale. */
+.theme-preview-card h3 {
+    margin: 0.55rem 0.55rem 0.15rem;
+    color: #17212b;
+    font-size: 0.86rem;
+    line-height: 1.15;
+}
+
+/* Shows muted supporting text without needing real gallery data. */
+.theme-preview-card p {
+    margin: 0 0.55rem 0.6rem;
+    color: #5d6874;
+    font-size: 0.72rem;
+}
+
+/* Presents selected and unselected pagination states with the configured accent. */
+.theme-preview-pagination {
+    display: flex;
+    gap: 0.35rem;
+}
+
+/* Makes inactive preview pagination look like real secondary pagination items. */
+.theme-preview-pagination span:not(:first-child) {
+    background: rgba(255, 255, 255, 0.62);
+    color: var(--preview-accent-dark);
+}
+
+@media (max-width: 900px) {
+    /* Stacks the Appearance editor when the Admin screen is too narrow for a useful split preview. */
+    .theme-appearance-editor {
+        grid-template-columns: 1fr;
+    }
+
+    /* Removes the vertical divider when the preview moves below the controls. */
+    .theme-appearance-controls {
+        padding-right: 0;
+        padding-bottom: 1.25rem;
+        border-right: 0;
+        border-bottom: 1px solid rgba(93, 104, 116, 0.22);
+    }
+
+    /* Avoids sticky positioning on narrow screens where the preview is no longer side-by-side. */
+    .theme-preview-page {
+        position: relative;
+        top: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    /* Gives color pickers the full row on very narrow Admin screens. */
+    .theme-color-control {
+        grid-template-columns: 1fr;
+    }
+
+    /* Keeps the preview cards readable on phones. */
+    .theme-preview-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Adds compact guidance and status styling for Admin gallery tree ordering. */

@@ -1050,7 +1050,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         echo '<meta name="robots" content="noindex,nofollow">';
     }
     // Built-in stylesheets are linked directly with per-file cache keys.
-    // This avoids stale browser caches for CSS files that were previously loaded through @import.
+    // Admin CSS remains a canonical cascade file so legacy selector order stays stable.
     $styleFiles = [
         'assets/styles/base.css',
         'assets/styles/public.css',
@@ -1303,7 +1303,12 @@ function render_footer(): void
     $scriptVersionPaths = [
         $scriptPath,
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/tag-suggestions.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-operations.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {
