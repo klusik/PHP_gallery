@@ -351,6 +351,8 @@ export function setupGalleryLightbox() {
     const image = overlay.querySelector('[data-lightbox-img]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    // lightboxMeta stores state or configuration for the gallery front-end flow.
+    const lightboxMeta = overlay.querySelector('.lightbox-meta');
     // lightboxImageTransitionDuration stores state or configuration for the gallery front-end flow.
     const lightboxImageTransitionDuration = 80;
     // lightboxPreviewPreloadRadius stores state or configuration for the gallery front-end flow.
@@ -1193,8 +1195,12 @@ export function setupGalleryLightbox() {
         const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
         // availableWidth stores state or configuration for the gallery front-end flow.
         const availableWidth = Math.max(240, window.innerWidth - (12 * rootFontSize));
+        // measuredMetaHeight stores state or configuration for the gallery front-end flow.
+        const measuredMetaHeight = lightboxMeta && !overlay.hidden ? lightboxMeta.getBoundingClientRect().height : 0;
+        // verticalReserve stores state or configuration for the gallery front-end flow.
+        const verticalReserve = Math.max(5 * rootFontSize, measuredMetaHeight + (3 * rootFontSize));
         // availableHeight stores state or configuration for the gallery front-end flow.
-        const availableHeight = Math.max(180, window.innerHeight * 0.78);
+        const availableHeight = Math.max(180, Math.min(window.innerHeight * 0.70, window.innerHeight - verticalReserve));
         // imageRatio stores state or configuration for the gallery front-end flow.
         const imageRatio = naturalWidth / naturalHeight;
         // stageWidth stores state or configuration for the gallery front-end flow.
@@ -1391,16 +1397,6 @@ export function setupGalleryLightbox() {
         const fullSrc = card.dataset.fullSrc || previewSrc;
         // altText stores state or configuration for the gallery front-end flow.
         const altText = card.dataset.title || '';
-        updateNormalLightboxStageSize(card);
-        // shouldShowImmediately stores state or configuration for the gallery front-end flow.
-        const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
-        preloadCardLightboxImages(card, true);
-        showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
-            if (!wasDisplayed || currentIndex !== index || activeLightboxImageToken !== imageToken) {
-                return;
-            }
-            swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
-        });
         title.textContent = card.dataset.title || '';
         description.textContent = card.dataset.description || 'No description.';
         score.textContent = card.dataset.score || '0';
@@ -1416,6 +1412,16 @@ export function setupGalleryLightbox() {
             lightboxMapButton.hidden = !hasMapPoint;
             lightboxMapButton.dataset.mapPoint = hasMapPoint ? card.dataset.mapPoint.trim() : '';
         }
+        updateNormalLightboxStageSize(card);
+        // shouldShowImmediately stores state or configuration for the gallery front-end flow.
+        const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
+        preloadCardLightboxImages(card, true);
+        showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
+            if (!wasDisplayed || currentIndex !== index || activeLightboxImageToken !== imageToken) {
+                return;
+            }
+            swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
+        });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             // mapPoint stores state or configuration for the gallery front-end flow.
             const mapPoint = card.dataset.mapPoint || '';
@@ -1591,11 +1597,7 @@ export function setupGalleryLightbox() {
         const mapButton = target?.closest('[data-lightbox-map]');
         if (mapButton) {
             event.preventDefault();
-            if (isLightboxFullscreen()) {
-                toggleLightboxMapSplit(mapButton.dataset.mapPoint || '', overlay.dataset.currentTitle || '');
-            } else {
-                openPhotoMapFromJson(mapButton.dataset.mapPoint || '');
-            }
+            toggleCurrentLightboxMap(mapButton.dataset.mapPoint || '');
         }
     }, {signal: controller.signal});
 
@@ -1655,6 +1657,10 @@ export function setupGalleryLightbox() {
         if (event.key === 'ArrowUp') {
             event.preventDefault();
             submitLightboxVote(1);
+        }
+        if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'm') {
+            event.preventDefault();
+            toggleCurrentLightboxMap();
         }
         if (event.key === 'f' || (event.key === 'F' && event.shiftKey === false) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f')) {
             event.preventDefault();
@@ -2277,6 +2283,20 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Closes the persistent map overlay without changing the current photo viewer.
+     *
+     * @returns {void}
+     */
+    function closeMapOverlay() {
+        // mapOverlay stores state or configuration for the gallery front-end flow.
+        const mapOverlay = document.querySelector('[data-map-overlay]');
+        if (mapOverlay instanceof HTMLElement) {
+            mapOverlay.hidden = true;
+        }
+        document.body.classList.remove('has-map-overlay');
+    }
+
+    /**
      * Ensures the persistent map overlay has exactly one close listener for the active viewer lifecycle.
      *
      * @param {HTMLElement} mapOverlay Persistent map overlay element.
@@ -2294,10 +2314,36 @@ export function setupGalleryLightbox() {
                 return;
             }
             if (event.target === mapOverlay || event.target.closest('[data-map-close]')) {
-                mapOverlay.hidden = true;
-                document.body.classList.remove('has-map-overlay');
+                closeMapOverlay();
             }
         }, {signal: closeController.signal});
+    }
+
+    /**
+     * Handles toggle current lightbox map behavior for the gallery UI.
+     * @param {*} json Value supplied by the caller or event context.
+     * @returns {*} Result of the UI operation, when a value is produced.
+     */
+    function toggleCurrentLightboxMap(json = '') {
+        // card stores state or configuration for the gallery front-end flow.
+        const card = cards[currentIndex] || null;
+        // mapPoint stores state or configuration for the gallery front-end flow.
+        const mapPoint = (json || card?.dataset.mapPoint || lightboxMapButton?.dataset.mapPoint || '').trim();
+        if (!mapPoint) {
+            return;
+        }
+        if (isLightboxFullscreen()) {
+            toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+            showLightboxHud();
+            return;
+        }
+        // mapOverlay stores state or configuration for the gallery front-end flow.
+        const mapOverlay = document.querySelector('[data-map-overlay]');
+        if (mapOverlay instanceof HTMLElement && !mapOverlay.hidden) {
+            closeMapOverlay();
+            return;
+        }
+        openPhotoMapFromJson(mapPoint);
     }
 
     /**

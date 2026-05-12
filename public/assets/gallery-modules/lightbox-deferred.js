@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260511-i18n-js-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260512-viewer-hud-v1';
 
 const deferredLightboxState = {
     controller: null,
