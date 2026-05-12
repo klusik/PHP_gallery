@@ -120,15 +120,17 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
 {
     // $branch stores the trusted branch selected by the update checker or fallback candidates.
     $branch = in_array($preferredBranch, application_update_branch_candidates(), true) ? (string) $preferredBranch : (string) application_update_branch_candidates()[0];
-    // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
-    $cachedData = application_patch_notes_read_cache($branch, max(300, $ttlSeconds));
-    if ($cachedData !== null) {
-        return $cachedData;
+    if ($ttlSeconds > 0) {
+        // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
+        $cachedData = application_patch_notes_read_cache($branch, $ttlSeconds);
+        if ($cachedData !== null) {
+            return $cachedData;
+        }
     }
 
     try {
-        // $markdown stores the remote PATCH_NOTES.md text fetched from GitHub.
-        $markdown = http_fetch(application_update_raw_url($branch, 'PATCH_NOTES.md'), 15);
+        // $markdown stores the remote PATCH_NOTES.md text fetched from GitHub Contents API.
+        $markdown = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 15);
         // $versions stores the parsed version sections keyed by normalized version number.
         $versions = application_patch_notes_parse_versions($markdown);
         // $data stores the viewer payload cached for subsequent page views.
@@ -136,7 +138,7 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
             'ok' => true,
             'branch' => $branch,
             'cached_at' => time(),
-            'source' => 'github',
+            'source' => 'github-api',
             'versions' => $versions,
             'error' => '',
         ];
@@ -826,15 +828,6 @@ function application_update_commit_zip_url(string $commitId): string
 }
 
 /**
- * Build a GitHub raw-content URL for a branch file.
- */
-function application_update_raw_url(string $branch, string $path): string
-{
-    application_update_assert_allowed_branch($branch);
-    return 'https://raw.githubusercontent.com/' . CMS_GITHUB_REPOSITORY . '/' . rawurlencode($branch) . '/' . ltrim($path, '/') . '?nocache=' . rawurlencode((string) time());
-}
-
-/**
  * Build a GitHub branch zip URL.
  */
 function application_update_zip_url(string $branch): string
@@ -855,6 +848,31 @@ function application_update_assert_allowed_branch(string $branch): void
 }
 
 /**
+ * Build a GitHub Contents API URL for one trusted branch file.
+ */
+function application_update_github_contents_api_url(string $branch, string $path): string
+{
+    application_update_assert_allowed_branch($branch);
+    [$owner, $repo] = explode('/', CMS_GITHUB_REPOSITORY, 2);
+    // $cleanPath stores the repository-relative file path accepted by the Contents API.
+    $cleanPath = ltrim(str_replace('\\', '/', $path), '/');
+    return 'https://api.github.com/repos/' . rawurlencode($owner) . '/' . rawurlencode($repo) . '/contents/' . str_replace('%2F', '/', rawurlencode($cleanPath)) . '?ref=' . rawurlencode($branch);
+}
+
+/**
+ * Fetch one small repository file through GitHub Contents API as raw text.
+ */
+function application_update_fetch_github_content(string $branch, string $path, int $timeoutSeconds): string
+{
+    // $headers stores the media type that asks GitHub to return raw file contents instead of JSON metadata.
+    $headers = [
+        'Accept: application/vnd.github.raw+json',
+        'X-GitHub-Api-Version: 2022-11-28',
+    ];
+    return http_fetch_with_headers(application_update_github_contents_api_url($branch, $path), $timeoutSeconds, $headers);
+}
+
+/**
  * Read the remote version marker that identifies the newest branch version.
  */
 function application_update_remote_version_candidates(string $branch): array
@@ -862,8 +880,8 @@ function application_update_remote_version_candidates(string $branch): array
     // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
     $versionCandidates = [];
     try {
-        // $bootstrap stores an intermediate value used by the surrounding gallery workflow.
-        $bootstrap = http_fetch(application_update_raw_url($branch, 'app/bootstrap.php'), 12);
+        // $bootstrap stores the remote bootstrap file fetched through GitHub Contents API.
+        $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', 12);
         // $bootstrapVersion stores an intermediate value used by the surrounding gallery workflow.
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
         if ($bootstrapVersion !== null) {
@@ -950,6 +968,22 @@ function application_update_normalize_version(string $version): ?string
  */
 function http_fetch(string $url, int $timeoutSeconds): string
 {
+    return http_fetch_with_headers($url, $timeoutSeconds, []);
+}
+
+/**
+ * Fetch a trusted remote URL with optional request headers and a bounded timeout.
+ */
+function http_fetch_with_headers(string $url, int $timeoutSeconds, array $headers = []): string
+{
+    // $baseHeaders stores cache-control and identity headers shared by all update HTTP calls.
+    $baseHeaders = [
+        'Cache-Control: no-cache',
+        'Pragma: no-cache',
+    ];
+    // $requestHeaders stores caller-provided headers after shared cache-control headers.
+    $requestHeaders = array_values(array_filter(array_merge($baseHeaders, $headers), static fn ($header): bool => is_string($header) && trim($header) !== ''));
+
     if (function_exists('curl_init')) {
         // $handle stores an intermediate value used by the surrounding gallery workflow.
         $handle = curl_init($url);
@@ -965,10 +999,7 @@ function http_fetch(string $url, int $timeoutSeconds): string
             CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . cms_current_version(),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_HTTPHEADER => [
-                'Cache-Control: no-cache',
-                'Pragma: no-cache',
-            ],
+            CURLOPT_HTTPHEADER => $requestHeaders,
         ]);
         // $body stores an intermediate value used by the surrounding gallery workflow.
         $body = curl_exec($handle);
@@ -983,14 +1014,14 @@ function http_fetch(string $url, int $timeoutSeconds): string
         return (string) $body;
     }
 
+    // $headerText stores HTTP headers formatted for the stream wrapper fallback.
+    $headerText = "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n" . implode("\r\n", $requestHeaders) . "\r\n";
     // $context stores an intermediate value used by the surrounding gallery workflow.
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
-            'header' => "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n"
-                . "Cache-Control: no-cache\r\n"
-                . "Pragma: no-cache\r\n",
+            'header' => $headerText,
         ],
     ]);
     // $body stores an intermediate value used by the surrounding gallery workflow.
