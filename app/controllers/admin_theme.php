@@ -227,15 +227,25 @@ function cms_admin_theme(): void
             remove_stored_favicon();
         } elseif (!empty($_POST['reset_theme_background'])) {
             // $path stores an intermediate value used by the surrounding gallery workflow.
-            $path = theme_background_path();
-            if ($path !== null) {
-                // $absolute stores an intermediate value used by the surrounding gallery workflow.
-                $absolute = dirname(__DIR__, 2) . '/' . ltrim($path, '/');
-                if (is_file($absolute)) {
-                    @unlink($absolute);
+            theme_background_clear_stored_files();
+            set_app_setting('theme_background_path', '');
+            set_app_setting('theme_background_original_path', '');
+            set_app_setting('theme_background_optimized_path', '');
+        } elseif (!empty($_POST['generate_theme_background_optimized'])) {
+            // $backgroundMaxSide stores the requested optimized background longest side.
+            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
+            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
+            theme_background_regenerate_optimized($backgroundMaxSide);
+        } elseif (!empty($_POST['delete_theme_background_optimized'])) {
+            // $optimizedPath stores the generated derivative so the original upload can stay untouched.
+            $optimizedPath = theme_background_optimized_path();
+            if ($optimizedPath !== null) {
+                $optimizedAbsolute = dirname(__DIR__, 2) . '/' . ltrim($optimizedPath, '/');
+                if (is_file($optimizedAbsolute)) {
+                    @unlink($optimizedAbsolute);
                 }
             }
-            set_app_setting('theme_background_path', '');
+            set_app_setting('theme_background_optimized_path', '');
         } elseif (!empty($_POST['reset_theme_branding_banner'])) {
             delete_theme_branding_asset('banner');
         } elseif (!empty($_POST['reset_theme_branding_separator'])) {
@@ -308,7 +318,7 @@ function cms_admin_theme(): void
                     if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
                         throw new RuntimeException('The uploaded theme background is not a valid image.');
                     }
-                    store_uploaded_theme_background($_FILES['theme_background']);
+                    store_uploaded_theme_background($_FILES['theme_background'], theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null));
                 }
             }
             foreach (array_keys(theme_branding_asset_types()) as $themeBrandingKind) {
@@ -319,6 +329,14 @@ function cms_admin_theme(): void
                 }
             }
             set_app_setting('theme_background_opacity', (string) max(0, min(100, (int) ($_POST['theme_background_opacity'] ?? 65))));
+            // $backgroundMaxSide stores the requested optimized background longest side.
+            $backgroundMaxSide = theme_background_optimized_max_side_value($_POST['theme_background_optimized_max_side'] ?? null);
+            // $previousBackgroundMaxSide stores the saved value so resize-only changes can rebuild the derivative.
+            $previousBackgroundMaxSide = theme_background_optimized_max_side_value(app_setting('theme_background_optimized_max_side', '1920'));
+            set_app_setting('theme_background_optimized_max_side', (string) $backgroundMaxSide);
+            if ($backgroundMaxSide !== $previousBackgroundMaxSide && empty($_FILES['theme_background']['tmp_name'])) {
+                theme_background_regenerate_optimized($backgroundMaxSide);
+            }
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
@@ -473,13 +491,38 @@ function cms_admin_theme(): void
     echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
     echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>' . e(t('admin.theme.media.zoom', 'Zoom')) . '<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">' . e(t('admin.theme.media.favicon_crop_hint', 'Drag the image to place the square crop. The small preview shows the browser icon scale.')) . '</span></div></div>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-backgrounds"><legend>' . e(t('admin.theme.media.background_legend', 'Background')) . '</legend>';
-    echo '<label>' . e(t('admin.theme.media.theme_background_image', 'Theme background image')) . '<input type="file" name="theme_background" accept="image/*"></label>';
-    if ($themeBackgroundUrl !== '') {
-        echo '<p class="muted">' . e(t('admin.theme.media.current_theme_background', 'Current theme background:')) . ' <a href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">' . e(t('admin.theme.media.view_stored_image', 'view stored image')) . '</a></p>';
+    echo '<fieldset class="form-grid admin-theme-background-card" id="admin-backgrounds"><legend>' . e(t('admin.theme.media.background_legend', 'Background')) . '</legend>';
+    $backgroundMaxSide = theme_background_optimized_max_side_value($theme['background_optimized_max_side'] ?? null);
+    $themeOriginalUrl = theme_background_original_path() !== null ? url_for('theme_background_asset') . '&variant=original' : '';
+    $themeOptimizedActive = theme_background_optimized_path() !== null;
+    $themeHasBackground = $themeBackgroundUrl !== '';
+    echo '<div class="admin-theme-background-preview">';
+    if ($themeHasBackground) {
+        echo '<a class="admin-theme-background-thumb" href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener"><img src="' . e($themeBackgroundUrl) . '" alt="' . e(t('admin.theme.media.current_theme_background_alt', 'Selected background preview')) . '"></a>';
     } else {
-        echo '<p class="muted">' . e(t('admin.theme.media.no_theme_background', 'No global theme background image is stored yet.')) . '</p>';
+        echo '<div class="admin-theme-background-thumb admin-theme-background-thumb-empty" aria-hidden="true"><span></span></div>';
     }
+    echo '<div class="admin-theme-background-copy"><strong>' . e($themeHasBackground ? t('admin.theme.media.background_selected', 'Background selected') : t('admin.theme.media.background_not_selected', 'No background selected')) . '</strong>';
+    if ($themeHasBackground && $themeOptimizedActive) {
+        echo '<span class="admin-theme-background-status is-ready">' . e(t('admin.theme.media.background_optimized_ready', 'Optimized WebP is active')) . '</span>';
+    } elseif ($themeHasBackground) {
+        echo '<span class="admin-theme-background-status">' . e(t('admin.theme.media.background_serving_original', 'Serving the original image')) . '</span>';
+    } else {
+        echo '<span class="muted">' . e(t('admin.theme.media.no_theme_background', 'No global theme background image is stored yet.')) . '</span>';
+    }
+    echo '</div></div>';
+    echo '<label>' . e(t('admin.theme.media.theme_background_image', 'Choose background image')) . '<input type="file" name="theme_background" accept="image/*"><span class="muted">' . e(t('admin.theme.media.theme_background_image_hint', 'Upload the image you want to keep as the original. The gallery can serve a smaller WebP copy for visitors.')) . '</span></label>';
+    echo '<label class="admin-theme-background-size">' . e(t('admin.theme.media.background_optimized_size', 'Optimized display size')) . ' <span class="muted" data-theme-background-optimized-size-display data-theme-background-optimized-size-template="' . e(t('admin.theme.media.background_optimized_size_value', '{size}px longest side')) . '">' . e(t('admin.theme.media.background_optimized_size_value', '{size}px longest side', ['size' => (string) $backgroundMaxSide])) . '</span><input type="range" name="theme_background_optimized_max_side" min="1024" max="3840" step="128" value="' . $backgroundMaxSide . '" data-theme-background-optimized-size><span class="muted">' . e(t('admin.theme.media.background_optimized_size_hint', 'Use 1920px for normal screens, 2560px or more for very large displays.')) . '</span></label>';
+    echo '<div class="admin-theme-background-actions">';
+    echo '<button type="submit" class="secondary" name="generate_theme_background_optimized" value="1" formnovalidate' . (!$themeHasBackground ? ' disabled' : '') . '>' . e($themeOptimizedActive ? t('admin.theme.media.regenerate_optimized_background', 'Regenerate optimized background') : t('admin.theme.media.generate_optimized_background', 'Generate optimized background')) . '</button>';
+    echo '<button type="submit" class="secondary" name="delete_theme_background_optimized" value="1" formnovalidate' . (!$themeOptimizedActive ? ' disabled' : '') . '>' . e(t('admin.theme.media.delete_optimized_background', 'Delete optimized copy')) . '</button>';
+    if ($themeHasBackground) {
+        echo '<a class="button secondary" href="' . e($themeBackgroundUrl) . '" target="_blank" rel="noopener">' . e(t('admin.theme.media.view_served_image', 'View used image')) . '</a>';
+    }
+    if ($themeOriginalUrl !== '') {
+        echo '<a class="button secondary" href="' . e($themeOriginalUrl) . '" target="_blank" rel="noopener">' . e(t('admin.theme.media.view_original_image', 'View original')) . '</a>';
+    }
+    echo '</div>';
     echo '<label>' . e(t('admin.theme.media.background_transparency', 'Background transparency')) . ' <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">' . e(t('admin.theme.media.background_transparency_hint', 'Higher means more visible image, lower means more of the color underneath.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback')) . '<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_none', 'No fallback set')) . '</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_upload', 'Upload new image')) . '</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images')) . '</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.')) . '</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>' . e(t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds')) . '</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>' . e(t('admin.theme.media.remove_theme_background', 'Remove theme background')) . '</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>' . e(t('admin.theme.media.remove_favicon', 'Remove favicon')) . '</button></div>';

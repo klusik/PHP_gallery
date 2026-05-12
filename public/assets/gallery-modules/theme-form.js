@@ -86,6 +86,44 @@ function syncGridRangeDisplay(controlSelector, displaySelector) {
 
 
 /**
+ * Keeps the Theme optimized-background size readout synchronized while dragging.
+ *
+ * The server-rendered text includes translated wording around the pixel value, so
+ * this helper uses the same template from a data attribute instead of hardcoding
+ * English in JavaScript.
+ *
+ * @param {HTMLFormElement} form Theme form containing the background controls.
+ * @returns {void}
+ */
+function setupThemeBackgroundOptimizedSizeDisplay(form) {
+    // control stores the slider deciding the longest side of the generated WebP copy.
+    const control = form.querySelector('[data-theme-background-optimized-size]');
+    // display stores the visible text next to the slider.
+    const display = form.querySelector('[data-theme-background-optimized-size-display]');
+    if (!control || !display) {
+        return;
+    }
+
+    /**
+     * Copies the current slider value into the localized readout template.
+     *
+     * @returns {void}
+     */
+    const syncValue = () => {
+        // size stores the clamped pixel value accepted by the PHP controller.
+        const size = Math.max(1024, Math.min(3840, parseInt(control.value, 10) || 1920));
+        // template stores translated text such as "{size}px longest side".
+        const template = display.getAttribute('data-theme-background-optimized-size-template') || '{size}px longest side';
+        display.textContent = template.split('{size}').join(String(size));
+    };
+
+    control.addEventListener('input', syncValue);
+    control.addEventListener('change', syncValue);
+    syncValue();
+}
+
+
+/**
  * Automatically enables a per-gallery grid override when the admin edits its sliders.
  *
  * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
@@ -460,6 +498,7 @@ export function setupThemeOverrideForm() {
         return;
     }
     setupThemeLivePreview(form);
+    setupThemeBackgroundOptimizedSizeDisplay(form);
     // changed stores state or configuration for the gallery front-end flow.
     const changed = form.querySelector('[data-theme-controls-changed]');
     if (!changed) {

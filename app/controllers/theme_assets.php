@@ -48,7 +48,10 @@ declare(strict_types=1);
 function cms_theme_background_asset(): void
 {
     // $relative stores an intermediate value used by the surrounding gallery workflow.
-    $relative = theme_background_path();
+    // $variant stores an optional admin preview mode for the saved original upload.
+    $variant = (string) ($_GET['variant'] ?? '');
+    // $relative stores the selected background derivative path.
+    $relative = $variant === 'original' ? theme_background_original_path() : theme_background_served_path();
     if ($relative === null) {
         cms_not_found();
         return;
