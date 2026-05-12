@@ -1050,12 +1050,22 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         echo '<meta name="robots" content="noindex,nofollow">';
     }
     // Built-in stylesheets are linked directly with per-file cache keys.
-    // Admin CSS remains a canonical cascade file so legacy selector order stays stable.
+    // This avoids stale browser caches for CSS files that were previously loaded through @import.
     $styleFiles = [
         'assets/styles/base.css',
         'assets/styles/public.css',
         'assets/styles/lightbox.css',
         'assets/styles/admin.css',
+        'assets/styles/admin-layout.css',
+        'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-theme-preview.css',
+        'assets/styles/admin-reordering.css',
+        'assets/styles/admin-media-tools.css',
+        'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-gallery-list.css',
+        'assets/styles/admin-patch-notes.css',
+        'assets/styles/admin-update.css',
+        'assets/styles/admin-tags.css',
         'assets/styles/side-panel.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
@@ -1267,6 +1277,9 @@ function cms_browser_i18n_strings(): array
         'votes.no_like' => t('js.votes.no_like', 'No like'),
         'thumbnail_bounds.auto_min' => t('thumbnail_bounds.auto_min', 'Auto min'),
         'thumbnail_bounds.auto_max' => t('thumbnail_bounds.auto_max', 'Auto max'),
+        'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
+        'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
+        'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
     ];
 }
 
@@ -1309,6 +1322,7 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-operations.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {

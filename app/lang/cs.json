@@ -1408,5 +1408,8 @@
   "upload.error.too_large_server": "Nahraný soubor je větší, než server povoluje.",
   "vote.error.too_many_votes": "Hlasujete příliš rychle. Zkuste to za chvíli znovu.",
   "vote.like": "To se mi líbí",
-  "vote.no_like": "Bez hlasu"
+  "vote.no_like": "Bez hlasu",
+  "js.admin.date_picker.open": "Otevřít kalendář",
+  "js.admin.date_picker.today": "Dnes",
+  "js.admin.date_picker.delete": "Smazat"
 }

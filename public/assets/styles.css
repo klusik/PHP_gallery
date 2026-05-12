@@ -56,3 +56,92 @@
     outline-offset: 2px;
     border-color: color-mix(in srgb, var(--accent-color, #2563eb) 58%, var(--color-border, rgba(15, 23, 42, 0.16)));
 }
+
+.admin-date-picker-control {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 42px;
+    padding: 0.25rem;
+    border: 1px solid var(--color-border, rgba(15, 23, 42, 0.16));
+    border-radius: var(--theme-radius, 14px);
+    background: var(--color-surface, #ffffff);
+}
+
+.admin-date-picker-control:focus-within {
+    outline: 2px solid color-mix(in srgb, var(--accent-color, #2563eb) 34%, transparent);
+    outline-offset: 2px;
+    border-color: color-mix(in srgb, var(--accent-color, #2563eb) 58%, var(--color-border, rgba(15, 23, 42, 0.16)));
+}
+
+.admin-edit-gallery-form .admin-date-picker-control input[type="date"],
+.admin-side-panel-field .admin-date-picker-control input[type="date"],
+.admin-date-picker-control input[type="date"] {
+    flex: 1 1 auto;
+    min-width: 9.5rem;
+    min-height: 34px;
+    padding: 0.35rem 0.45rem;
+    border: 0;
+    border-radius: calc(var(--theme-radius, 14px) - 4px);
+    background: transparent;
+    color: var(--color-text, #111827);
+    font: inherit;
+}
+
+.admin-edit-gallery-form .admin-date-picker-control input[type="date"]:focus,
+.admin-side-panel-field .admin-date-picker-control input[type="date"]:focus,
+.admin-date-picker-control input[type="date"]:focus {
+    outline: none;
+    border-color: transparent;
+}
+
+.admin-date-picker-control input[type="date"]::-webkit-calendar-picker-indicator {
+    display: none;
+    opacity: 0;
+}
+
+.admin-date-picker-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: 1px solid color-mix(in srgb, var(--accent-color, #2563eb) 42%, var(--color-border, rgba(15, 23, 42, 0.16)));
+    border-radius: calc(var(--theme-radius, 14px) - 5px);
+    background: color-mix(in srgb, var(--accent-color, #2563eb) 9%, var(--color-surface, #ffffff));
+    color: var(--accent-color, #2563eb);
+    cursor: pointer;
+}
+
+.admin-date-picker-trigger:hover,
+.admin-date-picker-trigger:focus-visible {
+    background: color-mix(in srgb, var(--accent-color, #2563eb) 15%, var(--color-surface, #ffffff));
+    border-color: color-mix(in srgb, var(--accent-color, #2563eb) 68%, var(--color-border, rgba(15, 23, 42, 0.16)));
+    outline: none;
+}
+
+.admin-date-picker-trigger svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.admin-date-picker-action.button {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 0.35rem 0.75rem;
+    border-radius: calc(var(--theme-radius, 14px) - 5px);
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    .admin-date-picker-control {
+        flex-wrap: wrap;
+    }
+
+    .admin-date-picker-control input[type="date"] {
+        min-width: 0;
+    }
+}

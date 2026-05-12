@@ -4260,3 +4260,59 @@ button.gallery-row-action.secondary {
         grid-template-columns: 1fr;
     }
 }
+
+/* Admin gallery date picker enhancement. */
+.admin-date-picker-field,
+.admin-side-panel-field:has(.admin-date-picker-control) {
+    gap: 0.35rem;
+}
+
+.admin-date-picker-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: min(100%, 28rem);
+    max-width: 100%;
+}
+
+.admin-date-picker-control .admin-date-picker-input {
+    min-width: 0;
+    flex: 1 1 10rem;
+    height: 2.15rem;
+    margin: 0;
+}
+
+.admin-date-picker-control .admin-date-picker-input::-webkit-calendar-picker-indicator {
+    display: none;
+    opacity: 0;
+}
+
+.admin-date-picker-control .admin-date-picker-button,
+.admin-page .admin-date-picker-control .admin-date-picker-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.15rem;
+    margin: 0;
+    padding: 0.35rem 0.65rem;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.admin-date-picker-control .admin-date-picker-calendar,
+.admin-page .admin-date-picker-control .admin-date-picker-calendar {
+    width: 2.15rem;
+    min-width: 2.15rem;
+    padding-inline: 0;
+    font-size: 1rem;
+}
+
+@media (max-width: 560px) {
+    .admin-date-picker-control {
+        flex-wrap: wrap;
+    }
+
+    .admin-date-picker-control .admin-date-picker-input {
+        flex-basis: calc(100% - 2.5rem);
+    }
+}

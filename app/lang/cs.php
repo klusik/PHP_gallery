@@ -58,5 +58,5 @@ return [
     'gallery.tag_editor' => 'Editor štítku',
     'gallery.edit_tag' => 'Upravit štítek',
     'gallery.edit_tag_named' => 'Upravit štítek {name}',
-    'gallery.remove_tag_named' => 'Odebrat štítek {name} z CMS',
+    'gallery.remove_tag_named' => 'Odebrat štítek {name} z CMS',    'js.admin.date_picker.open' => 'Otevřít kalendář',    'js.admin.date_picker.today' => 'Dnes',    'js.admin.date_picker.delete' => 'Smazat',
 ];

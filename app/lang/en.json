@@ -1408,5 +1408,8 @@
   "upload.error.too_large_server": "An uploaded file is larger than the server allows.",
   "vote.error.too_many_votes": "Too many votes. Try again in a moment.",
   "vote.like": "Like",
-  "vote.no_like": "No like"
+  "vote.no_like": "No like",
+  "js.admin.date_picker.open": "Open calendar",
+  "js.admin.date_picker.today": "Today",
+  "js.admin.date_picker.delete": "Delete"
 }

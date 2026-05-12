@@ -55,5 +55,5 @@ return [
     'gallery.tag_editor' => 'Tag editor',
     'gallery.edit_tag' => 'Edit tag',
     'gallery.edit_tag_named' => 'Edit tag {name}',
-    'gallery.remove_tag_named' => 'Remove tag {name} from CMS',
+    'gallery.remove_tag_named' => 'Remove tag {name} from CMS',    'js.admin.date_picker.open' => 'Open calendar',    'js.admin.date_picker.today' => 'Today',    'js.admin.date_picker.delete' => 'Delete',
 ];
