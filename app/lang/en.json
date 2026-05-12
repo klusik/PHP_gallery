@@ -518,7 +518,7 @@
     "admin.gallery_editor.tab_images": "Images",
     "admin.gallery_editor.tab_media": "Media",
     "admin.gallery_editor.tags": "Tags",
-    "admin.gallery_editor.tags_help": "Separate tags with commas.",
+    "admin.gallery_editor.tags_help": "Separate tags with commas. Tags are saved lowercase and may use only safe letters, numbers, and hyphens.",
     "admin.gallery_editor.taken": "Taken",
     "admin.gallery_editor.target_parent": "Target parent: {title}.",
     "admin.gallery_editor.thumbnail_bounds_migration_hidden": "Thumbnail quality bounds will be available after the database migration is applied.",
