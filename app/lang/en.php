@@ -47,4 +47,13 @@ return [
     'admin.gallery_editor.gallery_date' => 'Date',
     'admin.gallery_editor.gallery_date_help' => 'Optional manual gallery date, for example an event, trip, or shooting date.',
     'admin.gallery_editor.invalid_gallery_date' => 'Enter a valid gallery date.',
+    'admin.menu.edit_tags' => 'Edit tags',
+    'admin.tags.title' => 'Edit tags',
+    'admin.tags.saved' => 'Tag saved.',
+    'admin.tags.deleted' => 'Tag deleted.',
+    'admin.tags.error_delete_failed' => 'Tag could not be deleted.',
+    'gallery.tag_editor' => 'Tag editor',
+    'gallery.edit_tag' => 'Edit tag',
+    'gallery.edit_tag_named' => 'Edit tag {name}',
+    'gallery.remove_tag_named' => 'Remove tag {name} from CMS',
 ];

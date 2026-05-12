@@ -45,6 +45,7 @@ require_once __DIR__ . '/controllers/public_media.php';
 require_once __DIR__ . '/controllers/admin_auth.php';
 require_once __DIR__ . '/controllers/admin_integrity.php';
 require_once __DIR__ . '/controllers/admin_galleries.php';
+require_once __DIR__ . '/controllers/admin_tags.php';
 require_once __DIR__ . '/controllers/admin_uploads.php';
 require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';

@@ -75,44 +75,32 @@ function current_vote_for_image(int $imageId): int
 }
 
 /**
- * Convert a human-entered tag to the canonical stored form.
- */
-function normalize_tag_name(string $name): string
-{
-    // Variable $name stores this steps working value.
-    $name = trim($name);
-    if ($name === '') {
-        return '';
-    }
-    // Variable $ascii stores this steps working value.
-    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name);
-    // Variable $source stores this steps working value.
-    $source = $ascii === false ? $name : $ascii;
-    // Variable $normalized stores this steps working value.
-    $normalized = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $source));
-    // Variable $normalized stores this steps working value.
-    $normalized = trim($normalized, '-');
-    if ($normalized === '') {
-        return '';
-    }
-    return substr($normalized, 0, 100);
-}
-
-/**
- * Parse admin-entered comma/semicolon/newline tag text into unique canonical names.
+ * Parse admin-entered comma/semicolon/newline tag text into unique names.
  */
 function split_tag_names(string $tags): array
 {
     // Variable $names stores this steps working value.
     $names = [];
     foreach (preg_split('/[,;\n]+/', $tags) ?: [] as $name) {
-        // Variable $normalized stores this steps working value.
-        $normalized = normalize_tag_name((string) $name);
-        if ($normalized !== '') {
-            $names[$normalized] = $normalized;
+        // Variable $name stores this steps working value.
+        $name = sanitize_tag_name((string) $name);
+        if ($name !== '') {
+            $names[$name] = substr($name, 0, 100);
         }
     }
     return array_values($names);
+}
+
+/**
+ * Convert user-entered tag text into the canonical safe lowercase tag name.
+ */
+function sanitize_tag_name(string $name): string
+{
+    // Variable $slug stores this steps working value.
+    $slug = slugify(trim($name));
+    $slug = strtolower((string) preg_replace('/[^a-z0-9-]+/', '-', $slug));
+    $slug = trim((string) preg_replace('/-+/', '-', $slug), '-');
+    return $slug !== '' && $slug !== 'gallery' ? substr($slug, 0, 100) : '';
 }
 
 /**
@@ -120,90 +108,9 @@ function split_tag_names(string $tags): array
  */
 function tag_slug(string $name): string
 {
-    // Variable $normalized stores this steps working value.
-    $normalized = normalize_tag_name($name);
-    return $normalized !== '' ? substr($normalized, 0, 120) : 'tag';
-}
-
-/**
- * Normalize existing tag rows and merge rows that now resolve to one canonical tag.
- */
-function normalize_existing_tags(): void
-{
-    static $done = false;
-    if ($done) {
-        return;
-    }
-    $done = true;
-    // Variable $normalizationVersion stores this steps working value.
-    $normalizationVersion = '2026-05-safe-lowercase-v1';
-    try {
-        if (function_exists('app_setting') && app_setting('tag_normalization_version') === $normalizationVersion) {
-            return;
-        }
-    } catch (Throwable) {
-        // Keep normalizing through direct database reads when settings are temporarily unavailable.
-    }
-    try {
-        // Variable $rows stores this steps working value.
-        $rows = db()->query('SELECT id, name, slug FROM tags ORDER BY id')->fetchAll();
-    } catch (PDOException) {
-        return;
-    }
-    if (!$rows) {
-        if (function_exists('normalize_gallery_sidecar_tags_recursive')) {
-            normalize_gallery_sidecar_tags_recursive();
-        }
-        if (function_exists('set_app_setting')) {
-            set_app_setting('tag_normalization_version', $normalizationVersion);
-        }
-        return;
-    }
-
-    // Variable $canonicalIds stores this steps working value.
-    $canonicalIds = [];
-    try {
-        db()->beginTransaction();
-        foreach ($rows as $row) {
-            // Variable $tagId stores this steps working value.
-            $tagId = (int) $row['id'];
-            // Variable $name stores this steps working value.
-            $name = normalize_tag_name((string) $row['name']);
-            if ($name === '') {
-                db()->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([$tagId]);
-                db()->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([$tagId]);
-                db()->prepare('DELETE FROM tags WHERE id = ?')->execute([$tagId]);
-                continue;
-            }
-            // Variable $slug stores this steps working value.
-            $slug = tag_slug($name);
-            if (isset($canonicalIds[$slug]) && $canonicalIds[$slug] !== $tagId) {
-                // Variable $targetId stores this steps working value.
-                $targetId = $canonicalIds[$slug];
-                db()->prepare('INSERT IGNORE INTO gallery_tags (gallery_id, tag_id) SELECT gallery_id, ? FROM gallery_tags WHERE tag_id = ?')->execute([$targetId, $tagId]);
-                db()->prepare('INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT image_id, ? FROM image_tags WHERE tag_id = ?')->execute([$targetId, $tagId]);
-                db()->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([$tagId]);
-                db()->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([$tagId]);
-                db()->prepare('DELETE FROM tags WHERE id = ?')->execute([$tagId]);
-                continue;
-            }
-            $canonicalIds[$slug] = $tagId;
-            if ((string) $row['name'] !== $name || (string) $row['slug'] !== $slug) {
-                db()->prepare('UPDATE tags SET name = ?, slug = ?, updated_at = ? WHERE id = ?')->execute([$name, $slug, now_sql(), $tagId]);
-            }
-        }
-        db()->commit();
-        if (function_exists('normalize_gallery_sidecar_tags_recursive')) {
-            normalize_gallery_sidecar_tags_recursive();
-        }
-        if (function_exists('set_app_setting')) {
-            set_app_setting('tag_normalization_version', $normalizationVersion);
-        }
-    } catch (Throwable) {
-        if (db()->inTransaction()) {
-            db()->rollBack();
-        }
-    }
+    // Variable $slug stores this steps working value.
+    $slug = sanitize_tag_name($name);
+    return $slug !== '' ? substr($slug, 0, 120) : 'tag';
 }
 
 /**
@@ -211,11 +118,10 @@ function normalize_existing_tags(): void
  */
 function find_or_create_tag(string $name): int
 {
-    normalize_existing_tags();
     // Variable $name stores this steps working value.
-    $name = normalize_tag_name($name);
+    $name = sanitize_tag_name($name);
     if ($name === '') {
-        $name = 'tag';
+        return 0;
     }
     // Variable $slug stores this steps working value.
     $slug = tag_slug($name);
@@ -246,6 +152,9 @@ function sync_entity_tags(string $type, int $id, string $tagText): void
     foreach (split_tag_names($tagText) as $name) {
         // Variable $tagId stores this steps working value.
         $tagId = find_or_create_tag($name);
+        if ($tagId <= 0) {
+            continue;
+        }
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('INSERT IGNORE INTO ' . $mapTable . ' (' . $idColumn . ', tag_id) VALUES (?, ?)');
         $stmt->execute([$id, $tagId]);
@@ -360,7 +269,6 @@ function current_votes_for_images(array $imageIds): array
  */
 function tag_names_for_entity(string $type, int $id): string
 {
-    normalize_existing_tags();
     return implode(', ', array_column(tags_for_entity($type, $id), 'name'));
 }
 
@@ -369,7 +277,6 @@ function tag_names_for_entity(string $type, int $id): string
  */
 function all_tag_names(): array
 {
-    normalize_existing_tags();
     try {
         return db()->query('SELECT name FROM tags ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
     } catch (PDOException) {
@@ -377,14 +284,226 @@ function all_tag_names(): array
     }
 }
 
+
+/**
+ * Return true when the optional tag description column is available.
+ */
+function tag_description_schema_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        db()->query('SELECT description FROM tags LIMIT 1');
+        return $ready = true;
+    } catch (PDOException) {
+        return $ready = false;
+    }
+}
+
+/**
+ * Return editable tag rows with gallery and image usage counts.
+ */
+function admin_tag_rows(): array
+{
+    // Variable $descriptionReady stores this steps working value.
+    $descriptionReady = tag_description_schema_ready();
+    // Variable $descriptionColumn stores this steps working value.
+    $descriptionColumn = $descriptionReady ? 't.description' : "'' AS description";
+    // Variable $groupByDescription stores this steps working value.
+    $groupByDescription = $descriptionReady ? ', t.description' : '';
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->query("SELECT t.id, t.name, t.slug, " . $descriptionColumn . ", t.created_at, t.updated_at,
+        COUNT(DISTINCT gt.gallery_id) AS gallery_count,
+        COUNT(DISTINCT it.image_id) AS image_count
+        FROM tags t
+        LEFT JOIN gallery_tags gt ON gt.tag_id = t.id
+        LEFT JOIN image_tags it ON it.tag_id = t.id
+        GROUP BY t.id, t.name, t.slug" . $groupByDescription . ", t.created_at, t.updated_at
+        ORDER BY t.name");
+    return $stmt->fetchAll();
+}
+
+/**
+ * Fetch one tag by numeric ID for admin editing.
+ */
+function find_tag_by_id(int $id): ?array
+{
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('SELECT * FROM tags WHERE id = ?');
+    $stmt->execute([$id]);
+    // Variable $tag stores this steps working value.
+    $tag = $stmt->fetch();
+    return $tag ?: null;
+}
+
+/**
+ * Update one tag row while keeping names and slugs canonical and unique.
+ */
+function update_tag_metadata(int $id, string $name, string $slug, string $description): array
+{
+    // Variable $tag stores this steps working value.
+    $tag = find_tag_by_id($id);
+    if (!$tag) {
+        return ['ok' => false, 'error' => 'not_found'];
+    }
+
+    // Variable $safeName stores this steps working value.
+    $safeName = sanitize_tag_name($name);
+    if ($safeName === '') {
+        return ['ok' => false, 'error' => 'invalid_name'];
+    }
+    // Variable $safeSlug stores this steps working value.
+    $safeSlug = sanitize_tag_name($slug !== '' ? $slug : $safeName);
+    if ($safeSlug === '') {
+        return ['ok' => false, 'error' => 'invalid_slug'];
+    }
+
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare('SELECT id FROM tags WHERE slug = ? AND id <> ?');
+    $stmt->execute([$safeSlug, $id]);
+    if ($stmt->fetchColumn()) {
+        return ['ok' => false, 'error' => 'slug_taken'];
+    }
+
+    if (tag_description_schema_ready()) {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('UPDATE tags SET name = ?, slug = ?, description = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$safeName, $safeSlug, trim($description), now_sql(), $id]);
+    } else {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('UPDATE tags SET name = ?, slug = ?, updated_at = ? WHERE id = ?');
+        $stmt->execute([$safeName, $safeSlug, now_sql(), $id]);
+    }
+
+    return ['ok' => true, 'tag' => find_tag_by_id($id)];
+}
+
+
+/**
+ * Delete one tag and detach it from galleries and images.
+ */
+function delete_tag_by_id(int $id): array
+{
+    // Variable $tag stores this steps working value.
+    $tag = find_tag_by_id($id);
+    if (!$tag) {
+        return ['ok' => false, 'error' => 'not_found'];
+    }
+    // Variable $pdo stores this steps working value.
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM tags WHERE id = ?')->execute([$id]);
+        $pdo->commit();
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return ['ok' => false, 'error' => 'delete_failed'];
+    }
+    return ['ok' => true, 'tag' => $tag];
+}
+
+/**
+ * Normalize existing tags to safe lowercase values and merge duplicates.
+ */
+function normalize_existing_tags(): int
+{
+    // Variable $changed stores this steps working value.
+    $changed = 0;
+    // Variable $rows stores this steps working value.
+    $rows = db()->query('SELECT * FROM tags ORDER BY id')->fetchAll();
+    // Variable $seen stores this steps working value.
+    $seen = [];
+    foreach ($rows as $row) {
+        // Variable $id stores this steps working value.
+        $id = (int) $row['id'];
+        // Variable $safeName stores this steps working value.
+        $safeName = sanitize_tag_name((string) ($row['name'] ?? ''));
+        // Variable $safeSlug stores this steps working value.
+        $safeSlug = sanitize_tag_name((string) ($row['slug'] ?? $safeName));
+        if ($safeName === '' && $safeSlug === '') {
+            db()->prepare('DELETE FROM tags WHERE id = ?')->execute([$id]);
+            $changed++;
+            continue;
+        }
+        if ($safeName === '') {
+            $safeName = $safeSlug;
+        }
+        if ($safeSlug === '') {
+            $safeSlug = $safeName;
+        }
+        // Variable $key stores this steps working value.
+        $key = $safeSlug;
+        if (isset($seen[$key])) {
+            // Variable $targetId stores this steps working value.
+            $targetId = (int) $seen[$key];
+            db()->prepare('INSERT IGNORE INTO gallery_tags (gallery_id, tag_id) SELECT gallery_id, ? FROM gallery_tags WHERE tag_id = ?')->execute([$targetId, $id]);
+            db()->prepare('INSERT IGNORE INTO image_tags (image_id, tag_id) SELECT image_id, ? FROM image_tags WHERE tag_id = ?')->execute([$targetId, $id]);
+            db()->prepare('DELETE FROM gallery_tags WHERE tag_id = ?')->execute([$id]);
+            db()->prepare('DELETE FROM image_tags WHERE tag_id = ?')->execute([$id]);
+            db()->prepare('DELETE FROM tags WHERE id = ?')->execute([$id]);
+            $changed++;
+            continue;
+        }
+        $seen[$key] = $id;
+        if ((string) $row['name'] !== $safeName || (string) $row['slug'] !== $safeSlug) {
+            db()->prepare('UPDATE tags SET name = ?, slug = ?, updated_at = ? WHERE id = ?')->execute([$safeName, $safeSlug, now_sql(), $id]);
+            $changed++;
+        }
+    }
+    return $changed;
+}
+
+/**
+ * Normalize gallery sidecar tag text recursively so filesystem metadata matches the database convention.
+ */
+function normalize_gallery_sidecar_tags_recursively(): int
+{
+    // Variable $root stores this steps working value.
+    $root = rtrim((string) cms_config()['gallery_path'], DIRECTORY_SEPARATOR);
+    if ($root === '' || !is_dir($root)) {
+        return 0;
+    }
+    // Variable $changed stores this steps working value.
+    $changed = 0;
+    // Variable $iterator stores this steps working value.
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+        if (!$file instanceof SplFileInfo || $file->getFilename() !== 'gallery.json') {
+            continue;
+        }
+        // Variable $path stores this steps working value.
+        $path = $file->getPathname();
+        // Variable $data stores this steps working value.
+        $data = json_decode((string) file_get_contents($path), true);
+        if (!is_array($data) || !array_key_exists('tags', $data)) {
+            continue;
+        }
+        // Variable $rawTags stores this steps working value.
+        $rawTags = $data['tags'];
+        // Variable $source stores this steps working value.
+        $source = is_array($rawTags) ? implode(', ', array_map('strval', $rawTags)) : (string) $rawTags;
+        // Variable $normalized stores this steps working value.
+        $normalized = implode(', ', split_tag_names($source));
+        if ($normalized !== $source) {
+            $data['tags'] = $normalized;
+            file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $changed++;
+        }
+    }
+    return $changed;
+}
+
 /**
  * Fetch one tag by slug for public tag-filter pages.
  */
 function find_tag_by_slug(string $slug): ?array
 {
-    normalize_existing_tags();
-    // Variable $slug stores this steps working value.
-    $slug = tag_slug($slug);
     // Variable $stmt stores this steps working value.
     $stmt = db()->prepare('SELECT * FROM tags WHERE slug = ?');
     $stmt->execute([$slug]);

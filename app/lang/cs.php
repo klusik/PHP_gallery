@@ -50,4 +50,13 @@ return [
     'admin.gallery_editor.gallery_date' => 'Datum',
     'admin.gallery_editor.gallery_date_help' => 'Volitelné ručně zadané datum galerie, například datum akce, výletu nebo focení.',
     'admin.gallery_editor.invalid_gallery_date' => 'Zadejte platné datum galerie.',
+    'admin.menu.edit_tags' => 'Upravit štítky',
+    'admin.tags.title' => 'Upravit štítky',
+    'admin.tags.saved' => 'Štítek byl uložen.',
+    'admin.tags.deleted' => 'Štítek byl smazán.',
+    'admin.tags.error_delete_failed' => 'Štítek se nepodařilo smazat.',
+    'gallery.tag_editor' => 'Editor štítku',
+    'gallery.edit_tag' => 'Upravit štítek',
+    'gallery.edit_tag_named' => 'Upravit štítek {name}',
+    'gallery.remove_tag_named' => 'Odebrat štítek {name} z CMS',
 ];

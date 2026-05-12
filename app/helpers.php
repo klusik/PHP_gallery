@@ -161,6 +161,9 @@ function base_url(string $path = ''): string
  */
 function url_for(string $page, array $params = []): string
 {
+    if ($page === 'tag' && isset($params['slug']) && count($params) === 1) {
+        return base_url('tag/' . rawurlencode((string) $params['slug']));
+    }
     // Variable $params stores this steps working value.
     $params = ['page' => $page] + $params;
     return base_url('index.php?' . http_build_query($params));
@@ -814,6 +817,7 @@ function admin_menu_structure(): array
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags')],
             ],
         ],
         [

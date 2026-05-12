@@ -422,7 +422,8 @@ export function setupAdminGallerySidePanel() {
             return;
         }
         event.stopPropagation();
-        const kind = form.dataset.publicAdminDeleteKind === 'gallery' ? 'gallery' : 'photo';
+        const kindValue = String(form.dataset.publicAdminDeleteKind || 'photo');
+        const kind = ['gallery', 'photo', 'tag'].includes(kindValue) ? kindValue : 'photo';
         const name = String(form.dataset.publicAdminDeleteName || kind).trim();
         const message = [
             `Remove this ${kind} from CMS?`,
@@ -529,6 +530,10 @@ export function setupAdminGallerySidePanel() {
             reflectSavedImageInCurrentView(result);
             return;
         }
+        if (source === 'tag-edit') {
+            reflectSavedTagInCurrentView(result);
+            return;
+        }
         if (source === 'upload') {
             if (panel instanceof HTMLElement) {
                 writeAdminGallerySidePanelStatus(panel, String(result.message || 'Upload complete.'), false);
@@ -614,6 +619,15 @@ function sidePanelWorkflowFromLink(link) {
                 title: link.dataset.adminSidePanelTitle || 'Edit photo',
                 loadingMessage: 'Loading photo editor...',
                 loadErrorMessage: 'The photo editor could not be loaded.',
+            };
+        }
+        if (name === 'tag-edit') {
+            return {
+                name,
+                kicker: link.dataset.adminSidePanelKicker || 'Tag editor',
+                title: link.dataset.adminSidePanelTitle || 'Edit tag',
+                loadingMessage: 'Loading tag editor...',
+                loadErrorMessage: 'The tag editor could not be loaded.',
             };
         }
         if (name === 'upload') {
@@ -703,6 +717,9 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     } else if (workflow.name === 'image-edit') {
         const imageForm = body.querySelector('section.panel form.form-grid, form.form-grid');
         prepareAdminPanelEditForm(imageForm, workflow.name, sourceUrl);
+    } else if (workflow.name === 'tag-edit') {
+        const tagForm = body.querySelector('form.admin-tags-form');
+        prepareAdminPanelEditForm(tagForm, workflow.name, sourceUrl);
     } else if (workflow.name === 'upload') {
         const uploadForms = body.querySelectorAll('[data-gallery-upload-form]');
         uploadForms.forEach((uploadForm) => {
@@ -1003,7 +1020,7 @@ async function submitAdminPanelEditForm(form) {
     buttons.forEach((button) => {
         button.disabled = true;
     });
-    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? 'Saving photo...' : 'Saving gallery...', false);
+    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? 'Saving photo...' : (workflowName === 'tag-edit' ? 'Saving tag...' : 'Saving gallery...'), false);
     try {
         const body = new FormData(form);
         body.set('ajax', '1');
@@ -1017,7 +1034,7 @@ async function submitAdminPanelEditForm(form) {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? 'Photo save failed.' : 'Gallery save failed.');
+        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? 'Photo save failed.' : (workflowName === 'tag-edit' ? 'Tag save failed.' : 'Gallery save failed.'));
         if (!response.ok || !result.ok) {
             throw new Error(result.error || result.message || 'Save failed.');
         }
@@ -1199,6 +1216,38 @@ async function reflectGalleryImageBulkInCurrentView(result) {
  * @param {Record<string, *>} result Server response for the saved gallery.
  * @returns {void}
  */
+
+/**
+ * Reflect a saved tag after editing it from the side panel.
+ *
+ * Tag slugs can change, so the visible public tag page is refreshed from the
+ * returned public URL and the browser URL is updated without opening a separate
+ * full admin page.
+ *
+ * @param {Record<string, *>} result Server response for the saved tag.
+ * @returns {Promise<void>} Resolves after the panel and visible page refresh.
+ */
+async function reflectSavedTagInCurrentView(result) {
+    const panel = document.querySelector('[data-admin-side-panel]');
+    const publicUrl = String(result.public_url || '');
+    const editUrl = String(result.edit_url || '');
+    if (panel instanceof HTMLElement) {
+        writeAdminGallerySidePanelStatus(panel, String(result.message || 'Tag saved.'), false);
+        if (editUrl !== '') {
+            panel.dataset.adminSidePanelSourceUrl = editUrl;
+            await refreshAdminSidePanelFromServer(editUrl);
+        }
+    }
+    if (publicUrl !== '') {
+        if (document.querySelector('[data-public-tag-page]')) {
+            window.history.replaceState({}, '', publicUrl);
+            await refreshCurrentGalleryContextFromServer(publicUrl);
+        } else {
+            showAdminGallerySidePanelResultNotice(String(result.message || 'Tag saved.'), publicUrl);
+        }
+    }
+}
+
 async function reflectSavedGalleryInCurrentView(result) {
     const galleryTitle = String(result.gallery_title || 'Gallery');
     await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
