@@ -153,6 +153,70 @@ function discover_gallery_candidates(): array
     return $candidates;
 }
 
+
+/**
+ * Normalize tag values inside every gallery.json sidecar under the configured gallery root.
+ */
+function normalize_gallery_sidecar_tags_recursive(): void
+{
+    if (!function_exists('galleries_root') || !function_exists('normalize_tag_name')) {
+        return;
+    }
+    // Variable $root stores this steps working value.
+    $root = galleries_root();
+    if (!is_dir($root)) {
+        return;
+    }
+    try {
+        // Variable $iterator stores this steps working value.
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveCallbackFilterIterator(
+                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                static function (SplFileInfo $file): bool {
+                    if (!$file->isDir()) {
+                        return true;
+                    }
+                    // Variable $name stores this steps working value.
+                    $name = strtolower($file->getFilename());
+                    return !str_starts_with($name, '.') && !in_array($name, ['cache', 'thumbs', 'thumbnail', 'thumbnails', 'preview', 'previews'], true);
+                }
+            )
+        );
+        foreach ($iterator as $item) {
+            if (!$item->isFile() || $item->getFilename() !== 'gallery.json') {
+                continue;
+            }
+            // Variable $path stores this steps working value.
+            $path = $item->getPathname();
+            // Variable $data stores this steps working value.
+            $data = json_decode((string) file_get_contents($path), true);
+            if (!is_array($data) || !array_key_exists('tags', $data)) {
+                continue;
+            }
+            // Variable $rawTags stores this steps working value.
+            $rawTags = is_array($data['tags']) ? $data['tags'] : (preg_split('/[,;\n]+/', (string) $data['tags']) ?: []);
+            // Variable $tags stores this steps working value.
+            $tags = [];
+            foreach ($rawTags as $tag) {
+                // Variable $name stores this steps working value.
+                $name = normalize_tag_name((string) $tag);
+                if ($name !== '') {
+                    $tags[$name] = $name;
+                }
+            }
+            // Variable $normalizedTags stores this steps working value.
+            $normalizedTags = implode(', ', array_values($tags));
+            if ((string) $data['tags'] === $normalizedTags) {
+                continue;
+            }
+            $data['tags'] = $normalizedTags;
+            @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        }
+    } catch (Throwable) {
+        return;
+    }
+}
+
 /**
  * Read optional gallery metadata from gallery.json.
  */
@@ -213,7 +277,7 @@ function public_gallery_metadata(array $gallery): array
     $tagValues = is_array($rawTags) ? $rawTags : (preg_split('/[,;\n]+/', (string) $rawTags) ?: []);
     foreach ($tagValues as $tag) {
         // $tag stores an intermediate value used by the surrounding gallery workflow.
-        $tag = trim((string) $tag);
+        $tag = function_exists('normalize_tag_name') ? normalize_tag_name((string) $tag) : strtolower(trim((string) $tag));
         if ($tag !== '') {
             $tags[] = $tag;
         }

@@ -518,7 +518,7 @@
     "admin.gallery_editor.tab_images": "Obrázky",
     "admin.gallery_editor.tab_media": "Média",
     "admin.gallery_editor.tags": "Stitky",
-    "admin.gallery_editor.tags_help": "Oddelte stitky carkami.",
+    "admin.gallery_editor.tags_help": "Oddelte stitky carkami. Stitky se ukladaji malymi pismeny a mohou obsahovat jen bezpecna pismena, cisla a pomlcky.",
     "admin.gallery_editor.taken": "Porizeno",
     "admin.gallery_editor.target_parent": "Cilovy rodic: {title}.",
     "admin.gallery_editor.thumbnail_bounds_migration_hidden": "Meze kvality náhledů budou dostupné po provedení databázové migrace.",

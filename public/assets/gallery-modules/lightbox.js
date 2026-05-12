@@ -81,7 +81,7 @@ export function setupTagSuggestions(root = document) {
         const list = listId !== '' ? document.getElementById(listId) : null;
         // Variable `names` stores this steps working value.
         const names = list instanceof HTMLDataListElement
-            ? Array.from(list.options).map((option) => option.value.trim()).filter(Boolean)
+            ? Array.from(list.options).map((option) => normalizeTagName(option.value)).filter(Boolean)
             : [];
         // Variable `uniqueNames` stores this steps working value.
         const uniqueNames = Array.from(new Set(names));
@@ -93,6 +93,55 @@ export function setupTagSuggestions(root = document) {
         input.insertAdjacentElement('afterend', suggestions);
 
         /**
+         * Convert a tag to the same canonical lowercase safe form used on the server.
+         *
+         * @param {string} value Raw tag name.
+         * @returns {string} Safe lowercase tag name.
+         */
+        function normalizeTagName(value) {
+            return String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-zA-Z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .toLowerCase()
+                .slice(0, 100);
+        }
+
+        /**
+         * Normalize comma-separated tag text without losing separators while the admin types.
+         *
+         * @param {string} value Raw input value.
+         * @returns {string} Sanitized input value.
+         */
+        function normalizeTagText(value) {
+            return String(value || '')
+                .split(/([,;\n])/)
+                .map((part) => /^[,;\n]$/.test(part) ? part : normalizeTagName(part))
+                .join('')
+                .replace(/[;\n]+/g, ', ');
+        }
+
+        /**
+         * Sanitize the current field value and keep the cursor as stable as possible.
+         *
+         * @returns {void}
+         */
+        function sanitizeInputValue() {
+            const before = input.value;
+            const cursor = input.selectionStart;
+            const after = normalizeTagText(before);
+            if (after === before) {
+                return;
+            }
+            input.value = after;
+            if (typeof cursor === 'number') {
+                const nextCursor = Math.min(after.length, cursor);
+                input.setSelectionRange(nextCursor, nextCursor);
+            }
+        }
+
+        /**
          * Return the text fragment currently being edited after the last separator.
          *
          * @returns {string} Lower-cased partial tag name.
@@ -100,7 +149,7 @@ export function setupTagSuggestions(root = document) {
         function currentFragment() {
             // Variable `parts` stores this steps working value.
             const parts = input.value.split(/[,;\n]/);
-            return String(parts[parts.length - 1] || '').trim().toLowerCase();
+            return normalizeTagName(String(parts[parts.length - 1] || ''));
         }
 
         /**
@@ -109,7 +158,7 @@ export function setupTagSuggestions(root = document) {
          * @returns {Set<string>} Lower-cased chosen tag names.
          */
         function selectedTagNames() {
-            return new Set(input.value.split(/[,;\n]/).map((part) => part.trim().toLowerCase()).filter(Boolean));
+            return new Set(input.value.split(/[,;\n]/).map((part) => normalizeTagName(part)).filter(Boolean));
         }
 
         /**
@@ -120,7 +169,7 @@ export function setupTagSuggestions(root = document) {
          * @returns {number} Lower score means stronger match. -1 means no match.
          */
         function suggestionScore(name, fragment) {
-            const normalized = name.toLowerCase();
+            const normalized = normalizeTagName(name);
             if (normalized.startsWith(fragment)) {
                 return 0;
             }
@@ -161,7 +210,7 @@ export function setupTagSuggestions(root = document) {
             } else {
                 parts[valueIndex] = name;
             }
-            input.value = parts.join('').split(/[,;\n]/).map((part) => part.trim()).filter(Boolean).join(', ');
+            input.value = parts.join('').split(/[,;\n]/).map((part) => normalizeTagName(part)).filter(Boolean).join(', ');
             suggestions.innerHTML = '';
             suggestions.hidden = true;
             input.dispatchEvent(new Event('change', {bubbles: true}));
@@ -185,7 +234,7 @@ export function setupTagSuggestions(root = document) {
             }
             uniqueNames
                 .map((name) => ({name, score: suggestionScore(name, fragment)}))
-                .filter((entry) => entry.score >= 0 && !selected.has(entry.name.toLowerCase()))
+                .filter((entry) => entry.score >= 0 && !selected.has(normalizeTagName(entry.name)))
                 .sort((left, right) => left.score - right.score || left.name.localeCompare(right.name))
                 .slice(0, 8)
                 .forEach((entry) => {
@@ -201,7 +250,12 @@ export function setupTagSuggestions(root = document) {
             suggestions.hidden = suggestions.children.length === 0;
         }
 
-        input.addEventListener('input', renderSuggestions);
+        input.addEventListener('input', () => {
+            sanitizeInputValue();
+            renderSuggestions();
+        });
+        input.addEventListener('change', sanitizeInputValue);
+        input.addEventListener('blur', sanitizeInputValue);
         input.addEventListener('focus', renderSuggestions);
         input.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
