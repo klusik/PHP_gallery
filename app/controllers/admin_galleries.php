@@ -189,6 +189,7 @@ function admin_new_gallery_input_from_post(): array
         'parent_id' => $_POST['parent_id'] ?? 0,
         'voting_enabled' => $_POST['voting_enabled'] ?? 0,
         'show_filenames' => $_POST['show_filenames'] ?? 0,
+        'count_badge_visibility' => $_POST['count_badge_visibility'] ?? 'inherit',
     ];
 }
 
@@ -260,6 +261,13 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
         echo '<label><input type="checkbox" name="voting_enabled" value="1"> <span>' . e(t('admin.gallery_editor.enable_image_voting_short', 'Enable image voting')) . '</span></label>';
         echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</span></label>';
         echo '</div></div>';
+        if (gallery_count_badge_schema_ready()) {
+            echo '<div class="admin-side-panel-card"><label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
+            foreach (gallery_count_badge_override_values() as $countBadgeOption) {
+                echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+            }
+            echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</small></label></div>';
+        }
         return;
     }
     echo '<label>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '<input name="title" required></label>';
@@ -273,6 +281,13 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode):
     }
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
+    if (gallery_count_badge_schema_ready()) {
+        echo '<label>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '<select name="count_badge_visibility">';
+        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
+            echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+        }
+        echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</span></label>';
+    }
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description"></textarea></label>';
     render_gallery_description_formatting_hint();
 }
@@ -1242,6 +1257,8 @@ function cms_admin_edit_gallery(): void
         $votingEnabled = gallery_voting_schema_ready() && !empty($_POST['voting_enabled']) ? 1 : 0;
         // Variable $showFilenames stores this steps working value.
         $showFilenames = gallery_filename_display_schema_ready() && !empty($_POST['show_filenames']) ? 1 : 0;
+        // $countBadgeVisibility stores the optional gallery-card count badge override for this gallery.
+        $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($_POST['count_badge_visibility'] ?? 'inherit') : null;
         // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
         $nsfwEnabled = nsfw_guard_schema_ready() && !empty($_POST['nsfw_enabled']) ? 1 : 0;
         if ($pictureGameEnabled) {
@@ -1433,6 +1450,9 @@ function cms_admin_edit_gallery(): void
         }
         if (gallery_description_layout_schema_ready()) {
             $fields['description_layout = ?'] = $descriptionLayoutOverride;
+        }
+        if (gallery_count_badge_schema_ready()) {
+            $fields['count_badge_visibility = ?'] = $countBadgeVisibility;
         }
         if (nsfw_guard_schema_ready()) {
             $fields['nsfw_enabled = ?'] = $nsfwEnabled;
@@ -1676,6 +1696,19 @@ function cms_admin_edit_gallery(): void
         echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.description_layout_help', 'Current source: {source}. Effective layout: {layout}. Horizontal cards place the picture at the top, then title, date placeholder, tags, and a shortened Markdown-capable description.', ['source' => gallery_description_layout_source_label($gallery), 'layout' => gallery_description_layout_label($effectiveDescriptionLayout)])) . '</p></div>';
     } else {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.description_layout_migration_hidden', 'Gallery description format overrides will be available after the database migration is applied.')) . '</p></div>';
+    }
+    if (gallery_count_badge_schema_ready()) {
+        // $currentCountBadgeVisibility stores the optional value saved directly on this gallery.
+        $currentCountBadgeVisibility = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null) ?? 'inherit';
+        // $effectiveCountBadgeEnabled stores the visible count badge state before any form edits.
+        $effectiveCountBadgeEnabled = gallery_effective_count_badge_enabled($gallery);
+        echo '<div class="admin-edit-card"><h3>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</h3><label>' . e(t('admin.gallery_editor.count_badge_label', 'Card badge')) . '<select name="count_badge_visibility">';
+        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
+            echo '<option value="' . e($countBadgeOption) . '"' . ($currentCountBadgeVisibility === $countBadgeOption ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+        }
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.count_badge_help', 'Current source: {source}. Effective state: {state}. This controls the stacked-picture icon and contained-image number on gallery cards.', ['source' => gallery_count_badge_source_label($gallery), 'state' => gallery_count_badge_state_label($effectiveCountBadgeEnabled)])) . '</p></div>';
+    } else {
+        echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.count_badge_migration_hidden', 'Contained-picture badge overrides will be available after the database migration is applied.')) . '</p></div>';
     }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.
@@ -2519,6 +2552,7 @@ function cms_admin_bulk_images(): void
                     'sort_order' => $newGallerySortOrder,
                     'voting_enabled' => (int) ($newGalleryTemplateGallery['voting_enabled'] ?? 0) === 1,
                     'show_filenames' => gallery_shows_filenames($newGalleryTemplateGallery),
+                    'count_badge_visibility' => gallery_count_badge_storage_value($newGalleryTemplateGallery['count_badge_visibility'] ?? null) ?? 'inherit',
                 ]);
                 $destinationGalleryId = (int) $newGallery['id'];
                 $createdGalleryId = $destinationGalleryId;
@@ -2744,6 +2778,9 @@ function cms_admin_public_update_gallery(): void
     }
     if (gallery_filename_display_schema_ready()) {
         $fields['show_filenames = ?'] = !empty($_POST['show_filenames']) ? 1 : 0;
+    }
+    if (gallery_count_badge_schema_ready() && array_key_exists('count_badge_visibility', $_POST)) {
+        $fields['count_badge_visibility = ?'] = gallery_count_badge_storage_value($_POST['count_badge_visibility'] ?? 'inherit');
     }
     if (nsfw_guard_schema_ready()) {
         $fields['nsfw_enabled = ?'] = !empty($_POST['nsfw_enabled']) ? 1 : 0;

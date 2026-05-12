@@ -70,6 +70,7 @@ function theme_settings(): array
         'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
         'page_width_custom' => theme_page_width_custom_value(app_setting('theme_page_width_custom')),
         'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
+        'gallery_count_badge_enabled' => !function_exists('theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
     ];
 }
 
@@ -98,6 +99,7 @@ function theme_override_settings(): array
         'page_width' => app_setting('theme_page_width'),
         'page_width_custom' => app_setting('theme_page_width_custom'),
         'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
+        'gallery_count_badge_enabled' => app_setting('theme_gallery_count_badge_enabled'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }

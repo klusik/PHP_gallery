@@ -78,6 +78,7 @@ function cms_admin_upload(): void
                     'parent_id' => $_POST['parent_id'] ?? 0,
                     'voting_enabled' => $_POST['voting_enabled'] ?? 0,
                     'show_filenames' => $_POST['show_filenames'] ?? 0,
+                    'count_badge_visibility' => $_POST['count_badge_visibility'] ?? 'inherit',
                 ]);
             } else {
                 // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -371,6 +372,13 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
         }
         echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.upload.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
         echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.upload.show_file_names', 'Show file names')) . '</label>';
+        if (gallery_count_badge_schema_ready()) {
+            echo '<label>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '<select name="count_badge_visibility">';
+            foreach (gallery_count_badge_override_values() as $countBadgeOption) {
+                echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+            }
+            echo '</select><span class="muted">' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</span></label>';
+        }
         echo '<label>' . e(t('admin.upload.description', 'Description')) . '<textarea name="description"></textarea></label>';
         echo '<label>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
         echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
@@ -403,6 +411,14 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
     echo '<label><input type="checkbox" name="show_filenames" value="1"> <span>' . e(t('admin.upload.show_file_names', 'Show file names')) . '</span></label>';
     echo '</div>';
     echo '</div>';
+
+    if (gallery_count_badge_schema_ready()) {
+        echo '<div class="admin-side-panel-card"><label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.count_badge_title', 'Contained-picture badge')) . '</span><select name="count_badge_visibility">';
+        foreach (gallery_count_badge_override_values() as $countBadgeOption) {
+            echo '<option value="' . e($countBadgeOption) . '"' . ($countBadgeOption === 'inherit' ? ' selected' : '') . '>' . e(gallery_count_badge_override_label($countBadgeOption)) . '</option>';
+        }
+        echo '</select><small>' . e(t('admin.gallery_editor.count_badge_new_gallery_help', 'Controls the stacked-picture icon and image count on this gallery card.')) . '</small></label></div>';
+    }
 
     echo '<div class="admin-side-panel-card admin-side-panel-upload-card">';
     echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';
