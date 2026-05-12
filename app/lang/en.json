@@ -1427,5 +1427,9 @@
   "admin.theme.media.background_optimized_size_value": "{size}px longest side",
   "admin.theme.media.generate_optimized_background": "Generate optimized background",
   "admin.theme.media.regenerate_optimized_background": "Regenerate optimized background",
-  "admin.theme.media.delete_optimized_background": "Delete optimized copy"
+  "admin.theme.media.delete_optimized_background": "Delete optimized copy",
+  "admin.theme.layout.description_layout_horizontal_summary": "Image first, then a compact story card below it.",
+  "admin.theme.layout.description_layout_vertical_summary": "Image and text side by side, close to the classic gallery look.",
+  "admin.theme.layout.description_preview_title": "Summer gallery",
+  "admin.theme.layout.description_preview_meta": "12 photos"
 }

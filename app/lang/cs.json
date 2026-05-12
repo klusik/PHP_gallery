@@ -1427,5 +1427,9 @@
   "admin.theme.media.background_optimized_size_value": "Nejdelší strana {size} px",
   "admin.theme.media.generate_optimized_background": "Vytvořit optimalizované pozadí",
   "admin.theme.media.regenerate_optimized_background": "Znovu vytvořit optimalizované pozadí",
-  "admin.theme.media.delete_optimized_background": "Smazat optimalizovanou kopii"
+  "admin.theme.media.delete_optimized_background": "Smazat optimalizovanou kopii",
+  "admin.theme.layout.description_layout_horizontal_summary": "Nejdřív obrázek, potom kompaktní karta s příběhem.",
+  "admin.theme.layout.description_layout_vertical_summary": "Obrázek a text vedle sebe, blízko klasickému vzhledu galerie.",
+  "admin.theme.layout.description_preview_title": "Letní galerie",
+  "admin.theme.layout.description_preview_meta": "12 fotek"
 }

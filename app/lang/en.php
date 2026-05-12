@@ -72,4 +72,8 @@ return [
     'admin.theme.media.delete_optimized_background' => 'Delete optimized copy',
     'admin.theme.media.optimized_webp_active' => 'optimized WebP active',
     'admin.theme.media.optimized_webp_unavailable' => 'optimized WebP unavailable, serving original',
+    'admin.theme.layout.description_layout_horizontal_summary' => 'Image first, then a compact story card below it.',
+    'admin.theme.layout.description_layout_vertical_summary' => 'Image and text side by side, close to the classic gallery look.',
+    'admin.theme.layout.description_preview_title' => 'Summer gallery',
+    'admin.theme.layout.description_preview_meta' => '12 photos',
 ];

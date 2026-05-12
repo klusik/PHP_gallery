@@ -124,6 +124,48 @@ function setupThemeBackgroundOptimizedSizeDisplay(form) {
 
 
 /**
+ * Keeps the visual gallery-description layout picker synchronized with the saved select field.
+ *
+ * @param {HTMLFormElement} form Theme form containing the layout controls.
+ * @returns {void}
+ */
+function setupThemeDescriptionLayoutPicker(form) {
+    // select stores the real persisted field submitted to the PHP controller.
+    const select = form.querySelector('[data-theme-description-layout-select]');
+    // options stores the visual cards that make the layout choice easier to understand.
+    const options = Array.from(form.querySelectorAll('[data-theme-description-layout-option]'));
+    if (!select || options.length === 0) {
+        return;
+    }
+
+    /**
+     * Updates pressed state for every visual layout card.
+     *
+     * @returns {void}
+     */
+    const syncPressedState = () => {
+        options.forEach((option) => {
+            option.setAttribute('aria-pressed', option.getAttribute('data-theme-description-layout-option') === select.value ? 'true' : 'false');
+        });
+    };
+
+    options.forEach((option) => {
+        option.addEventListener('click', () => {
+            const nextValue = option.getAttribute('data-theme-description-layout-option') || 'vertical';
+            if (select.value !== nextValue) {
+                select.value = nextValue;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            syncPressedState();
+        });
+    });
+
+    select.addEventListener('change', syncPressedState);
+    syncPressedState();
+}
+
+
+/**
  * Automatically enables a per-gallery grid override when the admin edits its sliders.
  *
  * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
@@ -499,6 +541,7 @@ export function setupThemeOverrideForm() {
     }
     setupThemeLivePreview(form);
     setupThemeBackgroundOptimizedSizeDisplay(form);
+    setupThemeDescriptionLayoutPicker(form);
     // changed stores state or configuration for the gallery front-end flow.
     const changed = form.querySelector('[data-theme-controls-changed]');
     if (!changed) {

@@ -75,4 +75,8 @@ return [
     'admin.theme.media.delete_optimized_background' => 'Smazat optimalizovanou kopii',
     'admin.theme.media.optimized_webp_active' => 'optimalizovaný WebP je aktivní',
     'admin.theme.media.optimized_webp_unavailable' => 'optimalizovaný WebP není dostupný, používá se originál',
+    'admin.theme.layout.description_layout_horizontal_summary' => 'Nejdřív obrázek, potom kompaktní karta s příběhem.',
+    'admin.theme.layout.description_layout_vertical_summary' => 'Obrázek a text vedle sebe, blízko klasickému vzhledu galerie.',
+    'admin.theme.layout.description_preview_title' => 'Letní galerie',
+    'admin.theme.layout.description_preview_meta' => '12 fotek',
 ];

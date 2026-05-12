@@ -550,12 +550,26 @@ function cms_admin_theme(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
-    echo '<fieldset class="form-grid" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
-    echo '<label>' . e(t('admin.theme.layout.description_layout_label', 'Default gallery-card layout')) . '<select name="theme_gallery_description_layout">';
+    echo '<fieldset class="form-grid admin-theme-description-layout" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.')) . '</p>';
+    echo '<label class="admin-theme-description-select">' . e(t('admin.theme.layout.description_layout_label', 'Default gallery-card layout')) . '<select name="theme_gallery_description_layout" data-theme-description-layout-select>';
+    $currentDescriptionLayout = gallery_description_layout_normalize((string) ($theme['gallery_description_layout'] ?? 'vertical'));
     foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
-        echo '<option value="' . e($descriptionLayoutOption) . '"' . (gallery_description_layout_normalize((string) ($theme['gallery_description_layout'] ?? 'vertical')) === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
+        echo '<option value="' . e($descriptionLayoutOption) . '"' . ($currentDescriptionLayout === $descriptionLayoutOption ? ' selected' : '') . '>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</option>';
     }
-    echo '</select><span class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Vertical keeps the current image-left presentation. Horizontal places the gallery image on top, then title, date placeholder, tags, and a shortened Markdown-capable description.')) . '</span></label>';
+    echo '</select></label>';
+    echo '<div class="admin-theme-description-layout-picker" data-theme-description-layout-picker>';
+    foreach (gallery_description_layout_options() as $descriptionLayoutOption) {
+        $isHorizontalPreview = $descriptionLayoutOption === 'horizontal';
+        echo '<button type="button" class="admin-theme-description-card" data-theme-description-layout-option="' . e($descriptionLayoutOption) . '" aria-pressed="' . ($currentDescriptionLayout === $descriptionLayoutOption ? 'true' : 'false') . '">';
+        echo '<span class="admin-theme-description-card-copy"><strong>' . e(gallery_description_layout_label($descriptionLayoutOption)) . '</strong><span>' . e($isHorizontalPreview ? t('admin.theme.layout.description_layout_horizontal_summary', 'Image first, then a compact story card below it.') : t('admin.theme.layout.description_layout_vertical_summary', 'Image and text side by side, close to the classic gallery look.')) . '</span></span>';
+        echo '<span class="admin-theme-description-card-preview is-' . e($descriptionLayoutOption) . '" aria-hidden="true">';
+        echo '<span class="admin-theme-description-media"><span></span></span>';
+        echo '<span class="admin-theme-description-body"><span class="admin-theme-description-title">' . e(t('admin.theme.layout.description_preview_title', 'Summer gallery')) . '</span><span class="admin-theme-description-meta">' . e(t('admin.theme.layout.description_preview_meta', '12 photos')) . '</span><span class="admin-theme-description-tags"><i>travel</i><i>family</i><i>2026</i></span><span class="admin-theme-description-line is-wide"></span><span class="admin-theme-description-line"></span></span>';
+        echo '</span>';
+        echo '</button>';
+    }
+    echo '</div>';
     echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-gallery-count-badge"><legend>' . e(t('admin.theme.layout.count_badge_legend', 'Contained-picture badge')) . '</legend>';
     echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture icon and image count on gallery cards')) . '</label>';
