@@ -1,5 +1,14 @@
 # Patch notes
 
+## Version 0.65.6
+
+### Tag suggestion autocomplete refresh
+
+  - Extended tag suggestions so autocomplete can run inside a specific DOM root instead of only on the whole document.
+  - Wired the admin side-panel loader so newly loaded panel content initializes tag suggestions too.
+  - Restyled the public tag suggestion dropdown so reused tag chips are easier to scan and select.
+  - Relaxed the root guard so tag suggestions work with any render root that exposes `querySelectorAll`.
+
 ## Version 0.65.5
 
 ### Theme content revision caching

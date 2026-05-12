@@ -218,11 +218,12 @@ export function teardownGalleryLightbox() {
  *
  * @returns {void}
  */
-export function setupTagSuggestions() {
-    if (!document.querySelector('[data-tag-input]')) {
+export function setupTagSuggestions(root = document) {
+    const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+    if (!scope.querySelector('[data-tag-input]')) {
         return;
     }
     loadLightboxModule()
-        .then((module) => module.setupTagSuggestions())
+        .then((module) => module.setupTagSuggestions(scope))
         .catch(() => {});
 }

@@ -385,11 +385,28 @@ input[type="checkbox"] {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    margin-top: 0.45rem;
+    padding: 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 14px 36px rgba(47, 59, 79, 0.12);
+}
+.tag-suggestions[hidden] {
+    display: none;
 }
 .tag-suggestions button {
-    padding: 0.2rem 0.5rem;
-    background: transparent;
+    padding: 0.24rem 0.62rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
     color: var(--accent-dark);
+    font-size: 0.9rem;
+}
+.tag-suggestions button:hover,
+.tag-suggestions button:focus {
+    border-color: var(--accent-dark);
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
 
 /* Tables and admin thumbnails */
