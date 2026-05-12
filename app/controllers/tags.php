@@ -166,21 +166,30 @@ function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
 }
 
 /**
+ * Build the public vote controls and current vote state.
+ */
+function render_vote_form_html(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): string
+{
+    if (!$votingAllowed) {
+        return '';
+    }
+
+    return '<form class="vote-row image-vote-overlay" method="post" action="' . e(url_for('vote')) . '" data-vote-form>'
+        . '<input type="hidden" name="image_id" value="' . $imageId . '">'
+        . csrf_field()
+        . '<span class="vote-score-badge" aria-label="' . e(t('public.vote.likes', 'Likes')) . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>'
+        . '<span class="vote-action-group">'
+        . '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="' . e(t('public.vote.up', 'Vote up')) . '">&#9650;</button>'
+        . '</span>'
+        . '</form>';
+}
+
+/**
  * Render the public vote controls and current vote state.
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
 {
-    if (!$votingAllowed) {
-        return;
-    }
-    echo '<form class="vote-row image-vote-overlay" method="post" action="' . e(url_for('vote')) . '" data-vote-form>';
-    echo '<input type="hidden" name="image_id" value="' . $imageId . '">';
-    echo csrf_field();
-    echo '<span class="vote-score-badge" aria-label="' . e(t('public.vote.likes', 'Likes')) . '"><span aria-hidden="true">&#9650;</span><strong data-score-for="' . $imageId . '">' . $score . '</strong></span>';
-    echo '<span class="vote-action-group">';
-    echo '<button type="submit" name="vote" value="1" class="' . ($currentVote === 1 ? 'is-active' : '') . '" aria-pressed="' . ($currentVote === 1 ? 'true' : 'false') . '" aria-label="' . e(t('public.vote.up', 'Vote up')) . '">&#9650;</button>';
-    echo '</span>';
-    echo '</form>';
+    echo render_vote_form_html($imageId, $score, $currentVote, $votingAllowed);
 }
 
 

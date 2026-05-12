@@ -327,7 +327,7 @@ function cms_gallery(): void
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
         $imageCardClass = $publicPhotoReorderEnabled ? 'image-card has-public-reorder-handle' : 'image-card';
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image') . '>';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed) . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
         }
@@ -891,10 +891,12 @@ function render_public_image_admin_delete_form(array $image): void
  * Keeping visible cards and hidden pagination sources on the same attribute
  * contract prevents the lightbox from having a separate pagination-specific path.
  */
-function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute): string
+function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true): string
 {
     // $mapPointAttribute stores the optional GPS payload used by map-enabled photos.
     $mapPointAttribute = $imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '';
+    // $votingAttribute marks whether a cloned gallery-card vote form should exist for this image.
+    $votingAttribute = $votingAllowed ? ' data-voting-allowed="1"' : '';
     return $sourceAttribute
         . ' data-image-id="' . (int) $image['id'] . '"'
         . ' data-gallery-id="' . (int) $gallery['id'] . '"'
@@ -908,7 +910,27 @@ function lightbox_image_data_attributes(array $image, array $gallery, string $me
         . ' data-user-vote="' . $vote . '"'
         . ' data-image-width="' . (int) ($image['width'] ?? 0) . '"'
         . ' data-image-height="' . (int) ($image['height'] ?? 0) . '"'
+        . $votingAttribute
         . $mapPointAttribute;
+}
+
+/**
+ * Render an inert vote template for hidden lightbox source nodes.
+ *
+ * Visible photo cards already contain the active gallery-card voting form. Hidden
+ * pagination source nodes need the same server-rendered widget without creating
+ * another live form on the page. The browser does not submit or bind controls
+ * inside <template>, so the lightbox can safely clone it when that image opens.
+ */
+function render_lightbox_vote_template(int $imageId, int $score, int $vote, bool $votingAllowed): void
+{
+    // $voteFormHtml stores the exact same server-rendered widget used by visible gallery cards.
+    $voteFormHtml = render_vote_form_html($imageId, $score, $vote, $votingAllowed);
+    if ($voteFormHtml === '') {
+        return;
+    }
+
+    echo '<template data-lightbox-vote-template>' . $voteFormHtml . '</template>';
 }
 
 /**
@@ -942,7 +964,11 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
         $imageMapPoint = $mapsAllowed && image_has_gps($image) ? public_render_profile_with_thumbnail_purpose('hidden source map metadata no thumb', static fn (): array => image_map_point($image, $gallery, false)) : null;
         // $sourceAttribute stores a separate marker from visible cards so JavaScript can preserve the full image order.
         $sourceAttribute = 'data-lightbox-source';
-        echo '<div ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute) . '></div>';
+        // $votingAllowed stores whether this hidden source needs a reusable server-rendered vote widget.
+        $votingAllowed = gallery_voting_allowed($gallery);
+        echo '<div ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, $sourceAttribute, $votingAllowed) . '>';
+        render_lightbox_vote_template((int) $image['id'], (int) $image['score'], $vote, $votingAllowed);
+        echo '</div>';
     }
     echo '</div>';
 }
@@ -954,10 +980,14 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
  */
 function render_lightbox(bool $votingAllowed = true): void
 {
+    // $votePanelHtml is a host for the exact gallery-card vote widget.
+    // JavaScript clones the current image's server-rendered form into it.
+    $votePanelHtml = $votingAllowed ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>' : '';
+
     echo '<div class="lightbox" data-lightbox hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
-    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><img decoding="async" data-lightbox-img alt=""></button><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button></div><div class="lightbox-score-badge" aria-label="' . e(t('lightbox.score', 'Score')) . '"><span class="lightbox-score-icon">&#9650;</span><strong data-lightbox-score data-score-for="">0</strong></div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p>' . ($votingAllowed ? '<div class="lightbox-vote-panel"><form class="vote-row lightbox-vote" method="post" action="' . e(url_for('vote')) . '" data-vote-form data-lightbox-vote-form><input type="hidden" name="image_id" value="">' . csrf_field() . '<span class="lightbox-vote-label">' . e(t('vote.like', 'Like')) . '</span><button type="submit" name="vote" value="1" aria-label="' . e(t('vote.like', 'Like')) . '" title="' . e(t('vote.like', 'Like')) . '">&#9650;</button><span class="lightbox-vote-indicator" data-lightbox-vote-indicator>' . e(t('vote.no_like', 'No like')) . '</span></form></div>' : '') . '</figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
+    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><img decoding="async" data-lightbox-img alt=""></button><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';

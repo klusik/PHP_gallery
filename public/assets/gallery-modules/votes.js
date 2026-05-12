@@ -30,6 +30,34 @@
  *   2026-05-04
  */
 
+
+/**
+ * Finds a vote button from any event target inside it.
+ *
+ * Browser click targets are usually the button itself, but pseudo elements, icon
+ * wrappers, and some fullscreen overlay paths can expose a nested target. Keeping
+ * the lookup local to button[name="vote"] avoids depending on a fragile
+ * ancestor selector.
+ *
+ * @param {EventTarget|null} target Raw event target from click or submit flow.
+ * @returns {HTMLButtonElement|null} Vote button inside a managed vote form.
+ */
+function voteButtonFromEventTarget(target) {
+    // Variable `element` stores this steps working value.
+    const element = target instanceof Element ? target : target?.parentElement || null;
+    if (!element) {
+        return null;
+    }
+
+    // Variable `button` stores this steps working value.
+    const button = element.closest('button[name="vote"]');
+    if (!(button instanceof HTMLButtonElement)) {
+        return null;
+    }
+
+    return button.closest('[data-vote-form]') ? button : null;
+}
+
 /**
  * Vote form AJAX helper.
  *
@@ -94,35 +122,31 @@ function syncVoteFormsForImage(imageId, vote) {
 }
 
 /**
- * Attaches AJAX submit handling to every gallery vote form.
+ * Submits one vote form through AJAX and synchronizes every visible entry point.
  *
- * The server returns the authoritative score and vote state. This helper writes
- * those values back to every matching public card first, then emits a CustomEvent
- * so stateful modules such as the lightbox can update their own controls without
- * this small module needing to import the full viewer implementation.
- *
- * @returns {void}
+ * @param {HTMLFormElement} form Vote form currently being submitted.
+ * @param {HTMLButtonElement|null} submitter Button that initiated the vote, when available.
+ * @returns {Promise<void>} Resolves after the server response has been applied.
  */
-export function setupVoteForms() {
-    // Submit votes through fetch so the selected state and score update without
-    // leaving the lightbox/gallery page.
-    document.addEventListener('submit', async (event) => {
-        // Variable `form` stores this steps working value.
-        const form = event.target.closest('[data-vote-form]');
-        if (!form) {
-            return;
-        }
-        // Allow the already-liked state to toggle back to no vote when the user
-        // clicks the like button again. This must work from the card, normal
-        // picture view, lightbox form, and lightbox keyboard shortcut.
-        const activeVote = currentVoteForForm(form);
-        event.preventDefault();
-        // Variable `body` stores this steps working value.
-        const body = new FormData(form);
-        if (event.submitter && event.submitter.name) {
-            const submittedValue = event.submitter.value;
-            body.set(event.submitter.name, activeVote === '1' && submittedValue === '1' ? '0' : submittedValue);
-        }
+async function submitVoteForm(form, submitter = null) {
+    if (form.dataset.voteSubmitting === '1') {
+        return;
+    }
+
+    // Allow the already-liked state to toggle back to no vote when the user
+    // clicks the like button again. This must work from the card, normal
+    // picture view, lightbox form, and lightbox keyboard shortcut.
+    const activeVote = currentVoteForForm(form);
+    const body = new FormData(form);
+    const submittedVote = submitter?.value || form.dataset.pendingVote || '';
+    if (submitter?.name || submittedVote !== '') {
+        const submittedName = submitter?.name || 'vote';
+        body.set(submittedName, activeVote === '1' && submittedVote === '1' ? '0' : submittedVote);
+    }
+    delete form.dataset.pendingVote;
+
+    form.dataset.voteSubmitting = '1';
+    try {
         // Variable `response` stores this steps working value.
         const response = await fetch(form.action, {
             method: 'POST',
@@ -154,5 +178,59 @@ export function setupVoteForms() {
         // for this event. This avoids a hard dependency from the small vote form
         // helper back into the large viewer module.
         document.dispatchEvent(new CustomEvent('php-gallery:vote-updated', {detail: result}));
+    } finally {
+        delete form.dataset.voteSubmitting;
+    }
+}
+
+/**
+ * Attaches AJAX submit handling to every gallery vote form.
+ *
+ * The server returns the authoritative score and vote state. This helper writes
+ * those values back to every matching public card first, then emits a CustomEvent
+ * so stateful modules such as the lightbox can update their own controls without
+ * this small module needing to import the full viewer implementation.
+ *
+ * @returns {void}
+ */
+export function setupVoteForms() {
+    if (document.documentElement.dataset.voteFormsBound === '1') {
+        return;
+    }
+    document.documentElement.dataset.voteFormsBound = '1';
+
+    // Submit votes through fetch so the selected state and score update without
+    // leaving the lightbox/gallery page. This remains as a keyboard and no-JS
+    // behavior fallback for normal form submission.
+    document.addEventListener('submit', async (event) => {
+        // Variable `target` stores this steps working value.
+        const target = event.target instanceof Element ? event.target : null;
+        // Variable `form` stores this steps working value.
+        const form = target?.closest('[data-vote-form]');
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+        event.preventDefault();
+        await submitVoteForm(form, event.submitter instanceof HTMLButtonElement ? event.submitter : null);
     });
+
+    // Some viewer states place the vote form inside overlay/fullscreen UI. Handle
+    // the actual vote button in capture phase, before the lightbox overlay can
+    // consume the click for fullscreen, navigation, or map HUD behavior.
+    document.addEventListener('click', async (event) => {
+        // Variable `button` stores this steps working value.
+        const button = voteButtonFromEventTarget(event.target);
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
+        // Variable `form` stores this steps working value.
+        const form = button.closest('[data-vote-form]');
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        form.dataset.pendingVote = button.value;
+        await submitVoteForm(form, button);
+    }, true);
 }

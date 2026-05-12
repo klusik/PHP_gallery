@@ -1052,7 +1052,17 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     // Main stylesheet gets a build-busting version so structural CSS changes
     // are not masked by browser cache.
     $stylesPath = dirname(__DIR__) . '/public/assets/styles.css';
-    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '?v=' . (is_file($stylesPath) ? filemtime($stylesPath) : time()) . '">';
+    $stylesVersionPaths = [
+        $stylesPath,
+        dirname(__DIR__) . '/public/assets/styles/lightbox.css',
+    ];
+    $stylesVersion = 0;
+    foreach ($stylesVersionPaths as $versionPath) {
+        if (is_file($versionPath)) {
+            $stylesVersion = max($stylesVersion, filemtime($versionPath));
+        }
+    }
+    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '?v=' . ($stylesVersion > 0 ? $stylesVersion : time()) . '">';
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {
@@ -1286,8 +1296,19 @@ function render_footer(): void
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
+    $scriptVersionPaths = [
+        $scriptPath,
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
+    ];
+    $scriptVersion = 0;
+    foreach ($scriptVersionPaths as $versionPath) {
+        if (is_file($versionPath)) {
+            $scriptVersion = max($scriptVersion, filemtime($versionPath));
+        }
+    }
     render_browser_i18n_script();
-    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>';
+    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }

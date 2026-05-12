@@ -373,14 +373,10 @@ export function setupGalleryLightbox() {
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
     const description = overlay.querySelector('[data-lightbox-description]');
-    // Variable `score` stores this steps working value.
-    const score = overlay.querySelector('[data-lightbox-score]');
     // counter stores state or configuration for the gallery front-end flow.
     const counter = overlay.querySelector('[data-lightbox-counter]');
-    // Variable `lightboxVoteForm` stores this steps working value.
-    const lightboxVoteForm = overlay.querySelector('[data-lightbox-vote-form]');
-    // Variable `lightboxVoteIndicator` stores this steps working value.
-    const lightboxVoteIndicator = overlay.querySelector('[data-lightbox-vote-indicator]');
+    // Variable `lightboxVotePanel` stores the host for the shared gallery-card vote widget.
+    const lightboxVotePanel = overlay.querySelector('[data-lightbox-vote-panel]');
     // Variable `lightboxMapButton` stores this steps working value.
     const lightboxMapButton = overlay.querySelector('[data-lightbox-map]');
     // lightboxMapSplit stores state or configuration for the gallery front-end flow.
@@ -502,39 +498,100 @@ export function setupGalleryLightbox() {
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
     };
 
-    // Function `syncLightboxVote` executes this focused behavior.
+    // Function `currentLightboxVoteForm` returns the injected shared vote form.
+    function currentLightboxVoteForm() {
+        return lightboxVotePanel?.querySelector('[data-vote-form]') || null;
+    }
+
+    // Function `visibleVoteFormForImage` finds the already-rendered gallery-card vote form for an image.
+    function visibleVoteFormForImage(imageId) {
+        if (!imageId) {
+            return null;
+        }
+
+        for (const candidate of document.querySelectorAll('[data-lightbox-image][data-image-id]')) {
+            if (!(candidate instanceof HTMLElement) || candidate.dataset.imageId !== String(imageId)) {
+                continue;
+            }
+            const form = candidate.querySelector('[data-vote-form]');
+            if (form instanceof HTMLFormElement) {
+                return form;
+            }
+        }
+        return null;
+    }
+
+    // Function `templateVoteFormForCard` returns the inert vote form for hidden source-only images.
+    function templateVoteFormForCard(card) {
+        const template = card.querySelector('[data-lightbox-vote-template]');
+        if (template instanceof HTMLTemplateElement) {
+            const form = template.content.querySelector('[data-vote-form]');
+            if (form instanceof HTMLFormElement) {
+                return form;
+            }
+        }
+
+        // Older cached markup stored the shared form in a data attribute. Keeping
+        // this fallback prevents a half-updated browser cache from losing voting.
+        const voteFormHtml = card.dataset.voteFormHtml || '';
+        if (voteFormHtml.trim() === '') {
+            return null;
+        }
+        const scratch = document.createElement('template');
+        scratch.innerHTML = voteFormHtml;
+        const form = scratch.content.querySelector('[data-vote-form]');
+        return form instanceof HTMLFormElement ? form : null;
+    }
+
+    // Function `clonedVoteFormForCard` clones the same server-rendered widget used by gallery cards.
+    function clonedVoteFormForCard(card) {
+        const imageId = card.dataset.imageId || '';
+        const form = card.querySelector('[data-vote-form]') || visibleVoteFormForImage(imageId) || templateVoteFormForCard(card);
+        return form instanceof HTMLFormElement ? form.cloneNode(true) : null;
+    }
+
+    // Function `syncLightboxVote` injects the same server-rendered vote widget used by gallery cards.
     function syncLightboxVote(card) {
-        if (!lightboxVoteForm || lightboxVoteForm.closest('[hidden]')) {
+        if (!lightboxVotePanel) {
             return;
         }
-        // Variable `vote` stores this steps working value.
-        const vote = card.dataset.userVote === '1' ? '1' : '0';
-        lightboxVoteForm.querySelector('input[name="image_id"]').value = card.dataset.imageId || '';
-        score.dataset.scoreFor = card.dataset.imageId || '';
-        updateLightboxVoteButtons(vote);
-        updateLightboxVoteIndicator(vote);
+
+        lightboxVotePanel.replaceChildren();
+        lightboxVotePanel.hidden = true;
+
+        const form = clonedVoteFormForCard(card);
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+
+        lightboxVotePanel.appendChild(form);
+        lightboxVotePanel.hidden = false;
+        form.dataset.lightboxVoteForm = '1';
+        form.classList.add('lightbox-vote');
+        const imageIdInput = form.querySelector('input[name="image_id"]');
+        if (imageIdInput instanceof HTMLInputElement) {
+            imageIdInput.value = card.dataset.imageId || '';
+        }
+
+        form.querySelectorAll('[data-score-for]').forEach((node) => {
+            node.dataset.scoreFor = card.dataset.imageId || '';
+            node.textContent = card.dataset.score || '0';
+        });
+        updateLightboxVoteButtons(card.dataset.userVote === '1' ? '1' : '0');
     }
 
     // Function `updateLightboxVoteButtons` executes this focused behavior.
     function updateLightboxVoteButtons(vote) {
-        if (!lightboxVoteForm) {
+        const form = currentLightboxVoteForm();
+        if (!(form instanceof HTMLFormElement)) {
             return;
         }
-        lightboxVoteForm.querySelectorAll('button[name="vote"]').forEach((button) => {
+        form.querySelectorAll('button[name="vote"]').forEach((button) => {
             // Variable `active` stores this steps working value.
             const active = button.value === vote;
             button.classList.toggle('is-active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
-    }
-
-    // Function `updateLightboxVoteIndicator` executes this focused behavior.
-    function updateLightboxVoteIndicator(vote) {
-        if (!lightboxVoteIndicator) {
-            return;
-        }
-        lightboxVoteIndicator.classList.toggle('is-up', vote === '1');
-        lightboxVoteIndicator.textContent = vote === '1' ? i18n('votes.liked', 'Liked') : i18n('votes.no_like', 'No like');
     }
 
     /**
@@ -1397,9 +1454,12 @@ export function setupGalleryLightbox() {
         const fullSrc = card.dataset.fullSrc || previewSrc;
         // altText stores state or configuration for the gallery front-end flow.
         const altText = card.dataset.title || '';
-        title.textContent = card.dataset.title || '';
-        description.textContent = card.dataset.description || 'No description.';
-        score.textContent = card.dataset.score || '0';
+        const titleText = (card.dataset.title || '').trim();
+        title.textContent = titleText;
+        title.hidden = titleText === '';
+        const descriptionText = (card.dataset.description || '').trim();
+        description.textContent = descriptionText;
+        description.hidden = descriptionText === '';
         if (counter) {
             counter.textContent = `${index + 1} / ${cards.length}`;
         }
@@ -1670,13 +1730,19 @@ export function setupGalleryLightbox() {
 
     // Function `submitLightboxVote` executes this focused behavior.
     function submitLightboxVote(value) {
-        if (!lightboxVoteForm || lightboxVoteForm.closest('[hidden]')) {
+        const form = currentLightboxVoteForm();
+        if (!(form instanceof HTMLFormElement) || form.closest('[hidden]')) {
             return;
         }
         // Variable `button` stores this steps working value.
-        const button = lightboxVoteForm.querySelector(`button[name="vote"][value="${value}"]`);
+        const button = form.querySelector(`button[name="vote"][value="${value}"]`);
         if (button) {
-            button.click();
+            form.dataset.pendingVote = String(value);
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(button);
+            } else {
+                button.click();
+            }
         }
     }
 
@@ -2562,10 +2628,13 @@ export function setupGalleryLightbox() {
             return;
         }
         const result = event.detail || {};
-        if (overlay && score && overlay.dataset.currentImageId === String(result.image_id)) {
-            score.textContent = String(result.score);
+        if (overlay && overlay.dataset.currentImageId === String(result.image_id)) {
+            if (lightboxVotePanel) {
+                lightboxVotePanel.querySelectorAll('[data-score-for]').forEach((node) => {
+                    node.textContent = String(result.score);
+                });
+            }
             updateLightboxVoteButtons(String(result.vote));
-            updateLightboxVoteIndicator(String(result.vote));
         }
     }, {signal: controller.signal});
 }

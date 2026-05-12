@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260512-viewer-hud-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260512-lightbox-vote-clone-widget-v6';
 
 const deferredLightboxState = {
     controller: null,
