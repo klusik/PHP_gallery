@@ -174,43 +174,69 @@ function cms_admin_update(): void
         return;
     }
     render_header(t('admin.updates.title'));
-    echo '<section class="hero"><h1>' . e(t('admin.updates.title')) . '</h1><nav class="nav">';
+    // $latestVersion stores the readable latest release value for the status summary.
+    $latestVersion = !empty($status['latest_version']) ? (string) $status['latest_version'] : t('admin.common.unknown', 'Unknown');
+    // $channelLabel stores the readable channel currently installed on this instance.
+    $channelLabel = $betaActive ? t('admin.updates.channel_beta') : t('admin.updates.channel_stable');
+    // $updateStateLabel stores the high-level update state displayed in the summary cards.
+    $updateStateLabel = !empty($status['error']) ? t('admin.updates.check_failed', 'Check failed') : (!empty($status['update_available']) ? t('admin.updates.update_available', 'Update available') : t('admin.updates.current'));
+    // $updateStateClass stores a neutral class name for update state styling.
+    $updateStateClass = !empty($status['error']) ? 'is-warning' : (!empty($status['update_available']) ? 'is-attention' : 'is-ok');
+
+    echo '<section class="hero admin-update-hero"><div><p class="admin-kicker">' . e(t('admin.updates.kicker', 'Application maintenance')) . '</p><h1>' . e(t('admin.updates.title')) . '</h1><p class="muted">' . e(t('admin.updates.page_hint', 'Check releases, review patch notes, install updates, and use advanced recovery tools from one place.')) . '</p></div><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
     echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
     echo '</nav></section>';
+
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
     if ($error !== null) {
         echo '<div class="notice">' . e(t('admin.updates.failed_value', ['error' => $error])) . '</div>';
     }
-    echo '<section class="panel"><h2>' . e(t('admin.updates.status')) . '</h2>';
-    echo '<p>' . e(t('admin.updates.installed_version')) . ': <strong>' . e(cms_current_version()) . '</strong></p>';
-    if ($betaActive) {
-        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_beta')) . '</strong></p>';
-        echo '<p>' . e(t('admin.updates.installed_beta_code')) . ': <code>' . e(application_update_beta_commit()) . '</code></p>';
-    } else {
-        echo '<p>' . e(t('admin.updates.active_channel')) . ': <strong>' . e(t('admin.updates.channel_stable')) . '</strong></p>';
-    }
-    echo '<p>' . e(t('admin.updates.repository')) . ': <a href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(CMS_GITHUB_REPOSITORY) . '</a></p>';
+
+    render_admin_tabs([
+        ['id' => 'admin-update-tab-status', 'label' => t('admin.updates.status', 'Status'), 'active' => true],
+        ['id' => 'admin-update-tab-notes', 'label' => t('admin.updates.patch_notes_title', 'Patch notes'), 'badge' => count($patchNotesVersions)],
+        ['id' => 'admin-update-tab-advanced', 'label' => t('admin.updates.advanced_tools', 'Advanced tools')],
+    ], 'admin-update-tab-status');
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.status_kicker', 'Release status')) . '</p><h2>' . e(t('admin.updates.status')) . '</h2></div><p class="muted">' . e(t('admin.updates.status_hint', 'The updater checks GitHub metadata through the service layer and keeps the install action on the existing ZIP based workflow.')) . '</p></div>';
+    echo '<div class="admin-metric-grid admin-update-metric-grid">';
+    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.installed_version')) . '</span><strong>' . e(cms_current_version()) . '</strong><small>' . e(t('admin.updates.installed_version_hint', 'Version currently running on this installation.')) . '</small></article>';
+    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.latest_version')) . '</span><strong>' . e($latestVersion) . '</strong><small>' . e(empty($status['branch']) ? t('admin.updates.branch_unknown', 'Branch not available') : t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</small></article>';
+    echo '<article class="admin-metric-card"><span>' . e(t('admin.updates.active_channel')) . '</span><strong>' . e($channelLabel) . '</strong><small>' . ($betaActive ? e(t('admin.updates.installed_beta_code')) . ': <code>' . e(application_update_beta_commit()) . '</code>' : e(t('admin.updates.stable_channel_hint', 'Stable release channel is active.'))) . '</small></article>';
+    echo '<article class="admin-metric-card admin-update-state-card ' . e($updateStateClass) . '"><span>' . e(t('admin.updates.update_state', 'Update state')) . '</span><strong>' . e($updateStateLabel) . '</strong><small>' . e(!empty($status['version_source']) ? t('admin.updates.version_source_value', ['source' => (string) $status['version_source']]) : t('admin.updates.version_source_unknown', 'Version source not reported.')) . '</small></article>';
+    echo '</div>';
+
+    echo '<div class="admin-update-status-layout">';
+    echo '<article class="admin-update-card">';
+    echo '<div><p class="admin-kicker">' . e(t('admin.updates.repository')) . '</p><h3>' . e(CMS_GITHUB_REPOSITORY) . '</h3></div>';
+    echo '<p class="muted">' . e(t('admin.updates.repository_hint', 'The updater uses this repository for release metadata and ZIP downloads.')) . '</p>';
+    echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
+    echo '</article>';
+    echo '<article class="admin-update-card ' . (!empty($status['update_available']) ? 'is-attention' : '') . '">';
+    echo '<div><p class="admin-kicker">' . e(t('admin.updates.primary_action', 'Primary action')) . '</p><h3>' . e($updateStateLabel) . '</h3></div>';
     if (!empty($status['error'])) {
         echo '<p class="muted">' . e(t('admin.updates.check_failed_value', ['error' => (string) $status['error']])) . '</p>';
+    } elseif (!empty($status['update_available'])) {
+        echo '<form method="post" class="form-grid admin-update-action-form">' . csrf_field();
+        echo '<input type="hidden" name="update_action" value="stable_update">';
+        echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
+        echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
     } else {
-        echo '<p>' . e(t('admin.updates.latest_version')) . ': <strong>' . e((string) $status['latest_version']) . '</strong></p>';
-        echo '<p class="muted">' . e(t('admin.updates.checked_branch_value', ['branch' => (string) $status['branch']])) . '</p>';
-        if (!empty($status['version_source'])) {
-            echo '<p class="muted">' . e(t('admin.updates.version_source_value', ['source' => (string) $status['version_source']])) . '</p>';
-        }
-        if (!empty($status['update_available'])) {
-            echo '<form method="post" class="form-grid">' . csrf_field();
-            echo '<input type="hidden" name="update_action" value="stable_update">';
-            echo '<p>' . t('admin.updates.newer_available_description') . '</p>';
-            echo '<button type="submit" class="is-update-pending">' . e(t('admin.updates.update_button')) . '</button></form>';
-        } else {
-            echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
-        }
+        echo '<p class="muted">' . e(t('admin.updates.current')) . '</p>';
+        echo '<a class="button secondary" href="#admin-update-tab-notes">' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</a>';
     }
-    echo '<details class="patch-notes-viewer" data-patch-notes-viewer data-fragment-url="' . e(url_for('admin_update', ['patch_notes_fragment' => '1'])) . '">';
+    echo '</article>';
+    echo '</div>';
+    $statusHtml = (string) ob_get_clean();
+    render_admin_tab_panel('admin-update-tab-status', $statusHtml, true);
+
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.patch_notes_kicker', 'Release notes')) . '</p><h2>' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</h2></div><p class="muted">' . e(t('admin.updates.patch_notes_page_hint', 'Select an installed, latest, or older version without reloading the full admin page.')) . '</p></div>';
+    echo '<details class="patch-notes-viewer" data-patch-notes-viewer data-fragment-url="' . e(url_for('admin_update', ['patch_notes_fragment' => '1'])) . '" open>';
     echo '<summary><span>' . e(t('admin.updates.patch_notes_title', 'Patch notes')) . '</span><small>' . e(t('admin.updates.patch_notes_summary', 'Show release notes from GitHub')) . '</small></summary>';
     // $patchVersionGroups stores release-note versions grouped by the main minor stream.
     $patchVersionGroups = [];
@@ -307,29 +333,35 @@ function cms_admin_update(): void
     echo 'viewer.querySelectorAll(".patch-notes-shortcuts [data-patch-version]").forEach(function(link){link.addEventListener("click",function(event){event.preventDefault();viewer.open=true;loadVersion(link.getAttribute("data-patch-version")||"",true);});});';
     echo '})();';
     echo '</script>';
+    $patchNotesHtml = (string) ob_get_clean();
+    render_admin_tab_panel('admin-update-tab-notes', $patchNotesHtml, false);
 
-    echo '<hr><h3>' . e(t('admin.updates.beta_build')) . '</h3>';
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.updates.advanced_kicker', 'Recovery and testing')) . '</p><h2>' . e(t('admin.updates.advanced_tools', 'Advanced tools')) . '</h2></div><p class="muted">' . e(t('admin.updates.advanced_hint', 'Use beta installs and clean reinstall only when you intentionally need to test or repair the deployed code.')) . '</p></div>';
+    echo '<div class="admin-maintenance-grid admin-update-tools-grid">';
+    echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.beta_build')) . '</strong><span>' . e(t('admin.updates.beta_code_help')) . '</span>';
     echo '<form method="post" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="beta_install">';
     echo '<label>' . e(t('admin.updates.beta_code')) . '<input name="beta_commit" value="' . e(application_update_beta_commit()) . '" placeholder="abcdef1234567890"></label>';
-    echo '<p class="muted">' . e(t('admin.updates.beta_code_help')) . '</p>';
     echo '<button type="submit">' . e(t('admin.updates.install_beta')) . '</button>';
-    echo '</form>';
+    echo '</form></article>';
     if ($betaActive) {
-        echo '<form method="post" class="form-grid form-grid-spaced">' . csrf_field();
+        echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.restore_stable')) . '</strong><span>' . e(t('admin.updates.restore_stable_help')) . '</span>';
+        echo '<form method="post" class="form-grid">' . csrf_field();
         echo '<input type="hidden" name="update_action" value="beta_revert">';
-        echo '<p class="muted">' . e(t('admin.updates.restore_stable_help')) . '</p>';
         echo '<button type="submit" class="button secondary">' . e(t('admin.updates.restore_stable')) . '</button>';
-        echo '</form>';
+        echo '</form></article>';
     }
-    echo '<hr><h3>' . e(t('admin.updates.clean_reinstall_title')) . '</h3>';
-    echo '<form method="post" class="form-grid form-grid-spaced danger-zone">' . csrf_field();
+    echo '<article class="admin-maintenance-card admin-update-tool-card is-danger"><strong>' . e(t('admin.updates.clean_reinstall_title')) . '</strong><span>' . e(t('admin.updates.clean_reinstall_description')) . '</span>';
+    echo '<form method="post" class="form-grid danger-zone">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="clean_reinstall">';
-    echo '<p>' . e(t('admin.updates.clean_reinstall_description')) . '</p>';
     echo '<p class="muted">' . t('admin.updates.clean_reinstall_protected') . '</p>';
     echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
     echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
-    echo '</form>';
-    echo '</section>';
+    echo '</form></article>';
+    echo '</div>';
+    $advancedHtml = (string) ob_get_clean();
+    render_admin_tab_panel('admin-update-tab-advanced', $advancedHtml, false);
+
     render_footer();
 }
