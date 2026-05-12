@@ -1,5 +1,15 @@
 # Patch notes
 
+## Version 0.65.3
+
+### Updates page patch notes picker
+
+  - Replaced the plain patch-notes version select with a grouped picker that shows release streams, installed status,
+  and latest markers.
+  - Kept the native select in sync so form submission and fallback behavior still work.
+  - Added translation strings for release counts and the Installed/Latest badges.
+  - Refined the patch-notes panel styling so the new picker and version badges fit the admin layout cleanly.
+
 ## Version 0.65.2
 
 ### Updates page hardening
