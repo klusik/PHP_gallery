@@ -56,9 +56,10 @@ import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=202605
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
-import { setupVoteForms } from './gallery-modules/votes.js';
+import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
+import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260511-i18n-js-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260512-tag-whisperer-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260512-lightbox-vote-clone-widget-v6';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -73,7 +74,7 @@ import {
     setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260512-panel-refresh-v1';
+} from './gallery-modules/admin-operations.js?v=20260512-modular-admin-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -109,6 +110,7 @@ function bootGalleryBrowserFeatures() {
     setupImageBulkMoveFields();
     setupThumbnailCacheDeleteConfirmation();
     setupAdminTabs();
+    setupAdminDatePickers();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

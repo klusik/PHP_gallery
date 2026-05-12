@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.65.7';
+const CMS_VERSION = '0.66';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -182,6 +182,7 @@ function cms_run(): void
         'admin_new_gallery' => 'cms_admin_new_gallery',
         'admin_upload' => 'cms_admin_upload',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
+        'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
         'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',

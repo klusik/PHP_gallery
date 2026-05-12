@@ -113,6 +113,7 @@ return [
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         slug VARCHAR(120) NOT NULL,
+        description TEXT NULL,
         created_at DATETIME NOT NULL,
         updated_at DATETIME NOT NULL,
         UNIQUE KEY tags_slug_unique (slug),

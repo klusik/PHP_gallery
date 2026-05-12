@@ -37,6 +37,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../app/services/gallery_branding.php';
 
+if (!function_exists('t')) {
+    /**
+     * Return a deterministic translation fallback for standalone model tests.
+     */
+    function t(string $key, string $fallback = ''): string
+    {
+        return $fallback !== '' ? $fallback : $key;
+    }
+}
+
 /**
  * Throw when a branding model expectation fails.
  */

@@ -2935,6 +2935,98 @@ button.danger {
     margin: 0.25rem 0 0;
 }
 
+.admin-theme-background-card {
+    gap: 1rem;
+}
+
+.admin-theme-background-preview {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 78%, transparent);
+    border-radius: var(--radius-lg, 1rem);
+    background: color-mix(in srgb, var(--color-surface, #ffffff) 88%, var(--accent-color, #2563eb) 12%);
+}
+
+.admin-theme-background-thumb {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 72%, transparent);
+    border-radius: var(--radius-md, 0.8rem);
+    background: color-mix(in srgb, var(--color-paper, #f4f7fa) 72%, #000 6%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.admin-theme-background-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.admin-theme-background-thumb-empty span {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-color, #2563eb) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color, #2563eb) 28%, transparent);
+}
+
+.admin-theme-background-copy {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-theme-background-copy strong {
+    font-size: 1rem;
+    letter-spacing: -0.015em;
+}
+
+.admin-theme-background-status {
+    width: fit-content;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-paper, #f4f7fa) 82%, var(--color-text, #20242a) 8%);
+    color: var(--color-muted, #68707c);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.admin-theme-background-status.is-ready {
+    background: color-mix(in srgb, #16a34a 16%, var(--color-surface, #ffffff));
+    color: color-mix(in srgb, #166534 82%, var(--color-text, #20242a));
+}
+
+.admin-theme-background-size input[type="range"] {
+    margin-top: 0.45rem;
+}
+
+.admin-theme-background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+}
+
+.admin-theme-background-actions button[disabled] {
+    opacity: 0.52;
+    cursor: not-allowed;
+}
+
+@media (max-width: 680px) {
+    .admin-theme-background-preview {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-theme-background-thumb {
+        max-width: 260px;
+    }
+}
+
 @media (max-width: 900px) {
     .admin-theme-hero,
     .admin-theme-save-panel {
@@ -4170,5 +4262,149 @@ button.gallery-row-action.secondary {
 
     .admin-update-metric-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+/* Admin tag editor layout. */
+.admin-tags-hero {
+    margin-bottom: 1rem;
+}
+
+.admin-tags-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.admin-tags-list-panel,
+.admin-tags-edit-panel {
+    min-width: 0;
+}
+
+.admin-tags-list {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.admin-tag-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--panel) 92%, #fff);
+    color: inherit;
+    text-decoration: none;
+}
+
+.admin-tag-row:hover,
+.admin-tag-row:focus,
+.admin-tag-row.is-active {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+
+.admin-tag-row span {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.admin-tag-row strong,
+.admin-tag-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-tag-row small,
+.admin-tag-row em {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: normal;
+}
+
+.admin-tags-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-tags-form label {
+    display: grid;
+    gap: 0.4rem;
+    font-weight: 700;
+}
+
+.admin-tags-form input,
+.admin-tags-form textarea {
+    width: 100%;
+}
+
+.admin-tags-form .muted {
+    font-weight: 400;
+}
+
+@media (max-width: 880px) {
+    .admin-tags-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Admin gallery date picker enhancement. */
+.admin-date-picker-field,
+.admin-side-panel-field:has(.admin-date-picker-control) {
+    gap: 0.35rem;
+}
+
+.admin-date-picker-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: min(100%, 28rem);
+    max-width: 100%;
+}
+
+.admin-date-picker-control .admin-date-picker-input {
+    min-width: 0;
+    flex: 1 1 10rem;
+    height: 2.15rem;
+    margin: 0;
+}
+
+.admin-date-picker-control .admin-date-picker-input::-webkit-calendar-picker-indicator {
+    display: none;
+    opacity: 0;
+}
+
+.admin-date-picker-control .admin-date-picker-button,
+.admin-page .admin-date-picker-control .admin-date-picker-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.15rem;
+    margin: 0;
+    padding: 0.35rem 0.65rem;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.admin-date-picker-control .admin-date-picker-calendar,
+.admin-page .admin-date-picker-control .admin-date-picker-calendar {
+    width: 2.15rem;
+    min-width: 2.15rem;
+    padding-inline: 0;
+    font-size: 1rem;
+}
+
+@media (max-width: 560px) {
+    .admin-date-picker-control {
+        flex-wrap: wrap;
+    }
+
+    .admin-date-picker-control .admin-date-picker-input {
+        flex-basis: calc(100% - 2.5rem);
     }
 }

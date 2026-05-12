@@ -1,0 +1,133 @@
+/*
+ * admin-reordering.css
+ * Gallery ordering and drag feedback styles.
+ * Split from admin.css on 2026-05-12 to keep admin styling modular.
+ */
+
+.admin-gallery-order-toolbar {
+    margin-top: 0;
+}
+
+/* Keeps the legacy gallery move handle visually aligned with the existing photo move handle. */
+.admin-gallery-drag-handle {
+    font-size: 14px;
+}
+
+/* Makes the nested gallery table advertise pointer-based ordering without changing table layout. */
+.admin-gallery-order-table tr.is-dragging td {
+    background: #e8f2ff;
+    opacity: 0.2;
+}
+
+.admin-gallery-order-placeholder td::after {
+    content: attr(data-drag-hint);
+}
+
+/* Removes the moved subtree from the table flow while the ghost follows the pointer. */
+.admin-gallery-order-table tr.is-reorder-hidden {
+    display: none;
+}
+
+/* Prevents accidental text selection while galleries are being reordered or nested. */
+body.admin-gallery-order-active {
+    cursor: grabbing;
+    user-select: none;
+}
+
+/* Shows the exact drop position and uses indentation to preview the target tree depth. */
+.admin-gallery-order-placeholder td {
+    position: relative;
+    padding: 0;
+    border: 2px dashed #2271b1;
+    background: linear-gradient(90deg, transparent 0, transparent calc(var(--gallery-drag-depth, 0) * 28px), rgba(34, 113, 177, 0.10) calc(var(--gallery-drag-depth, 0) * 28px));
+}
+
+/* Adds a clear vertical marker at the candidate tree depth while dragging horizontally. */
+.admin-gallery-order-placeholder td::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 100%;
+    margin-left: calc(var(--gallery-drag-depth, 0) * 28px);
+    background: #2271b1;
+}
+
+/* Adds a directional cue so nesting and moving out are visible before the drop is committed. */
+.admin-gallery-order-placeholder td::after {
+    content: '↓ same level';
+    position: absolute;
+    top: 50%;
+    left: calc((var(--gallery-drag-depth, 0) * 28px) + 0.85rem);
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid rgba(34, 113, 177, 0.28);
+    border-radius: 999px;
+    background: #ffffff;
+    color: #0f4f97;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+    box-shadow: 0 0.35rem 1rem rgba(15, 79, 151, 0.16);
+    white-space: nowrap;
+}
+
+.admin-gallery-order-placeholder[data-drag-direction="right"] td::after {
+    content: '→ nest deeper';
+}
+
+.admin-gallery-order-placeholder[data-drag-direction="left"] td::after {
+    content: '← move out';
+}
+
+/* Keeps the gallery ghost readable when several nested rows move together. */
+.admin-gallery-order-ghost {
+    max-height: 420px;
+    overflow: hidden;
+    opacity: 0.2;
+}
+
+.admin-gallery-order-ghost[data-drag-direction="right"] {
+    box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.22), 0 1rem 2rem rgba(15, 79, 151, 0.22);
+}
+
+.admin-gallery-order-ghost[data-drag-direction="left"] {
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.22), 0 1rem 2rem rgba(120, 53, 15, 0.18);
+}
+
+/* Keeps older cloned gallery drag handles consistent inside the ghost row. */
+.admin-gallery-order-ghost .admin-gallery-drag-handle {
+    cursor: grabbing;
+}
+
+/* Keeps expanded admin log diagnostics readable without changing the table data model. */
+.log-entry-details summary {
+    cursor: pointer;
+}
+
+/* Gives the diagnostic export action breathing room inside a compact table cell. */
+.log-detail-actions {
+    margin: 0.75rem 0;
+}
+
+/* Renders admin log metadata as a compact two-column diagnostic list. */
+.log-detail-list {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) 1fr;
+    gap: 0.35rem 0.75rem;
+    margin: 0.75rem 0;
+}
+
+/* Keeps admin log detail labels visually distinct from values. */
+.log-detail-list dt {
+    font-weight: 700;
+}
+
+/* Prevents long request identifiers or routes from stretching the log table. */
+.log-detail-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+

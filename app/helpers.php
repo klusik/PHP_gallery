@@ -161,6 +161,9 @@ function base_url(string $path = ''): string
  */
 function url_for(string $page, array $params = []): string
 {
+    if ($page === 'tag' && isset($params['slug']) && count($params) === 1) {
+        return base_url('tag/' . rawurlencode((string) $params['slug']));
+    }
     // Variable $params stores this steps working value.
     $params = ['page' => $page] + $params;
     return base_url('index.php?' . http_build_query($params));
@@ -814,6 +817,7 @@ function admin_menu_structure(): array
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags')],
             ],
         ],
         [
@@ -1045,10 +1049,34 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    // Main stylesheet gets a build-busting version so structural CSS changes
-    // are not masked by browser cache.
-    $stylesPath = dirname(__DIR__) . '/public/assets/styles.css';
-    echo '<link rel="stylesheet" href="' . e(asset_url('assets/styles.css')) . '?v=' . (is_file($stylesPath) ? filemtime($stylesPath) : time()) . '">';
+    // Built-in stylesheets are linked directly with per-file cache keys.
+    // This avoids stale browser caches for CSS files that were previously loaded through @import.
+    $styleFiles = [
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/admin.css',
+        'assets/styles/admin-layout.css',
+        'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-theme-preview.css',
+        'assets/styles/admin-reordering.css',
+        'assets/styles/admin-media-tools.css',
+        'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-gallery-list.css',
+        'assets/styles/admin-patch-notes.css',
+        'assets/styles/admin-update.css',
+        'assets/styles/admin-tags.css',
+        'assets/styles/side-panel.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+    ];
+    foreach ($styleFiles as $styleFile) {
+        $stylePath = dirname(__DIR__) . '/public/' . $styleFile;
+        if (!is_file($stylePath)) {
+            continue;
+        }
+        echo '<link rel="stylesheet" href="' . e(asset_url($styleFile)) . '?v=' . filemtime($stylePath) . '">';
+    }
     // Variable $customCss stores this steps working value.
     $customCss = custom_css_url();
     if ($customCss) {
@@ -1249,6 +1277,9 @@ function cms_browser_i18n_strings(): array
         'votes.no_like' => t('js.votes.no_like', 'No like'),
         'thumbnail_bounds.auto_min' => t('thumbnail_bounds.auto_min', 'Auto min'),
         'thumbnail_bounds.auto_max' => t('thumbnail_bounds.auto_max', 'Auto max'),
+        'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
+        'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
+        'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
     ];
 }
 
@@ -1282,8 +1313,25 @@ function render_footer(): void
     echo '</footer>';
     // Variable $scriptPath stores this steps working value.
     $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
+    $scriptVersionPaths = [
+        $scriptPath,
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/tag-suggestions.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-operations.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
+    ];
+    $scriptVersion = 0;
+    foreach ($scriptVersionPaths as $versionPath) {
+        if (is_file($versionPath)) {
+            $scriptVersion = max($scriptVersion, filemtime($versionPath));
+        }
+    }
     render_browser_i18n_script();
-    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . (is_file($scriptPath) ? filemtime($scriptPath) : time()) . '"></script>';
+    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }

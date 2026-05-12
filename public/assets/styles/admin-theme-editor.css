@@ -1,0 +1,316 @@
+/*
+ * admin-theme-editor.css
+ * Theme editor layout styles.
+ * Split from admin.css on 2026-05-12 to keep admin styling modular.
+ */
+
+.admin-theme-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-theme-hero h1 {
+    margin-bottom: 0.25rem;
+    font-size: 2rem;
+    letter-spacing: -0.035em;
+}
+
+.admin-theme-hero p {
+    margin: 0;
+}
+
+.admin-theme-form {
+    margin-top: 0;
+}
+
+.admin-theme-form > .admin-tab-panel {
+    margin-top: 0;
+}
+
+.theme-tab-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.theme-tab-card-grid > fieldset,
+.admin-theme-form > .admin-tab-panel > fieldset {
+    margin: 0;
+}
+
+.admin-theme-save-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0;
+}
+
+.admin-theme-save-panel p {
+    margin: 0.25rem 0 0;
+}
+
+@media (max-width: 900px) {
+    .admin-theme-hero,
+    .admin-theme-save-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .theme-tab-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+.admin-theme-background-card {
+    gap: 1rem;
+}
+
+.admin-theme-background-preview {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 78%, transparent);
+    border-radius: var(--radius-lg, 1rem);
+    background: color-mix(in srgb, var(--color-surface, #ffffff) 88%, var(--accent-color, #2563eb) 12%);
+}
+
+.admin-theme-background-thumb {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 72%, transparent);
+    border-radius: var(--radius-md, 0.8rem);
+    background: color-mix(in srgb, var(--color-paper, #f4f7fa) 72%, #000 6%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.admin-theme-background-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.admin-theme-background-thumb-empty span {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-color, #2563eb) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color, #2563eb) 28%, transparent);
+}
+
+.admin-theme-background-copy {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-theme-background-copy strong {
+    font-size: 1rem;
+    letter-spacing: -0.015em;
+}
+
+.admin-theme-background-status {
+    width: fit-content;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-paper, #f4f7fa) 82%, var(--color-text, #20242a) 8%);
+    color: var(--color-muted, #68707c);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.admin-theme-background-status.is-ready {
+    background: color-mix(in srgb, #16a34a 16%, var(--color-surface, #ffffff));
+    color: color-mix(in srgb, #166534 82%, var(--color-text, #20242a));
+}
+
+.admin-theme-background-size input[type="range"] {
+    margin-top: 0.45rem;
+}
+
+.admin-theme-background-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+}
+
+.admin-theme-background-actions button[disabled] {
+    opacity: 0.52;
+    cursor: not-allowed;
+}
+
+@media (max-width: 680px) {
+    .admin-theme-background-preview {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-theme-background-thumb {
+        max-width: 260px;
+    }
+}
+
+.admin-theme-description-layout {
+    gap: 0.85rem;
+}
+
+.admin-theme-description-select {
+    max-width: 26rem;
+}
+
+.admin-theme-description-layout-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.admin-theme-description-card {
+    display: grid;
+    gap: 0.8rem;
+    width: 100%;
+    padding: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 78%, transparent);
+    border-radius: var(--radius-lg, 1rem);
+    background: color-mix(in srgb, var(--color-surface, #ffffff) 94%, var(--accent-color, #2563eb) 6%);
+    color: var(--color-text, #20242a);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.admin-theme-description-card:hover,
+.admin-theme-description-card:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-color, #2563eb) 58%, var(--line, #d6cfc2));
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+    transform: translateY(-1px);
+}
+
+.admin-theme-description-card:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent-color, #2563eb) 72%, #ffffff);
+    outline-offset: 3px;
+}
+
+.admin-theme-description-card[aria-pressed="true"] {
+    border-color: var(--accent-color, #2563eb);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--accent-color, #2563eb) 18%, transparent);
+}
+
+.admin-theme-description-card-copy {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.admin-theme-description-card-copy strong {
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+}
+
+.admin-theme-description-card-copy span {
+    color: var(--color-muted, #68707c);
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.admin-theme-description-card-preview {
+    display: grid;
+    gap: 0.7rem;
+    min-height: 150px;
+    overflow: hidden;
+    padding: 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--line, #d6cfc2) 72%, transparent);
+    border-radius: var(--radius, 16px);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-paper, #f4f7fa) 94%, var(--accent-color, #2563eb) 6%), var(--color-surface, #ffffff));
+    font-family: var(--font-family, Georgia, 'Times New Roman', serif);
+}
+
+.admin-theme-description-card-preview.is-vertical {
+    grid-template-columns: minmax(86px, 0.78fr) minmax(0, 1fr);
+    align-items: stretch;
+}
+
+.admin-theme-description-card-preview.is-horizontal {
+    grid-template-columns: 1fr;
+}
+
+.admin-theme-description-media {
+    display: grid;
+    min-height: 116px;
+    overflow: hidden;
+    border-radius: calc(var(--radius, 16px) * 0.75);
+    background:
+        radial-gradient(circle at 78% 24%, rgba(255, 255, 255, 0.72) 0 9%, transparent 10%),
+        linear-gradient(135deg, color-mix(in srgb, var(--accent-color, #2563eb) 64%, #ffffff), color-mix(in srgb, var(--accent-dark, #1d4ed8) 68%, #000000));
+}
+
+.admin-theme-description-media span {
+    align-self: end;
+    display: block;
+    height: 44%;
+    clip-path: polygon(0 100%, 26% 44%, 42% 72%, 62% 28%, 100% 100%);
+    background: rgba(255, 255, 255, 0.46);
+}
+
+.admin-theme-description-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.36rem;
+    min-width: 0;
+    padding: 0.15rem 0.05rem;
+}
+
+.admin-theme-description-title {
+    color: var(--color-text, #20242a);
+    font-size: 1.08rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+
+.admin-theme-description-meta {
+    color: var(--color-muted, #68707c);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.admin-theme-description-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.26rem;
+    margin: 0.08rem 0 0.1rem;
+}
+
+.admin-theme-description-tags i {
+    padding: 0.18rem 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-color, #2563eb) 13%, var(--color-surface, #ffffff));
+    color: color-mix(in srgb, var(--accent-color, #2563eb) 78%, var(--color-text, #20242a));
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.admin-theme-description-line {
+    display: block;
+    width: 72%;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-muted, #68707c) 22%, transparent);
+}
+
+.admin-theme-description-line.is-wide {
+    width: 100%;
+}
+
+@media (max-width: 780px) {
+    .admin-theme-description-layout-picker {
+        grid-template-columns: 1fr;
+    }
+}

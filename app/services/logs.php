@@ -44,6 +44,42 @@
  * and related helpers without any routing or bootstrap migration.
  */
 
+/**
+ * Translate admin-log diagnostics with the English language pack regardless of
+ * the selected public or admin UI language. Logs are support artifacts, so their
+ * labels must stay stable across installations and screenshots.
+ */
+if (!function_exists('admin_log_english_t')) {
+    function admin_log_english_t(string $key, string|array|null $fallback = null, array $parameters = []): string
+    {
+        if (is_array($fallback)) {
+            $parameters = $fallback;
+            $fallback = null;
+        }
+
+        $text = null;
+        if (function_exists('translation_load_language')) {
+            $englishStrings = translation_load_language('en');
+            if (array_key_exists($key, $englishStrings) && is_string($englishStrings[$key])) {
+                $text = $englishStrings[$key];
+            }
+        }
+
+        if ($text === null) {
+            $text = $fallback ?? $key;
+        }
+
+        if (function_exists('translation_interpolate')) {
+            return translation_interpolate($text, $parameters);
+        }
+
+        foreach ($parameters as $name => $value) {
+            $text = str_replace('{' . (string) $name . '}', (string) $value, $text);
+        }
+        return $text;
+    }
+}
+
 function admin_log_schema_ready(): bool
 {
     try {
@@ -83,17 +119,17 @@ function admin_log_column_exists(string $columnName): bool
 function admin_log_category_options(): array
 {
     return [
-        'system' => t('admin.logs.category.system', 'System'),
-        'gallery' => t('admin.logs.category.gallery', 'Gallery'),
-        'media' => t('admin.logs.category.media', 'Media'),
-        'upload' => t('admin.logs.category.upload', 'Upload'),
-        'thumbnail' => t('admin.logs.category.thumbnail', 'Thumbnails'),
-        'update' => t('admin.logs.category.update', 'Updates'),
-        'security' => t('admin.logs.category.security', 'Security'),
-        'database' => t('admin.logs.category.database', 'Database'),
-        'telemetry' => t('admin.logs.category.telemetry', 'Telemetry'),
-        'admin' => t('admin.logs.category.admin', 'Admin'),
-        'other' => t('admin.logs.category.other', 'Other'),
+        'system' => admin_log_english_t('admin.logs.category.system', 'System'),
+        'gallery' => admin_log_english_t('admin.logs.category.gallery', 'Gallery'),
+        'media' => admin_log_english_t('admin.logs.category.media', 'Media'),
+        'upload' => admin_log_english_t('admin.logs.category.upload', 'Upload'),
+        'thumbnail' => admin_log_english_t('admin.logs.category.thumbnail', 'Thumbnails'),
+        'update' => admin_log_english_t('admin.logs.category.update', 'Updates'),
+        'security' => admin_log_english_t('admin.logs.category.security', 'Security'),
+        'database' => admin_log_english_t('admin.logs.category.database', 'Database'),
+        'telemetry' => admin_log_english_t('admin.logs.category.telemetry', 'Telemetry'),
+        'admin' => admin_log_english_t('admin.logs.category.admin', 'Admin'),
+        'other' => admin_log_english_t('admin.logs.category.other', 'Other'),
     ];
 }
 
@@ -103,12 +139,12 @@ function admin_log_category_options(): array
 function admin_log_severity_options(): array
 {
     return [
-        'debug' => t('admin.logs.severity.debug', 'Debug'),
-        'info' => t('admin.logs.severity.info', 'Info'),
-        'notice' => t('admin.logs.severity.notice', 'Notice'),
-        'warning' => t('admin.logs.severity.warning', 'Warning'),
-        'error' => t('admin.logs.severity.error', 'Error'),
-        'critical' => t('admin.logs.severity.critical', 'Critical'),
+        'debug' => admin_log_english_t('admin.logs.severity.debug', 'Debug'),
+        'info' => admin_log_english_t('admin.logs.severity.info', 'Info'),
+        'notice' => admin_log_english_t('admin.logs.severity.notice', 'Notice'),
+        'warning' => admin_log_english_t('admin.logs.severity.warning', 'Warning'),
+        'error' => admin_log_english_t('admin.logs.severity.error', 'Error'),
+        'critical' => admin_log_english_t('admin.logs.severity.critical', 'Critical'),
     ];
 }
 
@@ -255,10 +291,10 @@ function admin_log_event(string $level, string $eventKey, string $message, array
 function admin_log_status_options(): array
 {
     return [
-        'todo' => t('admin.logs.status.todo', 'To be done'),
-        'doing' => t('admin.logs.status.doing', 'Will be done'),
-        'waiting' => t('admin.logs.status.waiting', 'Waiting'),
-        'done' => t('admin.logs.status.done', 'Done'),
+        'todo' => admin_log_english_t('admin.logs.status.todo', 'To be done'),
+        'doing' => admin_log_english_t('admin.logs.status.doing', 'Will be done'),
+        'waiting' => admin_log_english_t('admin.logs.status.waiting', 'Waiting'),
+        'done' => admin_log_english_t('admin.logs.status.done', 'Done'),
     ];
 }
 
@@ -586,25 +622,25 @@ function admin_log_export_text(array $entry): string
     $context = admin_log_context_array($entry);
     // $lines stores the text report line by line to keep formatting predictable.
     $lines = [
-        t('admin.logs.export.title', 'PHP Gallery admin log event'),
+        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
         '',
         'ID: ' . (string) ($entry['id'] ?? ''),
-        t('admin.logs.export.created_at', 'Created at: {value}', ['value' => (string) ($entry['created_at'] ?? '')]),
-        t('admin.logs.export.status', 'Status: {value}', ['value' => admin_log_status_label((string) ($entry['status'] ?? 'todo'))]),
-        t('admin.logs.export.level', 'Level: {value}', ['value' => (string) ($entry['level'] ?? '')]),
-        t('admin.logs.export.severity', 'Severity: {value}', ['value' => (string) ($entry['severity'] ?? ($entry['level'] ?? ''))]),
-        t('admin.logs.export.category', 'Category: {value}', ['value' => (string) ($entry['category'] ?? 'other')]),
-        t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
-        t('admin.logs.export.message', 'Message: {value}', ['value' => (string) ($entry['message'] ?? '')]),
-        t('admin.logs.export.admin_user', 'Admin user: {value}', ['value' => (string) ($entry['username'] ?? '')]),
-        t('admin.logs.export.subject', 'Subject: {value}', ['value' => trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? ''))]),
-        t('admin.logs.export.request_id', 'Request ID: {value}', ['value' => (string) ($entry['request_id'] ?? '')]),
-        t('admin.logs.export.route', 'Route: {value}', ['value' => (string) ($entry['route_name'] ?? '')]),
-        t('admin.logs.export.resolved_at', 'Resolved at: {value}', ['value' => (string) ($entry['resolved_at'] ?? '')]),
-        t('admin.logs.export.resolution_note', 'Resolution note: {value}', ['value' => (string) ($entry['resolution_note'] ?? '')]),
+        admin_log_english_t('admin.logs.export.created_at', 'Created at: {value}', ['value' => (string) ($entry['created_at'] ?? '')]),
+        admin_log_english_t('admin.logs.export.status', 'Status: {value}', ['value' => admin_log_status_label((string) ($entry['status'] ?? 'todo'))]),
+        admin_log_english_t('admin.logs.export.level', 'Level: {value}', ['value' => (string) ($entry['level'] ?? '')]),
+        admin_log_english_t('admin.logs.export.severity', 'Severity: {value}', ['value' => (string) ($entry['severity'] ?? ($entry['level'] ?? ''))]),
+        admin_log_english_t('admin.logs.export.category', 'Category: {value}', ['value' => (string) ($entry['category'] ?? 'other')]),
+        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
+        admin_log_english_t('admin.logs.export.message', 'Message: {value}', ['value' => (string) ($entry['message'] ?? '')]),
+        admin_log_english_t('admin.logs.export.admin_user', 'Admin user: {value}', ['value' => (string) ($entry['username'] ?? '')]),
+        admin_log_english_t('admin.logs.export.subject', 'Subject: {value}', ['value' => trim((string) ($entry['subject_type'] ?? '') . ' ' . (string) ($entry['subject_id'] ?? ''))]),
+        admin_log_english_t('admin.logs.export.request_id', 'Request ID: {value}', ['value' => (string) ($entry['request_id'] ?? '')]),
+        admin_log_english_t('admin.logs.export.route', 'Route: {value}', ['value' => (string) ($entry['route_name'] ?? '')]),
+        admin_log_english_t('admin.logs.export.resolved_at', 'Resolved at: {value}', ['value' => (string) ($entry['resolved_at'] ?? '')]),
+        admin_log_english_t('admin.logs.export.resolution_note', 'Resolution note: {value}', ['value' => (string) ($entry['resolution_note'] ?? '')]),
         '',
-        t('admin.logs.export.context', 'Context:'),
-        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : t('admin.logs.export.none', '(none)'),
+        admin_log_english_t('admin.logs.export.context', 'Context:'),
+        $context ? json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : admin_log_english_t('admin.logs.export.none', '(none)'),
         '',
     ];
     return implode("\n", $lines);
