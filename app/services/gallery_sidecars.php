@@ -251,6 +251,13 @@ function write_gallery_sidecar(array $gallery): void
             $data['description_layout'] = $descriptionLayout;
         }
     }
+    if (gallery_count_badge_schema_ready()) {
+        // $countBadgeVisibility stores a per-gallery count badge override, when this gallery has one.
+        $countBadgeVisibility = gallery_count_badge_storage_value($gallery['count_badge_visibility'] ?? null);
+        if ($countBadgeVisibility !== null) {
+            $data['count_badge_visibility'] = $countBadgeVisibility;
+        }
+    }
     if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
         $data['grid_columns'] = (int) $gallery['grid_columns'];
         $data['grid_rows'] = (int) $gallery['grid_rows'];
@@ -316,6 +323,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
         'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
+        'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
@@ -364,6 +372,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $showFilenames = gallery_filename_display_schema_ready() && (int) ($candidate['show_filenames'] ?? 0) === 1 ? 1 : 0;
     // $descriptionLayout stores a per-gallery card layout override read from gallery.json.
     $descriptionLayout = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($candidate['description_layout'] ?? null) : null;
+    // $countBadgeVisibility stores a per-gallery count badge override read from gallery.json.
+    $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($candidate['count_badge_visibility'] ?? null) : null;
     // $galleryDate stores the optional manual gallery date read from gallery.json.
     $galleryDate = gallery_date_schema_ready() ? gallery_date_sidecar_value($candidate['gallery_date'] ?? '') : null;
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
@@ -399,6 +409,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_description_layout_schema_ready()) {
         $columns[] = 'description_layout';
         $values[] = $descriptionLayout;
+    }
+    if (gallery_count_badge_schema_ready()) {
+        $columns[] = 'count_badge_visibility';
+        $values[] = $countBadgeVisibility;
     }
     if (gallery_date_schema_ready()) {
         $columns[] = 'gallery_date';
@@ -490,6 +504,8 @@ function create_empty_gallery(array $input): array
     $votingEnabled = !empty($input['voting_enabled']) ? 1 : 0;
     // $showFilenames stores an intermediate value used by the surrounding gallery workflow.
     $showFilenames = !empty($input['show_filenames']) ? 1 : 0;
+    // $countBadgeVisibility stores the optional per-gallery count badge override.
+    $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? 'inherit') : null;
     // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
@@ -516,8 +532,8 @@ function create_empty_gallery(array $input): array
         ? (int) $input['sort_order']
         : next_gallery_prepend_sort_order($parentId);
 
-    // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
-    $sidecarWritten = write_gallery_sidecar_for_path($folderPath, [
+    // $sidecarData stores the metadata persisted before the gallery row exists.
+    $sidecarData = [
         'title' => $title,
         'description' => $description,
         'gallery_date' => $galleryDate,
@@ -525,7 +541,12 @@ function create_empty_gallery(array $input): array
         'sort_order' => $sortOrder,
         'voting_enabled' => $votingEnabled,
         'show_filenames' => $showFilenames,
-    ]);
+    ];
+    if ($countBadgeVisibility !== null) {
+        $sidecarData['count_badge_visibility'] = $countBadgeVisibility;
+    }
+    // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
+    $sidecarWritten = write_gallery_sidecar_for_path($folderPath, $sidecarData);
     if (!$sidecarWritten) {
         throw new RuntimeException('Gallery folder was created, but gallery.json could not be written.');
     }

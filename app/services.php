@@ -57,6 +57,8 @@ require_once __DIR__ . '/services/gallery_backgrounds.php';
 require_once __DIR__ . '/services/pagination.php';
 // Load gallery description layout helpers before public cards are rendered.
 require_once __DIR__ . '/services/gallery_description_layout.php';
+// Load gallery count badge helpers before public cards are rendered.
+require_once __DIR__ . '/services/gallery_count_badges.php';
 // Load optional manual gallery-date helpers before admin and public gallery rendering.
 require_once __DIR__ . '/services/gallery_dates.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.

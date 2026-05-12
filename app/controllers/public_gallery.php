@@ -689,8 +689,10 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $coverAsset = $isProtectedPublicCard ? '' : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly));
     // $cover stores an intermediate value used by the surrounding gallery workflow.
     $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly));
+    // $showCountBadge stores whether this card should show the contained-picture badge.
+    $showCountBadge = !$isProtectedPublicCard && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
     // Variable $branchImageCount stores this steps working value.
-    $branchImageCount = $isProtectedPublicCard ? 0 : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly));
+    $branchImageCount = $showCountBadge ? public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly)) : 0;
     // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
     $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
         // $ownTags stores tags attached directly to the gallery record.
@@ -710,7 +712,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
     }
     echo '<a class="gallery-card-media" href="' . e(gallery_public_url($gallery)) . '" aria-label="' . e(t('gallery.card.open_gallery', 'Open gallery {title}', ['title' => (string) $gallery['title']])) . '">';
-    if ($showSubgalleryBadge && !$isProtectedPublicCard) {
+    if ($showCountBadge) {
         echo '<span class="subgallery-stack-badge" aria-label="' . e(t('gallery.card.subgallery_image_count', 'Subgallery containing {count} images', ['count' => (int) $branchImageCount])) . '"><span class="subgallery-stack-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="subgallery-stack-count">' . (int) $branchImageCount . '</span></span>';
     }
     // $coverLoadingAttributes keeps above-the-fold gallery cards eager without forcing later rows to compete for bandwidth.
@@ -751,7 +753,9 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     if ($isProtectedPublicCard) {
         echo '<p class="muted gallery-card-count">' . e(t('gallery.card.protected_gallery', 'Protected gallery')) . '</p>';
     } else {
-        echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => (int) $branchImageCount])) . '</p>';
+        if ($showCountBadge) {
+            echo '<p class="muted gallery-card-count gallery-card-count-visual-hidden">' . e(t('gallery.image_count', '{count} images', ['count' => (int) $branchImageCount])) . '</p>';
+        }
         if ($descriptionLayout !== 'horizontal') {
             render_tag_list($galleryCardTags, t('gallery.containing_tags', 'Containing tags'));
         }

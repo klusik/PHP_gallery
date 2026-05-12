@@ -1,5 +1,13 @@
 # Patch notes
 
+## Version 0.65.2
+
+### Updates page hardening
+
+  - Patch notes and update version checks now use the GitHub Contents API instead of raw branch file URLs.
+  - Remote HTTP fetching for update data now uses shared headers and timeout handling more consistently.
+  - The update page now reuses cached patch-note data more deliberately while still fetching fresh content when needed.
+
 ## Version 0.65.1
 
 Version 0.65.1 tightens public thumbnail loading so the first visible cards paint more consistently and progressive replacements do not flicker as aggressively during decode.

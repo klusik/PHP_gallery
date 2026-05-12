@@ -46,10 +46,10 @@ declare(strict_types=1);
 /**
  * Build the patch notes viewer model for the updates screen.
  */
-function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null): array
+function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 0): array
 {
     // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
-    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null);
+    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null, $ttlSeconds);
     // $patchNotesVersions stores the release-note sections available to the admin selector.
     $patchNotesVersions = (array) ($patchNotesData['versions'] ?? []);
     // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
@@ -153,8 +153,9 @@ function cms_admin_update(): void
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
-    // $status stores an intermediate value used by the surrounding gallery workflow.
+    // $status stores the fresh update check used by the page and reused by navigation badges.
     $status = check_application_update();
+    cache_application_update_check($status);
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
     // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
