@@ -1,5 +1,158 @@
 # Patch notes
 
+## Version 0.66
+
+### Large internal refactor
+
+  - Split the large gallery admin controller into focused controller files while preserving the old include contract through `app/controllers/admin_galleries.php`.
+  - Moved gallery discovery, bulk gallery operations, gallery editing, gallery reordering, image bulk actions, image reordering, public inline admin actions, and shared admin renderers into separate files.
+  - Split the thumbnail service into focused service files for formats, sources, HTML rendering, cached bundles, generation, maintenance, and DNG display derivatives.
+  - Split the browser admin JavaScript into focused ES modules while keeping `admin-operations.js` as the legacy re-export entry point.
+  - Split the admin CSS into focused stylesheet files for dashboard, layout, gallery list, media tools, reordering, tags, update page, patch notes, and theme editor areas.
+  - Regenerated the integrity manifest for the new file structure.
+
+### Admin tag management
+
+  - Added a new `admin_tags` route and controller.
+  - Added a dedicated Admin Tags page where admins can list, edit, rename, delete, and review reusable tags.
+  - Added editable tag metadata:
+    - display name
+    - slug
+    - public description
+    - usage counts
+  - Added a `tag_metadata` service for tag normalization, metadata editing, public lookup, and deletion logic.
+  - Added database migration `202605120002_tag_metadata.php` for tag descriptions and metadata support.
+  - Kept tags lowercase and safe for clean public URLs.
+  - Added public tag admin actions so logged-in admins can edit a tag directly from a public tag page.
+  - Added compact tag rendering so gallery cards can show a limited number of tags without expanding the layout too much.
+  - Added Czech and English translation coverage for the new tag management UI.
+
+### Clean public tag URLs
+
+  - Refactored public tag rendering into `app/controllers/public_tags.php`.
+  - Kept the legacy `tags.php` include contract while moving public tag page logic into focused code.
+  - Added clean tag URL support so tag pages no longer have to rely only on query-style URLs.
+  - Added public tag lookup by slug.
+  - Added public gallery lookup by tag id.
+  - Added tag descriptions to public tag pages when configured by the admin.
+
+### Lightbox and fullscreen voting
+
+  - Moved voting rendering into a focused vote controller.
+  - Added reusable vote form rendering through `render_vote_form_html()`.
+  - Added a dedicated `lightbox-votes.js` module for synchronizing lightbox and fullscreen vote controls.
+  - Lightbox and fullscreen voting now clone and reuse the same vote form concept used by gallery cards instead of maintaining a separate inconsistent implementation.
+  - Vote button state is synchronized after voting so gallery cards, lightbox, and fullscreen views stay consistent.
+  - Voting controls are hidden when voting is disabled for the gallery or picture context.
+  - Vote score display is suppressed when voting is disabled, preventing a half-visible inactive voting UI.
+  - Adjusted fullscreen toolbar layout so the vote arrow aligns inline with the other controls.
+  - Refined fullscreen map and toolbar spacing so the map label and empty lower gap do not reappear in map split mode.
+
+### Admin side panel workflow
+
+  - Moved side-panel behavior into a focused `admin-side-panel.js` module.
+  - Improved side-panel form preparation for gallery edit, image edit, upload, and bulk image actions.
+  - Added better incremental refresh handling after side-panel saves.
+  - Added public gallery fragment replacement so side-panel actions can update the visible gallery page without a full manual reload.
+  - Added image row updates after side-panel image edits.
+  - Added public image card updates after side-panel image edits.
+  - Added created-gallery focus handling so newly created galleries can be visually located after panel actions.
+  - Improved upload progress handling inside the panel.
+  - Improved upload result propagation for uploaded, scanned, thumbnail-created, and thumbnail-failed counts.
+
+### Admin date picker
+
+  - Added a focused `admin-date-picker.js` module.
+  - Reworked native date inputs into a compact admin control.
+  - Moved the clickable calendar icon before the date value.
+  - Added Today and Delete quick actions.
+  - Kept the real submitted value on the native date input.
+  - Re-applies the enhancement when forms are loaded through the admin side panel.
+  - Added CSS for consistent date picker sizing and alignment in both admin zone and side-panel forms.
+
+### Admin logs diagnostics
+
+  - Added database migration `202605120003_admin_log_diagnostics.php`.
+  - Added diagnostic columns for admin logs:
+    - fingerprint
+    - HTTP method
+    - AJAX flag
+  - Added indexes for log fingerprint and route/method/time filtering.
+  - Added migration logic to categorize older logs more accurately.
+  - Added migration logic to mark low-severity todo logs as done when appropriate.
+  - Added migration logic to infer subject type for older gallery, image, thumbnail, update, telemetry, and tag events.
+  - Updated log rendering to force English labels on the logs page, making exported and displayed operational logs easier to share for debugging.
+  - Improved live log filters through the new `admin-logs.js` module.
+
+### Thumbnail and DNG handling
+
+  - Refactored thumbnail handling out of the monolithic thumbnail service.
+  - Added `dng_derivatives.php` for DNG display master generation and derivative handling.
+  - Added support checks for DNG derivative generation.
+  - Added fallback paths for embedded DNG previews when full RAW decoding is not available.
+  - Added thumbnail bundle helpers for cached variant selection.
+  - Added focused thumbnail source helpers for paths, URLs, srcsets, WebP srcsets, and fallback selection.
+  - Added focused thumbnail generation helpers for JPEG and WebP output.
+  - Added focused thumbnail maintenance helpers for inventory and repair workflows.
+  - Improved partial-file cleanup when thumbnail generation fails.
+  - Preserved EXIF-sensitive WebP generation paths where supported.
+
+### Public gallery rendering
+
+  - Updated public gallery rendering to work with the new tag metadata and compact tag display.
+  - Improved public gallery card tag layout so tags can sit near date metadata without forcing unnecessary vertical expansion.
+  - Added public CSS refinements for tag and metadata display.
+  - Improved public gallery admin actions for tags.
+  - Kept public gallery rendering compatible with the existing visibility and admin-edit workflows.
+
+### Theme and background handling
+
+  - Updated theme asset handling so theme CSS revisions can be refreshed more reliably after admin theme changes.
+  - Added focused theme editor and theme preview CSS files.
+  - Improved gallery background service handling.
+  - Added small modern-theme CSS refinements.
+  - Improved update-page and patch-notes styling through dedicated admin stylesheets.
+
+### Patch notes viewer styling
+
+  - Added a dedicated `admin-patch-notes.css` stylesheet.
+  - Restyled patch-note content cards, headings, paragraphs, lists, inline code, and preformatted code.
+  - Added loading-state styling for dynamically refreshed patch-note fragments.
+  - Improved the version picker styling so installed and latest markers are easier to scan.
+  - Kept the patch notes panel visually consistent with the dashboard-style admin update page.
+
+### Admin dashboard and gallery list JavaScript
+
+  - Added `admin-core.js` for shared browser helpers used by multiple admin modules.
+  - Added `admin-gallery-list.js` for gallery filters, tree handling, dashboard reordering, and public page reordering.
+  - Added `admin-image-reordering.js` for image table drag sorting and name sorting.
+  - Added `admin-refresh-progress.js` for refresh progress feedback.
+  - Added `admin-thumbnail-progress.js` for thumbnail progress feedback.
+  - Added `admin-tabs.js` for reusable admin tab behavior.
+  - Added `tag-suggestions.js` for safer tag autocomplete behavior.
+  - Added `admin-picture-game.js` for keyboard support on the picture game admin screen.
+
+### Upload workflow
+
+  - Simplified upload controller responsibilities after moving shared side-panel logic into browser modules.
+  - Improved upload progress display.
+  - Improved upload result reporting for side-panel workflows.
+  - Kept normal upload routes and non-JavaScript fallback behavior intact.
+
+### Translations
+
+  - Updated English and Czech JSON translation files for the new admin tag page, tag metadata, logs, date picker, patch notes viewer, and admin UI refinements.
+  - Updated English and Czech PHP translation loaders with the new string coverage.
+  - Kept the multilingual structure compatible with existing `t()` usage.
+
+### Integrity, migrations, and tests
+
+  - Updated `app/core-manifest.json` for the new controllers, services, browser modules, stylesheets, and migrations.
+  - Added new migrations for tag metadata and admin log diagnostics.
+  - Updated the initial schema migration with the new tag metadata field.
+  - Extended the gallery branding model test coverage.
+  - Preserved legacy include entry points where large files were split, reducing regression risk for existing routes.
+
 ## Version 0.65.7
 
 ### Tag normalization and autocomplete sanitizing
