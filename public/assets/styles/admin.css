@@ -1,4 +1,4 @@
-﻿/* Responsive adjustments */
+/* Responsive adjustments */
 
 .site-footer {
     padding: 2rem 0;
@@ -3602,7 +3602,7 @@ button.gallery-row-action.secondary {
         radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 11%, transparent), transparent 34rem),
         linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
     box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .patch-notes-viewer > summary {
@@ -3659,7 +3659,7 @@ button.gallery-row-action.secondary {
 
 .patch-notes-toolbar {
     display: grid;
-    grid-template-columns: minmax(15rem, 24rem) 1fr;
+    grid-template-columns: minmax(17rem, 28rem) 1fr;
     align-items: end;
     gap: 1rem;
     padding: 1rem 1.15rem 0.75rem;
@@ -3673,30 +3673,199 @@ button.gallery-row-action.secondary {
     flex-wrap: wrap;
 }
 
+.patch-notes-select-form {
+    position: relative;
+}
+
 .patch-notes-shortcuts {
     justify-content: flex-end;
 }
 
-.patch-notes-select-form label {
-    display: grid;
-    gap: 0.38rem;
-    min-width: min(100%, 15rem);
+.patch-notes-picker-label {
+    flex: 1 0 100%;
     color: var(--muted, #64748b);
     font-size: 0.82rem;
-    font-weight: 700;
+    font-weight: 750;
 }
 
-.patch-notes-select-form select {
-    min-height: 2.55rem;
-    border-radius: calc(var(--radius, 16px) * 0.75);
-    border-color: color-mix(in srgb, var(--admin-border, #d7dde3) 82%, transparent);
-    background-color: rgba(255, 255, 255, 0.86);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.patch-notes-picker {
+    position: relative;
+    flex: 1 1 19rem;
+    min-width: min(100%, 17rem);
+}
+
+.patch-notes-picker-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 2.7rem;
+    padding: 0.64rem 0.78rem 0.64rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 82%, transparent);
+    border-radius: calc(var(--radius, 16px) * 0.8);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+    color: #0f172a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 8px 22px rgba(15, 23, 42, 0.06);
+    font-weight: 780;
+    text-align: left;
+    cursor: pointer;
+}
+
+.patch-notes-picker-button:hover,
+.patch-notes-picker.is-open .patch-notes-picker-button {
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 55%, var(--admin-border, #d7dde3));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent, #2271b1) 12%, transparent), 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.patch-notes-picker-chevron {
+    color: var(--admin-accent, #2271b1);
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: transform 0.16s ease;
+}
+
+.patch-notes-picker.is-open .patch-notes-picker-chevron {
+    transform: rotate(180deg);
+}
+
+.patch-notes-picker-menu {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 0.42rem);
+    left: 0;
+    width: min(30rem, calc(100vw - 3rem));
+    max-height: 28rem;
+    overflow: auto;
+    padding: 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 78%, transparent);
+    border-radius: calc(var(--radius, 16px) + 2px);
+    background:
+        radial-gradient(circle at top left, color-mix(in srgb, var(--admin-accent, #2271b1) 9%, transparent), transparent 18rem),
+        rgba(255, 255, 255, 0.98);
+    box-shadow: 0 22px 54px rgba(15, 23, 42, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-0.25rem) scale(0.985);
+    transform-origin: top left;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.patch-notes-picker.is-open .patch-notes-picker-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.patch-notes-version-group + .patch-notes-version-group {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid color-mix(in srgb, var(--admin-border, #d7dde3) 66%, transparent);
+}
+
+.patch-notes-version-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.48rem 0.58rem 0.42rem;
+    color: #111827;
+    font-size: 0.92rem;
+    font-weight: 820;
+    letter-spacing: -0.01em;
+}
+
+.patch-notes-version-heading small {
+    padding: 0.16rem 0.48rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 8%, #ffffff);
+    color: color-mix(in srgb, var(--admin-accent, #2271b1) 68%, #334155);
+    border: 1px solid color-mix(in srgb, var(--admin-accent, #2271b1) 10%, transparent);
+    font-size: 0.72rem;
+    font-weight: 720;
+    white-space: nowrap;
+}
+
+.patch-notes-version-option {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 2.35rem;
+    margin-top: 0.16rem;
+    padding: 0.48rem 0.6rem 0.48rem 1.22rem;
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius, 16px) * 0.64);
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 4%, #ffffff);
+    color: #334155;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+
+.patch-notes-version-option:hover,
+.patch-notes-version-option:focus-visible {
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 8%, #ffffff);
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 14%, transparent);
+    color: #0f172a;
+    outline: none;
+}
+
+.patch-notes-version-option.is-selected {
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 11%, #ffffff);
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 22%, transparent);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--admin-accent, #2271b1) 82%, #ffffff);
+    color: #111827;
+    font-weight: 800;
+}
+
+.patch-notes-version-number {
+    min-width: 0;
+}
+
+.patch-notes-version-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.3rem;
+}
+
+.patch-notes-version-meta small {
+    padding: 0.12rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.055);
+    color: #475569;
+    border: 1px solid rgba(15, 23, 42, 0.045);
+    font-size: 0.68rem;
+    font-weight: 760;
+    white-space: nowrap;
+}
+
+.patch-notes-version-option.is-installed .patch-notes-version-meta small:first-child {
+    background: rgba(22, 163, 74, 0.10);
+    color: #166534;
+    border-color: rgba(22, 163, 74, 0.12);
+}
+
+.patch-notes-version-option.is-latest .patch-notes-version-meta small:last-child {
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 9%, #ffffff);
+    color: color-mix(in srgb, var(--admin-accent, #2271b1) 72%, #334155);
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 12%, transparent);
+}
+
+.patch-notes-native-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .patch-notes-shortcuts .button,
 .patch-notes-select-form .button {
-    min-height: 2.55rem;
+    min-height: 2.7rem;
     border-radius: calc(var(--radius, 16px) * 0.75);
 }
 
@@ -3829,3 +3998,52 @@ button.gallery-row-action.secondary {
     }
 }
 
+/* Softens the patch notes version picker and protects it from generic admin button styling. */
+.admin-page .patch-notes-picker-button {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+    color: #0f172a;
+    border-color: color-mix(in srgb, var(--admin-border, #d7dde3) 82%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.admin-page .patch-notes-picker-button:hover,
+.admin-page .patch-notes-picker.is-open .patch-notes-picker-button {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 250, 252, 0.98));
+    color: #0f172a;
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 42%, var(--admin-border, #d7dde3));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent, #2271b1) 10%, transparent), 0 12px 26px rgba(15, 23, 42, 0.08);
+}
+
+.admin-page .patch-notes-picker-chevron {
+    color: #334155;
+}
+
+.admin-page .patch-notes-version-option {
+    background: rgba(255, 255, 255, 0.96);
+    color: #334155;
+    border-color: rgba(15, 23, 42, 0.08);
+    box-shadow: none;
+}
+
+.admin-page .patch-notes-version-option:hover,
+.admin-page .patch-notes-version-option:focus-visible {
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 5%, #ffffff);
+    color: #0f172a;
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 18%, rgba(15, 23, 42, 0.08));
+    box-shadow: none;
+}
+
+.admin-page .patch-notes-version-option.is-selected {
+    background: color-mix(in srgb, var(--admin-accent, #2271b1) 8%, #ffffff);
+    color: #111827;
+    border-color: color-mix(in srgb, var(--admin-accent, #2271b1) 28%, rgba(15, 23, 42, 0.10));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--admin-accent, #2271b1) 72%, #ffffff);
+}
+
+.admin-page .patch-notes-version-option .patch-notes-version-number {
+    color: inherit;
+}
+
+.admin-page .patch-notes-version-option.is-selected .patch-notes-version-number {
+    color: #111827;
+}
