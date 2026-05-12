@@ -99,6 +99,35 @@ button.is-update-pending {
     gap: 1rem;
 }
 
+.grid.pagination-grid-columns-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-9 { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-10 { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-11 { grid-template-columns: repeat(11, minmax(0, 1fr)); }
+.grid.pagination-grid-columns-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+@media (max-width: 760px) {
+    .grid.pagination-grid-columns-2,
+    .grid.pagination-grid-columns-3,
+    .grid.pagination-grid-columns-4,
+    .grid.pagination-grid-columns-5,
+    .grid.pagination-grid-columns-6,
+    .grid.pagination-grid-columns-7,
+    .grid.pagination-grid-columns-8,
+    .grid.pagination-grid-columns-9,
+    .grid.pagination-grid-columns-10,
+    .grid.pagination-grid-columns-11,
+    .grid.pagination-grid-columns-12 {
+        grid-template-columns: 1fr;
+    }
+}
+
 .gallery-card,
 .image-card {
     position: relative;

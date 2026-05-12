@@ -59,17 +59,34 @@ function cms_home(): void
     });
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = main_page_gallery_grid_settings();
+    // $allHomeGalleries stores the full front-page gallery list before optional slicing.
+    $allHomeGalleries = $galleries;
+    // $homeGalleryCount stores the full front-page gallery count before optional slicing.
+    $homeGalleryCount = count($allHomeGalleries);
     // Variable $galleryPagination stores this steps working value.
-    $galleryPagination = pagination_model(count($galleries), pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
+    $galleryPagination = pagination_model($homeGalleryCount, pagination_current_page('gallery_page'), (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
     if (!empty($paginationSettings['enabled'])) {
         // $galleries stores the public home gallery list after optional pagination slicing.
-        $galleries = pagination_slice_items($galleries, $galleryPagination);
+        // Always slice from the immutable full result set so the rendered cards and
+        // the pagination controls are based on the same source. This avoids a
+        // controls-only front page after Theme pagination settings change.
+        $galleries = pagination_slice_items($allHomeGalleries, $galleryPagination);
+        if ($homeGalleryCount > 0 && $galleries === []) {
+            // A stale or malformed front-page pagination request must not render a controls-only page.
+            $galleryPagination = pagination_model($homeGalleryCount, 1, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'gallery_page', null, static fn (int $pageNumber): string => pagination_home_gallery_clean_url($pageNumber));
+            $galleries = pagination_slice_items($allHomeGalleries, $galleryPagination);
+        }
+    } else {
+        // Keep the non-paginated branch explicit so later code never depends on
+        // a list variable that was already touched by another page mode.
+        $galleries = $allHomeGalleries;
     }
     render_header(site_name());
-    if ($galleries) {
+    if ($homeGalleryCount > 0) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
+        echo '<div class="gallery-list-content" data-back-to-top-list>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
-        echo '<section class="grid gallery-list-content' . e(pagination_grid_columns_class($paginationSettings)) . '" data-back-to-top-list>';
+        echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
         public_render_profile_count('rendered_subgalleries', count($galleries));
         public_render_profile_span('render_home_gallery_cards', static function () use ($galleries): void {
             foreach ($galleries as $index => $gallery) {
@@ -78,6 +95,7 @@ function cms_home(): void
         });
         echo '</section>';
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
+        echo '</div>';
         render_back_to_top_button();
         echo '</div>';
     }
