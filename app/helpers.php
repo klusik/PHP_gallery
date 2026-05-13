@@ -161,7 +161,7 @@ function base_url(string $path = ''): string
  */
 function url_for(string $page, array $params = []): string
 {
-    if ($page === 'tag' && isset($params['slug']) && count($params) === 1) {
+    if ($page === 'tag' && isset($params['slug']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
         return base_url('tag/' . rawurlencode((string) $params['slug']));
     }
     // Variable $params stores this steps working value.
@@ -308,6 +308,9 @@ function gallery_public_url(array $gallery): string
         // $urlPath stores an intermediate value used by the surrounding gallery workflow.
         $urlPath = (string) ($gallery['slug'] ?? 'gallery');
     }
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return url_for('gallery', ['public_path' => $urlPath]);
+    }
     return public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
 }
 
@@ -324,6 +327,16 @@ function image_public_url(array $image, array $gallery): string
     } else {
         // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify($slug);
+    }
+    $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
+    if ($urlPath === '') {
+        $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+    }
+    if ($urlPath === '') {
+        $urlPath = (string) ($gallery['slug'] ?? 'gallery');
+    }
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return url_for('gallery', ['public_path' => trim($urlPath . '/' . $slug, '/')]);
     }
     return rtrim(gallery_public_url($gallery), '/') . '/' . rawurlencode($slug) . '/';
 }

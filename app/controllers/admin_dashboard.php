@@ -152,6 +152,10 @@ function cms_admin(): void
     if (isset($_GET['devmode_saved'])) {
         echo '<div class="notice">' . e(t('admin.dashboard.notice_devmode_saved', 'Dev mode setting saved.')) . '</div>';
     }
+    if (isset($_GET['url_rewrite_saved'])) {
+        echo '<div class="notice">' . e(t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.')) . '</div>';
+    }
+    render_admin_url_rewrite_warning();
     if (isset($_GET['paths_regenerated'])) {
         echo '<div class="notice">' . e(t('admin.dashboard.notice_paths_regenerated', 'Regenerated clean public paths. Updated {gallery_count} gallery path(s) and {image_count} image path(s).', ['gallery_count' => (int) ($_GET['gallery_paths'] ?? 0), 'image_count' => (int) ($_GET['image_paths'] ?? 0)])) . '</div>';
     } elseif (isset($_GET['paths_error'])) {
@@ -281,6 +285,7 @@ function cms_admin(): void
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
+    render_admin_url_rewrite_card('admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-maintenance-card" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -527,6 +532,65 @@ function admin_ordered_gallery_rows(array $rows): array
 
     $appendChildren(0);
     return $orderedRows;
+}
+
+
+/**
+ * Render a non-blocking warning when clean URL generation is enabled but rewrite support looks unavailable.
+ */
+function render_admin_url_rewrite_warning(): void
+{
+    $compatibility = url_rewrite_compatibility();
+    if (!$compatibility['enabled'] || !in_array((string) $compatibility['status'], ['unsupported'], true)) {
+        return;
+    }
+
+    $reason = (string) ($compatibility['reasons'][0] ?? t('admin.dashboard.url_rewrite_warning_unknown_reason', 'Rewrite support was not detected.'));
+    echo '<div class="notice is-alert"><strong>' . e(t('admin.dashboard.url_rewrite_warning_title', 'URL rewrite is enabled, but support was not detected.')) . '</strong> ';
+    echo e($reason) . ' ';
+    echo e(t('admin.dashboard.url_rewrite_warning_hint', 'Public links will fall back to index.php URLs where possible. Check .htaccess, mod_rewrite, or disable URL rewrite below if this hosting does not support it.'));
+    echo '</div>';
+}
+
+/**
+ * Render the URL rewrite setting and compatibility summary.
+ */
+function render_admin_url_rewrite_card(string $className): void
+{
+    $enabled = url_rewrite_enabled();
+    $compatibility = url_rewrite_compatibility();
+    $status = (string) $compatibility['status'];
+    $statusLabels = [
+        'disabled' => t('admin.dashboard.url_rewrite_status_disabled', 'Disabled intentionally'),
+        'supported' => t('admin.dashboard.url_rewrite_status_supported', 'Supported'),
+        'likely_supported' => t('admin.dashboard.url_rewrite_status_likely_supported', 'Likely supported'),
+        'unsupported' => t('admin.dashboard.url_rewrite_status_unsupported', 'Not detected'),
+        'unknown' => t('admin.dashboard.url_rewrite_status_unknown', 'Unknown'),
+    ];
+    $reason = (string) ($compatibility['reasons'][0] ?? t('admin.dashboard.url_rewrite_reason_unknown', 'No detailed compatibility signal is available for this request.'));
+
+    echo '<form method="post" action="' . e(url_for('admin_url_rewrite')) . '" class="' . e($className) . '">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.url_rewrite_title', 'URL rewrite')) . '</strong>';
+    echo '<span>' . e(t('admin.dashboard.url_rewrite_hint', 'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.')) . '</span>';
+    echo '<label class="admin-checkbox-row"><input type="checkbox" name="url_rewrite_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.url_rewrite_enable_clean_urls', 'Use clean rewritten public URLs')) . '</span></label>';
+    echo '<small><strong>' . e(t('admin.dashboard.url_rewrite_detected_status', 'Detected status:')) . '</strong> ' . e($statusLabels[$status] ?? $statusLabels['unknown']) . ' · ' . e($reason) . '</small>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.url_rewrite_save', 'Save URL rewrite')) . '</button></form>';
+}
+
+/**
+ * Persist the URL rewrite admin setting.
+ */
+function cms_admin_url_rewrite(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
+    flash_message('admin_notice', '' . t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.') . '');
+    redirect_to(url_for('admin', ['url_rewrite_saved' => 1]));
 }
 
 /**

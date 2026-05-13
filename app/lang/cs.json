@@ -1431,5 +1431,20 @@
   "admin.theme.layout.description_layout_horizontal_summary": "Nejdřív obrázek, potom kompaktní karta s příběhem.",
   "admin.theme.layout.description_layout_vertical_summary": "Obrázek a text vedle sebe, blízko klasickému vzhledu galerie.",
   "admin.theme.layout.description_preview_title": "Letní galerie",
-  "admin.theme.layout.description_preview_meta": "12 fotek"
+  "admin.theme.layout.description_preview_meta": "12 fotek",
+  "admin.dashboard.notice_url_rewrite_saved": "Nastavení URL rewrite bylo uloženo.",
+  "admin.dashboard.url_rewrite_warning_unknown_reason": "Podpora URL rewrite nebyla detekována.",
+  "admin.dashboard.url_rewrite_warning_title": "URL rewrite je zapnutý, ale podpora nebyla detekována.",
+  "admin.dashboard.url_rewrite_warning_hint": "Veřejné odkazy budou podle možností padat zpět na index.php URL. Zkontrolujte .htaccess, mod_rewrite, nebo URL rewrite níže vypněte, pokud ho hosting nepodporuje.",
+  "admin.dashboard.url_rewrite_status_disabled": "Záměrně vypnuto",
+  "admin.dashboard.url_rewrite_status_supported": "Podporováno",
+  "admin.dashboard.url_rewrite_status_likely_supported": "Pravděpodobně podporováno",
+  "admin.dashboard.url_rewrite_status_unsupported": "Nedetekováno",
+  "admin.dashboard.url_rewrite_status_unknown": "Neznámé",
+  "admin.dashboard.url_rewrite_reason_unknown": "Pro tento požadavek není dostupný detailní signál kompatibility.",
+  "admin.dashboard.url_rewrite_title": "URL rewrite",
+  "admin.dashboard.url_rewrite_hint": "Čisté veřejné URL jsou ve výchozím stavu zapnuté. Vypínejte je jen tehdy, když hosting neumí spolehlivě směrovat přepsané cesty.",
+  "admin.dashboard.url_rewrite_enable_clean_urls": "Používat čisté přepsané veřejné URL",
+  "admin.dashboard.url_rewrite_detected_status": "Detekovaný stav:",
+  "admin.dashboard.url_rewrite_save": "Uložit URL rewrite"
 }
