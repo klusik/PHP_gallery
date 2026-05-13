@@ -94,4 +94,5 @@ return [
     'admin.dashboard.url_rewrite_enable_clean_urls' => 'Používat čisté přepsané veřejné URL',
     'admin.dashboard.url_rewrite_detected_status' => 'Detekovaný stav:',
     'admin.dashboard.url_rewrite_save' => 'Uložit URL rewrite',
+    'gallery.card.unpublished_admin_hint' => 'Tuto galerii ve vypisech vidi pouze prihlaseni administratori.',
 ];

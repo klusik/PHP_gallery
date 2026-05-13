@@ -178,6 +178,56 @@ button.is-update-pending {
     min-height: 10rem;
     padding: 1rem;
 }
+
+
+/* Shows logged-in admins which gallery cards are visible only because admin visibility rules are active. */
+.public-page .gallery-card.is-admin-unpublished-gallery {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--muted) 58%, var(--line));
+    background: color-mix(in srgb, var(--panel) 72%, #6b7280 28%);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
+}
+
+.public-page .gallery-card.is-admin-unpublished-gallery .gallery-card-media,
+.public-page .gallery-card.is-admin-unpublished-gallery .gallery-card-body {
+    filter: grayscale(0.62) saturate(0.72);
+    opacity: 0.72;
+}
+
+.public-page .gallery-card.is-admin-unpublished-gallery:hover .gallery-card-media,
+.public-page .gallery-card.is-admin-unpublished-gallery:focus-within .gallery-card-media,
+.public-page .gallery-card.is-admin-unpublished-gallery:hover .gallery-card-body,
+.public-page .gallery-card.is-admin-unpublished-gallery:focus-within .gallery-card-body {
+    opacity: 0.88;
+}
+
+.public-page .admin-gallery-visibility-marker {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 18;
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0.3rem 0.62rem;
+    border: 1px solid color-mix(in srgb, var(--panel) 55%, transparent);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, #111827 76%, transparent);
+    color: #fffdf8;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    backdrop-filter: blur(14px) saturate(1.2);
+}
+
+.public-page .gallery-card.is-admin-unpublished-gallery .subgallery-stack-badge {
+    top: 3rem;
+}
 .image-card {
     position: relative;
 }

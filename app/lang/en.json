@@ -1446,5 +1446,6 @@
   "admin.dashboard.url_rewrite_hint": "Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.",
   "admin.dashboard.url_rewrite_enable_clean_urls": "Use clean rewritten public URLs",
   "admin.dashboard.url_rewrite_detected_status": "Detected status:",
-  "admin.dashboard.url_rewrite_save": "Save URL rewrite"
+  "admin.dashboard.url_rewrite_save": "Save URL rewrite",
+  "gallery.card.unpublished_admin_hint": "Only logged-in admins can see this gallery in listings."
 }

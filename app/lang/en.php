@@ -91,4 +91,5 @@ return [
     'admin.dashboard.url_rewrite_enable_clean_urls' => 'Use clean rewritten public URLs',
     'admin.dashboard.url_rewrite_detected_status' => 'Detected status:',
     'admin.dashboard.url_rewrite_save' => 'Save URL rewrite',
+    'gallery.card.unpublished_admin_hint' => 'Only logged-in admins can see this gallery in listings.',
 ];
