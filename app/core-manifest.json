@@ -24,7 +24,7 @@
         "app/controllers/admin_logs.php": "sha256:17f33cb0ffdb9cb25ba80468fe9cf4fcbd8bca57f8810f715ccdaf09f010fd45",
         "app/controllers/admin_public_inline.php": "sha256:6c078b855c55f8ebb44b93163a8aa8cea7feab347fb376cd38a7b4f656fa9742",
         "app/controllers/admin_tags.php": "sha256:d0ae4e59e72f41db02fe706143aae60588284f1311193494866d76da97f0cbcc",
-        "app/controllers/admin_telemetry.php": "sha256:8e5438d137b7c1bc1790ee34a3a0e2c66283bd79b532f2eb031ffeb200040bc0",
+        "app/controllers/admin_telemetry.php": "sha256:4e1ee0bda418abe57f42f80be016ea7a0aec0e0dd66a51a20b81c51b0409b151",
         "app/controllers/admin_theme.php": "sha256:878c1603122b01626a7de3dde1d39aa71fae33e1da8dc773bc9a7c9ce1c3b3dc",
         "app/controllers/admin_thumbnails.php": "sha256:59186e9edf512ff208034a74684dfc0cbfee0f408c498b752e0287711ef3fc8f",
         "app/controllers/admin_uploads.php": "sha256:8f4f92d654c69d510798e2790414b9c812b80e1e0d9f65748759574c294a3118",
