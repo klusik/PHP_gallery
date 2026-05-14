@@ -46,10 +46,10 @@ declare(strict_types=1);
 /**
  * Build the patch notes viewer model for the updates screen.
  */
-function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 0): array
+function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 18000, bool $allowRemote = false): array
 {
-    // $patchNotesData stores parsed release notes fetched from GitHub or the bundled fallback file.
-    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null, $ttlSeconds);
+    // $patchNotesData stores parsed release notes fetched from local cache, GitHub, or the bundled fallback file.
+    $patchNotesData = application_patch_notes_viewer_data(!empty($status['branch']) ? (string) $status['branch'] : null, $ttlSeconds, $allowRemote);
     // $patchNotesVersions stores the release-note sections available to the admin selector.
     $patchNotesVersions = (array) ($patchNotesData['versions'] ?? []);
     // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
@@ -119,6 +119,20 @@ function cms_admin_update(): void
                 // $dryRunStatus stores the refreshed automatic update diagnostics after a safe metadata-only check.
                 $dryRunStatus = application_autoupdate_dry_run(true);
                 $_SESSION['admin_update_notice'] = t('admin.updates.autoupdate_dry_run_completed', 'Automatic update dry run completed. Last result: {result}', ['result' => (string) ($dryRunStatus['last_result'] ?? '')]);
+            } elseif ($action === 'force_check') {
+                // $forcedStatus stores a manual administrator check that bypasses the local five-hour cache but still records GitHub headers.
+                $forcedStatus = application_update_status_for_admin(true);
+                if (empty($forcedStatus['error'])) {
+                    try {
+                        // Force check is the explicit admin action that may also refresh remote patch notes.
+                        application_patch_notes_viewer_data(!empty($forcedStatus['branch']) ? (string) $forcedStatus['branch'] : null, 0, true);
+                    } catch (Throwable $patchNotesException) {
+                        // Patch notes are optional diagnostics. Version metadata remains the authoritative force-check result.
+                    }
+                }
+                $_SESSION['admin_update_notice'] = empty($forcedStatus['error'])
+                    ? t('admin.updates.force_check_completed', 'Forced GitHub update check completed.')
+                    : t('admin.updates.force_check_completed_with_error', 'Forced GitHub update check completed with a warning: {error}', ['error' => (string) $forcedStatus['error']]);
             } elseif ($action === 'beta_install') {
                 // $result stores an intermediate value used by the surrounding gallery workflow.
                 $result = install_application_beta((string) ($_POST['beta_commit'] ?? ''));
@@ -160,15 +174,24 @@ function cms_admin_update(): void
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = (string) ($_SESSION['admin_update_notice'] ?? '');
     unset($_SESSION['admin_update_notice']);
-    // $status stores the fresh update check used by the page and reused by navigation badges.
-    $status = check_application_update();
-    cache_application_update_check($status);
+    // $githubCacheTtlSeconds stores the shared five-hour cache lifetime for passive update-page reads.
+    $githubCacheTtlSeconds = 18000;
+    // $status stores cached update metadata. Plain page loads must not contact GitHub.
+    $status = application_update_status_for_admin(false, $githubCacheTtlSeconds);
     // $betaActive stores an intermediate value used by the surrounding gallery workflow.
     $betaActive = application_update_beta_active();
     // $autoupdateStatus stores the persisted automatic update setting and runtime state.
     $autoupdateStatus = application_autoupdate_status();
+    // $githubApiStatus stores the latest GitHub API headers and policy backoff diagnostics.
+    $githubApiStatus = application_update_github_api_status();
+    // $metadataCacheStatus stores local update-check cache diagnostics for the GitHub API policy card.
+    $metadataCacheStatus = application_update_check_cache_status($githubCacheTtlSeconds);
+    // $patchNotesBranch stores a trusted branch name for local patch-note cache diagnostics.
+    $patchNotesBranch = in_array((string) ($status['branch'] ?? ''), application_update_branch_candidates(), true) ? (string) $status['branch'] : (string) application_update_branch_candidates()[0];
+    // $patchNotesCacheStatus stores local patch-note cache diagnostics before the viewer reads anything.
+    $patchNotesCacheStatus = application_patch_notes_cache_status($patchNotesBranch, $githubCacheTtlSeconds);
     // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
-    $patchNotesModel = cms_update_patch_notes_model($status, (string) ($_GET['patch_version'] ?? cms_current_version()));
+    $patchNotesModel = cms_update_patch_notes_model($status, (string) ($_GET['patch_version'] ?? cms_current_version()), $githubCacheTtlSeconds, false);
     // $patchNotesVersions stores the release-note sections available to the admin selector.
     $patchNotesVersions = (array) ($patchNotesModel['versions'] ?? []);
     // $selectedPatchVersion stores the version selected by the admin or the installed version by default.
@@ -195,6 +218,7 @@ function cms_admin_update(): void
     echo '<section class="hero admin-update-hero"><div><p class="admin-kicker">' . e(t('admin.updates.kicker', 'Application maintenance')) . '</p><h1>' . e(t('admin.updates.title')) . '</h1><p class="muted">' . e(t('admin.updates.page_hint', 'Check releases, review patch notes, install updates, and use advanced recovery tools from one place.')) . '</p></div><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a>';
     echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
+    echo '<form method="post" class="inline-action-form">' . csrf_field() . '<input type="hidden" name="update_action" value="force_check"><button type="submit" class="button secondary">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button></form>';
     echo '</nav></section>';
 
     if ($notice !== '') {
@@ -226,6 +250,31 @@ function cms_admin_update(): void
     echo '<a class="button secondary" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.updates.open_github')) . '</a>';
     echo '</article>';
     echo '<article class="admin-update-card">';
+    echo '<div><p class="admin-kicker">' . e(t('admin.updates.github_api_kicker', 'GitHub API policy')) . '</p><h3>' . e(t('admin.updates.github_api_title', 'Rate-limit status')) . '</h3></div>';
+    echo '<p class="muted">' . e(t('admin.updates.github_api_hint', 'The updater uses response headers from normal GitHub API calls. It does not call /rate_limit just to inspect limits.')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_last_checked', 'Last GitHub API response')) . ':</strong> ' . e((string) ($githubApiStatus['last_checked_label'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_remaining', 'Remaining quota')) . ':</strong> ' . e((string) ($githubApiStatus['remaining'] ?? '')) . ' / ' . e((string) ($githubApiStatus['limit'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_used', 'Used quota')) . ':</strong> ' . e((string) ($githubApiStatus['used'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_resource', 'Resource')) . ':</strong> ' . e((string) ($githubApiStatus['resource'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_reset', 'Primary reset')) . ':</strong> ' . e((string) ($githubApiStatus['reset_label'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_http_status', 'Last HTTP status')) . ':</strong> ' . e((string) ($githubApiStatus['last_status'] ?? '')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_last_url', 'Last endpoint')) . ':</strong> <code>' . e((string) ($githubApiStatus['last_url'] ?? '')) . '</code></p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_metadata_cache', 'Update metadata cache')) . ':</strong> ' . e(t('admin.updates.github_cache_value', '{time}, expires {expires}', ['time' => (string) ($metadataCacheStatus['cached_at_label'] ?? ''), 'expires' => (string) ($metadataCacheStatus['expires_at_label'] ?? '')])) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.github_patch_notes_cache', 'Patch notes cache')) . ':</strong> ' . e(t('admin.updates.github_cache_value', '{time}, expires {expires}', ['time' => (string) ($patchNotesCacheStatus['cached_at_label'] ?? ''), 'expires' => (string) ($patchNotesCacheStatus['expires_at_label'] ?? '')])) . '</p>';
+    if (!empty($githubApiStatus['secondary_backoff_seconds'])) {
+        echo '<p class="muted"><strong>' . e(t('admin.updates.github_api_secondary_backoff', 'Secondary-limit backoff')) . ':</strong> ' . e(t('admin.updates.github_api_secondary_backoff_value', '{seconds} second(s)', ['seconds' => (string) $githubApiStatus['secondary_backoff_seconds']])) . '</p>';
+    }
+    if (!empty($githubApiStatus['wait']['active'])) {
+        echo '<p class="notice"><strong>' . e(t('admin.updates.github_api_waiting', 'Waiting')) . ':</strong> ' . e(t('admin.updates.github_api_next_allowed', 'Next allowed check: {time}', ['time' => (string) ($githubApiStatus['wait']['next_allowed_label'] ?? '')])) . '</p>';
+    }
+    echo '<p class="muted">' . e(t('admin.updates.github_passive_page_hint', 'Reloading this page uses local cache only. It does not contact GitHub unless you use Force check or an automatic check is due.')) . '</p>';
+    echo '<form method="post" class="form-grid admin-update-action-form">' . csrf_field();
+    echo '<input type="hidden" name="update_action" value="force_check">';
+    echo '<p class="muted">' . e(t('admin.updates.force_check_hint', 'Bypass the local five-hour cache and ask GitHub now. GitHub rate-limit headers are still recorded and respected after the response.')) . '</p>';
+    echo '<button type="submit" class="button secondary">' . e(t('admin.updates.force_check_button', 'Force check')) . '</button>';
+    echo '</form>';
+    echo '</article>';
+    echo '<article class="admin-update-card">';
     echo '<div><p class="admin-kicker">' . e(t('admin.updates.autoupdate_kicker', 'Automatic updates')) . '</p><h3>' . e(!empty($autoupdateStatus['enabled']) ? t('admin.common.enabled', 'Enabled') : t('admin.common.disabled', 'Disabled')) . '</h3></div>';
     if (!empty($autoupdateStatus['beta_active'])) {
         echo '<p class="muted">' . e(t('admin.updates.autoupdate_beta_disabled_hint', 'Automatic updates are checked in settings, but ignored while beta code is installed. The setting is not changed.')) . '</p>';
@@ -244,6 +293,7 @@ function cms_admin_update(): void
     // $autoupdateLastResult stores the last persisted automatic updater result, if any.
     $autoupdateLastResult = (string) ($autoupdateStatus['last_result'] ?? '');
     echo '<p class="muted"><strong>' . e(t('admin.updates.autoupdate_last_result_label', 'Last result')) . ':</strong> ' . e($autoupdateLastResult !== '' ? $autoupdateLastResult : t('admin.updates.autoupdate_last_result_none', 'not recorded yet')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.updates.autoupdate_next_check_label', 'Next automatic check')) . ':</strong> ' . e((string) ($autoupdateStatus['next_eligible_label'] ?? t('admin.updates.autoupdate_last_check_never', 'never'))) . '</p>';
     echo '<form method="post" class="form-grid admin-update-action-form">' . csrf_field();
     echo '<input type="hidden" name="update_action" value="autoupdate_settings">';
     echo '<label class="checkbox-row"><input type="checkbox" name="application_autoupdate_enabled" value="1"' . (!empty($autoupdateStatus['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.updates.autoupdate_enable_label', 'Enable automatic stable updates')) . '</span></label>';
