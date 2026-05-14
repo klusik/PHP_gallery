@@ -60,44 +60,76 @@ function cms_github_project_url(): string
  */
 function check_application_update(): array
 {
-    // $lastError stores an intermediate value used by the surrounding gallery workflow.
+    // $lastError stores the newest transport or parsing error from the remote checks.
     $lastError = null;
-    // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
+    // $latestStatus stores the newest valid remote version payload found across allowed branches.
     $latestStatus = null;
+    // $reachableBranch stores the first branch where GitHub answered, even if no version marker was present.
+    $reachableBranch = null;
+    // $markerDiagnostics stores human-readable marker failures for admin diagnostics and dry-run logs.
+    $markerDiagnostics = [];
+
     foreach (application_update_branch_candidates() as $branch) {
         try {
-            // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
-            $versionCandidates = application_update_remote_version_candidates($branch);
+            // $versionResult stores valid version candidates plus fetch diagnostics for the current branch.
+            $versionResult = application_update_remote_version_result($branch);
+            if (!empty($versionResult['reachable']) && $reachableBranch === null) {
+                $reachableBranch = $branch;
+            }
+            // $versionCandidates stores the valid remote version candidates found for this branch.
+            $versionCandidates = (array) ($versionResult['candidates'] ?? []);
             if ($versionCandidates === []) {
-                // $lastError stores an intermediate value used by the surrounding gallery workflow.
-                $lastError = 'No version marker was found in app/bootstrap.php on branch ' . $branch . '.';
+                $markerDiagnostics[$branch] = (string) ($versionResult['diagnostic'] ?? ('No version marker was found on branch ' . $branch . '.'));
                 continue;
             }
-            // $latestVersion stores an intermediate value used by the surrounding gallery workflow.
+
+            // $latestVersion stores the highest valid version advertised by this branch.
             $latestVersion = application_update_highest_version($versionCandidates);
-            // $status stores an intermediate value used by the surrounding gallery workflow.
+            // $currentVersion stores the installed release so stale remote branches never look like a downgrade target.
+            $currentVersion = cms_current_version();
+            // $displayVersion stores the version shown in admin cards and cached diagnostics.
+            $displayVersion = version_compare($latestVersion, $currentVersion, '<') ? $currentVersion : $latestVersion;
+            // $statusDiagnostic stores a non-fatal note when GitHub reports an older marker than this install.
+            $statusDiagnostic = version_compare($latestVersion, $currentVersion, '<') ? ('GitHub branch ' . $branch . ' reports version ' . $latestVersion . ', which is older than installed version ' . $currentVersion . '.') : '';
+            // $status stores the normalized update state used by the admin UI and automatic updater.
             $status = [
-                'current_version' => cms_current_version(),
-                'latest_version' => $latestVersion,
+                'current_version' => $currentVersion,
+                'latest_version' => $displayVersion,
                 'branch' => $branch,
                 'repository' => CMS_GITHUB_REPOSITORY,
-                'update_available' => version_compare($latestVersion, cms_current_version(), '>'),
+                'update_available' => version_compare($latestVersion, $currentVersion, '>'),
                 'version_sources' => $versionCandidates,
-                'version_source' => application_update_version_source_label($versionCandidates, $latestVersion),
+                'version_source' => $statusDiagnostic !== '' ? 'installed fallback' : application_update_version_source_label($versionCandidates, $latestVersion),
                 'error' => null,
+                'diagnostic' => $statusDiagnostic,
+                'remote_older_than_installed' => $statusDiagnostic !== '',
             ];
             if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
-                // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
                 $latestStatus = $status;
             }
         } catch (Throwable $exception) {
-            // $lastError stores an intermediate value used by the surrounding gallery workflow.
             $lastError = $exception->getMessage();
+            $markerDiagnostics[$branch] = $exception->getMessage();
         }
     }
 
     if ($latestStatus !== null) {
         return $latestStatus;
+    }
+
+    if ($reachableBranch !== null) {
+        return [
+            'current_version' => cms_current_version(),
+            'latest_version' => cms_current_version(),
+            'branch' => $reachableBranch,
+            'repository' => CMS_GITHUB_REPOSITORY,
+            'update_available' => false,
+            'version_sources' => ['installed fallback' => cms_current_version()],
+            'version_source' => 'installed fallback',
+            'error' => null,
+            'diagnostic' => implode(' ', array_filter($markerDiagnostics)),
+            'remote_marker_missing' => true,
+        ];
     }
 
     return [
@@ -109,6 +141,7 @@ function check_application_update(): array
         'version_sources' => [],
         'version_source' => '',
         'error' => $lastError ?? 'Could not contact GitHub.',
+        'diagnostic' => implode(' ', array_filter($markerDiagnostics)),
     ];
 }
 
@@ -636,6 +669,8 @@ function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = n
             'update_available' => !empty($status['update_available']),
             'beta_active' => application_update_beta_active(),
             'forced' => $force,
+            'version_source' => (string) ($status['version_source'] ?? ''),
+            'diagnostic' => (string) ($status['diagnostic'] ?? ''),
         ], ['category' => 'update', 'severity' => 'notice']);
         return application_autoupdate_status();
     } catch (Throwable $exception) {
@@ -1121,21 +1156,60 @@ function application_update_fetch_github_content(string $branch, string $path, i
  */
 function application_update_remote_version_candidates(string $branch): array
 {
-    // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
+    // $result stores the richer branch probe while preserving the legacy return shape for callers.
+    $result = application_update_remote_version_result($branch);
+    return (array) ($result['candidates'] ?? []);
+}
+
+/**
+ * Read remote version markers and keep diagnostics for branches without a marker.
+ */
+function application_update_remote_version_result(string $branch): array
+{
+    // $versionCandidates stores trusted version markers found in remote files.
     $versionCandidates = [];
+    // $diagnostics stores non-fatal parsing details used by the update page and logs.
+    $diagnostics = [];
+    // $reachable stores whether at least one trusted GitHub file was fetched successfully.
+    $reachable = false;
+
     try {
         // $bootstrap stores the remote bootstrap file fetched through GitHub Contents API.
         $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', 12);
-        // $bootstrapVersion stores an intermediate value used by the surrounding gallery workflow.
+        $reachable = true;
+        // $bootstrapVersion stores the version parsed from the bootstrap constant when present.
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
         if ($bootstrapVersion !== null) {
             $versionCandidates['app/bootstrap.php'] = $bootstrapVersion;
+        } else {
+            $diagnostics[] = 'No CMS_VERSION marker was found in app/bootstrap.php on branch ' . $branch . '.';
         }
     } catch (Throwable $exception) {
-        $versionCandidates['app/bootstrap.php error'] = $exception->getMessage();
+        $diagnostics[] = 'app/bootstrap.php: ' . $exception->getMessage();
     }
 
-    return array_filter($versionCandidates ?? [], static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null);
+    if ($versionCandidates === []) {
+        try {
+            // $patchNotes stores the remote release notes used as a secondary version signal.
+            $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 12);
+            $reachable = true;
+            // $patchNotesVersion stores the newest heading parsed from the release notes.
+            $patchNotesVersion = application_update_version_from_patch_notes($patchNotes);
+            if ($patchNotesVersion !== null) {
+                $versionCandidates['PATCH_NOTES.md'] = $patchNotesVersion;
+            } else {
+                $diagnostics[] = 'No version heading was found in PATCH_NOTES.md on branch ' . $branch . '.';
+            }
+        } catch (Throwable $exception) {
+            $diagnostics[] = 'PATCH_NOTES.md: ' . $exception->getMessage();
+        }
+    }
+
+    return [
+        'candidates' => array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null),
+        'reachable' => $reachable,
+        'diagnostic' => implode(' ', array_filter($diagnostics)),
+    ];
 }
 
 /**
@@ -1188,6 +1262,23 @@ function application_update_version_from_bootstrap(string $bootstrap): ?string
 {
     if (preg_match("/const\s+CMS_VERSION\s*=\s*['\"]([^'\"]+)['\"]\s*;/i", $bootstrap, $match)) {
         return application_update_normalize_version((string) $match[1]);
+    }
+    return null;
+}
+
+/**
+ * Parse the newest release version from PATCH_NOTES.md headings.
+ */
+function application_update_version_from_patch_notes(string $markdown): ?string
+{
+    if (preg_match_all('/^##\s+Version\s+([^\r\n]+)/mi', $markdown, $matches) !== false && !empty($matches[1])) {
+        foreach ($matches[1] as $candidate) {
+            // $version stores the normalized heading version when it follows the project release format.
+            $version = application_update_normalize_version((string) $candidate);
+            if ($version !== null) {
+                return $version;
+            }
+        }
     }
     return null;
 }
