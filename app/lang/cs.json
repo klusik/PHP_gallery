@@ -223,6 +223,7 @@
   "admin.dashboard.metric_galleries": "Galerie",
   "admin.dashboard.metric_images_sampled": "zkontrolovaných obrázků",
   "admin.dashboard.metric_imported_images_hint": "Importované obrázky zobrazené v seznamech galerií",
+  "admin.dashboard.metric_original_storage": "Originální soubory: {size}",
   "admin.dashboard.metric_private": "soukromé",
   "admin.dashboard.metric_system_state": "Stav systému",
   "admin.dashboard.metric_thumbnail_gaps": "Mezery v náhledech",

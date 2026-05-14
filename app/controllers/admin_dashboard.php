@@ -101,6 +101,10 @@ function cms_admin(): void
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
+    // $originalStorageBytes stores the total size of imported source files only. Generated thumbnails and display derivatives are not included.
+    $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
+    // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
+    $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
@@ -175,7 +179,7 @@ function cms_admin(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.overview_kicker', 'Overview')) . '</p><h2>' . e(t('admin.dashboard.overview_title', 'Admin at a glance')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.overview_description', 'Use this page for immediate work. Dedicated tools stay on their own pages.')) . '</p></div>';
     echo '<section class="admin-metric-grid" aria-label="' . e(t('admin.dashboard.admin_summary', 'Admin summary')) . '">';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '</small></article>';
+    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '</small></article>';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_top_level_images', 'Top-level images')) . '</span><strong>' . (int) $totalImages . '</strong><small>' . e(t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists')) . '</small></article>';
     if (!empty($thumbnailSummary['deferred'])) {
         echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . e(t('admin.dashboard.metric_not_checked', 'Not checked')) . '</strong><small>' . e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')) . '</small></article>';
@@ -309,6 +313,56 @@ function cms_admin(): void
     admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
+
+/**
+ * Return the total byte size of imported original gallery files.
+ *
+ * The dashboard intentionally reads the image metadata table here instead of
+ * scanning the filesystem. The value therefore represents source files already
+ * imported into the gallery index and excludes generated thumbnails, DNG display
+ * masters, caches, and any other derivative files stored beside the gallery.
+ */
+function admin_dashboard_original_storage_bytes(): int
+{
+    try {
+        // $row stores the aggregate as a scalar-compatible result from the images table.
+        $row = db()->query('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images')->fetch();
+        return max(0, (int) ($row['original_bytes'] ?? 0));
+    } catch (Throwable) {
+        return 0;
+    }
+}
+
+/**
+ * Format a byte count for compact dashboard display.
+ */
+function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): string
+{
+    // Reuse the telemetry formatter when it is already available so byte labels
+    // stay consistent across admin reports and the dashboard.
+    if (function_exists('telemetry_format_bytes')) {
+        return telemetry_format_bytes($bytes, $precision);
+    }
+
+    // $normalizedBytes stores a non-negative float so invalid values never leak
+    // into the rendered dashboard.
+    $normalizedBytes = max(0.0, (float) $bytes);
+    // $units stores the compact units used by the admin dashboard metric cards.
+    $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+    // $unitIndex stores the selected unit position after scaling by powers of 1024.
+    $unitIndex = 0;
+
+    while ($normalizedBytes >= 1024 && $unitIndex < count($units) - 1) {
+        $normalizedBytes /= 1024;
+        $unitIndex++;
+    }
+
+    if ($unitIndex === 0) {
+        return number_format($normalizedBytes, 0) . ' ' . $units[$unitIndex];
+    }
+
+    return number_format($normalizedBytes, $precision) . ' ' . $units[$unitIndex];
+}
 
 /**
  * Return admin dashboard gallery rows with only columns used by the table.

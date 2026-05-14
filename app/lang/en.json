@@ -223,6 +223,7 @@
   "admin.dashboard.metric_galleries": "Galleries",
   "admin.dashboard.metric_images_sampled": "images sampled",
   "admin.dashboard.metric_imported_images_hint": "Imported images shown in gallery lists",
+  "admin.dashboard.metric_original_storage": "Original files: {size}",
   "admin.dashboard.metric_private": "private",
   "admin.dashboard.metric_system_state": "System state",
   "admin.dashboard.metric_thumbnail_gaps": "Thumbnail gaps",
