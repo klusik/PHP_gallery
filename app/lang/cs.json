@@ -1048,7 +1048,7 @@
   "admin.updates.autoupdate_dry_run_completed": "Suchá kontrola automatických aktualizací byla dokončena. Poslední výsledek: {result}",
   "admin.updates.autoupdate_dry_run_hint": "Spustí pouze kontrolu metadat. Aktualizuje diagnostiku poslední kontroly, ale nikdy neinstaluje soubory.",
   "admin.updates.autoupdate_enable_label": "Povolit automatické stabilní aktualizace",
-  "admin.updates.autoupdate_hint": "Když je volba zapnutá, běžné načtení stránky nejvýše jednou za pět minut zkontroluje stabilní aktualizaci a automaticky ji nainstaluje, pokud je dostupná.",
+  "admin.updates.autoupdate_hint": "Když je volba zapnutá, běžné načtení stránky nejvýše jednou za pět hodin zkontroluje stabilní aktualizaci a automaticky ji nainstaluje, pokud je dostupná. Tlačítko suché kontroly okamžitě vynutí novou kontrolu metadat bez instalace.",
   "admin.updates.autoupdate_kicker": "Automatické aktualizace",
   "admin.updates.autoupdate_last_check_label": "Poslední automatická kontrola",
   "admin.updates.autoupdate_last_check_never": "nikdy",

@@ -599,10 +599,12 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  * never changes the admin checkbox when beta code is active, and throttles remote
  * checks to one attempt per installation per configured interval.
  */
-function application_autoupdate_maybe_run(int $ttlSeconds = 300): void
+function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
 {
-    // $ttlSeconds stores the minimum remote check interval. Five minutes is the default.
-    $ttlSeconds = max(300, $ttlSeconds);
+    // $ttlSeconds stores the minimum remote check interval. Five hours is the default
+    // so shared hosting installations do not burn anonymous GitHub API quota on
+    // normal page traffic. Manual dry checks intentionally bypass this throttle.
+    $ttlSeconds = max(18000, $ttlSeconds);
     // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
     $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     if (!in_array($method, ['GET', 'HEAD'], true)) {

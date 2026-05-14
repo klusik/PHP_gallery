@@ -230,7 +230,7 @@ function cms_admin_update(): void
     if (!empty($autoupdateStatus['beta_active'])) {
         echo '<p class="muted">' . e(t('admin.updates.autoupdate_beta_disabled_hint', 'Automatic updates are checked in settings, but ignored while beta code is installed. The setting is not changed.')) . '</p>';
     } else {
-        echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every five minutes and install it automatically when available.')) . '</p>';
+        echo '<p class="muted">' . e(t('admin.updates.autoupdate_hint', 'When enabled, normal page requests check for a stable update at most once every five hours and install it automatically when available. The dry check button forces a fresh metadata-only check immediately.')) . '</p>';
     }
     // $autoupdateLastCheckedLabel stores either a formatted timestamp or a localized never-checked fallback.
     $autoupdateLastCheckedLabel = (string) ($autoupdateStatus['last_checked_label'] ?? t('admin.updates.autoupdate_last_check_never', 'never'));
