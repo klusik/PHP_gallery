@@ -143,6 +143,7 @@ function cms_run(): void
     }
     translation_bootstrap_request($page);
     send_security_headers();
+    application_autoupdate_maybe_run();
     // Variable $routes stores this steps working value.
     $routes = [
         'home' => 'cms_home',

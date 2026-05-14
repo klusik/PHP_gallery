@@ -471,6 +471,250 @@ function application_update_beta_commit(): string
 }
 
 /**
+ * Return true when automatic stable updates are enabled by admin settings.
+ */
+function application_autoupdate_enabled(): bool
+{
+    return app_setting('application_autoupdate_enabled', '1') === '1';
+}
+
+/**
+ * Persist the automatic stable update setting from the admin maintenance page.
+ */
+function set_application_autoupdate_enabled(bool $enabled): void
+{
+    set_app_setting('application_autoupdate_enabled', $enabled ? '1' : '0');
+}
+
+/**
+ * Return diagnostic state for the automatic updater card.
+ */
+function application_autoupdate_status(): array
+{
+    // $lastCheckedAt stores the last request-time automatic update check timestamp.
+    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
+    // $lastResult stores the latest readable automatic update result.
+    $lastResult = (string) app_setting('application_autoupdate_last_result', '');
+    // $enabled stores the raw admin checkbox state, even when beta code makes it ineffective.
+    $enabled = application_autoupdate_enabled();
+    // $betaActive stores whether autoupdate must stay passive because a manual beta commit is installed.
+    $betaActive = application_update_beta_active();
+    // $lastCheckedLabel stores the UI-ready timestamp label, including a never-checked fallback.
+    $lastCheckedLabel = application_autoupdate_last_checked_label($lastCheckedAt);
+    // $lastCheckedRelative stores a concise freshness label such as "2 minutes ago".
+    $lastCheckedRelative = application_autoupdate_relative_time_label($lastCheckedAt);
+
+    return [
+        'enabled' => $enabled,
+        'effective' => $enabled && !$betaActive,
+        'beta_active' => $betaActive,
+        'last_checked_at' => $lastCheckedAt,
+        'last_checked_label' => $lastCheckedLabel,
+        'last_checked_relative' => $lastCheckedRelative,
+        'last_result' => $lastResult,
+    ];
+}
+
+/**
+ * Return a readable automatic update check timestamp for admin diagnostics.
+ */
+function application_autoupdate_last_checked_label(int $lastCheckedAt): string
+{
+    if ($lastCheckedAt <= 0) {
+        return t('admin.updates.autoupdate_last_check_never', 'never');
+    }
+
+    return date('Y-m-d H:i:s', $lastCheckedAt);
+}
+
+/**
+ * Return a concise relative automatic update check age for admin diagnostics.
+ */
+function application_autoupdate_relative_time_label(int $lastCheckedAt): string
+{
+    if ($lastCheckedAt <= 0) {
+        return '';
+    }
+
+    // $ageSeconds stores elapsed wall-clock seconds since the last automatic check.
+    $ageSeconds = max(0, time() - $lastCheckedAt);
+    if ($ageSeconds < 60) {
+        return t('admin.updates.autoupdate_relative_seconds', 'just now');
+    }
+
+    // $minutes stores rounded-down elapsed minutes for compact labels.
+    $minutes = intdiv($ageSeconds, 60);
+    if ($minutes < 60) {
+        return t('admin.updates.autoupdate_relative_minutes', '{count} minute(s) ago', ['count' => (string) $minutes]);
+    }
+
+    // $hours stores rounded-down elapsed hours for same-day and recent checks.
+    $hours = intdiv($minutes, 60);
+    if ($hours < 48) {
+        return t('admin.updates.autoupdate_relative_hours', '{count} hour(s) ago', ['count' => (string) $hours]);
+    }
+
+    // $days stores rounded-down elapsed days for stale checks.
+    $days = intdiv($hours, 24);
+    return t('admin.updates.autoupdate_relative_days', '{count} day(s) ago', ['count' => (string) $days]);
+}
+
+/**
+ * Check and install a stable release automatically when the request-time timer allows it.
+ *
+ * This routine is intentionally conservative: it runs only on safe browser reads,
+ * never changes the admin checkbox when beta code is active, and throttles remote
+ * checks to one attempt per installation per configured interval.
+ */
+function application_autoupdate_maybe_run(int $ttlSeconds = 300): void
+{
+    // $ttlSeconds stores the minimum remote check interval. Five minutes is the default.
+    $ttlSeconds = max(300, $ttlSeconds);
+    // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if (!in_array($method, ['GET', 'HEAD'], true)) {
+        return;
+    }
+    if (!application_autoupdate_enabled()) {
+        return;
+    }
+
+    // $now stores one timestamp used consistently for throttle and lock state.
+    $now = time();
+    // $lastCheckedAt stores the latest automatic update check timestamp.
+    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
+    if ($lastCheckedAt > 0 && $now - $lastCheckedAt < $ttlSeconds) {
+        return;
+    }
+
+    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if ($lockUntil > $now) {
+        return;
+    }
+
+    if (application_update_beta_active()) {
+        application_autoupdate_dry_run(false, $now);
+        return;
+    }
+
+    application_autoupdate_run_installing_check(false, $now);
+}
+
+/**
+ * Run the automatic update check without installing anything.
+ *
+ * Beta installs use this path so the admin can validate GitHub connectivity,
+ * update detection, throttling, and the Last automatic check diagnostics without
+ * replacing the pinned beta commit. Manual admin dry runs can force the same
+ * safe check immediately from the update page.
+ */
+function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = null): array
+{
+    // $now stores the timestamp written to the shared automatic update diagnostics.
+    $now = $checkedAt ?? time();
+    // $lockUntil stores a soft process lock so concurrent dry-run checks do not fan out.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if (!$force && $lockUntil > $now) {
+        return application_autoupdate_status();
+    }
+
+    set_app_setting('application_autoupdate_last_checked_at', (string) $now);
+    set_app_setting('application_autoupdate_lock_until', (string) ($now + 600));
+
+    try {
+        // $status stores the same update payload used by the manual update page.
+        $status = check_application_update();
+        cache_application_update_check($status);
+        // $result stores a compact diagnostic value shown in the automatic update card.
+        $result = application_autoupdate_dry_run_result_label($status);
+        set_app_setting('application_autoupdate_last_result', $result);
+        admin_log_event('info', 'update.autoupdate_dry_run_checked', t('admin.updates.log_autoupdate_dry_run_checked', 'Automatic update dry run checked for a newer stable release without installing it.'), [
+            'result' => $result,
+            'current_version' => cms_current_version(),
+            'latest_version' => (string) ($status['latest_version'] ?? ''),
+            'update_available' => !empty($status['update_available']),
+            'beta_active' => application_update_beta_active(),
+            'forced' => $force,
+        ], ['category' => 'update', 'severity' => 'notice']);
+        return application_autoupdate_status();
+    } catch (Throwable $exception) {
+        set_app_setting('application_autoupdate_last_result', 'dry_run_failed:' . $exception->getMessage());
+        admin_log_event('warning', 'update.autoupdate_dry_run_failed', t('admin.updates.log_autoupdate_dry_run_failed', 'Automatic update dry run failed.'), [
+            'error' => $exception->getMessage(),
+            'current_version' => cms_current_version(),
+            'beta_active' => application_update_beta_active(),
+            'php_version' => PHP_VERSION,
+            'forced' => $force,
+        ], ['category' => 'update', 'severity' => 'error']);
+        return application_autoupdate_status();
+    } finally {
+        delete_app_settings(['application_autoupdate_lock_until']);
+    }
+}
+
+/**
+ * Return a compact persisted result label for a dry automatic update check.
+ */
+function application_autoupdate_dry_run_result_label(array $status): string
+{
+    if (!empty($status['error'])) {
+        return 'dry_run_check_failed';
+    }
+
+    if (application_update_status_is_pending($status)) {
+        return 'dry_run_update_available:' . (string) ($status['latest_version'] ?? 'unknown');
+    }
+
+    return 'dry_run_no_update';
+}
+
+/**
+ * Run the automatic update check and install a stable release when pending.
+ */
+function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
+{
+    // $now stores the timestamp written to the shared automatic update diagnostics.
+    $now = $checkedAt ?? time();
+    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if (!$force && $lockUntil > $now) {
+        return application_autoupdate_status();
+    }
+
+    set_app_setting('application_autoupdate_last_checked_at', (string) $now);
+    set_app_setting('application_autoupdate_lock_until', (string) ($now + 600));
+
+    try {
+        // $status stores the same update payload used by the manual update page.
+        $status = check_application_update();
+        cache_application_update_check($status);
+        if (!application_update_status_is_pending($status)) {
+            set_app_setting('application_autoupdate_last_result', empty($status['error']) ? 'no_update' : 'check_failed');
+            return application_autoupdate_status();
+        }
+
+        // $result stores manual-updater diagnostics for the automatic update log entry.
+        $result = install_application_update();
+        set_app_setting('application_autoupdate_last_result', 'updated:' . (string) ($result['version'] ?? 'unknown'));
+        admin_log_event('info', 'update.autoupdate_installed', t('admin.updates.log_autoupdate_installed', 'Automatic application update installed a newer stable release.'), $result, ['category' => 'update', 'severity' => 'notice']);
+        return application_autoupdate_status();
+    } catch (Throwable $exception) {
+        set_app_setting('application_autoupdate_last_result', 'failed:' . $exception->getMessage());
+        admin_log_event('warning', 'update.autoupdate_failed', t('admin.updates.log_autoupdate_failed', 'Automatic application update failed.'), [
+            'error' => $exception->getMessage(),
+            'current_version' => cms_current_version(),
+            'beta_active' => application_update_beta_active(),
+            'php_version' => PHP_VERSION,
+            'forced' => $force,
+        ], ['category' => 'update', 'severity' => 'error']);
+        return application_autoupdate_status();
+    } finally {
+        delete_app_settings(['application_autoupdate_lock_until']);
+    }
+}
+
+/**
  * Return the stored beta backup archive path.
  */
 function application_update_beta_backup_path(): string
