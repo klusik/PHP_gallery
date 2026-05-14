@@ -158,39 +158,24 @@ function check_application_update(bool $force = false): array
  */
 function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 18000): array
 {
-    if ($force) {
-        // $status stores a fresh GitHub probe explicitly requested by the administrator.
-        $status = check_application_update(true);
-        cache_application_update_check($status);
-        return $status;
+    if (!$force) {
+        // $cachedStatus stores GitHub metadata already fetched by automatic or manual checks.
+        // The admin update page is intentionally passive on GET renders: it may show stale
+        // local metadata, but it must not spend GitHub quota merely because the admin
+        // refreshed the browser. Fresh checks are owned by the Force check button and
+        // by the automatic updater timer.
+        $cachedStatus = cached_application_update_check($ttlSeconds, false);
+        if ($cachedStatus !== []) {
+            return $cachedStatus;
+        }
+
+        return application_update_unknown_cached_status();
     }
 
-    // $cachedStatus stores the newest persisted GitHub metadata for passive page rendering.
-    $cachedStatus = application_update_read_cached_status(false, $ttlSeconds);
-    if ($cachedStatus !== []) {
-        return $cachedStatus;
-    }
-
-    return application_update_passive_uncached_status();
-}
-
-/**
- * Return a local status when the update page has no cached GitHub metadata yet.
- */
-function application_update_passive_uncached_status(): array
-{
-    return [
-        'current_version' => cms_current_version(),
-        'latest_version' => null,
-        'branch' => implode(' or ', application_update_branch_candidates()),
-        'repository' => CMS_GITHUB_REPOSITORY,
-        'update_available' => false,
-        'version_sources' => [],
-        'version_source' => '',
-        'error' => null,
-        'diagnostic' => 'No cached GitHub update status exists yet. Use Force check to contact GitHub explicitly.',
-        'passive_uncached' => true,
-    ];
+    // $status stores a fresh GitHub probe requested by an explicit administrator action.
+    $status = check_application_update($force);
+    cache_application_update_check($status);
+    return $status;
 }
 
 /**
@@ -198,32 +183,7 @@ function application_update_passive_uncached_status(): array
  */
 function application_update_github_wait_state(): array
 {
-    // $now stores a single timestamp used for every comparison in this decision.
-    $now = time();
-    // $retryAfterUntil stores a Retry-After based pause after secondary limits or 429/403 responses.
-    $retryAfterUntil = (int) app_setting('application_update_github_retry_after_until', '0');
-    // $primaryResetAt stores the x-ratelimit-reset time when GitHub reported zero remaining core quota.
-    $primaryResetAt = (int) app_setting('application_update_github_primary_reset_at', '0');
-    // $nextAllowedAt stores the strictest known wait target.
-    $nextAllowedAt = max($retryAfterUntil, $primaryResetAt);
-    // $reason stores which saved policy guard selected the current wait.
-    $reason = '';
-    if ($nextAllowedAt > 0 && $nextAllowedAt === $primaryResetAt) {
-        $reason = 'primary_rate_limit_reset';
-    }
-    if ($nextAllowedAt > 0 && $nextAllowedAt === $retryAfterUntil && $retryAfterUntil >= $primaryResetAt) {
-        $reason = 'retry_after_or_secondary_backoff';
-    }
-
-    return [
-        'active' => $nextAllowedAt > $now,
-        'now' => $now,
-        'next_allowed_at' => $nextAllowedAt,
-        'retry_after_until' => $retryAfterUntil,
-        'primary_reset_at' => $primaryResetAt,
-        'reason' => $reason,
-        'next_allowed_label' => $nextAllowedAt > 0 ? date('Y-m-d H:i:s', $nextAllowedAt) : '',
-    ];
+    return cms_github_api_wait_state();
 }
 
 /**
@@ -250,36 +210,7 @@ function application_update_rate_limited_status(array $waitState): array
  */
 function application_update_github_api_status(): array
 {
-    // $headersJson stores the latest parsed rate-limit headers from a GitHub API response.
-    $headersJson = (string) app_setting('application_update_github_headers_json', '');
-    // $headers stores normalized GitHub headers when they were captured successfully.
-    $headers = json_decode($headersJson, true);
-    if (!is_array($headers)) {
-        $headers = [];
-    }
-
-    // $lastCheckedAt stores the most recent attempted GitHub HTTP request timestamp.
-    $lastCheckedAt = (int) app_setting('application_update_github_last_checked_at', '0');
-    // $waitState stores active policy backoff information.
-    $waitState = application_update_github_wait_state();
-    // $resetAt stores the GitHub primary rate-limit reset timestamp when available.
-    $resetAt = (int) ($headers['x-ratelimit-reset'] ?? 0);
-
-    return [
-        'last_checked_at' => $lastCheckedAt,
-        'last_checked_label' => $lastCheckedAt > 0 ? date('Y-m-d H:i:s', $lastCheckedAt) : t('admin.updates.autoupdate_last_check_never', 'never'),
-        'last_status' => (string) app_setting('application_update_github_last_status', ''),
-        'last_url' => (string) app_setting('application_update_github_last_url', ''),
-        'limit' => (string) ($headers['x-ratelimit-limit'] ?? ''),
-        'remaining' => (string) ($headers['x-ratelimit-remaining'] ?? ''),
-        'used' => (string) ($headers['x-ratelimit-used'] ?? ''),
-        'resource' => (string) ($headers['x-ratelimit-resource'] ?? ''),
-        'reset_at' => $resetAt,
-        'reset_label' => $resetAt > 0 ? date('Y-m-d H:i:s', $resetAt) : '',
-        'retry_after' => (string) ($headers['retry-after'] ?? ''),
-        'secondary_backoff_seconds' => (string) app_setting('application_update_github_secondary_backoff_seconds', ''),
-        'wait' => $waitState,
-    ];
+    return cms_github_api_status();
 }
 
 /**
@@ -287,61 +218,14 @@ function application_update_github_api_status(): array
  */
 function application_update_record_github_response(string $url, int $status, array $headers): void
 {
-    // $normalizedHeaders stores only headers relevant to GitHub API diagnostics and backoff.
-    $normalizedHeaders = [];
-    foreach ($headers as $name => $value) {
-        // $lowerName stores the canonical lowercase header key used in GitHub documentation.
-        $lowerName = strtolower((string) $name);
-        if (in_array($lowerName, ['x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-used', 'x-ratelimit-reset', 'x-ratelimit-resource', 'retry-after'], true)) {
-            $normalizedHeaders[$lowerName] = is_array($value) ? implode(', ', array_map('strval', $value)) : (string) $value;
-        }
-    }
-
-    // $now stores the response handling timestamp used by every persisted policy guard.
-    $now = time();
-    set_app_setting('application_update_github_last_checked_at', (string) $now);
-    set_app_setting('application_update_github_last_status', (string) $status);
-    set_app_setting('application_update_github_last_url', $url);
-    set_app_setting('application_update_github_headers_json', json_encode($normalizedHeaders, JSON_UNESCAPED_SLASHES) ?: '{}');
-
-    // $retryAfter stores the server-requested wait in seconds when GitHub sends Retry-After.
-    $retryAfter = isset($normalizedHeaders['retry-after']) ? max(0, (int) $normalizedHeaders['retry-after']) : 0;
-    if ($retryAfter > 0) {
-        set_app_setting('application_update_github_retry_after_until', (string) ($now + $retryAfter));
-    }
-
-    // $remaining stores GitHub primary remaining quota from x-ratelimit-remaining.
-    $remaining = isset($normalizedHeaders['x-ratelimit-remaining']) ? (int) $normalizedHeaders['x-ratelimit-remaining'] : null;
-    // $resetAt stores GitHub primary reset time from x-ratelimit-reset.
-    $resetAt = isset($normalizedHeaders['x-ratelimit-reset']) ? (int) $normalizedHeaders['x-ratelimit-reset'] : 0;
-    if ($remaining === 0 && $resetAt > $now) {
-        set_app_setting('application_update_github_primary_reset_at', (string) $resetAt);
-    } elseif ($remaining !== 0) {
-        delete_app_settings(['application_update_github_primary_reset_at']);
-    }
-
-    // $isRateLimitedStatus stores whether GitHub returned a status commonly used for primary or secondary limits.
-    $isRateLimitedStatus = in_array($status, [403, 429], true);
-    // $primaryLimitActive stores whether x-ratelimit-reset already describes the wait target.
-    $primaryLimitActive = $remaining === 0 && $resetAt > $now;
-    if ($isRateLimitedStatus && $retryAfter === 0 && !$primaryLimitActive) {
-        // $backoffSeconds stores the exponential wait used when GitHub reports a secondary limit without Retry-After.
-        $backoffSeconds = (int) app_setting('application_update_github_secondary_backoff_seconds', '60');
-        $backoffSeconds = max(60, min(3600, $backoffSeconds));
-        set_app_setting('application_update_github_retry_after_until', (string) ($now + $backoffSeconds));
-        set_app_setting('application_update_github_secondary_backoff_seconds', (string) min(3600, $backoffSeconds * 2));
-    }
-
-    if ($status < 400 && $retryAfter === 0) {
-        delete_app_settings(['application_update_github_retry_after_until', 'application_update_github_secondary_backoff_seconds']);
-    }
+    cms_github_api_record_response($url, $status, $headers);
 }
 
 
 /**
  * Return parsed remote patch notes for the update page viewer.
  */
-function application_patch_notes_viewer_data(?string $preferredBranch = null, int $ttlSeconds = 1800, bool $allowRemote = true): array
+function application_patch_notes_viewer_data(?string $preferredBranch = null, int $ttlSeconds = 1800): array
 {
     // $branch stores the trusted branch selected by the update checker or fallback candidates.
     $branch = in_array($preferredBranch, application_update_branch_candidates(), true) ? (string) $preferredBranch : (string) application_update_branch_candidates()[0];
@@ -351,16 +235,6 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
         if ($cachedData !== null) {
             return $cachedData;
         }
-    }
-
-    if (!$allowRemote) {
-        // $staleCachedData stores the newest local patch-notes cache when passive rendering must avoid GitHub.
-        $staleCachedData = application_patch_notes_read_cache($branch, 0);
-        if ($staleCachedData !== null) {
-            $staleCachedData['stale'] = true;
-            return $staleCachedData;
-        }
-        return application_patch_notes_local_fallback($branch, 'Remote patch notes were not requested during passive page rendering.');
     }
 
     try {
@@ -380,27 +254,19 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
         application_patch_notes_write_cache($branch, $data);
         return $data;
     } catch (Throwable $exception) {
-        return application_patch_notes_local_fallback($branch, $exception->getMessage());
+        // $localPath stores the bundled patch notes file used when GitHub is unavailable.
+        $localPath = application_update_project_root() . '/PATCH_NOTES.md';
+        // $localMarkdown stores the bundled patch notes text when it can be read safely.
+        $localMarkdown = is_file($localPath) ? (string) file_get_contents($localPath) : '';
+        return [
+            'ok' => $localMarkdown !== '',
+            'branch' => $branch,
+            'cached_at' => time(),
+            'source' => 'local',
+            'versions' => $localMarkdown !== '' ? application_patch_notes_parse_versions($localMarkdown) : [],
+            'error' => $exception->getMessage(),
+        ];
     }
-}
-
-/**
- * Return bundled patch notes when remote patch notes are unavailable or intentionally passive.
- */
-function application_patch_notes_local_fallback(string $branch, string $error): array
-{
-    // $localPath stores the bundled patch notes file used when GitHub is unavailable.
-    $localPath = application_update_project_root() . '/PATCH_NOTES.md';
-    // $localMarkdown stores the bundled patch notes text when it can be read safely.
-    $localMarkdown = is_file($localPath) ? (string) file_get_contents($localPath) : '';
-    return [
-        'ok' => $localMarkdown !== '',
-        'branch' => $branch,
-        'cached_at' => time(),
-        'source' => 'local',
-        'versions' => $localMarkdown !== '' ? application_patch_notes_parse_versions($localMarkdown) : [],
-        'error' => $error,
-    ];
 }
 
 /**
@@ -439,10 +305,7 @@ function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?a
 
     // $modifiedAt stores the cache write timestamp reported by the filesystem.
     $modifiedAt = filemtime($path);
-    if ($modifiedAt === false) {
-        return null;
-    }
-    if ($ttlSeconds > 0 && time() - $modifiedAt > $ttlSeconds) {
+    if ($modifiedAt === false || time() - $modifiedAt > $ttlSeconds) {
         return null;
     }
 
@@ -455,34 +318,6 @@ function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?a
     }
 
     return $data;
-}
-
-/**
- * Return cache diagnostics for remote patch notes shown in the update page.
- */
-function application_patch_notes_cache_status(string $branch, int $ttlSeconds = 18000): array
-{
-    // $ttlSeconds stores the intended five-hour patch notes cache lifetime.
-    $ttlSeconds = max(60, $ttlSeconds);
-    // $path stores the cache file selected for the current GitHub branch.
-    $path = application_patch_notes_cache_path($branch);
-    // $modifiedAt stores the filesystem timestamp when cached notes are available.
-    $modifiedAt = is_file($path) ? (int) filemtime($path) : 0;
-    // $now stores a single timestamp for all derived labels.
-    $now = time();
-    // $expiresAt stores when patch notes become eligible for a remote refresh.
-    $expiresAt = $modifiedAt > 0 ? $modifiedAt + $ttlSeconds : 0;
-
-    return [
-        'has_cache' => $modifiedAt > 0,
-        'cached_at' => $modifiedAt,
-        'cached_at_label' => $modifiedAt > 0 ? date('Y-m-d H:i:s', $modifiedAt) : t('admin.updates.autoupdate_last_check_never', 'never'),
-        'expires_at' => $expiresAt,
-        'expires_at_label' => $expiresAt > 0 ? date('Y-m-d H:i:s', $expiresAt) : '',
-        'fresh' => $modifiedAt > 0 && $now <= $expiresAt,
-        'age_label' => $modifiedAt > 0 ? application_update_elapsed_label($now - $modifiedAt) : '',
-        'ttl_seconds' => $ttlSeconds,
-    ];
 }
 
 /**
@@ -655,110 +490,65 @@ function application_patch_notes_inline_markdown(string $text): string
 /**
  * Return a cached update check for small UI badges.
  */
-function cached_application_update_check(int $ttlSeconds = 3600): array
+function cached_application_update_check(int $ttlSeconds = 3600, bool $refreshWhenStale = false): array
 {
-    static $requestCache = [];
+    static $requestCache = null;
 
     // $ttlSeconds stores the shortest acceptable cache lifetime for admin badges.
     $ttlSeconds = max(60, $ttlSeconds);
-    // $cacheKey stores a per-lifetime in-request cache so callers can ask for different freshness windows safely.
-    $cacheKey = (string) $ttlSeconds;
-    if (isset($requestCache[$cacheKey]) && is_array($requestCache[$cacheKey])) {
-        return (array) $requestCache[$cacheKey];
+    if (is_array($requestCache) && time() - (int) ($requestCache['cached_at'] ?? 0) <= $ttlSeconds) {
+        return (array) ($requestCache['status'] ?? []);
     }
 
-    // $cachedStatus stores the persisted update-check payload only when it is still fresh enough.
-    $cachedStatus = application_update_read_cached_status(true, $ttlSeconds);
-    if ($cachedStatus !== []) {
-        $requestCache[$cacheKey] = $cachedStatus;
-    }
-    return $cachedStatus;
-}
-
-/**
- * Read the persisted update status without contacting GitHub.
- */
-function application_update_read_cached_status(bool $freshOnly = true, int $ttlSeconds = 3600): array
-{
-    // $ttlSeconds stores the freshness window used when stale cache entries should be ignored.
-    $ttlSeconds = max(60, $ttlSeconds);
     // $cachedAt stores the Unix timestamp for the DB-backed update-check cache.
     $cachedAt = (int) app_setting('application_update_check_cached_at', '0');
-    // $cachedJson stores the last update-check payload used by admin navigation badges and the update page.
+    // $cachedJson stores the last update-check payload used by admin navigation badges.
     $cachedJson = (string) app_setting('application_update_check_status_json', '');
-    if ($cachedAt <= 0 || $cachedJson === '') {
+    if ($cachedAt > 0 && $cachedJson !== '') {
+        // $cachedStatus stores the decoded update-check payload when it matches the expected shape.
+        $cachedStatus = json_decode($cachedJson, true);
+        if (is_array($cachedStatus)) {
+            $requestCache = ['cached_at' => $cachedAt, 'status' => $cachedStatus];
+            if (time() - $cachedAt <= $ttlSeconds || !$refreshWhenStale) {
+                return $cachedStatus;
+            }
+        }
+    }
+
+    if (!$refreshWhenStale) {
         return [];
     }
-    if ($freshOnly && time() - $cachedAt > $ttlSeconds) {
-        return [];
-    }
 
-    // $cachedStatus stores the decoded update-check payload when it matches the expected shape.
-    $cachedStatus = json_decode($cachedJson, true);
-    if (!is_array($cachedStatus)) {
-        return [];
-    }
-
-    return $cachedStatus;
-}
-
-/**
- * Return cache diagnostics for update metadata shown in the update page.
- */
-function application_update_check_cache_status(int $ttlSeconds = 18000): array
-{
-    // $ttlSeconds stores the intended five-hour metadata cache lifetime.
-    $ttlSeconds = max(60, $ttlSeconds);
-    // $cachedAt stores the timestamp written when the latest metadata check was cached.
-    $cachedAt = (int) app_setting('application_update_check_cached_at', '0');
-    // $now stores a single timestamp for all derived labels.
-    $now = time();
-    // $expiresAt stores when automatic metadata refreshes become eligible again.
-    $expiresAt = $cachedAt > 0 ? $cachedAt + $ttlSeconds : 0;
-
-    return [
-        'has_cache' => $cachedAt > 0 && (string) app_setting('application_update_check_status_json', '') !== '',
-        'cached_at' => $cachedAt,
-        'cached_at_label' => $cachedAt > 0 ? date('Y-m-d H:i:s', $cachedAt) : t('admin.updates.autoupdate_last_check_never', 'never'),
-        'expires_at' => $expiresAt,
-        'expires_at_label' => $expiresAt > 0 ? date('Y-m-d H:i:s', $expiresAt) : '',
-        'fresh' => $cachedAt > 0 && $now <= $expiresAt,
-        'age_label' => $cachedAt > 0 ? application_update_elapsed_label($now - $cachedAt) : '',
-        'ttl_seconds' => $ttlSeconds,
-    ];
-}
-
-/**
- * Return a concise elapsed-time label for update diagnostics.
- */
-function application_update_elapsed_label(int $seconds): string
-{
-    // $seconds stores the clamped elapsed value used for display only.
-    $seconds = max(0, $seconds);
-    if ($seconds < 60) {
-        return t('admin.updates.autoupdate_relative_seconds', 'just now');
-    }
-
-    // $minutes stores rounded-down elapsed minutes.
-    $minutes = intdiv($seconds, 60);
-    if ($minutes < 60) {
-        return t('admin.updates.autoupdate_relative_minutes', '{count} minute(s) ago', ['count' => (string) $minutes]);
-    }
-
-    // $hours stores rounded-down elapsed hours.
-    $hours = intdiv($minutes, 60);
-    if ($hours < 48) {
-        return t('admin.updates.autoupdate_relative_hours', '{count} hour(s) ago', ['count' => (string) $hours]);
-    }
-
-    // $days stores rounded-down elapsed days.
-    $days = intdiv($hours, 24);
-    return t('admin.updates.autoupdate_relative_days', '{count} day(s) ago', ['count' => (string) $days]);
+    // $status stores the fresh remote status only for callers that explicitly allow a refresh.
+    $status = check_application_update();
+    cache_application_update_check($status);
+    $requestCache = ['cached_at' => time(), 'status' => $status];
+    return $status;
 }
 
 /**
  * Store an update check result for badge rendering.
  */
+
+/**
+ * Return a safe placeholder when no local update metadata has been cached yet.
+ */
+function application_update_unknown_cached_status(): array
+{
+    return [
+        'current_version' => cms_current_version(),
+        'latest_version' => null,
+        'branch' => implode(' or ', application_update_branch_candidates()),
+        'repository' => CMS_GITHUB_REPOSITORY,
+        'update_available' => false,
+        'version_sources' => [],
+        'version_source' => 'local cache',
+        'error' => null,
+        'diagnostic' => 'No local GitHub update metadata has been cached yet. Use Force check to query GitHub now.',
+        'local_cache_only' => true,
+    ];
+}
+
 function cache_application_update_check(array $status): void
 {
     // $json stores the compact update status used by navigation badges.
@@ -794,8 +584,8 @@ function application_update_status_is_pending(array $status): bool
  */
 function application_update_pending(): bool
 {
-    // $status stores the last known metadata only. Navigation labels must never contact GitHub.
-    $status = application_update_read_cached_status(false, 3600);
+    // $status stores an intermediate value used by the surrounding gallery workflow.
+    $status = cached_application_update_check(3600);
     return application_update_status_is_pending($status);
 }
 
@@ -848,8 +638,6 @@ function application_autoupdate_status(): array
     $lastCheckedLabel = application_autoupdate_last_checked_label($lastCheckedAt);
     // $lastCheckedRelative stores a concise freshness label such as "2 minutes ago".
     $lastCheckedRelative = application_autoupdate_relative_time_label($lastCheckedAt);
-    // $nextEligibleAt stores when request-time automatic checks may contact GitHub again.
-    $nextEligibleAt = $lastCheckedAt > 0 ? $lastCheckedAt + 18000 : 0;
 
     return [
         'enabled' => $enabled,
@@ -858,8 +646,6 @@ function application_autoupdate_status(): array
         'last_checked_at' => $lastCheckedAt,
         'last_checked_label' => $lastCheckedLabel,
         'last_checked_relative' => $lastCheckedRelative,
-        'next_eligible_at' => $nextEligibleAt,
-        'next_eligible_label' => $nextEligibleAt > 0 ? date('Y-m-d H:i:s', $nextEligibleAt) : t('admin.updates.autoupdate_last_check_never', 'never'),
         'last_result' => $lastResult,
     ];
 }
@@ -1461,12 +1247,6 @@ function application_update_github_contents_api_url(string $branch, string $path
  */
 function application_update_fetch_github_content(string $branch, string $path, int $timeoutSeconds): string
 {
-    // $waitState stores any saved GitHub policy pause from a previous API response.
-    $waitState = application_update_github_wait_state();
-    if (!empty($waitState['active'])) {
-        throw new RuntimeException('GitHub API calls are paused until ' . (string) ($waitState['next_allowed_label'] ?? '') . ' because the previous response asked this installation to wait.');
-    }
-
     // $headers stores the media type that asks GitHub to return raw file contents instead of JSON metadata.
     $headers = [
         'Accept: application/vnd.github.raw+json',
@@ -1474,9 +1254,8 @@ function application_update_fetch_github_content(string $branch, string $path, i
     ];
     // $url stores the exact GitHub API endpoint so diagnostics can show which API call was last made.
     $url = application_update_github_contents_api_url($branch, $path);
-    // $response stores body, status, and headers for GitHub rate-limit accounting.
-    $response = http_fetch_response_with_headers($url, $timeoutSeconds, $headers);
-    application_update_record_github_response($url, (int) $response['status'], (array) $response['headers']);
+    // $response stores body, status, and headers from the central GitHub API gateway.
+    $response = cms_github_api_get($url, $timeoutSeconds, $headers, true);
     return (string) $response['body'];
 }
 
@@ -1650,6 +1429,10 @@ function http_fetch_with_headers(string $url, int $timeoutSeconds, array $header
  */
 function http_fetch_response_with_headers(string $url, int $timeoutSeconds, array $headers = []): array
 {
+    if (strpos($url, 'https://api.github.com/') === 0) {
+        return cms_github_api_get($url, $timeoutSeconds, $headers, true);
+    }
+
     // $baseHeaders stores cache-control and identity headers shared by all update HTTP calls.
     $baseHeaders = [
         'Cache-Control: no-cache',

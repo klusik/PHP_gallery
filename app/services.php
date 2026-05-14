@@ -88,6 +88,8 @@ require_once __DIR__ . '/services/telemetry_privacy.php';
 require_once __DIR__ . '/services/telemetry.php';
 require_once __DIR__ . '/services/telemetry_rollup.php';
 require_once __DIR__ . '/services/database_observer.php';
+// Load the GitHub API gateway before update services perform remote checks.
+require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
