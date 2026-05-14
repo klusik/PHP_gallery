@@ -2023,14 +2023,297 @@ body.admin-image-order-active {
     }
 }
 
+.admin-log-filters-panel {
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), color-mix(in srgb, var(--surface) 92%, var(--background))),
+        var(--surface);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
+}
+
+.admin-log-filters-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.admin-log-filters-header h2 {
+    margin-bottom: 0.25rem;
+}
+
+.admin-log-filters-header p {
+    margin: 0;
+    max-width: 46rem;
+}
+
+.admin-log-filter-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    min-width: 7.5rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-align: center;
+}
+
 .admin-log-filter-grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-log-filter-main {
+    display: grid;
+    grid-template-columns: minmax(18rem, 0.92fr) minmax(22rem, 1.08fr);
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.admin-log-filter-group {
+    min-width: 0;
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: calc(var(--radius, 16px) + 2px);
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.admin-log-filter-group legend {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0 0.35rem;
+    color: #17212b;
+    font-size: 0.78rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.admin-log-control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.admin-log-filter-control {
+    display: grid;
+    gap: 0.38rem;
+    min-width: 0;
+    color: #273445;
+    font-size: 0.84rem;
+    font-weight: 780;
+}
+
+.admin-log-filter-control span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.2rem;
+}
+
+.admin-log-filter-control select,
+.admin-log-filter-control input {
+    width: 100%;
+}
+
+.admin-log-filter-help {
+    margin: 0 0 0.75rem;
+    color: var(--muted);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.admin-log-severity-filter {
+    min-width: 0;
+}
+
+.admin-log-severity-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.45rem;
+    min-height: 1.45rem;
+    padding: 0 0.42rem;
+    border: 1px solid color-mix(in srgb, var(--admin-accent, #1f7ab8) 30%, transparent);
+    border-radius: 999px;
+    background: var(--admin-accent-soft, #e8f2fa);
+    color: #0f4f80;
+    font-size: 0.74rem;
+    font-weight: 850;
+    letter-spacing: normal;
+    line-height: 1;
+}
+
+.admin-log-severity-count.is-empty {
+    border-color: #dbe5ef;
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.admin-log-severity-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.admin-log-severity-choice {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.admin-log-severity-checkbox {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+    opacity: 0;
+}
+
+.admin-log-severity-choice span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.38rem 0.68rem;
+    border: 1px solid #dbe5ef;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.86);
+    color: #334155;
+    font-size: 0.84rem;
+    font-weight: 760;
+    line-height: 1;
+    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.admin-log-severity-choice span::before {
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: #94a3b8;
+    content: '';
+}
+
+.admin-log-severity-choice:hover span {
+    border-color: color-mix(in srgb, var(--admin-accent, #1f7ab8) 42%, #dbe5ef);
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07);
+    transform: translateY(-1px);
+}
+
+.admin-log-severity-checkbox:focus-visible + span {
+    outline: 2px solid var(--admin-accent, #1f7ab8);
+    outline-offset: 2px;
+}
+
+.admin-log-severity-checkbox:checked + span {
+    border-color: color-mix(in srgb, var(--admin-accent, #1f7ab8) 50%, transparent);
+    background: var(--admin-accent-soft, #e8f2fa);
+    color: #0f4f80;
+    box-shadow: inset 0 0 0 1px rgba(31, 122, 184, 0.08), 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.admin-log-severity-checkbox:checked + span::before {
+    background: var(--admin-accent, #1f7ab8);
+    box-shadow: 0 0 0 3px rgba(31, 122, 184, 0.14);
+}
+
+.admin-log-severity-choice.is-warning .admin-log-severity-checkbox:checked + span,
+.admin-log-severity-choice.is-error .admin-log-severity-checkbox:checked + span,
+.admin-log-severity-choice.is-critical .admin-log-severity-checkbox:checked + span {
+    border-color: rgba(220, 38, 38, 0.24);
+    background: rgba(254, 226, 226, 0.72);
+    color: #991b1b;
+}
+
+.admin-log-severity-choice.is-warning .admin-log-severity-checkbox:checked + span::before,
+.admin-log-severity-choice.is-error .admin-log-severity-checkbox:checked + span::before,
+.admin-log-severity-choice.is-critical .admin-log-severity-checkbox:checked + span::before {
+    background: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14);
+}
+
+.admin-log-severity-summary {
+    margin: 0.75rem 0 0;
+    padding: 0.62rem 0.72rem;
+    border: 1px solid #e5edf5;
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.82);
+    color: #64748b;
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.admin-log-filter-footer {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) auto;
+    gap: 1rem;
     align-items: end;
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: calc(var(--radius, 16px) + 2px);
+    background: rgba(248, 250, 252, 0.72);
+}
+
+.admin-log-search-control {
+    max-width: none;
+}
+
+.admin-log-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: flex-end;
+}
+
+@media (max-width: 70rem) {
+    .admin-log-filter-main,
+    .admin-log-filter-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-log-filter-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 48rem) {
+    .admin-log-filters-header {
+        display: grid;
+    }
+
+    .admin-log-filter-state {
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    .admin-log-control-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-log-filter-group,
+    .admin-log-filter-footer {
+        padding: 0.85rem;
+    }
 }
 
 .admin-log-table code {
+
     font-size: 0.85rem;
     word-break: break-word;
 }

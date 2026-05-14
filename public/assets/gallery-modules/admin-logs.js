@@ -121,6 +121,29 @@ export function setupAdminLogLiveFilters() {
         }
     };
 
+    // Function `updateSeveritySummary` keeps the multi-select state readable during live filtering.
+    const updateSeveritySummary = () => {
+        const severityField = form.querySelector('[data-admin-log-severity-filter]');
+        const summary = form.querySelector('[data-admin-log-severity-summary]');
+        const countBadge = form.querySelector('.admin-log-severity-count');
+        if (!severityField || !summary) {
+            return;
+        }
+        const checkedLabels = Array.from(severityField.querySelectorAll('input[type="checkbox"]:checked'))
+            .map((input) => input.closest('label')?.textContent?.trim() || '')
+            .filter((label) => label !== '');
+        if (countBadge) {
+            countBadge.textContent = String(checkedLabels.length);
+            countBadge.classList.toggle('is-empty', checkedLabels.length === 0);
+        }
+        if (checkedLabels.length === 0) {
+            summary.textContent = severityField.dataset.allText || 'All severities are shown.';
+            return;
+        }
+        const template = severityField.dataset.activeTemplate || 'Active severities: {values}';
+        summary.textContent = template.replace('{values}', checkedLabels.join(', '));
+    };
+
     // Function `buildUrl` creates the filtered request URL used by normal and live requests.
     const buildUrl = (includeAjax = true) => {
         // Variable `params` stores serialized filter controls from the visible form.
@@ -212,7 +235,10 @@ export function setupAdminLogLiveFilters() {
     };
 
     form.querySelectorAll('[data-admin-log-live-filter]').forEach((control) => {
-        control.addEventListener('change', refreshLogs);
+        control.addEventListener('change', () => {
+            updateSeveritySummary();
+            refreshLogs();
+        });
     });
     if (searchInput) {
         searchInput.addEventListener('input', scheduleRefresh);

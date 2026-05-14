@@ -353,9 +353,30 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
         $where[] = 'l.category = ?';
         $params[] = (string) $filters['category'];
     }
-    if (admin_log_column_exists('severity') && !empty($filters['severity']) && isset(admin_log_severity_options()[(string) $filters['severity']])) {
-        $where[] = 'l.severity = ?';
-        $params[] = (string) $filters['severity'];
+    if (admin_log_column_exists('severity')) {
+        // $selectedSeverities stores the new multi-select filter. The legacy single
+        // severity key is still accepted for older links and saved browser history.
+        $selectedSeverities = [];
+        if (isset($filters['severities']) && is_array($filters['severities'])) {
+            $selectedSeverities = $filters['severities'];
+        } elseif (!empty($filters['severity'])) {
+            $selectedSeverities = [(string) $filters['severity']];
+        }
+
+        // $validSeverities stores only supported values in stable option order.
+        $validSeverities = [];
+        foreach (array_keys(admin_log_severity_options()) as $severity) {
+            if (in_array($severity, $selectedSeverities, true)) {
+                $validSeverities[] = $severity;
+            }
+        }
+
+        if ($validSeverities !== []) {
+            $where[] = 'l.severity IN (' . implode(', ', array_fill(0, count($validSeverities), '?')) . ')';
+            foreach ($validSeverities as $severity) {
+                $params[] = $severity;
+            }
+        }
     }
     if (!empty($filters['q'])) {
         // $searchColumns stores searchable text columns that are always present on the legacy table.
