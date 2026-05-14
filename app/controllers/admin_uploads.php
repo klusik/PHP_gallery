@@ -53,7 +53,8 @@ function cms_admin_upload(): void
             echo json_encode(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')]);
             return;
         }
-        redirect_to(url_for('admin_login'));
+        // Preserve the upload URL for normal browser requests so login can resume from the same admin context.
+        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
     }
     if (request_method() === 'POST') {
         verify_csrf();

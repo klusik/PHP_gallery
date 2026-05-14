@@ -571,6 +571,9 @@ function cms_find_valid_password_reset_token(string $selector, string $token): ?
 
 function cms_admin_login(): void
 {
+    // $returnTarget stores the local page that should reopen after successful authentication.
+    $returnTarget = sanitize_login_return_target((string) ($_POST['return'] ?? $_GET['return'] ?? ''), url_for('admin'));
+
     if (request_method() === 'POST') {
         verify_csrf();
         // Variable $identifier stores this steps working value.
@@ -604,7 +607,8 @@ function cms_admin_login(): void
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                redirect_to(url_for('admin'));
+                // Redirect to the page where the visitor clicked the login link, not always to the admin dashboard.
+                redirect_to($returnTarget);
             }
             auth_throttle_record_attempt('admin_login_visitor', $visitorSubject);
             if ($normalizedIdentifier !== '') {
@@ -623,6 +627,8 @@ function cms_admin_login(): void
     }
     echo '<section class="panel"><h1>' . e(t('admin.auth.login_title')) . '</h1><form method="post" class="form-grid">';
     echo csrf_field();
+    // Keep the sanitized return target through failed login attempts without exposing unsafe redirect data.
+    echo '<input type="hidden" name="return" value="' . e($returnTarget) . '">';
     echo '<label>' . e(t('admin.auth.username_or_email')) . '<input name="identifier" required autocomplete="username"></label>';
     echo '<label>' . e(t('admin.auth.password')) . '<input name="password" type="password" required autocomplete="current-password"></label>';
     echo '<button type="submit">' . e(t('admin.auth.login_button')) . '</button></form>';
@@ -791,7 +797,7 @@ function cms_admin_account(): void
     // Variable $user stores this steps working value.
     $user = current_user();
     if (!$user) {
-        redirect_to(url_for('admin_login'));
+        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
     }
 
     if (request_method() === 'POST') {
