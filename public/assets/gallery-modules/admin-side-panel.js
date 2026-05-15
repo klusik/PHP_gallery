@@ -505,9 +505,28 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
         uploadForms.forEach((uploadForm) => {
             if (uploadForm instanceof HTMLFormElement) {
                 uploadForm.dataset.adminPanelWorkflow = 'upload';
+                ensureUploadSourceUrlField(uploadForm);
             }
         });
     }
+}
+
+/**
+ * Store the page that opened the upload drawer so a successful upload can
+ * refresh the same paginated gallery view instead of falling back to page one.
+ *
+ * @param {HTMLFormElement} form Upload form rendered inside the side panel.
+ * @returns {void}
+ */
+function ensureUploadSourceUrlField(form) {
+    let field = form.querySelector('input[name="source_url"]');
+    if (!(field instanceof HTMLInputElement)) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'source_url';
+        form.append(field);
+    }
+    field.value = window.location.href;
 }
 
 /**
@@ -1065,8 +1084,8 @@ async function reflectUploadedGalleryInCurrentView(result) {
     const targetUrl = String(result.gallery_url || '');
     const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
     showAdminGallerySidePanelResultNotice(message, targetUrl);
-    if (Boolean(result.created_gallery) && String(result.edit_url || '') !== '') {
-        await switchAdminSidePanelToCreatedGalleryEditor(result);
+    if (String(result.edit_url || '') !== '') {
+        await switchAdminSidePanelToGalleryEditor(result);
     } else {
         await refreshAdminSidePanelFromServer();
     }
@@ -1256,7 +1275,7 @@ function adminSidePanelSamePageUrl(left, right) {
  * @param {Record<string, *>} result Server response containing the created gallery edit URL.
  * @returns {Promise<boolean>} True when the editor was loaded into the side panel.
  */
-async function switchAdminSidePanelToCreatedGalleryEditor(result) {
+async function switchAdminSidePanelToGalleryEditor(result) {
     const panel = document.querySelector('[data-admin-side-panel]');
     const editUrl = String(result.edit_url || '');
     if (!(panel instanceof HTMLElement) || editUrl === '') {
@@ -1266,7 +1285,7 @@ async function switchAdminSidePanelToCreatedGalleryEditor(result) {
     panel.dataset.adminSidePanelSourceUrl = editUrl;
     panel.classList.add('is-edit-panel');
     setAdminGallerySidePanelHeading(panel, 'Gallery editor', String(result.gallery_title || 'Edit gallery'));
-    writeAdminGallerySidePanelStatus(panel, 'Loading created gallery editor...', false);
+    writeAdminGallerySidePanelStatus(panel, 'Loading gallery editor...', false);
     const refreshed = await refreshAdminSidePanelFromServer(editUrl);
     writeAdminGallerySidePanelStatus(panel, '', false);
     return refreshed;
@@ -1283,7 +1302,7 @@ async function reflectCreatedGalleryInCurrentView(result) {
     }
 
     if (String(result.edit_url || '') !== '') {
-        await switchAdminSidePanelToCreatedGalleryEditor(result);
+        await switchAdminSidePanelToGalleryEditor(result);
     }
 
     if (refreshUrl !== '' && !adminSidePanelSamePageUrl(refreshUrl, window.location.href)) {
