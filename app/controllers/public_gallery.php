@@ -724,8 +724,15 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     $descriptionPreview = gallery_description_markdown_excerpt((string) ($gallery['description'] ?? ''));
     // $descriptionHtml stores the safe rendered card description.
     $descriptionHtml = gallery_description_markdown_html($descriptionPreview);
-    $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '');
-    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
+    // $effectiveVisibility stores the normalized card visibility used for admin-only visual state markers.
+    $effectiveVisibility = gallery_effective_visibility($gallery);
+    // $showAdminUnpublishedMarker keeps unpublished galleries visible to admins while making their non-public state obvious.
+    $showAdminUnpublishedMarker = current_user() && !admin_anonymous_preview_active() && $effectiveVisibility === 'unpublished';
+    $galleryCardClass = 'gallery-card is-gallery-description-' . $descriptionLayout . ($isProtectedPublicCard ? ' is-protected-gallery' : '') . ($showPublicReorderHandle ? ' has-public-reorder-handle' : '') . ($showAdminUnpublishedMarker ? ' is-admin-unpublished-gallery' : '');
+    echo '<article class="' . e($galleryCardClass) . '" data-gallery-id="' . (int) $gallery['id'] . '" data-gallery-visibility="' . e($effectiveVisibility) . '" data-public-gallery-order-item data-public-order-id="' . (int) $gallery['id'] . '">';
+    if ($showAdminUnpublishedMarker) {
+        echo '<span class="admin-gallery-visibility-marker" title="' . e(t('gallery.card.unpublished_admin_hint', 'Only logged-in admins can see this gallery in listings.')) . '">' . e(t('gallery.visibility.unpublished', 'unpublished')) . '</span>';
+    }
     if ($showPublicReorderHandle) {
         echo '<button type="button" class="public-reorder-handle public-gallery-reorder-handle" data-public-reorder-handle aria-label="' . e(t('gallery.reorder.drag_subgallery_aria', 'Drag subgallery to reorder visible subgalleries')) . '" title="' . e(t('gallery.reorder.drag_subgallery_title', 'Drag to reorder this visible subgallery')) . '"><span aria-hidden="true">↕</span><span>' . e(t('gallery.reorder.move_gallery', 'Move gallery')) . '</span></button>';
     }

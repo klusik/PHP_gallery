@@ -101,6 +101,10 @@ function cms_admin(): void
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
+    // $originalStorageBytes stores the total size of imported source files only. Generated thumbnails and display derivatives are not included.
+    $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
+    // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
+    $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
@@ -152,6 +156,10 @@ function cms_admin(): void
     if (isset($_GET['devmode_saved'])) {
         echo '<div class="notice">' . e(t('admin.dashboard.notice_devmode_saved', 'Dev mode setting saved.')) . '</div>';
     }
+    if (isset($_GET['url_rewrite_saved'])) {
+        echo '<div class="notice">' . e(t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.')) . '</div>';
+    }
+    render_admin_url_rewrite_warning();
     if (isset($_GET['paths_regenerated'])) {
         echo '<div class="notice">' . e(t('admin.dashboard.notice_paths_regenerated', 'Regenerated clean public paths. Updated {gallery_count} gallery path(s) and {image_count} image path(s).', ['gallery_count' => (int) ($_GET['gallery_paths'] ?? 0), 'image_count' => (int) ($_GET['image_paths'] ?? 0)])) . '</div>';
     } elseif (isset($_GET['paths_error'])) {
@@ -171,7 +179,7 @@ function cms_admin(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.overview_kicker', 'Overview')) . '</p><h2>' . e(t('admin.dashboard.overview_title', 'Admin at a glance')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.overview_description', 'Use this page for immediate work. Dedicated tools stay on their own pages.')) . '</p></div>';
     echo '<section class="admin-metric-grid" aria-label="' . e(t('admin.dashboard.admin_summary', 'Admin summary')) . '">';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '</small></article>';
+    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '</small></article>';
     echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_top_level_images', 'Top-level images')) . '</span><strong>' . (int) $totalImages . '</strong><small>' . e(t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists')) . '</small></article>';
     if (!empty($thumbnailSummary['deferred'])) {
         echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . e(t('admin.dashboard.metric_not_checked', 'Not checked')) . '</strong><small>' . e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')) . '</small></article>';
@@ -281,6 +289,7 @@ function cms_admin(): void
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
+    render_admin_url_rewrite_card('admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-maintenance-card" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -304,6 +313,56 @@ function cms_admin(): void
     admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
+
+/**
+ * Return the total byte size of imported original gallery files.
+ *
+ * The dashboard intentionally reads the image metadata table here instead of
+ * scanning the filesystem. The value therefore represents source files already
+ * imported into the gallery index and excludes generated thumbnails, DNG display
+ * masters, caches, and any other derivative files stored beside the gallery.
+ */
+function admin_dashboard_original_storage_bytes(): int
+{
+    try {
+        // $row stores the aggregate as a scalar-compatible result from the images table.
+        $row = db()->query('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images')->fetch();
+        return max(0, (int) ($row['original_bytes'] ?? 0));
+    } catch (Throwable) {
+        return 0;
+    }
+}
+
+/**
+ * Format a byte count for compact dashboard display.
+ */
+function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): string
+{
+    // Reuse the telemetry formatter when it is already available so byte labels
+    // stay consistent across admin reports and the dashboard.
+    if (function_exists('telemetry_format_bytes')) {
+        return telemetry_format_bytes($bytes, $precision);
+    }
+
+    // $normalizedBytes stores a non-negative float so invalid values never leak
+    // into the rendered dashboard.
+    $normalizedBytes = max(0.0, (float) $bytes);
+    // $units stores the compact units used by the admin dashboard metric cards.
+    $units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+    // $unitIndex stores the selected unit position after scaling by powers of 1024.
+    $unitIndex = 0;
+
+    while ($normalizedBytes >= 1024 && $unitIndex < count($units) - 1) {
+        $normalizedBytes /= 1024;
+        $unitIndex++;
+    }
+
+    if ($unitIndex === 0) {
+        return number_format($normalizedBytes, 0) . ' ' . $units[$unitIndex];
+    }
+
+    return number_format($normalizedBytes, $precision) . ' ' . $units[$unitIndex];
+}
 
 /**
  * Return admin dashboard gallery rows with only columns used by the table.
@@ -527,6 +586,65 @@ function admin_ordered_gallery_rows(array $rows): array
 
     $appendChildren(0);
     return $orderedRows;
+}
+
+
+/**
+ * Render a non-blocking warning when clean URL generation is enabled but rewrite support looks unavailable.
+ */
+function render_admin_url_rewrite_warning(): void
+{
+    $compatibility = url_rewrite_compatibility();
+    if (!$compatibility['enabled'] || !in_array((string) $compatibility['status'], ['unsupported'], true)) {
+        return;
+    }
+
+    $reason = (string) ($compatibility['reasons'][0] ?? t('admin.dashboard.url_rewrite_warning_unknown_reason', 'Rewrite support was not detected.'));
+    echo '<div class="notice is-alert"><strong>' . e(t('admin.dashboard.url_rewrite_warning_title', 'URL rewrite is enabled, but support was not detected.')) . '</strong> ';
+    echo e($reason) . ' ';
+    echo e(t('admin.dashboard.url_rewrite_warning_hint', 'Public links will fall back to index.php URLs where possible. Check .htaccess, mod_rewrite, or disable URL rewrite below if this hosting does not support it.'));
+    echo '</div>';
+}
+
+/**
+ * Render the URL rewrite setting and compatibility summary.
+ */
+function render_admin_url_rewrite_card(string $className): void
+{
+    $enabled = url_rewrite_enabled();
+    $compatibility = url_rewrite_compatibility();
+    $status = (string) $compatibility['status'];
+    $statusLabels = [
+        'disabled' => t('admin.dashboard.url_rewrite_status_disabled', 'Disabled intentionally'),
+        'supported' => t('admin.dashboard.url_rewrite_status_supported', 'Supported'),
+        'likely_supported' => t('admin.dashboard.url_rewrite_status_likely_supported', 'Likely supported'),
+        'unsupported' => t('admin.dashboard.url_rewrite_status_unsupported', 'Not detected'),
+        'unknown' => t('admin.dashboard.url_rewrite_status_unknown', 'Unknown'),
+    ];
+    $reason = (string) ($compatibility['reasons'][0] ?? t('admin.dashboard.url_rewrite_reason_unknown', 'No detailed compatibility signal is available for this request.'));
+
+    echo '<form method="post" action="' . e(url_for('admin_url_rewrite')) . '" class="' . e($className) . '">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.url_rewrite_title', 'URL rewrite')) . '</strong>';
+    echo '<span>' . e(t('admin.dashboard.url_rewrite_hint', 'Clean public URLs are enabled by default. Disable them only when your hosting cannot route rewritten paths.')) . '</span>';
+    echo '<label class="admin-checkbox-row"><input type="checkbox" name="url_rewrite_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.url_rewrite_enable_clean_urls', 'Use clean rewritten public URLs')) . '</span></label>';
+    echo '<small><strong>' . e(t('admin.dashboard.url_rewrite_detected_status', 'Detected status:')) . '</strong> ' . e($statusLabels[$status] ?? $statusLabels['unknown']) . ' · ' . e($reason) . '</small>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.url_rewrite_save', 'Save URL rewrite')) . '</button></form>';
+}
+
+/**
+ * Persist the URL rewrite admin setting.
+ */
+function cms_admin_url_rewrite(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
+    flash_message('admin_notice', '' . t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.') . '');
+    redirect_to(url_for('admin', ['url_rewrite_saved' => 1]));
 }
 
 /**

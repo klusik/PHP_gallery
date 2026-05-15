@@ -156,12 +156,98 @@ function base_url(string $path = ''): string
     return ($base === '' ? ($basePath === '' ? '' : $basePath) : $base) . '/' . ltrim($path, '/');
 }
 
+
+/**
+ * Return the current browser request URI as a safe post-login return target.
+ *
+ * The value is intentionally stored as a relative URI from REQUEST_URI rather
+ * than as a full absolute URL. That keeps the login workflow tied to this same
+ * installation and avoids trusting a host supplied by the browser.
+ */
+function current_login_return_target(): string
+{
+    // $requestUri stores the path and query string that the visitor is viewing now.
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    if ($requestUri === '') {
+        return url_for('home');
+    }
+
+    return sanitize_login_return_target($requestUri, url_for('home'));
+}
+
+/**
+ * Validate a submitted post-login return target and fall back when it is unsafe.
+ *
+ * Only same-site relative URLs are accepted. Absolute URLs, protocol-relative
+ * URLs, login/logout routes, setup routes, and malformed values are ignored so
+ * the login form cannot be abused as an open redirect.
+ */
+function sanitize_login_return_target(string $target, string $fallback = ''): string
+{
+    // $fallback stores the route used when no trustworthy return target exists.
+    $fallback = $fallback !== '' ? $fallback : url_for('admin');
+    // $target stores the trimmed value from either the query string or POST body.
+    $target = trim($target);
+    if ($target === '') {
+        return $fallback;
+    }
+
+    // Reject control characters before parsing so headers cannot be polluted.
+    if (preg_match('/[\x00-\x1F\x7F]/', $target)) {
+        return $fallback;
+    }
+
+    // Only accept relative URLs. This prevents redirects to another domain.
+    if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $target) || str_starts_with($target, '//')) {
+        return $fallback;
+    }
+
+    // Convert plain relative paths to root-relative form for consistent parsing.
+    if (!str_starts_with($target, '/')) {
+        $target = '/' . ltrim($target, '/');
+    }
+
+    // $parts stores the parsed URL components used to inspect the local route.
+    $parts = parse_url($target);
+    if (!is_array($parts) || isset($parts['scheme']) || isset($parts['host'])) {
+        return $fallback;
+    }
+
+    // $path stores the requested path without query data.
+    $path = (string) ($parts['path'] ?? '/');
+    // $query stores the requested query string, if any.
+    $query = (string) ($parts['query'] ?? '');
+    // $queryParams stores parsed query arguments used for route-level exclusions.
+    $queryParams = [];
+    if ($query !== '') {
+        parse_str($query, $queryParams);
+    }
+
+    // $page stores the front-controller page name when the URL uses index.php routing.
+    $page = (string) ($queryParams['page'] ?? '');
+    // Do not return to authentication, setup, or password-reset pages after login.
+    if (in_array($page, ['admin_login', 'admin_logout', 'admin_forgot_password', 'admin_reset_password', 'setup'], true)) {
+        return $fallback;
+    }
+
+    // Clean URL installations can also expose auth routes without a page query.
+    // Keep this conservative because these paths should never be a post-login target.
+    $lowerPath = strtolower($path);
+    foreach (['admin_login', 'admin_logout', 'admin_forgot_password', 'admin_reset_password', 'setup'] as $unsafePathPart) {
+        if (str_contains($lowerPath, $unsafePathPart)) {
+            return $fallback;
+        }
+    }
+
+    return $target;
+}
+
 /**
  * Build a query-string route URL.
  */
 function url_for(string $page, array $params = []): string
 {
-    if ($page === 'tag' && isset($params['slug']) && count($params) === 1) {
+    if ($page === 'tag' && isset($params['slug']) && count($params) === 1 && url_rewrite_should_emit_clean_urls()) {
         return base_url('tag/' . rawurlencode((string) $params['slug']));
     }
     // Variable $params stores this steps working value.
@@ -308,6 +394,9 @@ function gallery_public_url(array $gallery): string
         // $urlPath stores an intermediate value used by the surrounding gallery workflow.
         $urlPath = (string) ($gallery['slug'] ?? 'gallery');
     }
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return url_for('gallery', ['public_path' => $urlPath]);
+    }
     return public_base_url() . '/gallery/' . public_path_segment($urlPath) . '/';
 }
 
@@ -324,6 +413,16 @@ function image_public_url(array $image, array $gallery): string
     } else {
         // $slug stores an intermediate value used by the surrounding gallery workflow.
         $slug = slugify($slug);
+    }
+    $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
+    if ($urlPath === '') {
+        $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+    }
+    if ($urlPath === '') {
+        $urlPath = (string) ($gallery['slug'] ?? 'gallery');
+    }
+    if (!url_rewrite_should_emit_clean_urls()) {
+        return url_for('gallery', ['public_path' => trim($urlPath . '/' . $slug, '/')]);
     }
     return rtrim(gallery_public_url($gallery), '/') . '/' . rawurlencode($slug) . '/';
 }
@@ -1120,7 +1219,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         }
         echo '<a href="' . e(url_for('admin_logout')) . '">' . e(t('nav.logout', 'Logout')) . '</a>';
     } else {
-        echo '<a href="' . e(url_for('admin_login')) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
+        echo '<a href="' . e(url_for('admin_login', ['return' => current_login_return_target()])) . '">' . e(t('nav.admin_login', 'Admin login')) . '</a>';
     }
     echo '</nav></header>';
     if ($headerBranding['separator_url'] !== '') {

@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.66';
+const CMS_VERSION = '0.67';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -143,6 +143,7 @@ function cms_run(): void
     }
     translation_bootstrap_request($page);
     send_security_headers();
+    application_autoupdate_maybe_run();
     // Variable $routes stores this steps working value.
     $routes = [
         'home' => 'cms_home',
@@ -177,6 +178,7 @@ function cms_run(): void
         'admin_update' => 'cms_admin_update',
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',
+        'admin_url_rewrite' => 'cms_admin_url_rewrite',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',

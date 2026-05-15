@@ -141,6 +141,124 @@ function admin_log_normalize_time_sort(?string $timeSort): string
 }
 
 /**
+ * Return the app-settings key used for the persistent admin log severity filter.
+ */
+function admin_log_severity_filter_setting_key(): string
+{
+    return 'admin_logs_severity_filter_json';
+}
+
+/**
+ * Return validated severity values while preserving the visible option order.
+ */
+function admin_log_normalize_severity_filter(mixed $rawValues): array
+{
+    // $values stores the submitted or decoded values before validation.
+    $values = is_array($rawValues) ? $rawValues : [$rawValues];
+    // $submitted stores normalized string values keyed for quick lookup.
+    $submitted = [];
+    foreach ($values as $value) {
+        if (is_array($value)) {
+            foreach ($value as $nestedValue) {
+                $submitted[(string) $nestedValue] = true;
+            }
+            continue;
+        }
+        // Accept comma-separated values as a defensive fallback for hand-written URLs.
+        foreach (explode(',', (string) $value) as $part) {
+            $part = trim($part);
+            if ($part !== '') {
+                $submitted[$part] = true;
+            }
+        }
+    }
+
+    // $normalized stores only severities that are supported by the current schema/UI.
+    $normalized = [];
+    foreach (array_keys(admin_log_severity_options()) as $severity) {
+        if (isset($submitted[$severity])) {
+            $normalized[] = $severity;
+        }
+    }
+    return $normalized;
+}
+
+/**
+ * Decode the persistent severity filter from app settings.
+ */
+function admin_log_persisted_severity_filter(): array
+{
+    // $encoded stores the JSON payload written by the logs filter form.
+    $encoded = app_setting(admin_log_severity_filter_setting_key(), '[]');
+    // $decoded stores candidate values before option validation.
+    $decoded = json_decode((string) $encoded, true);
+    return admin_log_normalize_severity_filter(is_array($decoded) ? $decoded : []);
+}
+
+/**
+ * Persist or clear the severity filter depending on the selected values.
+ */
+function admin_log_save_severity_filter(array $severities): void
+{
+    // Empty selection is explicit and means the default all-severities state.
+    if ($severities === []) {
+        delete_app_settings([admin_log_severity_filter_setting_key()]);
+        return;
+    }
+    set_app_setting(admin_log_severity_filter_setting_key(), json_encode(array_values($severities), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+/**
+ * Return true when the current request intentionally changes the severity filter.
+ */
+function admin_log_request_has_severity_filter_input(): bool
+{
+    return array_key_exists('severity_filter_submitted', $_GET)
+        || array_key_exists('severities', $_GET)
+        || array_key_exists('severity', $_GET);
+}
+
+/**
+ * Resolve selected severities from reset action, request data, or persisted settings.
+ */
+function admin_log_resolve_selected_severities(): array
+{
+    if ((string) ($_GET['reset_severity'] ?? '') === '1') {
+        admin_log_save_severity_filter([]);
+        return [];
+    }
+
+    if (admin_log_request_has_severity_filter_input()) {
+        // $rawValues stores the new multi-select field first, then legacy single severity values.
+        $rawValues = $_GET['severities'] ?? ($_GET['severity'] ?? []);
+        $severities = admin_log_normalize_severity_filter($rawValues);
+        admin_log_save_severity_filter($severities);
+        return $severities;
+    }
+
+    return admin_log_persisted_severity_filter();
+}
+
+/**
+ * Build compact human-readable text for the active severity filter.
+ */
+function admin_log_severity_filter_summary(array $selectedSeverities): string
+{
+    if ($selectedSeverities === []) {
+        return admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.');
+    }
+
+    // $labels stores labels in the same order as the checkbox list.
+    $labels = [];
+    foreach (admin_log_severity_options() as $value => $label) {
+        if (in_array($value, $selectedSeverities, true)) {
+            $labels[] = $label;
+        }
+    }
+    return admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}', ['values' => implode(', ', $labels)]);
+}
+
+/**
  * Build the admin log URL while preserving active filters.
  */
 function admin_log_filter_url(array $overrides = []): string
@@ -149,15 +267,25 @@ function admin_log_filter_url(array $overrides = []): string
     $params = [
         'status' => (string) ($_GET['status'] ?? ''),
         'category' => (string) ($_GET['category'] ?? ''),
-        'severity' => (string) ($_GET['severity'] ?? ''),
         'q' => trim((string) ($_GET['q'] ?? '')),
         'time_sort' => admin_log_normalize_time_sort((string) ($_GET['time_sort'] ?? 'desc')),
     ];
+
+    // Preserve multi-select severities when building sort links. Legacy single severity links
+    // are normalized into the new array-shaped query parameter.
+    $activeSeverities = admin_log_request_has_severity_filter_input()
+        ? admin_log_normalize_severity_filter($_GET['severities'] ?? ($_GET['severity'] ?? []))
+        : admin_log_persisted_severity_filter();
+    if ($activeSeverities !== []) {
+        $params['severities'] = $activeSeverities;
+        $params['severity_filter_submitted'] = '1';
+    }
+
     foreach ($overrides as $key => $value) {
         $params[(string) $key] = $value;
     }
     foreach ($params as $key => $value) {
-        if ($value === '' || $value === null) {
+        if ($value === '' || $value === null || $value === []) {
             unset($params[$key]);
         }
     }
@@ -229,8 +357,8 @@ function cms_admin_logs(): void
     $status = isset($_GET['status']) ? (string) $_GET['status'] : null;
     // $category stores the operational category filter.
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
-    // $severity stores the severity filter.
-    $severity = isset($_GET['severity']) ? (string) $_GET['severity'] : '';
+    // $selectedSeverities stores the persistent multi-select severity filter.
+    $selectedSeverities = admin_log_resolve_selected_severities();
     // $query stores the text search filter.
     $query = trim((string) ($_GET['q'] ?? ''));
     // $timeSort stores the selected chronological order.
@@ -238,7 +366,7 @@ function cms_admin_logs(): void
     // $logs stores the filtered admin log entries.
     $logs = admin_log_list($status, 150, [
         'category' => $category,
-        'severity' => $severity,
+        'severities' => $selectedSeverities,
         'q' => $query,
         'time_sort' => $timeSort,
     ]);
@@ -265,26 +393,35 @@ function cms_admin_logs(): void
     echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a>';
     echo '</nav></section>';
 
-    echo '<section class="panel"><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
+    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log without losing the selected severity state.')) . '</p></div><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
-    echo '<label>' . e(admin_log_english_t('admin.logs.status', 'Status')) . '<select name="status" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_states', 'All states')) . '</option>';
+    echo '<div class="admin-log-filter-main">';
+    echo '<fieldset class="admin-log-filter-group"><legend>' . e(admin_log_english_t('admin.logs.filter_scope', 'Log scope')) . '</legend><div class="admin-log-control-grid">';
+    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.status', 'Status')) . '</span><select name="status" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_states', 'All states')) . '</option>';
     foreach (admin_log_status_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($status === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '<select name="category" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_categories', 'All categories')) . '</option>';
+    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</span><select name="category" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_categories', 'All categories')) . '</option>';
     foreach (admin_log_category_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($category === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '<select name="severity" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_severities', 'All severities')) . '</option>';
+    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.time_order', 'Time order')) . '</span><select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.newest_first', 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.oldest_first', 'Oldest first')) . '</option></select></label>';
+    echo '</div></fieldset>';
+    echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e(admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.')) . '" data-active-template="' . e(admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}')) . '"><legend><span>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</span><span class="admin-log-severity-count">' . e((string) count($selectedSeverities)) . '</span></legend>';
+    echo '<input type="hidden" name="severity_filter_submitted" value="1">';
+    echo '<p class="admin-log-filter-help">' . e(admin_log_english_t('admin.logs.severity_filter_hint', 'Pick one or more severities. Empty means all.')) . '</p>';
+    echo '<div class="admin-log-severity-options">';
     foreach (admin_log_severity_options() as $value => $label) {
-        echo '<option value="' . e($value) . '"' . ($severity === $value ? ' selected' : '') . '>' . e($label) . '</option>';
+        echo '<label class="admin-log-severity-choice is-' . e($value) . '"><input class="admin-log-severity-checkbox" type="checkbox" name="severities[]" value="' . e($value) . '"' . (in_array($value, $selectedSeverities, true) ? ' checked' : '') . ' data-admin-log-live-filter> <span>' . e($label) . '</span></label>';
     }
-    echo '</select></label>';
-    echo '<label>' . e(admin_log_english_t('admin.logs.time_order', 'Time order')) . '<select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.newest_first', 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.oldest_first', 'Oldest first')) . '</option></select></label>';
-    echo '<label>' . e(admin_log_english_t('admin.logs.search', 'Search')) . '<input name="q" value="' . e($query) . '" placeholder="' . e(admin_log_english_t('admin.logs.search_placeholder', 'Event key, message, context, request, or route')) . '" autocomplete="off" data-admin-log-live-search></label>';
-    echo '<div class="bulk-row"><button type="submit">' . e(admin_log_english_t('admin.logs.apply_filters', 'Apply filters')) . '</button><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(admin_log_english_t('admin.logs.clear', 'Clear')) . '</a><span class="muted" data-admin-log-live-state aria-live="polite"></span></div>';
+    echo '</div><p class="admin-log-severity-summary" data-admin-log-severity-summary>' . e(admin_log_severity_filter_summary($selectedSeverities)) . '</p></fieldset>';
+    echo '</div>';
+    echo '<div class="admin-log-filter-footer">';
+    echo '<label class="admin-log-filter-control admin-log-search-control"><span>' . e(admin_log_english_t('admin.logs.search', 'Search')) . '</span><input name="q" value="' . e($query) . '" placeholder="' . e(admin_log_english_t('admin.logs.search_placeholder', 'Event key, message, context, request, or route')) . '" autocomplete="off" data-admin-log-live-search></label>';
+    echo '<div class="admin-log-filter-actions"><button type="submit">' . e(admin_log_english_t('admin.logs.apply_filters', 'Apply filters')) . '</button><a class="button secondary" href="' . e(url_for('admin_logs', ['reset_severity' => '1'])) . '">' . e(admin_log_english_t('admin.logs.reset_severity_filter', 'Reset severity filter')) . '</a></div>';
+    echo '</div>';
     echo '</form></section>';
 
     echo '<section class="panel" data-admin-log-results><h2>' . e(admin_log_english_t('admin.logs.entries', 'Entries')) . ' <span class="muted" data-admin-log-count>(' . count($logs) . ' ' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . ')</span></h2>';

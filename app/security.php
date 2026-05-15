@@ -113,7 +113,8 @@ function require_admin(): void
     // Variable $user stores this steps working value.
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
-        redirect_to(url_for('admin_login'));
+        // Preserve the protected URL so successful login resumes the intended admin action.
+        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
     }
 }
 

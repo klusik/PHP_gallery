@@ -1123,6 +1123,29 @@ export function setupGalleryLightbox() {
         }
     }
 
+    /**
+     * Compare two browser-visible URLs without being sensitive to relative input.
+     *
+     * The lightbox opens direct photo URLs by replacing the current history entry.
+     * When the current page is already that photo URL, close should fall back to
+     * the gallery URL rendered by PHP. When the current page is a paginated
+     * gallery URL, close must restore that exact URL instead.
+     *
+     * @param {string} firstUrl First URL candidate.
+     * @param {string} secondUrl Second URL candidate.
+     * @returns {boolean} True when both URLs resolve to the same browser URL.
+     */
+    function urlsMatch(firstUrl, secondUrl) {
+        if (!firstUrl || !secondUrl) {
+            return false;
+        }
+        try {
+            return new URL(firstUrl, window.location.href).href === new URL(secondUrl, window.location.href).href;
+        } catch (error) {
+            return firstUrl === secondUrl;
+        }
+    }
+
     // Function `openAt` executes this focused behavior.
     function openAt(index) {
         // Variable `card` stores this steps working value.
@@ -1139,10 +1162,14 @@ export function setupGalleryLightbox() {
         const imageToken = activeLightboxImageToken;
         // pageUrl stores state or configuration for the gallery front-end flow.
         const pageUrl = card.dataset.pageUrl || '';
-        // galleryUrl stores state or configuration for the gallery front-end flow.
-        const galleryUrl = card.dataset.galleryUrl || window.location.href;
+        // galleryUrl stores the page that should be restored when the lightbox closes.
+        // Prefer the current browser URL when the visitor opens a photo from a
+        // paginated gallery page, because the server-rendered fallback points to
+        // the base gallery URL and intentionally has no active pagination state.
+        const galleryUrl = window.location.href;
+        const fallbackGalleryUrl = card.dataset.galleryUrl || galleryUrl;
         if (!lightboxHistoryActive) {
-            lightboxReturnUrl = galleryUrl;
+            lightboxReturnUrl = pageUrl && urlsMatch(galleryUrl, pageUrl) ? fallbackGalleryUrl : galleryUrl;
             lightboxHistoryActive = true;
         }
         if (pageUrl && window.history && window.history.replaceState) {

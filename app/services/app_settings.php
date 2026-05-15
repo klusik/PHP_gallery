@@ -503,6 +503,156 @@ function delete_app_settings(array $keys): void
     }
 }
 
+
+/**
+ * Return true when generated public links should prefer clean rewritten URLs.
+ *
+ * The default is intentionally enabled to preserve the historic application
+ * behavior. Administrators can store url_rewrite_enabled = 0 when their hosting
+ * cannot route clean URLs reliably.
+ */
+function url_rewrite_enabled(): bool
+{
+    return app_setting('url_rewrite_enabled', '1') !== '0';
+}
+
+/**
+ * Persist the clean URL rewrite preference.
+ */
+function set_url_rewrite_enabled(bool $enabled): void
+{
+    set_app_setting('url_rewrite_enabled', $enabled ? '1' : '0');
+}
+
+/**
+ * Return whether one .htaccess file contains rewrite rules for this app.
+ */
+function url_rewrite_marker_file_ok(string $path): bool
+{
+    if (!is_file($path) || !is_readable($path)) {
+        return false;
+    }
+
+    $contents = (string) file_get_contents($path);
+    return stripos($contents, 'mod_rewrite.c') !== false
+        && stripos($contents, 'RewriteEngine On') !== false
+        && stripos($contents, 'RewriteRule') !== false;
+}
+
+/**
+ * Inspect the current runtime for practical URL rewrite compatibility signals.
+ *
+ * This is deliberately a confidence model, not a hosting-specific guarantee. The
+ * app can prove rewrite support only after a clean URL was routed to PHP. The
+ * remaining checks look for the files and server indicators that this project
+ * needs on typical Apache, LiteSpeed, and compatible shared hosting.
+ *
+ * @param array<string, string>|null $server Override used by tests.
+ * @param string|null $root Override used by tests.
+ * @return array{enabled: bool, status: string, supported: bool, confidence: string, reasons: array<int, string>, details: array<string, mixed>}
+ */
+function url_rewrite_compatibility(?array $server = null, ?string $root = null): array
+{
+    $server = $server ?? $_SERVER;
+    $root = $root ?? dirname(__DIR__, 2);
+    $enabled = url_rewrite_enabled();
+
+    $rootHtaccess = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . '.htaccess';
+    $publicHtaccess = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . '.htaccess';
+    $rootMarker = url_rewrite_marker_file_ok($rootHtaccess);
+    $publicMarker = url_rewrite_marker_file_ok($publicHtaccess);
+    $serverSoftware = strtolower((string) ($server['SERVER_SOFTWARE'] ?? ''));
+    $requestUri = (string) ($server['REQUEST_URI'] ?? '');
+    $scriptName = (string) ($server['SCRIPT_NAME'] ?? '');
+    $redirectUrl = (string) ($server['REDIRECT_URL'] ?? '');
+    $reasons = [];
+    $confidence = 'medium';
+    $status = 'unknown';
+    $supported = false;
+
+    if (!$enabled) {
+        return [
+            'enabled' => false,
+            'status' => 'disabled',
+            'supported' => false,
+            'confidence' => 'manual',
+            'reasons' => ['URL rewrite is disabled by admin setting.'],
+            'details' => [
+                'root_htaccess' => $rootMarker,
+                'public_htaccess' => $publicMarker,
+                'server_software' => $serverSoftware,
+            ],
+        ];
+    }
+
+    if ($redirectUrl !== '' || ((string) parse_url($requestUri, PHP_URL_PATH) !== '' && !str_contains((string) parse_url($requestUri, PHP_URL_PATH), 'index.php') && basename($scriptName) === 'index.php')) {
+        $status = 'supported';
+        $supported = true;
+        $confidence = 'high';
+        $reasons[] = 'This request reached PHP through a clean rewritten URL.';
+    }
+
+    if (!$supported && function_exists('apache_get_modules')) {
+        $modules = array_map('strtolower', apache_get_modules());
+        if (in_array('mod_rewrite', $modules, true)) {
+            $status = 'supported';
+            $supported = true;
+            $confidence = 'high';
+            $reasons[] = 'Apache reports that mod_rewrite is loaded.';
+        }
+    }
+
+    if (!$supported && ($rootMarker || $publicMarker) && ($serverSoftware === '' || str_contains($serverSoftware, 'apache') || str_contains($serverSoftware, 'litespeed'))) {
+        $status = 'likely_supported';
+        $supported = true;
+        $confidence = 'medium';
+        $reasons[] = 'Rewrite rules are present and the reported server is Apache/LiteSpeed-compatible.';
+    }
+
+    if (!$supported && !$rootMarker && !$publicMarker) {
+        $status = 'unsupported';
+        $confidence = 'high';
+        $reasons[] = 'No readable project .htaccess rewrite rules were found.';
+    } elseif (!$supported && str_contains($serverSoftware, 'iis')) {
+        $status = 'unsupported';
+        $confidence = 'medium';
+        $reasons[] = 'The server reports IIS and no compatible rewrite signal was detected.';
+    } elseif (!$supported) {
+        $status = 'unknown';
+        $confidence = 'low';
+        $reasons[] = 'Rewrite support could not be proven from this request.';
+    }
+
+    return [
+        'enabled' => true,
+        'status' => $status,
+        'supported' => $supported,
+        'confidence' => $confidence,
+        'reasons' => $reasons,
+        'details' => [
+            'root_htaccess' => $rootMarker,
+            'public_htaccess' => $publicMarker,
+            'server_software' => $serverSoftware,
+            'request_uri' => $requestUri,
+            'script_name' => $scriptName,
+            'redirect_url' => $redirectUrl,
+        ],
+    ];
+}
+
+/**
+ * Return true when pretty public URLs should be emitted for the current request.
+ */
+function url_rewrite_should_emit_clean_urls(): bool
+{
+    if (!url_rewrite_enabled()) {
+        return false;
+    }
+
+    $compatibility = url_rewrite_compatibility();
+    return in_array((string) $compatibility['status'], ['supported', 'likely_supported', 'unknown'], true);
+}
+
 /**
  * Public site name shown in the header and browser title.
  */

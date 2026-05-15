@@ -1,568 +1,580 @@
 # Architecture
 
-PHP Gallery CMS is a small plain-PHP application. It avoids a framework, build
-step, and Composer dependencies so it can run on ordinary shared hosting.
+PHP Gallery CMS is a modern plain-PHP application (v0.66+) designed to run reliably on ordinary shared hosting without frameworks, build steps, or external dependencies.
+
+## Core Principles
+
+- **No framework overhead** - Direct request/response, minimal abstraction
+- **Filesystem-first** - Galleries are folders on disk; database mirrors metadata
+- **Database as source of truth for metadata** - Access rules, visibility, tags, votes, settings
+- **Shared hosting compatible** - Works with basic Apache + MySQL on low-cost hosting
+- **Clean separation** - Controllers handle HTTP, services handle business logic
+- **Type safety** - Strict types enabled throughout, PHP 8.0+ features used
+- **Focused modules** - Large files split into smaller, single-responsibility controllers and services
 
 ## Request Flow
 
-`index.php` delegates to `public/index.php`, which loads `app/bootstrap.php`.
-The bootstrap file loads helpers, database access, security helpers, migrations,
-services, and controllers. `cms_run()` maps the `page` query parameter or a
-pretty URL to a controller function.
+### Entry Point
 
-Important routes:
+1. **`index.php`** (root) delegates to **`public/index.php`** (web root)
+2. **`public/index.php`** loads **`app/bootstrap.php`**
+3. **`app/bootstrap.php`** initializes the application:
+   - Loads configuration
+   - Starts session with security headers
+   - Maps incoming request to a route
+   - Dispatches to the appropriate controller function
 
-- `page=home` lists public top-level galleries.
-- `page=gallery&slug=...` renders one gallery, its images, subgalleries, tags,
-  votes, breadcrumbs, and lightbox data.
-- `page=robots` and `page=sitemap` serve crawlable SEO files for public pages.
-- `page=gallery_access` validates a protected-gallery password and records a
-  short public unlock in the visitor session.
-- `page=share&id=...&token=...` validates a share token for one protected
-  gallery and redirects to that gallery.
-- `page=tag&slug=...` renders a public gallery listing filtered by one tag.
-- `page=picture_game&id=...` runs the optional side-by-side picture comparison
-  game for opted-in public gallery branches.
-- `page=gallery_map_data&id=...` returns JSON map points for the current public
-  gallery branch when GPS maps are enabled.
-- `page=media&id=...` streams an image through PHP after visibility checks.
-- `page=thumb&id=...&size=...` streams a generated JPEG thumbnail after the
-  same visibility checks.
-- `page=admin` is the dashboard for discovery, scans, bulk actions, edits, and
-  admin-only render profiling.
-- `page=admin_new_gallery` creates an empty filesystem gallery folder and DB
-  row from an authenticated admin form, including optional manual date and
-  description-layout metadata when the schema is available.
-- `page=admin_upload` stores uploaded images inside real gallery folders, then
-  scans the target folder and can continue into thumbnail batch generation. It
-  can also run the create-and-upload workflow for a new gallery under a selected
-  parent.
-- `page=admin_theme` stores theme controls, language choices, default gallery
-  description layout, and optional custom CSS.
-- `page=admin_update` checks GitHub for newer releases, renders cached or
-  bundled patch notes, and can install the configured branch archive after
-  creating a backup of overwritten files.
-- `reset.php` is a standalone admin-only recovery entrypoint that restores the
-  current stable branch head when the normal admin update page is unusable
-  after a broken beta deploy.
-- `page=admin_run_migrations` runs pending migrations from an authenticated
-  admin POST when the dashboard detects a stale schema.
-- `page=admin_account` manages the admin username, recovery email, password,
-  password reset delivery settings, and test email delivery.
-- `page=admin_forgot_password` and `page=admin_reset_password` implement the
-  optional recovery flow when reset email delivery is configured.
-- `page=admin_public_update_gallery` and `page=admin_public_update_image` save
-  admin-only inline edits submitted from public gallery pages.
-- `install.php` is standalone and can create config, DB tables, folders, and the
-  first admin account before the normal app is ready.
+### Routing
 
-The app supports two web-root layouts. The repository root can be served
-directly, in which case root `index.php` delegates to `public/index.php`; or the
-server can point directly at `public/`. Query-string routes work in both layouts,
-and Apache rewrite rules add nicer URLs when `.htaccess` is enabled.
-The gallery pretty route accepts both the canonical `/gallery/{slug}/` shape and
-nested filesystem-path compatibility URLs such as `/gallery/travel/italy/rome/`.
-Rendered gallery pages always emit the slug URL as canonical. Public gallery
-cards use the clean slug route as the first step toward cleaner navigation,
-while breadcrumbs, redirects, forms, admin links, media, thumbnails, votes, and
-downloads keep using query-string routes for compatibility with shared hosting
-setups that do not rewrite clean URLs reliably.
+The router (`cms_route_from_request()`) supports two parallel systems:
 
-When `base_url` is empty, route helpers emit root-relative URLs based on the
-front-controller base path. This keeps CSS, JavaScript, and form actions stable
-when a visitor is on a clean gallery URL instead of `index.php`.
+**Query-string routes** (always work, backward compatible):
+```
+/index.php?page=gallery&slug=vacation
+/index.php?page=admin&action=edit_gallery
+```
 
-## Files
+**Pretty URLs** (with Apache `.htaccess` rewrite rules, optional):
+```
+/gallery/vacation/
+/admin/?action=edit_gallery
+/download/vacation.zip
+```
 
-- `app/bootstrap.php`: loads the app and dispatches routes.
-- `app/database.php`: creates the shared PDO connection.
-- `app/helpers.php`: rendering helpers, URL helpers, escaping, path helpers.
-- `app/security.php`: sessions, current user lookup, CSRF, visitor vote hash.
-- `app/services.php`: filesystem discovery, imports, scans, tags, votes,
-  settings, covers, ZIP creation, and database lookup helpers.
-- `app/services/translations.php`: request language selection, fallback
-  translation lookup, coverage diagnostics, and browser string export.
-- `app/services/auth_throttle.php`: hashed-subject login and password reset
-  throttling.
-- `app/services/admin_render_profiler.php`: admin-only dashboard timing and
-  counter instrumentation.
-- `app/services/gallery_dates.php`: optional manual gallery date normalization,
-  storage formatting, sidecar support, and public rendering.
-- `app/services/gallery_description_layout.php`: Theme default and per-gallery
-  public card layout resolution.
-- `app/controllers.php`: page handlers and HTML rendering for public/admin UI.
-- `database/migrations/`: ordered PHP files returning SQL statements.
-- `public/assets/styles.css`: built-in themeable stylesheet.
-- `public/assets/gallery.js`: voting AJAX, tag suggestions, admin tree controls,
-  select-all controls, upload/thumbnail progress, and lightbox behavior.
-- `deploy.bat` and `scripts/deploy.ps1`: optional FTP/local deployment helpers.
-- `.htaccess`, `public/.htaccess`, `cache/.htaccess`, `galleries/.htaccess`:
-  routing and direct-access protection for Apache hosting.
+Both systems populate `$_GET['page']` and other parameters identically, ensuring controllers work regardless of rewrite availability.
+
+### Route Table
+
+The complete routing table is defined in `cms_run()` in `app/bootstrap.php`. Key routes:
+
+**Public Gallery Routes:**
+- `home` - Lists public top-level galleries
+- `gallery` - Renders one gallery with images, subgalleries, tags, votes
+- `tag` - Renders galleries filtered by a tag
+- `picture_game` - Side-by-side image comparison (optional, gallery-specific)
+- `gallery_map_data` - Returns JSON GPS points for maps
+- `media` - Streams image file with visibility checks
+- `thumb` - Streams generated JPEG thumbnail
+- `public_media` - Legacy public media endpoint
+- `public_thumb` - Legacy public thumb endpoint
+- `robots` - `robots.txt` for SEO
+- `sitemap` - `sitemap.xml` for search engines
+- `share` - Validates share token for protected gallery
+- `gallery_access` - Validates gallery password
+- `download_gallery` - Creates ZIP archive of one gallery
+- `download_all` - Creates ZIP archive of all accessible galleries
+- `vote` - AJAX endpoint for image/gallery voting
+- `exif` - Returns EXIF data for an image (if enabled)
+
+**Asset Routes:**
+- `theme_css` - Dynamically generated admin theme CSS
+- `gallery_cover_asset` - Gallery cover image uploads
+- `gallery_branding_asset` - Gallery branding (logo, colors)
+- `theme_background_asset` - Theme background images
+- `theme_branding_asset` - Site-wide branding
+- `favicon_asset` - Dynamic favicon
+
+**Admin Routes:**
+- `admin` - Main dashboard (discovery, bulk actions, settings overview)
+- `admin_login` - Login form
+- `admin_logout` - Logout (destroys session)
+- `admin_forgot_password` - Password recovery initiation
+- `admin_reset_password` - Password reset form
+- `admin_account` - Admin user settings, email, password
+- `admin_theme` - Theme customization, language, gallery layout defaults
+- `admin_discover` - Find new galleries on filesystem
+- `admin_import` - Import discovered galleries
+- `admin_new_gallery` - Create empty gallery folder and DB entry
+- `admin_edit_gallery` - Edit gallery metadata (name, description, visibility, etc.)
+- `admin_bulk_galleries` - Bulk rename/delete/move galleries
+- `admin_reorder_galleries` - Reorder gallery hierarchy
+- `admin_reorder_public_galleries` - Reorder public gallery display order
+- `admin_reorder_images` - Reorder images within a gallery
+- `admin_bulk_images` - Bulk image operations
+- `admin_edit_image` - Edit image caption, tags, metadata
+- `admin_upload` - Upload images to a gallery
+- `admin_tags` - Manage reusable tags, metadata, descriptions
+- `admin_thumbnails` - Generate/regenerate/delete thumbnails
+- `admin_scan_images` - Scan gallery folder for new/modified files
+- `admin_integrity` - Verify database consistency against filesystem
+- `admin_logs` - View admin action audit log
+- `admin_log_update` - Modify log visibility/status
+- `admin_log_export` - Export logs as JSON/CSV
+- `admin_logs_export_zip` - Export logs as ZIP archive
+- `admin_telemetry` - View usage statistics and telemetry
+- `admin_telemetry_settings` - Telemetry preferences
+- `admin_telemetry_export` - Export telemetry data
+- `admin_update` - Check for and install application updates
+- `admin_reset` - Emergency recovery (restore from stable branch)
+- `admin_run_migrations` - Run pending database migrations
+- `admin_create_thumbnails` - Generate missing thumbnails (wizard)
+- `admin_delete_thumbnails` - Delete cached thumbnails
+- `admin_dismiss_thumbnail_notice` - Hide thumbnail rebuild notice
+- `admin_regenerate_paths` - Regenerate public URL slugs
+- `admin_save_gallery_collapse` - Save admin panel expand/collapse state
+- `admin_devmode` - Development/debug information
+- `admin_public_update_gallery` - Inline edit gallery from public page
+- `admin_public_update_image` - Inline edit image from public page
+
+**Special Routes:**
+- `setup` - First-run installer (runs when `config.php` missing)
+- `telemetry_ingest` - Receives anonymous usage statistics
+- `usage_collect` - Alias for telemetry_ingest
+
+## Files & Organization
+
+### Root Directory
+```
+index.php                    Main entry point (delegates to public/index.php)
+public/index.php             Front controller for web server
+config.php                   Generated on install (database, paths, settings)
+config.example.php           Example configuration template
+install.php                  Standalone installer (runs before app ready)
+setup-gallery.php            Bootstrap installer (one-file setup)
+reset.php                    Emergency recovery endpoint
+.htaccess                    Apache rewrite rules for pretty URLs
+```
+
+### `app/` - Application Core
+```
+app/
+  bootstrap.php              Initialization, routing, dispatcher
+  controllers.php            Module loader for controllers
+  controllers/               Refactored controller files
+    admin_auth.php           Login, logout, password reset, sessions
+    admin_galleries.php      Loader for gallery controller modules
+    admin_galleries_*.php    Focused controllers (discovery, edit, bulk, reorder)
+    admin_gallery_renderers.php  Shared HTML rendering helpers
+    admin_images_*.php       Image reordering, bulk actions
+    admin_tags.php           Tag management, metadata editing
+    admin_theme.php          Theme customization, language, layout
+    admin_thumbnails.php     Thumbnail generation, management, quality
+    admin_dashboard.php      Main admin dashboard
+    admin_logs.php           Audit log viewing and export
+    admin_integrity.php      Database consistency checking
+    admin_uploads.php        File upload handling, scanning
+    admin_public_inline.php  Inline editing from public gallery pages
+    public_gallery.php       Public gallery rendering (images, lightbox, voting)
+    public_media.php         Media streaming and handling
+    public_tags.php          Public tag listing and filtering
+    theme_assets.php         Dynamic asset serving (CSS, images, favicon)
+    downloads.php            ZIP archive creation
+    updates.php              Update checking and installation
+    picture_game.php         Side-by-side image comparison
+    tags.php                 Legacy tag page loader
+    exif.php                 EXIF metadata extraction
+    setup.php                Installer logic
+    telemetry.php            Anonymous stats collection
+    http_helpers.php         Utility functions for controllers
+  
+  helpers.php                URL helpers, escaping, rendering utilities
+  security.php               Sessions, CSRF, admin auth, visitor hashing
+  database.php               PDO connection factory
+  migrations.php             Migration runner and tracking
+  services.php               Service loader and registry
+  services/                  Focused service modules
+    gallery_*.php            Gallery queries, mutations, metadata
+    image_scanning.php       Filesystem scanning for images
+    thumbnail_*.php          Thumbnail generation and management
+    tag*.php                 Tag operations and metadata
+    vote*.php                Voting/scoring operations
+    download*.php            ZIP creation and signatures
+    upload*.php              File upload validation
+    telemetry*.php           Anonymous statistics collection
+    theme.php                Theme settings and CSS
+    exif.php                 EXIF extraction
+    pagination.php           Paginated queries
+    logs.php                 Admin log storage
+    auth_throttle.php        Login/password-reset rate limiting
+    translations.php         Language selection and fallbacks
+    ...and many more focused service files
+  
+  lang/                      Translation files
+    en.json                  English strings
+    cs.json                  Czech strings
+    en.php                   English (fallback)
+    cs.php                   Czech (fallback)
+  
+  integrity.php              File integrity checking
+  core-manifest.json         Integrity manifest (auto-generated)
+```
+
+### `database/` - Database Schema
+```
+database/
+  migrations/                Numbered, sequential migration files
+    202604270001_initial_schema.php       Base schema (users, galleries, images, etc.)
+    202604270002_tags_and_theme.php       Tag tables, theme settings
+    202604280001_picture_game.php         Picture game metadata
+    202604280002_admin_logs_status.php    Admin log status column
+    202604280003_exif_gps_maps.php        GPS/map metadata
+    202604290001_password_protected_galleries.php  Protected gallery schema
+    202604290002_persistent_share_links.php       Share token management
+    202604300001_gallery_voting.php       Voting/scoring
+    ...and more recent migrations for features and refinements
+```
+
+### `public/` - Web Root Assets
+```
+public/
+  index.php                  Front controller (delegates to app/bootstrap.php)
+  .htaccess                  Access control for Apache
+  assets/
+    styles.css               Main stylesheet (legacy, pre-split)
+    gallery.js               Main JavaScript (legacy, re-exports modules)
+    telemetry.js             Anonymous stats collection
+    usage.js                 Usage tracking
+    gallery-modules/         Modern ES6 modules
+      admin-bulk-actions.js  Bulk operation UI
+      admin-core.js          Re-export of admin functions
+      admin-date-picker.js   Calendar date selection widget
+      admin-gallery-list.js  Gallery list management
+      admin-image-reordering.js  Drag-and-drop image sorting
+      admin-logs.js          Log filtering UI
+      admin-operations.js    Legacy admin function export
+      admin-refresh-progress.js  Progress indicators
+      admin-side-panel.js    Side panel form handling
+      admin-tabs.js          Tab switching
+      admin-thumbnail-progress.js  Thumbnail generation progress
+      back-to-top.js         Scroll-to-top button
+      favicon-cropper.js     Favicon upload handling
+      lightbox-deferred.js   Lazy-load lightbox
+      lightbox-votes.js      Vote form sync in lightbox
+      lightbox.js            Fullscreen image viewer
+      responsive-thumbnails.js  Adaptive thumbnail sizing
+      tag-suggestions.js     Auto-complete tag input
+      theme-form.js          Theme editor form
+      votes.js               Voting UI
+    styles/                  Modern CSS modules
+      admin-*.css            Admin area stylesheets
+      base.css               Base styles
+      lightbox.css           Lightbox/fullscreen styles
+      public.css             Public gallery styles
+      utilities.css          Utility classes
+```
+
+### `galleries/` - User Content
+```
+galleries/                   Gallery folder root (configurable)
+  vacation/                  Gallery folder (contains images)
+    image1.jpg
+    image2.jpg
+    subfolder/               Subgallery
+      image3.jpg
+      gallery.json           Optional metadata (title, description, tags)
+  ...
+```
+
+### `cache/` - Generated Files
+```
+cache/
+  .htaccess                  Prevent direct access
+  installed.lock             Marks app as installed
+  bootstrap-installed.lock   Marks bootstrap installer completed
+  thumbnails/                Generated thumbnail cache
+  zip/                       Temporary ZIP archives
+  ...
+```
+
+### `custom_css/`
+```
+custom_css/
+  custom.css                 Admin theme customizations
+  modern.css                 Modern theme stylesheet
+  css_template.css           Theme CSS template
+```
 
 ## Data Model
 
-`galleries` represent folders under `galleries_root`. The filesystem folder tree
-is the source of truth for gallery hierarchy; the database mirrors it and stores
-metadata, access rules, tags, and public slugs. Nested folders become
-subgalleries through `parent_id`. `images` represent image files directly inside
-one gallery folder. Child folder images are intentionally not imported into the
-parent gallery.
-
-`cover_image_id` stores an editable title picture. If a gallery has no direct
-cover image, public gallery cards can compose a small cover from child gallery
-covers.
-`cover_image_path` stores an uploaded gallery thumbnail separately from the
-imported gallery images. When present and the gallery is public, the card can
-use that asset instead of generating a cover from gallery photos.
-
-`gallery_date` stores an optional admin-selected date for a gallery. It is
-nullable, independent from upload dates and EXIF dates, and indexed for future
-sorting or timeline features. Empty values render nothing on public pages.
-
-`description_layout` stores an optional per-gallery override for the public
-subgallery card layout. `NULL` means the gallery inherits the Theme default.
-Allowed stored values are `vertical` and `horizontal`.
-
-Protected-gallery access is stored on `galleries` separately from visibility.
-`access_mode` determines whether public access is normal or protected,
-`access_listing` determines whether a protected public gallery appears in public
-listings, `access_password_hash` stores the optional gallery password hash, and
-`access_token_hash`, encrypted `access_share_token`, and
-`access_token_expires_at` manage admin-generated share links. Share-link
-validation uses the hash; the encrypted token copy exists only so admins can see
-and revoke the active URL later. Protected access is inherited from ancestors at
-runtime. Password unlocks are session-scoped and expire after 10 minutes.
-
-Public gallery metadata resolves from `gallery.json` first, then database
-values, then folder-name fallbacks. The public page header emits canonical,
-description, Open Graph, Twitter card, and JSON-LD markup from that resolved
-metadata. Gallery image `alt` text uses caption metadata first, then a humanized
-filename, then a gallery/index fallback.
-`gallery.json` may store tags as comma-separated text or as a JSON array.
-
-`tags`, `gallery_tags`, and `image_tags` store reusable tags. Admins edit tags as
-comma-separated text; the UI recommends existing tags while typing. Public tag
-links filter galleries by gallery tags and by image tags. Parent galleries can
-also display `Containing tags`, which are aggregated from descendant galleries
-and their images.
-
-`image_votes` stores one vote per logged-in user or anonymous visitor hash.
-Scores are summed from those rows, and the UI marks the current visitor's choice.
-
-`picture_game_votes` stores pair history for the optional picture game. The pair
-is normalized so the same two images cannot be repeated in reverse order for the
-same viewer. A row is written when a pair is displayed, and `winner_image_id` is
-filled when the viewer chooses a picture. The winning image also receives a
-normal upvote in `image_votes`; the non-selected image receives no vote.
-
-`gps_map_enabled` on `galleries` opts a branch into EXIF/GPS map support. The
-setting is recursive, so a parent gallery enables maps for its descendants.
-Image scans can populate `exif_taken_at`, camera metadata, and GPS coordinates
-when the EXIF extension is available. `gps_lat`, `gps_lng`, `gps_altitude`, and
-`gps_extracted_at` are stored separately from the source file and refreshed on
-rescan. The migration also adds an index for gallery/GPS lookups.
-
-`app_settings` stores configurable application values such as the public site
-name, active public and admin languages, theme color overrides, radius override,
-font mode override, default gallery description layout, and selected custom CSS
-preset. CSS files in `custom_css/` can be selected in the admin theme
-screen; the selected file or a custom upload is copied to
-`public/assets/custom.css` and loaded after the built-in stylesheet. The active
-CSS skin supplies the default theme-control values. Once a control is changed,
-`page=theme_css` loads after custom CSS and emits the saved overrides. The
-Theme screen's `Reset to CSS` action removes those saved overrides without
-removing the active custom CSS file.
-
-`auth_rate_limits` stores hashed throttle subjects for admin login and password
-reset buckets. The table tracks attempts, first and last attempt timestamps, and
-optional lock expiration. Raw submitted identifiers and raw IP addresses are not
-stored.
-
-`admin_logs` stores admin-visible operational events such as failed migration
-runs and rejected admin-only actions. The dashboard renders recent entries, and
-`page=admin_logs` provides the full workflow view with status filters and
-bulk updates so admins can mark items as `todo`, `doing`, `waiting`, or `done`
-without server log access.
-
-The application updater is file-based so it can run on shared hosting without
-Git. It reads `CMS_VERSION` from GitHub `app/bootstrap.php` as the version
-source of truth, downloads a branch zip, copies application-managed files, and
-backs up overwritten files under `cache/updates/backups`. The update page can
-fetch and parse remote `PATCH_NOTES.md`, cache the parsed payload under
-`cache/updates/patch-notes`, and fall back to the bundled local file when GitHub
-is unavailable. Local-only paths such as `config.php`,
-`galleries/`, `cache/`, `custom_css/`, and `public/assets/custom.css` are
-skipped.
-
-The admin gallery tree collapse state is also stored in `app_settings` as a JSON
-list of collapsed gallery IDs. The dashboard posts updates through
-`page=admin_save_gallery_collapse`.
-
-Admin gallery folder changes are physical filesystem operations. Changing a
-gallery parent or folder name moves the whole folder subtree under
-`galleries_root`, rejects destination collisions and self-descendant moves, then
-updates every affected gallery row. If the database update fails after the
-filesystem move, the service attempts to move the folder back and logs the
-failure for admin review.
-
-The public JavaScript intentionally detects inline `style` attributes and shows
-a full-page warning. Theme changes should go through theme settings or custom
-CSS, not ad hoc inline HTML styling.
-
-The gallery page batches per-image tags and votes, memoizes request-scoped
-gallery helpers, resolves gallery-card description layout from per-gallery or
-Theme settings, preserves safe Markdown line breaks in descriptions, and preloads
-adjacent lightbox images so forward/backward browsing feels smoother on large
-images without changing the rendered layout.
-
-When GPS maps are enabled, the gallery page renders a pin button on each image
-with coordinates and a map button for the branch. The JavaScript loads Leaflet
-on demand, opens an overlay with OpenStreetMap tiles, and uses a small JSON
-endpoint to fetch all map points for the current gallery branch.
-
-Migrations are ordered PHP files that return SQL statements. The runner records
-applied versions in `schema_migrations`. The installer and migration runner
-apply each migration file directly and do not open an explicit transaction
-around the file. MySQL DDL statements may auto-commit schema changes, so the
-application relies on statement ordering and the migration record table instead
-of transaction wrapping.
-
-Feature code that depends on a new migration should avoid fatal errors against
-older databases. The picture game, gallery dates, description layout, password
-reset throttling, thumbnail bounds, and other optional features check schema
-availability before rendering controls or writing new columns. When a feature is
-not ready, the admin UI either hides the control or shows an authenticated `Run
-database migration` prompt that posts to `page=admin_run_migrations`.
-
-## Filesystem Rules
-
-Gallery discovery starts at `galleries_root`. The app normalizes relative paths
-and checks that image access stays inside the configured gallery folder. Public
-media is served through `page=media`, not as raw filesystem paths.
-
-The browser upload path follows the same structure as FTP. It creates or reuses
-a real gallery folder, stores validated images in that folder with safe unique
-filenames, scans the folder, and optionally starts the same thumbnail batch
-endpoint used by import and dashboard thumbnail actions.
-
-Sitemap generation reads public galleries from the database and emits absolute
-clean gallery URLs. `robots.txt` allows public crawling, disallows admin routes,
-and points crawlers at the sitemap.
-
-Thumbnail generation creates a `thumbs/` directory inside each gallery folder.
-Generated files are progressive JPEGs named from the original base filename plus
-`_thumb300`, `_thumb600`, or `_thumb800`, for example `photo_thumb300.jpg`.
-Discovery ignores thumbnail folders, and scans only import direct source images
-from the gallery folder. Public cards and image previews use responsive
-`srcset`/`sizes` hints so the browser can choose between the available thumbnail
-sizes based on the actual card width. Missing thumbnails fall back to the
-original media route until an admin generates them. The lightbox intentionally
-uses the original protected media route instead of thumbnails. The admin
-dashboard can defer exact thumbnail maintenance scans and display cached summary
-data so dashboard rendering does not repeatedly scan large media trees.
-
-Thumbnail creation is incremental. If a generated file exists and is newer than
-or equal to the source image, the service counts it as skipped and does not
-rewrite it. Admin thumbnail forms progressively enhance to AJAX batches by
-posting `ajax=1` to `page=admin_create_thumbnails`; the response reports total,
-processed, created, skipped, and completion state for the progress UI.
-Gallery import with `Create optimized thumbnails during import` checked uses an
-AJAX import phase followed by the same thumbnail batch endpoint, so progress is
-visible while thumbnails are created for newly imported galleries.
-The upload screen reports HEIC and RAW support when the runtime extensions are
-available, and accepts those formats when conversion support is present.
-
-Each gallery can also have a `gallery.json` sidecar. The app writes metadata such
-as title, description, visibility, sort order, and cover path there when gallery
-metadata changes.
-
-## Admin Workflow
-
-1. Run `install.php` or manual setup.
-2. Log in at `index.php?page=admin_login`.
-3. Use `Check for new gallery folders`. The dashboard action refreshes already
-   imported galleries for new or changed direct image files before it shows the
-   folder discovery page, logs the refresh, and displays a wait indicator while
-   the request is running.
-4. Import selected folders. Selected parent folders automatically include
-   detected descendant gallery folders.
-5. Let import scan images and optionally create thumbnails, or run scan and
-   thumbnail actions later from the dashboard/edit pages.
-6. Filter the dashboard gallery table by visibility when a bulk gallery action
-   should only target drafts, public galleries, or private galleries. The
-   `Select displayed galleries` checkbox only selects rows that remain visible
-   after both status filtering and collapsed tree branches.
-7. Create empty gallery folders or upload multiple images from the dashboard
-   when FTP is not convenient. Upload-created galleries and FTP-created
-   galleries use the same folder layout and scan path.
-8. Bulk-publish galleries or images.
-9. Collapse or expand subgallery rows as needed; the state is persisted.
-10. Edit titles, descriptions, optional manual gallery dates, tags, cover
-    images, hierarchy, folder names, description layout, and theme settings.
-    Changing a gallery parent or folder name moves the real folder subtree and
-    then updates DB paths.
-11. Logged-in admins can also manage galleries and images from public gallery
-   pages through compact admin actions that open the side-panel workflows.
-   Inline removal deletes CMS records only; filesystem folders and image files
-   are left intact.
-12. Opt galleries or gallery branches into the picture game from gallery edit
-    pages or dashboard bulk actions. New galleries remain opted out by default.
-13. Enable EXIF/GPS maps for gallery branches after running the `v_0.12`
-    migration and rescanning existing images. The setting is recursive, so child
-    galleries inherit map availability from enabled ancestors.
-14. If a feature migration is pending, use the dashboard migration prompt to run
-    it before enabling the related controls.
-
-## Deployment
-
-The project is designed for copy/FTP deployment. `deploy.bat` wraps the
-PowerShell deploy script and can either upload by FTP or create a local
-`deploy/` folder for manual upload. Deployment excludes local-only files such as
-`.git`, `config.php`, caches, logs, and temporary output.
-
-Production setup should create `config.php` on the target server. The browser
-installer is the intended low-friction path because it can create the database,
-run migrations, write config, and create the first admin user without console
-access.
-
-URL generation starts from `base_url` but corrects same-host HTTPS requests and
-shared-hosting path mismatches against the current front-controller path. This
-keeps generated CSS, JavaScript, media, and share-link URLs aligned with the
-public URL even when a host exposes an internal folder such as `/subdom/name` as
-the domain root.
-
-## Security Notes
-
-All database writes use PDO prepared statements. Admin POST routes require CSRF
-tokens. Passwords use PHP password hashing. Public image access checks gallery
-and image visibility unless an admin is logged in. Protected-gallery helpers are
-centralized and used by public gallery pages, thumbnails, media, downloads, map
-JSON, tags, votes, and the picture game.
-
-`install.php` is a first-run endpoint. It refuses to run after either
-`config.php` or `cache/installed.lock` exists, and successful browser installs
-write both files. Deleting or server-blocking the installer after setup is still
-reasonable defense in depth on public hosts.
-
-The `app/`, `database/`, `scripts/`, `cache/`, `logs/`, `tmp/`, `tests/`,
-`deploy/`, and `galleries/` directories are not intended to be browsed directly.
-Apache `.htaccess` files are included for common hosting setups. They disable
-directory indexes, deny common sensitive file extensions, block `.git` paths,
-block dotfiles except `.well-known/`, and deny application-private directories
-from the web root. Server-level configuration should enforce the same rule where
-`.htaccess` is unavailable.
-
-
----
-
-## Architectural Notes (Updated)
-
-### Filesystem-first consistency
-
-The application strictly enforces that filesystem structure is the primary
-source of truth. Any DB inconsistency must be resolved in favor of filesystem
-state. This affects:
-
-- gallery discovery
-- parent/child relationships
-- folder rename/move operations
-- import and rescan workflows
-
-All structural mutations must:
-
-1. Perform filesystem operation first
-2. Reflect change in database
-3. Rollback filesystem change if DB update fails
-4. Log failure into admin_logs
-
-This ensures no “phantom galleries” exist in DB without real folders.
-
----
-
-### Thumbnail Strategy
-
-Thumbnails are intentionally:
-
-- lazy-generated or batch-generated
-- stored inside gallery folders (not global cache)
-- resolution-tiered (300 / 600 / 800)
-
-Dynamic frontend behavior:
-
-- grid density determines effective image size
-- browser selects appropriate srcset variant
-- original image is never used in grid unless fallback
-
-Lightbox always uses original media endpoint to preserve quality.
-
----
-
-### Grid and Pagination System
-
-Grid system is unified and driven by:
-
-- global theme settings
-- optional per-gallery overrides
-- future extensibility for subgallery inheritance
-
-Pagination:
-
-- disabled by default
-- when enabled, respects grid dimensions (cols × rows)
-- must remain consistent across:
-  - galleries
-  - subgalleries
-  - image listings
-
-Important constraint:
-Frontend must not break layout consistency when pagination is active.
-
----
-
-### Admin UX Direction
-
-Admin is evolving toward:
-
-- left-side navigation (WordPress-like)
-- separation of concerns between:
-  - gallery management
-  - media operations
-  - appearance
-  - maintenance
-
-Key design goals:
-
-- reduce cognitive load
-- avoid “single page overload”
-- preserve direct access workflows
-
----
-
-### Update System Constraints
-
-Updater must:
-
-- never duplicate folder structures (e.g. app/app)
-- strictly control overwrite scope
-- preserve:
-  - config.php
-  - galleries/
-  - cache/
-  - custom_css/
-
-Clean reinstall mode:
-
-- removes unknown files
-- restores repository state
-- keeps user data intact
-
----
-
-### Logging and Observability
-
-
-### Admin Render Profiling
-
-The admin dashboard can collect request-local profiling data while rendering the
-admin gallery tree. The profiler records counters and timers around schema
-checks, database calls, app setting reads and writes, self-heal checks, gallery
-ordering, collapsed-tree lookup, preview cover resolution, thumbnail summary
-reads, and tab rendering.
-
-The profiler is admin-only diagnostic output. It is not part of public telemetry
-and must not be shown to anonymous visitors.
-
-Current:
-
-- admin_logs table
-- workflow states (todo, doing, waiting, done)
-
-Planned:
-
-- structured log payloads (JSON)
-- filtering and search improvements
-- export capability
-
-Future telemetry:
-
-- anonymous usage tracking
-- no PII
-- opt-out capable
-- local-first where possible
-
----
-
-### Performance Model
-
-Avoid:
-
-- blocking operations during page render
-- synchronous large batch processing
-
-Prefer:
-
-- incremental processing
-- AJAX batch endpoints
-- caching at multiple levels
-
-Heavy operations:
-
-- thumbnail generation
-- ZIP creation
-- gallery scanning
-
-must always be async-capable from admin UI.
-
----
-
-### Security Model Refinements
-
-Key principles:
-
-- all access validated at controller level
-- no direct file exposure
-- consistent access checks across:
-  - media
-  - thumbnails
-  - map data
-  - tags
-  - votes
-
-Protected gallery model:
-
-- session-based unlock
-- token-based sharing
-- inheritance from parent galleries
-
----
-
-### Known Architectural Tradeoffs
-
-- No framework → higher manual maintenance cost
-- Filesystem-first → complex sync logic
-- Shared hosting compatibility → limits async/background processing
-- PHP-only → no queue system or workers
-
-These are intentional design constraints.
-
----
-
-### Future Refactoring Targets
-
-- split large controllers into smaller domain services
-- isolate filesystem operations into dedicated service layer
-- formalize DTOs for gallery/image transport
-- improve testability (currently low)
-
----
-
-### Version 1.0 Readiness Criteria
-
-To consider architecture stable:
-
-- gallery ordering fully implemented (drag-drop tree)
-- admin UI modularized
-- update system hardened
-- grid + pagination fully consistent
-- logging system extended
-
+### Core Tables
+
+**`users`**
+- Admin account(s) with username, email, password hash
+- Currently supports single role: `admin`
+- Optional password reset flow with email delivery
+
+**`galleries`**
+- Mirrors filesystem folders under `galleries/` root
+- Key columns:
+  - `id` - Internal ID
+  - `folder_path` - Relative path from galleries root
+  - `folder_path_hash` - SHA256 hash of path (fast lookup)
+  - `parent_id` - NULL for top-level, otherwise parent gallery ID
+  - `title`, `description` - Gallery metadata
+  - `visibility` - public/private/draft
+  - `public_slug` - URL-safe slug for pretty URLs
+  - `cover_image_id` - Image ID for gallery card thumbnail
+  - `cover_image_path` - Uploaded cover image path
+  - `gallery_date` - Optional admin-set date
+  - `sort_order` - Display order
+  - `show_filenames` - Whether to expose raw filenames in captions
+  - `description_layout` - vertical/horizontal subgallery card layout
+  - Access control fields (password hash, share tokens, etc.)
+  - Created/updated timestamps
+
+**`images`**
+- Image files within galleries
+- Key columns:
+  - `id` - Internal ID
+  - `gallery_id` - Parent gallery
+  - `filename` - Original filename
+  - `title` - Admin-editable title
+  - `caption` - Admin-editable caption
+  - `vote_score` - Aggregated votes
+  - `sort_order` - Display order
+  - Metadata: dimensions, file size, upload date, EXIF data
+  - Created/updated timestamps
+
+**`tags`, `gallery_tags`, `image_tags`**
+- Reusable tags with optional descriptions
+- Tag metadata: display name, slug, description, usage counts
+- Gallery and image associations through junction tables
+
+**`image_votes`**
+- One row per user/visitor per image
+- Stores +1/-1 votes
+- Anonymous votes hash visitor by IP/cookie
+- Vote scores computed as aggregates
+
+**`admin_logs`**
+- Audit trail of admin actions
+- Columns: action type, subject (gallery/image), timestamp, user
+- Diagnostic fields: HTTP method, AJAX flag, request fingerprint
+- Used for troubleshooting and compliance
+
+**`admin_settings`**
+- Key-value store for admin preferences
+- Theme choice, language, layout defaults, column visibility
+
+**`telemetry`**
+- Optional anonymous usage statistics
+- Gallery counts, image counts, feature usage
+- Privacy-respecting, can be disabled
+
+### Relationships
+
+```
+users
+  ↓ (admin of)
+galleries (parent_id creates hierarchy)
+  ↓ (contains)
+images
+  ↓ (voted on by)
+image_votes
+
+galleries ↔ tags (through gallery_tags)
+images ↔ tags (through image_tags)
+
+admin_logs (references galleries, images, users)
+telemetry (anonymous aggregates, no personal data)
+```
+
+## Key Features & Their Implementations
+
+### Gallery Discovery & Import
+- **Controller:** `admin_galleries_discovery.php`
+- **Service:** `image_scanning.php`, `gallery_lookup.php`, `gallery_mutations.php`
+- **Workflow:** Scan `galleries/` folder → detect new folders → optionally import with thumbnail creation
+
+### Image Upload & Scanning
+- **Controller:** `admin_uploads.php`
+- **Services:** `uploads.php`, `image_scanning.php`, `thumbnail_generation.php`
+- **Workflow:** Validate file → move to gallery folder → scan for images → optionally create thumbnails
+
+### Thumbnail Generation
+- **Controllers:** `admin_thumbnails.php`
+- **Services:** `thumbnail_generation.php`, `thumbnail_formats.php`, `thumbnail_sources.php`, `thumbnail_bundles.php`, `thumbnail_maintenance.php`, `dng_derivatives.php`
+- **Features:** 
+  - JPEG + WebP variants
+  - Quality bounds and responsive sizing
+  - DNG RAW display masters
+  - Deferred/batch generation
+  - Maintenance and cleanup
+
+### Public Gallery Rendering
+- **Controller:** `public_gallery.php`
+- **Services:** `gallery_display.php`, `gallery_lookup.php`, `gallery_access.php`, `gallery_covers.php`, `pagination.php`
+- **Features:**
+  - Breadcrumbs for nested galleries
+  - Subgallery cards with cover images
+  - Image grid with responsive thumbnails
+  - Lightbox/fullscreen viewer with EXIF overlay
+  - Voting/scoring UI
+  - Tag filtering
+  - SEO metadata (canonical, OG, JSON-LD)
+
+### Gallery Access Control
+- **Service:** `gallery_access.php`
+- **Types:**
+  - Public (anyone can view)
+  - Draft (admin only)
+  - Private/Protected (password or share link)
+- **Share Links:** Generate time-limited, single-use tokens
+- **Password Protection:** Per-gallery passwords, session-scoped unlock
+
+### Voting & Scoring
+- **Services:** `votes.php`
+- **Features:**
+  - Per-image and per-gallery scores
+  - +1/-1 voting
+  - Anonymous visitor hashing (IP-based)
+  - Logged-in user voting (session-based)
+  - Vote persistence
+
+### Tagging
+- **Service:** `tags.php`, `tag_metadata.php`
+- **Features:**
+  - Reusable tags with metadata
+  - Admin tag management
+  - Tag auto-complete in edit forms
+  - Public tag pages
+  - Gallery/image filtering by tags
+  - Aggregated "containing tags" for parent galleries
+
+### ZIP Downloads
+- **Service:** `downloads.php`
+- **Features:**
+  - Download single gallery as ZIP
+  - Download all accessible galleries as ZIP
+  - Streaming (not stored on disk)
+  - Signature verification for secure links
+
+### Audit Logging
+- **Service:** `logs.php`
+- **Features:**
+  - All admin actions logged (create, edit, delete, upload, etc.)
+  - Diagnostic data (HTTP method, AJAX flag, fingerprint)
+  - Search/filter by action, gallery, image, date
+  - Export as JSON/CSV/ZIP
+  - Log retention policy (optional)
+
+### Telemetry & Statistics
+- **Services:** `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`
+- **Features:**
+  - Anonymous usage collection (opt-in)
+  - No personal data collected
+  - Gallery/image counts, feature usage
+  - Admin dashboard statistics
+  - Privacy controls
+
+### Theme Customization
+- **Controller:** `admin_theme.php`
+- **Services:** `theme.php`, `gallery_branding.php`, `gallery_backgrounds.php`
+- **Features:**
+  - Admin color/font customization
+  - Language selection (English, Czech, extensible)
+  - Gallery-specific branding (logo, background, cover)
+  - Custom CSS editor
+  - Dark/light mode support
+  - Default layout for gallery cards
+
+### Updates
+- **Controller:** `updates.php`
+- **Service:** `updates.php`
+- **Features:**
+  - Check GitHub for newer releases
+  - Beta/stable branch selection
+  - Download and install updates
+  - Backup modified files before update
+  - Cached release notes
+
+### Migrations
+- **Service:** `migrations.php`
+- **Features:**
+  - Numbered, sequential migrations
+  - Tracking table to prevent re-runs
+  - Forward-compatible schema evolution
+  - Admin UI to run pending migrations
+
+## Performance Optimizations
+
+### Caching
+- **Browser caching:** Static assets with cache headers
+- **Thumbnail caching:** Generated thumbnails stored on disk
+- **Database query caching:** App-level caching for repeated queries
+- **ZIP stream generation:** Not stored; streamed directly to client
+
+### Database
+- **Indexes:** On frequently queried columns (folder_path_hash, gallery_id, etc.)
+- **Query optimization:** Minimal joins, pagination for large galleries
+- **Connection pooling:** PDO persistent connections (optional)
+
+### Images & Thumbnails
+- **Responsive thumbnails:** Multiple sizes/formats for different contexts
+- **WebP support:** Modern browsers get smaller, faster files
+- **Quality bounds:** Configurable JPEG quality vs. size tradeoff
+- **Lazy loading:** Thumbnails load deferred in fullscreen
+
+### Frontend
+- **ES6 module system:** Code splitting for smaller JS downloads
+- **Responsive CSS:** Mobile-first media queries
+- **Minimal HTTP requests:** Bundled CSS/JS, inline SVGs for icons
+
+## Security
+
+### Input Validation
+- **File uploads:** MIME type checking, extension whitelist, size limits
+- **Database:** Parameterized queries with bound variables (PDO)
+- **User input:** HTML escaping with `e()` helper, CSRF protection
+
+### Authentication
+- **Sessions:** Secure cookies (HttpOnly, SameSite, HTTPS-only)
+- **Password reset:** Rate-limited, token-based flow
+- **Multi-admin support:** Per-user audit logging
+
+### Authorization
+- **Gallery access:** Visibility rules enforced on all queries
+- **Password-protected galleries:** Validated before rendering
+- **Share links:** Token validation, expiration checking
+
+### Attack Prevention
+- **CSRF:** Token validation on all state-changing requests
+- **SQL injection:** Parameterized queries throughout
+- **XSS:** Output escaping on all user-controlled content
+- **Path traversal:** Validated folder paths, no `..` allowed
+
+### Integrity
+- **File integrity checking:** Manifest of core application files
+- **Database integrity:** Optional consistency checks
+
+## Development
+
+### Code Organization
+- **Strict types:** `declare(strict_types=1)` in all PHP files
+- **Type hints:** Function parameters and return types
+- **Naming conventions:** Clear, descriptive function names
+- **Documentation:** Header comments explaining module purpose
+- **Version tracking:** Each file timestamped
+
+### Extending the Application
+1. **New feature:** Create new controller file in `app/controllers/`
+2. **Business logic:** Add service file in `app/services/`
+3. **Database changes:** Create numbered migration in `database/migrations/`
+4. **Translations:** Add strings to `app/lang/` JSON files
+5. **Register routes:** Add entry to `$routes` table in `bootstrap.php`
+
+### Testing
+- Test files in `tests/` directory
+- Unit tests for data model behavior
+- Run with standard PHP test runner (PHPUnit, etc.)
+
+### Deployment
+- **Single-file installer:** `setup-gallery.php` for shared hosting
+- **Manual deployment:** Upload with FTP, run installer
+- **Zero config:** Configuration auto-generated on install
+- **Zero build step:** No npm, Composer, or pre-processing needed
+
+## Summary
+
+PHP Gallery CMS v0.66+ is a focused, well-organized application with:
+
+- **Clear request/response flow:** Routing → Controllers → Services → Views
+- **Focused responsibility:** Controllers handle HTTP, Services handle logic
+- **Modular design:** 50+ service files, 30+ controller modules
+- **Database-backed state:** Galleries, images, tags, votes, logs
+- **Filesystem-first:** Galleries are folders; DB stores metadata
+- **Rich feature set:** Discovery, upload, tagging, voting, access control, logs, stats
+- **Shared hosting ready:** No dependencies, simple deployment
+- **Modern PHP:** Type hints, strict mode, PDO, security best practices
+
+The application is built for reliability, maintainability, and ease of deployment on ordinary shared hosting.

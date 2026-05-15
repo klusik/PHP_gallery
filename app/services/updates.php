@@ -58,46 +58,85 @@ function cms_github_project_url(): string
 /**
  * Check GitHub release metadata for the newest published application version.
  */
-function check_application_update(): array
+function check_application_update(bool $force = false): array
 {
-    // $lastError stores an intermediate value used by the surrounding gallery workflow.
+    // $force bypasses only PHP Gallery's local metadata cache. It never bypasses
+    // GitHub Retry-After or x-ratelimit-reset wait windows.
+    // $waitState stores GitHub policy backoff data from previous responses.
+    $waitState = application_update_github_wait_state();
+    if (!empty($waitState['active'])) {
+        return application_update_rate_limited_status($waitState);
+    }
+    // $lastError stores the newest transport or parsing error from the remote checks.
     $lastError = null;
-    // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
+    // $latestStatus stores the newest valid remote version payload found across allowed branches.
     $latestStatus = null;
+    // $reachableBranch stores the first branch where GitHub answered, even if no version marker was present.
+    $reachableBranch = null;
+    // $markerDiagnostics stores human-readable marker failures for admin diagnostics and dry-run logs.
+    $markerDiagnostics = [];
+
     foreach (application_update_branch_candidates() as $branch) {
         try {
-            // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
-            $versionCandidates = application_update_remote_version_candidates($branch);
+            // $versionResult stores valid version candidates plus fetch diagnostics for the current branch.
+            $versionResult = application_update_remote_version_result($branch);
+            if (!empty($versionResult['reachable']) && $reachableBranch === null) {
+                $reachableBranch = $branch;
+            }
+            // $versionCandidates stores the valid remote version candidates found for this branch.
+            $versionCandidates = (array) ($versionResult['candidates'] ?? []);
             if ($versionCandidates === []) {
-                // $lastError stores an intermediate value used by the surrounding gallery workflow.
-                $lastError = 'No version marker was found in app/bootstrap.php on branch ' . $branch . '.';
+                $markerDiagnostics[$branch] = (string) ($versionResult['diagnostic'] ?? ('No version marker was found on branch ' . $branch . '.'));
                 continue;
             }
-            // $latestVersion stores an intermediate value used by the surrounding gallery workflow.
+
+            // $latestVersion stores the highest valid version advertised by this branch.
             $latestVersion = application_update_highest_version($versionCandidates);
-            // $status stores an intermediate value used by the surrounding gallery workflow.
+            // $currentVersion stores the installed release so stale remote branches never look like a downgrade target.
+            $currentVersion = cms_current_version();
+            // $displayVersion stores the version shown in admin cards and cached diagnostics.
+            $displayVersion = version_compare($latestVersion, $currentVersion, '<') ? $currentVersion : $latestVersion;
+            // $statusDiagnostic stores a non-fatal note when GitHub reports an older marker than this install.
+            $statusDiagnostic = version_compare($latestVersion, $currentVersion, '<') ? ('GitHub branch ' . $branch . ' reports version ' . $latestVersion . ', which is older than installed version ' . $currentVersion . '.') : '';
+            // $status stores the normalized update state used by the admin UI and automatic updater.
             $status = [
-                'current_version' => cms_current_version(),
-                'latest_version' => $latestVersion,
+                'current_version' => $currentVersion,
+                'latest_version' => $displayVersion,
                 'branch' => $branch,
                 'repository' => CMS_GITHUB_REPOSITORY,
-                'update_available' => version_compare($latestVersion, cms_current_version(), '>'),
+                'update_available' => version_compare($latestVersion, $currentVersion, '>'),
                 'version_sources' => $versionCandidates,
-                'version_source' => application_update_version_source_label($versionCandidates, $latestVersion),
+                'version_source' => $statusDiagnostic !== '' ? 'installed fallback' : application_update_version_source_label($versionCandidates, $latestVersion),
                 'error' => null,
+                'diagnostic' => $statusDiagnostic,
+                'remote_older_than_installed' => $statusDiagnostic !== '',
             ];
             if ($latestStatus === null || version_compare($latestVersion, (string) $latestStatus['latest_version'], '>')) {
-                // $latestStatus stores an intermediate value used by the surrounding gallery workflow.
                 $latestStatus = $status;
             }
         } catch (Throwable $exception) {
-            // $lastError stores an intermediate value used by the surrounding gallery workflow.
             $lastError = $exception->getMessage();
+            $markerDiagnostics[$branch] = $exception->getMessage();
         }
     }
 
     if ($latestStatus !== null) {
         return $latestStatus;
+    }
+
+    if ($reachableBranch !== null) {
+        return [
+            'current_version' => cms_current_version(),
+            'latest_version' => cms_current_version(),
+            'branch' => $reachableBranch,
+            'repository' => CMS_GITHUB_REPOSITORY,
+            'update_available' => false,
+            'version_sources' => ['installed fallback' => cms_current_version()],
+            'version_source' => 'installed fallback',
+            'error' => null,
+            'diagnostic' => implode(' ', array_filter($markerDiagnostics)),
+            'remote_marker_missing' => true,
+        ];
     }
 
     return [
@@ -109,7 +148,77 @@ function check_application_update(): array
         'version_sources' => [],
         'version_source' => '',
         'error' => $lastError ?? 'Could not contact GitHub.',
+        'diagnostic' => implode(' ', array_filter($markerDiagnostics)),
     ];
+}
+
+
+/**
+ * Return a cache-aware update status for the admin page.
+ */
+function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 18000): array
+{
+    if (!$force) {
+        // $cachedStatus stores GitHub metadata already fetched by automatic or manual checks.
+        // The admin update page is intentionally passive on GET renders: it may show stale
+        // local metadata, but it must not spend GitHub quota merely because the admin
+        // refreshed the browser. Fresh checks are owned by the Force check button and
+        // by the automatic updater timer.
+        $cachedStatus = cached_application_update_check($ttlSeconds, false);
+        if ($cachedStatus !== []) {
+            return $cachedStatus;
+        }
+
+        return application_update_unknown_cached_status();
+    }
+
+    // $status stores a fresh GitHub probe requested by an explicit administrator action.
+    $status = check_application_update($force);
+    cache_application_update_check($status);
+    return $status;
+}
+
+/**
+ * Return the next safe GitHub request time according to saved rate-limit policy data.
+ */
+function application_update_github_wait_state(): array
+{
+    return cms_github_api_wait_state();
+}
+
+/**
+ * Build a non-network update status when GitHub asked this installation to wait.
+ */
+function application_update_rate_limited_status(array $waitState): array
+{
+    return [
+        'current_version' => cms_current_version(),
+        'latest_version' => null,
+        'branch' => implode(' or ', application_update_branch_candidates()),
+        'repository' => CMS_GITHUB_REPOSITORY,
+        'update_available' => false,
+        'version_sources' => [],
+        'version_source' => '',
+        'error' => 'GitHub update checks are paused until ' . (string) ($waitState['next_allowed_label'] ?? '') . ' because the previous response asked this installation to wait.',
+        'diagnostic' => 'The updater is respecting GitHub rate-limit headers and did not make a new request.',
+        'github_policy_wait' => $waitState,
+    ];
+}
+
+/**
+ * Return persisted GitHub API diagnostics for the update page.
+ */
+function application_update_github_api_status(): array
+{
+    return cms_github_api_status();
+}
+
+/**
+ * Persist GitHub API headers and calculate safe retry windows from official response headers.
+ */
+function application_update_record_github_response(string $url, int $status, array $headers): void
+{
+    cms_github_api_record_response($url, $status, $headers);
 }
 
 
@@ -381,7 +490,7 @@ function application_patch_notes_inline_markdown(string $text): string
 /**
  * Return a cached update check for small UI badges.
  */
-function cached_application_update_check(int $ttlSeconds = 3600): array
+function cached_application_update_check(int $ttlSeconds = 3600, bool $refreshWhenStale = false): array
 {
     static $requestCache = null;
 
@@ -395,16 +504,22 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
     $cachedAt = (int) app_setting('application_update_check_cached_at', '0');
     // $cachedJson stores the last update-check payload used by admin navigation badges.
     $cachedJson = (string) app_setting('application_update_check_status_json', '');
-    if ($cachedAt > 0 && $cachedJson !== '' && time() - $cachedAt <= $ttlSeconds) {
-        // $cachedStatus stores the decoded update-check payload when it is still usable.
+    if ($cachedAt > 0 && $cachedJson !== '') {
+        // $cachedStatus stores the decoded update-check payload when it matches the expected shape.
         $cachedStatus = json_decode($cachedJson, true);
         if (is_array($cachedStatus)) {
             $requestCache = ['cached_at' => $cachedAt, 'status' => $cachedStatus];
-            return $cachedStatus;
+            if (time() - $cachedAt <= $ttlSeconds || !$refreshWhenStale) {
+                return $cachedStatus;
+            }
         }
     }
 
-    // $status stores the fresh remote status when the cache is missing or expired.
+    if (!$refreshWhenStale) {
+        return [];
+    }
+
+    // $status stores the fresh remote status only for callers that explicitly allow a refresh.
     $status = check_application_update();
     cache_application_update_check($status);
     $requestCache = ['cached_at' => time(), 'status' => $status];
@@ -414,6 +529,26 @@ function cached_application_update_check(int $ttlSeconds = 3600): array
 /**
  * Store an update check result for badge rendering.
  */
+
+/**
+ * Return a safe placeholder when no local update metadata has been cached yet.
+ */
+function application_update_unknown_cached_status(): array
+{
+    return [
+        'current_version' => cms_current_version(),
+        'latest_version' => null,
+        'branch' => implode(' or ', application_update_branch_candidates()),
+        'repository' => CMS_GITHUB_REPOSITORY,
+        'update_available' => false,
+        'version_sources' => [],
+        'version_source' => 'local cache',
+        'error' => null,
+        'diagnostic' => 'No local GitHub update metadata has been cached yet. Use Force check to query GitHub now.',
+        'local_cache_only' => true,
+    ];
+}
+
 function cache_application_update_check(array $status): void
 {
     // $json stores the compact update status used by navigation badges.
@@ -468,6 +603,254 @@ function application_update_beta_active(): bool
 function application_update_beta_commit(): string
 {
     return (string) app_setting('application_update_beta_commit', '');
+}
+
+/**
+ * Return true when automatic stable updates are enabled by admin settings.
+ */
+function application_autoupdate_enabled(): bool
+{
+    return app_setting('application_autoupdate_enabled', '1') === '1';
+}
+
+/**
+ * Persist the automatic stable update setting from the admin maintenance page.
+ */
+function set_application_autoupdate_enabled(bool $enabled): void
+{
+    set_app_setting('application_autoupdate_enabled', $enabled ? '1' : '0');
+}
+
+/**
+ * Return diagnostic state for the automatic updater card.
+ */
+function application_autoupdate_status(): array
+{
+    // $lastCheckedAt stores the last request-time automatic update check timestamp.
+    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
+    // $lastResult stores the latest readable automatic update result.
+    $lastResult = (string) app_setting('application_autoupdate_last_result', '');
+    // $enabled stores the raw admin checkbox state, even when beta code makes it ineffective.
+    $enabled = application_autoupdate_enabled();
+    // $betaActive stores whether autoupdate must stay passive because a manual beta commit is installed.
+    $betaActive = application_update_beta_active();
+    // $lastCheckedLabel stores the UI-ready timestamp label, including a never-checked fallback.
+    $lastCheckedLabel = application_autoupdate_last_checked_label($lastCheckedAt);
+    // $lastCheckedRelative stores a concise freshness label such as "2 minutes ago".
+    $lastCheckedRelative = application_autoupdate_relative_time_label($lastCheckedAt);
+
+    return [
+        'enabled' => $enabled,
+        'effective' => $enabled && !$betaActive,
+        'beta_active' => $betaActive,
+        'last_checked_at' => $lastCheckedAt,
+        'last_checked_label' => $lastCheckedLabel,
+        'last_checked_relative' => $lastCheckedRelative,
+        'last_result' => $lastResult,
+    ];
+}
+
+/**
+ * Return a readable automatic update check timestamp for admin diagnostics.
+ */
+function application_autoupdate_last_checked_label(int $lastCheckedAt): string
+{
+    if ($lastCheckedAt <= 0) {
+        return t('admin.updates.autoupdate_last_check_never', 'never');
+    }
+
+    return date('Y-m-d H:i:s', $lastCheckedAt);
+}
+
+/**
+ * Return a concise relative automatic update check age for admin diagnostics.
+ */
+function application_autoupdate_relative_time_label(int $lastCheckedAt): string
+{
+    if ($lastCheckedAt <= 0) {
+        return '';
+    }
+
+    // $ageSeconds stores elapsed wall-clock seconds since the last automatic check.
+    $ageSeconds = max(0, time() - $lastCheckedAt);
+    if ($ageSeconds < 60) {
+        return t('admin.updates.autoupdate_relative_seconds', 'just now');
+    }
+
+    // $minutes stores rounded-down elapsed minutes for compact labels.
+    $minutes = intdiv($ageSeconds, 60);
+    if ($minutes < 60) {
+        return t('admin.updates.autoupdate_relative_minutes', '{count} minute(s) ago', ['count' => (string) $minutes]);
+    }
+
+    // $hours stores rounded-down elapsed hours for same-day and recent checks.
+    $hours = intdiv($minutes, 60);
+    if ($hours < 48) {
+        return t('admin.updates.autoupdate_relative_hours', '{count} hour(s) ago', ['count' => (string) $hours]);
+    }
+
+    // $days stores rounded-down elapsed days for stale checks.
+    $days = intdiv($hours, 24);
+    return t('admin.updates.autoupdate_relative_days', '{count} day(s) ago', ['count' => (string) $days]);
+}
+
+/**
+ * Check and install a stable release automatically when the request-time timer allows it.
+ *
+ * This routine is intentionally conservative: it runs only on safe browser reads,
+ * never changes the admin checkbox when beta code is active, and throttles remote
+ * checks to one attempt per installation per configured interval.
+ */
+function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
+{
+    // $ttlSeconds stores the minimum remote check interval. Five hours is the default
+    // so shared hosting installations do not burn anonymous GitHub API quota on
+    // normal page traffic. Manual dry checks intentionally bypass this throttle.
+    $ttlSeconds = max(18000, $ttlSeconds);
+    // $method stores the current HTTP verb so uploads, votes, edits, and CSRF flows are not interrupted.
+    $method = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if (!in_array($method, ['GET', 'HEAD'], true)) {
+        return;
+    }
+    if (!application_autoupdate_enabled()) {
+        return;
+    }
+
+    // $now stores one timestamp used consistently for throttle and lock state.
+    $now = time();
+    // $lastCheckedAt stores the latest automatic update check timestamp.
+    $lastCheckedAt = (int) app_setting('application_autoupdate_last_checked_at', '0');
+    if ($lastCheckedAt > 0 && $now - $lastCheckedAt < $ttlSeconds) {
+        return;
+    }
+
+    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if ($lockUntil > $now) {
+        return;
+    }
+
+    if (application_update_beta_active()) {
+        application_autoupdate_dry_run(false, $now);
+        return;
+    }
+
+    application_autoupdate_run_installing_check(false, $now);
+}
+
+/**
+ * Run the automatic update check without installing anything.
+ *
+ * Beta installs use this path so the admin can validate GitHub connectivity,
+ * update detection, throttling, and the Last automatic check diagnostics without
+ * replacing the pinned beta commit. Manual admin dry runs can force the same
+ * safe check immediately from the update page.
+ */
+function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = null): array
+{
+    // $now stores the timestamp written to the shared automatic update diagnostics.
+    $now = $checkedAt ?? time();
+    // $lockUntil stores a soft process lock so concurrent dry-run checks do not fan out.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if (!$force && $lockUntil > $now) {
+        return application_autoupdate_status();
+    }
+
+    set_app_setting('application_autoupdate_last_checked_at', (string) $now);
+    set_app_setting('application_autoupdate_lock_until', (string) ($now + 600));
+
+    try {
+        // $status stores the same update payload used by the manual update page.
+        $status = check_application_update();
+        cache_application_update_check($status);
+        // $result stores a compact diagnostic value shown in the automatic update card.
+        $result = application_autoupdate_dry_run_result_label($status);
+        set_app_setting('application_autoupdate_last_result', $result);
+        admin_log_event('info', 'update.autoupdate_dry_run_checked', t('admin.updates.log_autoupdate_dry_run_checked', 'Automatic update dry run checked for a newer stable release without installing it.'), [
+            'result' => $result,
+            'current_version' => cms_current_version(),
+            'latest_version' => (string) ($status['latest_version'] ?? ''),
+            'update_available' => !empty($status['update_available']),
+            'beta_active' => application_update_beta_active(),
+            'forced' => $force,
+            'version_source' => (string) ($status['version_source'] ?? ''),
+            'diagnostic' => (string) ($status['diagnostic'] ?? ''),
+        ], ['category' => 'update', 'severity' => 'notice']);
+        return application_autoupdate_status();
+    } catch (Throwable $exception) {
+        set_app_setting('application_autoupdate_last_result', 'dry_run_failed:' . $exception->getMessage());
+        admin_log_event('warning', 'update.autoupdate_dry_run_failed', t('admin.updates.log_autoupdate_dry_run_failed', 'Automatic update dry run failed.'), [
+            'error' => $exception->getMessage(),
+            'current_version' => cms_current_version(),
+            'beta_active' => application_update_beta_active(),
+            'php_version' => PHP_VERSION,
+            'forced' => $force,
+        ], ['category' => 'update', 'severity' => 'error']);
+        return application_autoupdate_status();
+    } finally {
+        delete_app_settings(['application_autoupdate_lock_until']);
+    }
+}
+
+/**
+ * Return a compact persisted result label for a dry automatic update check.
+ */
+function application_autoupdate_dry_run_result_label(array $status): string
+{
+    if (!empty($status['error'])) {
+        return 'dry_run_check_failed';
+    }
+
+    if (application_update_status_is_pending($status)) {
+        return 'dry_run_update_available:' . (string) ($status['latest_version'] ?? 'unknown');
+    }
+
+    return 'dry_run_no_update';
+}
+
+/**
+ * Run the automatic update check and install a stable release when pending.
+ */
+function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
+{
+    // $now stores the timestamp written to the shared automatic update diagnostics.
+    $now = $checkedAt ?? time();
+    // $lockUntil stores a soft process lock so concurrent requests do not all update at once.
+    $lockUntil = (int) app_setting('application_autoupdate_lock_until', '0');
+    if (!$force && $lockUntil > $now) {
+        return application_autoupdate_status();
+    }
+
+    set_app_setting('application_autoupdate_last_checked_at', (string) $now);
+    set_app_setting('application_autoupdate_lock_until', (string) ($now + 600));
+
+    try {
+        // $status stores the same update payload used by the manual update page.
+        $status = check_application_update();
+        cache_application_update_check($status);
+        if (!application_update_status_is_pending($status)) {
+            set_app_setting('application_autoupdate_last_result', empty($status['error']) ? 'no_update' : 'check_failed');
+            return application_autoupdate_status();
+        }
+
+        // $result stores manual-updater diagnostics for the automatic update log entry.
+        $result = install_application_update();
+        set_app_setting('application_autoupdate_last_result', 'updated:' . (string) ($result['version'] ?? 'unknown'));
+        admin_log_event('info', 'update.autoupdate_installed', t('admin.updates.log_autoupdate_installed', 'Automatic application update installed a newer stable release.'), $result, ['category' => 'update', 'severity' => 'notice']);
+        return application_autoupdate_status();
+    } catch (Throwable $exception) {
+        set_app_setting('application_autoupdate_last_result', 'failed:' . $exception->getMessage());
+        admin_log_event('warning', 'update.autoupdate_failed', t('admin.updates.log_autoupdate_failed', 'Automatic application update failed.'), [
+            'error' => $exception->getMessage(),
+            'current_version' => cms_current_version(),
+            'beta_active' => application_update_beta_active(),
+            'php_version' => PHP_VERSION,
+            'forced' => $force,
+        ], ['category' => 'update', 'severity' => 'error']);
+        return application_autoupdate_status();
+    } finally {
+        delete_app_settings(['application_autoupdate_lock_until']);
+    }
 }
 
 /**
@@ -869,7 +1252,11 @@ function application_update_fetch_github_content(string $branch, string $path, i
         'Accept: application/vnd.github.raw+json',
         'X-GitHub-Api-Version: 2022-11-28',
     ];
-    return http_fetch_with_headers(application_update_github_contents_api_url($branch, $path), $timeoutSeconds, $headers);
+    // $url stores the exact GitHub API endpoint so diagnostics can show which API call was last made.
+    $url = application_update_github_contents_api_url($branch, $path);
+    // $response stores body, status, and headers from the central GitHub API gateway.
+    $response = cms_github_api_get($url, $timeoutSeconds, $headers, true);
+    return (string) $response['body'];
 }
 
 /**
@@ -877,21 +1264,60 @@ function application_update_fetch_github_content(string $branch, string $path, i
  */
 function application_update_remote_version_candidates(string $branch): array
 {
-    // $versionCandidates stores an intermediate value used by the surrounding gallery workflow.
+    // $result stores the richer branch probe while preserving the legacy return shape for callers.
+    $result = application_update_remote_version_result($branch);
+    return (array) ($result['candidates'] ?? []);
+}
+
+/**
+ * Read remote version markers and keep diagnostics for branches without a marker.
+ */
+function application_update_remote_version_result(string $branch): array
+{
+    // $versionCandidates stores trusted version markers found in remote files.
     $versionCandidates = [];
+    // $diagnostics stores non-fatal parsing details used by the update page and logs.
+    $diagnostics = [];
+    // $reachable stores whether at least one trusted GitHub file was fetched successfully.
+    $reachable = false;
+
     try {
         // $bootstrap stores the remote bootstrap file fetched through GitHub Contents API.
         $bootstrap = application_update_fetch_github_content($branch, 'app/bootstrap.php', 12);
-        // $bootstrapVersion stores an intermediate value used by the surrounding gallery workflow.
+        $reachable = true;
+        // $bootstrapVersion stores the version parsed from the bootstrap constant when present.
         $bootstrapVersion = application_update_version_from_bootstrap($bootstrap);
         if ($bootstrapVersion !== null) {
             $versionCandidates['app/bootstrap.php'] = $bootstrapVersion;
+        } else {
+            $diagnostics[] = 'No CMS_VERSION marker was found in app/bootstrap.php on branch ' . $branch . '.';
         }
     } catch (Throwable $exception) {
-        $versionCandidates['app/bootstrap.php error'] = $exception->getMessage();
+        $diagnostics[] = 'app/bootstrap.php: ' . $exception->getMessage();
     }
 
-    return array_filter($versionCandidates ?? [], static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null);
+    if ($versionCandidates === []) {
+        try {
+            // $patchNotes stores the remote release notes used as a secondary version signal.
+            $patchNotes = application_update_fetch_github_content($branch, 'PATCH_NOTES.md', 12);
+            $reachable = true;
+            // $patchNotesVersion stores the newest heading parsed from the release notes.
+            $patchNotesVersion = application_update_version_from_patch_notes($patchNotes);
+            if ($patchNotesVersion !== null) {
+                $versionCandidates['PATCH_NOTES.md'] = $patchNotesVersion;
+            } else {
+                $diagnostics[] = 'No version heading was found in PATCH_NOTES.md on branch ' . $branch . '.';
+            }
+        } catch (Throwable $exception) {
+            $diagnostics[] = 'PATCH_NOTES.md: ' . $exception->getMessage();
+        }
+    }
+
+    return [
+        'candidates' => array_filter($versionCandidates, static fn ($value): bool => is_string($value) && application_update_normalize_version($value) !== null),
+        'reachable' => $reachable,
+        'diagnostic' => implode(' ', array_filter($diagnostics)),
+    ];
 }
 
 /**
@@ -949,6 +1375,23 @@ function application_update_version_from_bootstrap(string $bootstrap): ?string
 }
 
 /**
+ * Parse the newest release version from PATCH_NOTES.md headings.
+ */
+function application_update_version_from_patch_notes(string $markdown): ?string
+{
+    if (preg_match_all('/^##\s+Version\s+([^\r\n]+)/mi', $markdown, $matches) !== false && !empty($matches[1])) {
+        foreach ($matches[1] as $candidate) {
+            // $version stores the normalized heading version when it follows the project release format.
+            $version = application_update_normalize_version((string) $candidate);
+            if ($version !== null) {
+                return $version;
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Normalize version strings used in notes, tags, and constants.
  */
 function application_update_normalize_version(string $version): ?string
@@ -976,6 +1419,20 @@ function http_fetch(string $url, int $timeoutSeconds): string
  */
 function http_fetch_with_headers(string $url, int $timeoutSeconds, array $headers = []): string
 {
+    // $response stores the complete HTTP response while this legacy wrapper returns only the body.
+    $response = http_fetch_response_with_headers($url, $timeoutSeconds, $headers);
+    return (string) $response['body'];
+}
+
+/**
+ * Fetch a trusted remote URL and return body, status, and response headers.
+ */
+function http_fetch_response_with_headers(string $url, int $timeoutSeconds, array $headers = []): array
+{
+    if (strpos($url, 'https://api.github.com/') === 0) {
+        return cms_github_api_get($url, $timeoutSeconds, $headers, true);
+    }
+
     // $baseHeaders stores cache-control and identity headers shared by all update HTTP calls.
     $baseHeaders = [
         'Cache-Control: no-cache',
@@ -985,11 +1442,13 @@ function http_fetch_with_headers(string $url, int $timeoutSeconds, array $header
     $requestHeaders = array_values(array_filter(array_merge($baseHeaders, $headers), static fn ($header): bool => is_string($header) && trim($header) !== ''));
 
     if (function_exists('curl_init')) {
-        // $handle stores an intermediate value used by the surrounding gallery workflow.
+        // $handle stores the cURL handle used for a single bounded HTTP request.
         $handle = curl_init($url);
         if ($handle === false) {
             throw new RuntimeException('Could not initialize HTTP client.');
         }
+        // $responseHeaders stores normalized response headers captured by cURL.
+        $responseHeaders = [];
         curl_setopt_array($handle, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
@@ -1000,36 +1459,67 @@ function http_fetch_with_headers(string $url, int $timeoutSeconds, array $header
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $requestHeaders,
+            CURLOPT_HEADERFUNCTION => static function ($curlHandle, string $headerLine) use (&$responseHeaders): int {
+                // $length stores the raw header-line length cURL expects this callback to return.
+                $length = strlen($headerLine);
+                // $parts stores the parsed header name and value when the line is a normal response header.
+                $parts = explode(':', trim($headerLine), 2);
+                if (count($parts) === 2) {
+                    $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                }
+                return $length;
+            },
         ]);
-        // $body stores an intermediate value used by the surrounding gallery workflow.
+        // $body stores the response body returned by cURL.
         $body = curl_exec($handle);
-        // $status stores an intermediate value used by the surrounding gallery workflow.
+        // $status stores the final response code after redirects.
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-        // $error stores an intermediate value used by the surrounding gallery workflow.
+        // $error stores the cURL transport error when the request failed before a valid response body.
         $error = curl_error($handle);
         curl_close($handle);
         if ($body === false || $status >= 400) {
+            if (strpos($url, 'https://api.github.com/') === 0) {
+                application_update_record_github_response($url, $status, $responseHeaders);
+            }
             throw new RuntimeException($error !== '' ? $error : 'HTTP request failed with status ' . $status . '.');
         }
-        return (string) $body;
+        return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
     }
 
     // $headerText stores HTTP headers formatted for the stream wrapper fallback.
     $headerText = "User-Agent: PHP-Gallery-CMS/" . cms_current_version() . "\r\n" . implode("\r\n", $requestHeaders) . "\r\n";
-    // $context stores an intermediate value used by the surrounding gallery workflow.
+    // $context stores stream options for a single bounded GET request.
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
             'timeout' => $timeoutSeconds,
             'header' => $headerText,
+            'ignore_errors' => true,
         ],
     ]);
-    // $body stores an intermediate value used by the surrounding gallery workflow.
+    // $body stores the response body returned by the stream wrapper.
     $body = @file_get_contents($url, false, $context);
-    if ($body === false) {
-        throw new RuntimeException('HTTP request failed. Enable curl or allow_url_fopen for update checks.');
+    // $responseHeaders stores normalized headers from the stream wrapper metadata variable.
+    $responseHeaders = [];
+    // $status stores the parsed response code when stream metadata is available.
+    $status = 0;
+    foreach (($http_response_header ?? []) as $line) {
+        if (preg_match('/^HTTP\/\S+\s+(\d+)/', $line, $match)) {
+            $status = (int) $match[1];
+            continue;
+        }
+        $parts = explode(':', trim($line), 2);
+        if (count($parts) === 2) {
+            $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+        }
     }
-    return $body;
+    if ($body === false || $status >= 400) {
+        if (strpos($url, 'https://api.github.com/') === 0) {
+            application_update_record_github_response($url, $status, $responseHeaders);
+        }
+        throw new RuntimeException($status >= 400 ? 'HTTP request failed with status ' . $status . '.' : 'HTTP request failed. Enable curl or allow_url_fopen for update checks.');
+    }
+    return ['body' => (string) $body, 'status' => $status, 'headers' => $responseHeaders];
 }
 
 /**

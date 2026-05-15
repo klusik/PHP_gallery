@@ -40,6 +40,42 @@ declare(strict_types=1);
  * This module owns the admin upload endpoint and JSON response detection used by asynchronous upload flows.
  */
 
+
+/**
+ * Return a safe same-origin URL supplied by the side-panel upload workflow.
+ *
+ * The value is used only as a refresh source after JSON uploads. Keeping this
+ * validation server-side prevents a submitted form from turning the refresh
+ * URL into an arbitrary external target.
+ */
+function admin_upload_safe_refresh_url(mixed $value): string
+{
+    $candidate = trim((string) $value);
+    if ($candidate === '') {
+        return '';
+    }
+    $parts = parse_url($candidate);
+    if ($parts === false) {
+        return '';
+    }
+    $host = strtolower((string) ($parts['host'] ?? ''));
+    if ($host !== '') {
+        $requestHost = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+        if ($requestHost === '' || $host !== $requestHost) {
+            return '';
+        }
+    }
+    $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+    if ($scheme !== '' && !in_array($scheme, ['http', 'https'], true)) {
+        return '';
+    }
+    $path = (string) ($parts['path'] ?? '');
+    if ($path === '' && $host === '') {
+        return '';
+    }
+    return $candidate;
+}
+
 function cms_admin_upload(): void
 {
     // $isAjaxUpload stores an intermediate value used by the surrounding gallery workflow.
@@ -53,7 +89,8 @@ function cms_admin_upload(): void
             echo json_encode(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')]);
             return;
         }
-        redirect_to(url_for('admin_login'));
+        // Preserve the upload URL for normal browser requests so login can resume from the same admin context.
+        redirect_to(url_for('admin_login', ['return' => current_login_return_target()]));
     }
     if (request_method() === 'POST') {
         verify_csrf();
@@ -137,6 +174,14 @@ function cms_admin_upload(): void
             $refreshGalleryId = $mode === 'new' ? $parentGalleryId : (int) $gallery['id'];
             // $refreshUrl stores the source URL for current-context refreshes without guessing on the client.
             $refreshUrl = $mode === 'new' ? ($parentGalleryUrl !== '' ? $parentGalleryUrl : url_for('home')) : gallery_public_url($gallery);
+            // $callerRefreshUrl stores the public/admin page that opened the side-panel upload workflow.
+            $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
+            if ($mode !== 'new' && $callerRefreshUrl !== '') {
+                // Existing-gallery uploads should refresh the exact page the admin was viewing, including photo_page or clean pagination paths.
+                $refreshUrl = $callerRefreshUrl;
+            }
+            // $editUrl stores the gallery editor target used after upload so the admin can continue managing photos immediately.
+            $editUrl = url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'tab' => 'admin-edit-images']) . '#admin-edit-images';
             // $response stores an intermediate value used by the surrounding gallery workflow.
             $response = [
                 'ok' => true,
@@ -144,7 +189,7 @@ function cms_admin_upload(): void
                 'gallery_ids' => [(int) $gallery['id']],
                 'gallery_title' => (string) ($gallery['title'] ?? ''),
                 'gallery_url' => gallery_public_url($gallery),
-                'edit_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned']]),
+                'edit_url' => $editUrl,
                 'parent_gallery_id' => $parentGalleryId,
                 'parent_gallery_url' => $parentGalleryUrl,
                 'refresh_gallery_id' => $refreshGalleryId,

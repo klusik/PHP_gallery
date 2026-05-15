@@ -47,6 +47,67 @@ function normalizedAdminTabHash(hash) {
     return legacyAdminTabHashes.get(hash) || hash;
 }
 
+
+/**
+ * Keep the persistent admin sidebar aligned with hash-selected dashboard tabs.
+ *
+ * The server cannot read URL fragments, so links that point to the same admin
+ * page need a small client-side correction after the dashboard tab module has
+ * resolved the active hash. This keeps Dashboard active for the overview tab
+ * and All galleries active for #admin-tab-galleries.
+ *
+ * @param {string} activeHash Normalized URL fragment including the leading #.
+ * @returns {void}
+ */
+function syncAdminSidebarHashSelection(activeHash) {
+    const sidebar = document.querySelector('.admin-sidebar');
+    if (!(sidebar instanceof HTMLElement)) {
+        return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const currentPage = currentUrl.searchParams.get('page') || '';
+    const links = Array.from(sidebar.querySelectorAll('.admin-menu-link'))
+        .filter((link) => link instanceof HTMLAnchorElement)
+        .filter((link) => {
+            try {
+                const linkUrl = new URL(link.href, window.location.href);
+                const linkPage = linkUrl.searchParams.get('page') || '';
+
+                // Hash-only admin dashboard links can be rendered through rewritten
+                // or non-rewritten URLs. Compare the logical page first so the
+                // sidebar still updates when /admin and /index.php?page=admin
+                // point to the same dashboard.
+                if (currentPage === 'admin' && linkPage === 'admin') {
+                    return true;
+                }
+
+                return linkUrl.origin === currentUrl.origin
+                    && linkUrl.pathname === currentUrl.pathname
+                    && linkUrl.search === currentUrl.search;
+            } catch (error) {
+                return false;
+            }
+        });
+
+    if (!links.length) {
+        return;
+    }
+
+    const normalizedHash = normalizedAdminTabHash(activeHash || '');
+    const targetLink = normalizedHash
+        ? links.find((link) => normalizedAdminTabHash(link.hash || '') === normalizedHash)
+        : links.find((link) => !link.hash);
+
+    if (!(targetLink instanceof HTMLAnchorElement)) {
+        return;
+    }
+
+    links.forEach((link) => {
+        link.classList.toggle('is-active', link === targetLink);
+    });
+}
+
 export function setupAdminTabs(root = document) {
     setupAdminTabsInRoot(root);
 }
@@ -107,6 +168,9 @@ export function setupAdminTabsInRoot(root) {
                     window.history.pushState(null, '', nextHash);
                 }
             }
+            if (shouldManageHash) {
+                syncAdminSidebarHashSelection(`#${targetPanel.id}`);
+            }
             tabsRoot.closest('form, [data-admin-side-panel-body], main')?.querySelectorAll('input[type="hidden"][name="return_tab"]').forEach((input) => {
                 if (input instanceof HTMLInputElement) {
                     input.value = targetPanel.id;
@@ -119,7 +183,9 @@ export function setupAdminTabsInRoot(root) {
         if (activeHash && activeHash !== window.location.hash) {
             window.history.replaceState(null, '', activeHash);
         }
-        activateTab((activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '');
+        const initialTargetId = (activeHash || '').replace(/^#/, '') || tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.adminTabTarget || tabs[0].dataset.adminTabTarget || '';
+        activateTab(initialTargetId);
+        syncAdminSidebarHashSelection(initialTargetId ? `#${initialTargetId}` : '');
 
         tabs.forEach((tab) => {
             tab.addEventListener('click', (event) => {
@@ -168,6 +234,7 @@ export function setupAdminTabsInRoot(root) {
             // hash stores the normalized browser hash after navigation.
             const hash = normalizedAdminTabHash(window.location.hash);
             if (!hash) {
+                syncAdminSidebarHashSelection('');
                 return;
             }
             if (hash !== window.location.hash) {
