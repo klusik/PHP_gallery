@@ -1,5 +1,354 @@
 # Patch notes
 
+## Version 0.67
+
+Version 0.67 is a large maintenance, update-system, diagnostics, and admin-workflow release. It focuses on making GitHub update checks safer and cheaper, adding optional automatic stable updates, improving URL rewrite compatibility handling, expanding telemetry exports, making admin logs more usable, preserving navigation context across login, upload, and lightbox flows, and refreshing the project documentation.
+
+### Highlights
+
+#### Added a central GitHub API gateway
+
+  - Added `app/services/github.php` as the single controlled access layer for GitHub REST API calls.
+  - All updater GitHub Contents API requests now pass through the shared GitHub gateway.
+  - Added local file-backed GitHub API cache metadata.
+  - Added ETag and Last-Modified validator storage.
+  - Added conditional GitHub requests so unchanged GitHub content can return `304 Not Modified`.
+  - Added cached body reuse when GitHub returns `304 Not Modified`.
+  - Added persisted GitHub response diagnostics for the Updates page.
+  - Added support for recording:
+    - HTTP status
+    - ETag
+    - Last-Modified
+    - rate-limit resource
+    - used quota
+    - remaining quota
+    - reset time
+    - Retry-After wait windows
+  - Added a wait-state model so GitHub primary rate-limit and Retry-After responses are respected by later update checks.
+  - Avoided calling GitHub `/rate_limit` just to inspect quota state.
+  - Kept the updater based on normal required API responses instead of adding extra quota-consuming diagnostic requests.
+
+#### Added five-hour update-check caching and safer force checks
+
+  - Changed the update status flow so the admin page uses a cache-aware update status with a five-hour TTL.
+  - Added a Force check action that bypasses the local five-hour cache when an admin explicitly asks for a fresh GitHub check.
+  - Force checks still record and respect GitHub rate-limit headers after the response.
+  - Added a non-network fallback status when the installation is waiting for a GitHub retry window.
+  - Added clearer handling for unknown cached update state when no remote metadata has been cached yet.
+  - Improved remote version probing across allowed branches.
+  - Added diagnostics when a branch is reachable but does not expose a usable version marker.
+  - Prevented stale remote branch metadata from making the update page appear to offer a downgrade.
+  - Added parsing of version markers from remote `PATCH_NOTES.md` headings as an additional version source.
+  - Improved update-source labels so the admin can see when the detected version came from bootstrap metadata, patch notes, or branch diagnostics.
+
+#### Added optional automatic stable updates
+
+  - Added an admin setting for automatic stable updates.
+  - Automatic updates are disabled unless explicitly enabled.
+  - When enabled, safe browser requests can check for a stable update at most once every five hours.
+  - Automatic checks do not run on unsafe request methods.
+  - Automatic checks do not run while another automatic update check is locked.
+  - Automatic checks respect beta installations and do not replace beta code automatically.
+  - Added automatic update dry-run support.
+  - Dry runs check metadata and update diagnostics without installing files.
+  - Beta installs use dry-run behavior so update detection can be validated without replacing the beta build.
+  - Added an admin dry-run button on the Updates page.
+  - Added persisted automatic update diagnostics:
+    - last automatic check time
+    - relative check age
+    - last result
+    - no-update result
+    - check-failed result
+    - updated result
+    - dry-run result
+  - Added admin log events for:
+    - automatic update installed
+    - automatic update failed
+    - automatic update dry run checked
+    - automatic update dry run failed
+
+#### Added URL rewrite settings and compatibility diagnostics
+
+  - Added `url_rewrite_enabled()` and `set_url_rewrite_enabled()` app-setting helpers.
+  - Clean URL generation remains enabled by default to preserve existing behavior.
+  - Admins can now disable clean rewritten public URLs when their hosting does not support rewrite routing.
+  - Added rewrite compatibility checks for typical Apache, LiteSpeed, and shared-hosting signals.
+  - Added `.htaccess` marker checks so the app can detect whether rewrite rules are likely present.
+  - Added runtime compatibility diagnostics with status values such as:
+    - supported
+    - likely supported
+    - unsupported
+    - disabled intentionally
+    - unknown
+  - Added an `admin_url_rewrite` route for saving the setting.
+  - Added a URL rewrite card to the dashboard maintenance area.
+  - Added a dashboard warning when URL rewrite is enabled but support is not detected.
+  - Updated public gallery, image, and tag URL helpers so they fall back to `index.php` URLs when clean URL emission is disabled.
+  - Kept query-string routes as the durable fallback for hosts where pretty URLs are unreliable.
+
+#### Preserved login return targets
+
+  - Added `current_login_return_target()` for capturing the current browser request as a same-site relative return target.
+  - Added `sanitize_login_return_target()` to reject unsafe login redirects.
+  - Login return targets reject:
+    - absolute external URLs
+    - protocol-relative URLs
+    - control characters
+    - login routes
+    - logout routes
+    - setup routes
+    - password reset routes
+  - The public Admin login link now includes the current page as a safe return target.
+  - Successful login now redirects back to the originating page instead of always opening the admin dashboard.
+  - Failed login attempts keep the sanitized return target in a hidden form field.
+  - Admin account and upload redirects now preserve the intended post-login context.
+
+#### Fixed paginated gallery return behavior from photo view
+
+  - The lightbox now treats the current browser URL as the preferred gallery return URL when a photo is opened.
+  - When a visitor opens a photo from a paginated gallery page, closing the photo now restores that exact paginated gallery URL.
+  - Added URL comparison logic so direct photo URLs can still fall back to the server-rendered base gallery URL when appropriate.
+  - Avoided resetting a paginated gallery back to the base gallery URL after viewing a photo.
+  - Kept normal non-paginated lightbox navigation behavior intact.
+
+#### Improved side-panel upload refresh context
+
+  - Added `admin_upload_safe_refresh_url()` to validate the page that opened a side-panel upload workflow.
+  - Side-panel upload forms now include the source page URL.
+  - Existing-gallery uploads can refresh the exact page that opened the upload panel.
+  - Paginated gallery views preserve their active `photo_page` or clean pagination URL after upload.
+  - Upload JSON responses now return an editor URL that opens the image-management tab after upload.
+  - The side panel can switch to the gallery editor after both new-gallery and existing-gallery upload flows.
+  - Reworded the side-panel loading status from created-gallery-specific wording to generic gallery editor wording.
+
+#### Added dashboard original-storage metric
+
+  - Added an admin dashboard metric for total imported original file storage.
+  - The metric sums `images.file_size` from imported source files.
+  - Generated thumbnails, DNG display masters, caches, and other derivatives are excluded.
+  - The value is formatted as a compact byte label in the Galleries summary card.
+  - The query is profiled through the existing admin dashboard render profiler.
+
+#### Expanded standalone telemetry HTML export
+
+  - Expanded the telemetry export from a basic report into a much richer standalone diagnostics document.
+  - Added report helper functions for bounded windows, scalar queries, table counts, and reusable table rendering.
+  - Added session quality metrics:
+    - sessions
+    - page views
+    - photo views
+    - total capped duration
+    - average pages per session
+    - average photos per session
+    - average session duration
+    - bounced sessions
+    - recent versus previous sessions
+  - Added daily trend rows for sessions, page views, photo views, photo viewing time, client errors, and media bytes.
+  - Added top gallery engagement reporting.
+  - Added top route reporting.
+  - Added browser, device, locale, viewport, and referrer-style distributions where telemetry data exists.
+  - Added performance metrics and web-vital style summaries.
+  - Added client error distributions.
+  - Added recent anonymized telemetry event access-log output.
+  - Added database telemetry summaries and fingerprint hot-spot tables.
+  - Added recent telemetry job-run reporting.
+  - Added compact bar-chart and trend-chart HTML renderers for the export.
+  - Improved metric cards with optional explanatory hints.
+  - Kept the telemetry report privacy-oriented and based on already collected anonymous telemetry data.
+
+#### Redesigned admin log filters
+
+  - Reworked the admin Logs filter panel into a more coherent grouped interface.
+  - Added fieldset and legend structure for better semantic grouping.
+  - Added a persistent multi-select severity filter.
+  - Severity selections are stored in app settings and reused across log views.
+  - Empty severity selection now explicitly means all severities.
+  - Added severity filter reset behavior.
+  - Added active severity summary text.
+  - Preserved selected severities when building sort and filter URLs.
+  - Kept backward compatibility with the legacy single `severity` query parameter.
+  - Updated live filtering JavaScript to handle severity checkboxes and summary updates.
+  - Added a new `admin_log_severity_filter_test.php` test.
+
+#### Improved unpublished-gallery visibility for admins
+
+  - Public gallery cards now expose normalized visibility metadata in `data-gallery-visibility`.
+  - Logged-in admins now get a visible marker for unpublished galleries in public listings.
+  - Anonymous preview mode does not show the admin unpublished marker.
+  - Added dedicated public CSS for unpublished gallery cards.
+  - Unpublished galleries visible only to admins are visually greyed and labeled instead of looking identical to public galleries.
+  - Added English and Czech strings for the unpublished admin hint.
+
+#### Improved theme background optimization UI
+
+  - Added UI strings and styling for optimized theme background handling.
+  - Theme media controls can now show whether an optimized WebP background is active.
+  - Added controls and labels for:
+    - generating an optimized background
+    - regenerating an optimized background
+    - deleting the optimized background
+    - viewing the original image
+    - viewing the served image
+    - selecting optimized background size
+  - Added admin theme preview CSS for background optimization states.
+  - Added clearer labels for whether the site is serving the original background or the optimized WebP copy.
+
+#### Improved admin tab hash behavior
+
+  - Updated admin tab JavaScript to preserve and resolve tab hashes more reliably.
+  - Added configurable hash suppression for cases where a panel should not write browser history.
+  - Added helper behavior for activating admin tabs inside dynamic side-panel roots.
+  - Updated module versioning for the side-panel and tab modules.
+
+#### Updated project documentation
+
+  - Rewrote `README.md` into a more structured project overview.
+  - Expanded feature descriptions for gallery management, image management, thumbnails, access control, tags, voting, navigation, downloading, theming, updates, admin tools, telemetry, and security.
+  - Reorganized installation instructions around the one-file shared-hosting installer.
+  - Added clearer local-development and troubleshooting sections.
+  - Rewrote `ARCHITECTURE.md` for the modern v0.66+ codebase.
+  - Documented the request flow, route table, app directory structure, data model, feature responsibilities, performance model, security practices, and extension workflow.
+  - Updated documentation to reflect the split controller and service structure.
+
+### Updates and GitHub API details
+
+  - The update page now uses cached update status by default.
+  - Normal update-page reloads no longer need to consume a fresh GitHub API request each time.
+  - The Force check button intentionally performs a fresh check.
+  - GitHub API diagnostics are shown on the update page using stored response headers.
+  - The app records rate-limit state from the responses it already needed to make.
+  - The app does not spend an extra API request only to display rate-limit status.
+  - `Retry-After` and primary reset times are turned into a local next-safe-check window.
+  - Cached GitHub response bodies are reused for unchanged remote files.
+  - Branch probes now retain diagnostics when a branch is reachable but missing a usable marker.
+  - Update status can distinguish:
+    - current installation
+    - pending update
+    - stale remote marker
+    - unavailable remote marker
+    - rate-limited wait state
+    - unknown cached state
+
+### Automatic update behavior
+
+  - Automatic stable updates are deliberately conservative.
+  - They run only when enabled by admin setting.
+  - They run only from safe browser requests.
+  - They are throttled by a local five-hour interval.
+  - They use a lock setting to avoid overlapping checks.
+  - They never silently switch a beta installation back to stable.
+  - Beta installations can still run dry checks for metadata and diagnostics.
+  - Automatic install results are written into admin logs with update category and severity metadata.
+  - Failures are logged with current version, beta state, PHP version, and error detail.
+
+### URL rewrite behavior
+
+  - Clean URLs remain the default behavior.
+  - Admins can turn clean URL emission off from the dashboard maintenance area.
+  - When disabled, public helpers emit compatible query-string URLs.
+  - Compatibility checking is advisory rather than a false guarantee.
+  - The system checks practical signals such as rewrite environment variables, request routing state, and `.htaccess` markers.
+  - The dashboard warning explains likely hosting causes such as missing `.htaccess` support or missing rewrite support.
+
+### Admin logs behavior
+
+  - The severity filter is no longer a single dropdown.
+  - Multiple severities can be selected at once.
+  - The selection persists between visits.
+  - Resetting severity returns the page to all severities.
+  - Search, status, category, severity, and time-order filters remain compatible with live AJAX refresh.
+  - The filter layout now has clearer visual hierarchy and better grouping.
+
+### Telemetry export details
+
+  - The standalone HTML telemetry export now has broader operational value.
+  - It includes engagement, performance, error, access-log-like, database, and job-run sections.
+  - Tables use reusable rendering helpers.
+  - Charts are generated as compact HTML/CSS report elements.
+  - The report remains local and anonymous.
+  - Existing telemetry tables are queried defensively so missing optional telemetry tables do not break export rendering.
+
+### Public and admin navigation fixes
+
+  - Admin login now returns users to the page that initiated login.
+  - Upload workflows preserve the side-panel source URL.
+  - Photo view close behavior preserves paginated gallery state.
+  - Existing gallery uploads reopen the relevant gallery editor tab after completion.
+  - Public clean URL generation can be disabled without breaking the underlying query-string routes.
+
+### Translations
+
+  - Added English and Czech strings for:
+    - URL rewrite settings and warnings
+    - GitHub API policy diagnostics
+    - Force check actions
+    - automatic update settings
+    - automatic update dry runs
+    - automatic update log messages
+    - admin log severity filter summaries
+    - theme background optimization controls
+    - dashboard original-storage metric
+    - unpublished gallery admin marker
+    - date picker JavaScript labels
+  - Updated PHP translation fallback files with the new string coverage.
+  - Kept the multilingual structure compatible with existing `t()` and JavaScript translation usage.
+
+### Tests
+
+  - Added `tests/admin_log_severity_filter_test.php`.
+  - Added `tests/url_rewrite_settings_test.php`.
+  - Covered severity-filter normalization, persistence behavior, reset semantics, and compatibility with legacy query values.
+  - Covered URL rewrite setting defaults, saved values, compatibility states, marker detection, and query-string fallback behavior.
+
+### Files changed
+
+  - `ARCHITECTURE.md`
+  - `README.md`
+  - `app/bootstrap.php`
+  - `app/controllers/admin_auth.php`
+  - `app/controllers/admin_dashboard.php`
+  - `app/controllers/admin_logs.php`
+  - `app/controllers/admin_telemetry.php`
+  - `app/controllers/admin_uploads.php`
+  - `app/controllers/public_gallery.php`
+  - `app/controllers/updates.php`
+  - `app/core-manifest.json`
+  - `app/helpers.php`
+  - `app/lang/cs.json`
+  - `app/lang/cs.php`
+  - `app/lang/en.json`
+  - `app/lang/en.php`
+  - `app/security.php`
+  - `app/services.php`
+  - `app/services/app_settings.php`
+  - `app/services/github.php`
+  - `app/services/logs.php`
+  - `app/services/updates.php`
+  - `public/assets/gallery-modules/admin-logs.js`
+  - `public/assets/gallery-modules/admin-operations.js`
+  - `public/assets/gallery-modules/admin-side-panel.js`
+  - `public/assets/gallery-modules/admin-tabs.js`
+  - `public/assets/gallery-modules/lightbox-deferred.js`
+  - `public/assets/gallery-modules/lightbox.js`
+  - `public/assets/gallery.js`
+  - `public/assets/styles/admin-theme-preview.css`
+  - `public/assets/styles/admin.css`
+  - `public/assets/styles/public.css`
+  - `tests/admin_log_severity_filter_test.php`
+  - `tests/url_rewrite_settings_test.php`
+
+### Notes
+
+  - Clean rewritten URLs remain enabled by default.
+  - Disable URL rewrite only on hosting where clean routed URLs do not work.
+  - Normal update-page reloads should now use cached update status instead of spending repeated GitHub API calls.
+  - Use Force check only when a fresh GitHub request is intentional.
+  - Automatic updates install only stable releases and are skipped for beta code.
+  - Automatic update dry runs never install files.
+  - The dashboard original-storage metric counts imported original files only.
+  - The telemetry export depends on telemetry tables and collected telemetry data; missing optional data results in empty report sections, not fatal errors.
+  - The core manifest was refreshed for the new services, controllers, scripts, styles, tests, and documentation changes.
+
 ## Version 0.66
 
 ### Large internal refactor
