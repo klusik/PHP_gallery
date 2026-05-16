@@ -1,12 +1,16 @@
 """
 PHP Gallery watched-folder uploader.
 
-This Windows companion app watches one local folder and uploads stable image
-files to PHP Gallery through a gallery-scoped API key. Gallery validation,
-storage, scanning, and thumbnail generation remain server-side concerns.
-"""
+This Windows companion app watches one local folder and uploads new image
+files to PHP Gallery through a gallery-scoped API key. The Python side is
+intentionally thin: it observes files, waits until each file is stable, sends
+an HTTP multipart upload request, and records local retry state.
 
-from __future__ import annotations
+Gallery-side validation, permissions, storage decisions, database indexing,
+thumbnail generation, and any future business rules remain owned by PHP
+Gallery. Keeping those rules server-side prevents this helper from becoming a
+second, divergent implementation of upload behavior.
+"""
 
 import argparse
 import hashlib
@@ -22,13 +26,16 @@ import uuid
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib import error, parse, request
 
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 except ImportError:  # pragma: no cover
+    # Tkinter can be absent in some stripped-down Python builds. The import is
+    # optional so command-line mode can still report a clean error instead of
+    # crashing at import time.
     tk = None
     filedialog = None
     messagebox = None
@@ -40,6 +47,7 @@ CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
+
 SUPPORTED_SUFFIXES = {
     ".jpg",
     ".jpeg",
@@ -50,6 +58,7 @@ SUPPORTED_SUFFIXES = {
     ".heif",
     ".dng",
 }
+
 DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
@@ -57,7 +66,22 @@ DEFAULT_TIMEOUT_SECONDS = 180
 
 @dataclass
 class WatcherConfig:
-    """Configuration saved locally for the watcher app."""
+    """
+    Runtime and persisted configuration for the watcher app.
+
+    The values are intentionally simple JSON-compatible primitives so the
+    configuration file can be edited manually when needed. The GUI writes the
+    same structure as command-line mode reads, which keeps both entry points
+    aligned.
+
+    @param watched_folder: Local folder to observe for newly added images.
+    @param gallery_url: PHP Gallery site root or explicit upload endpoint URL.
+    @param api_key: Gallery-scoped API key used in the X-Gallery-API-Key header.
+    @param scan_interval_seconds: Polling delay between folder scans.
+    @param stable_seconds: Minimum unchanged duration before a file is uploaded.
+    @param create_thumbnails: Whether the server should create thumbnails after
+        accepting the upload.
+    """
 
     watched_folder: str = ""
     gallery_url: str = ""
@@ -67,8 +91,20 @@ class WatcherConfig:
     create_thumbnails: bool = True
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "WatcherConfig":
-        """Build a typed configuration object from loaded JSON data."""
+    def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
+        """
+        Build a typed configuration object from decoded JSON data.
+
+        Missing keys are treated as defaults. This makes configuration upgrades
+        safe because older config files keep working when new fields are added.
+        Numeric values are coerced from strings where possible because manual
+        edits and GUI variables often produce text.
+
+        @param data: Dictionary loaded from the JSON configuration file.
+        @return: Normalized WatcherConfig instance.
+        @raises ValueError: Raised by float conversion when numeric values are
+            present but cannot be parsed.
+        """
         return cls(
             watched_folder=str(data.get("watched_folder", "")),
             gallery_url=str(data.get("gallery_url", "")),
@@ -78,8 +114,12 @@ class WatcherConfig:
             create_thumbnails=bool(data.get("create_thumbnails", True)),
         )
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation."""
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert this configuration to a JSON-serializable dictionary.
+
+        @return: Plain dictionary suitable for json.dumps().
+        """
         return {
             "watched_folder": self.watched_folder,
             "gallery_url": self.gallery_url,
@@ -91,13 +131,32 @@ class WatcherConfig:
 
 
 class ConfigStore:
-    """Loads and saves local app configuration."""
+    """
+    Small persistence wrapper for the local configuration file.
+
+    The class owns all filesystem details for config persistence so the GUI and
+    command-line code do not duplicate path handling, JSON parsing, and atomic
+    write behavior.
+    """
 
     def __init__(self, path: Path = CONFIG_PATH) -> None:
+        """
+        Create a config store for one JSON file.
+
+        @param path: Path to the JSON configuration file.
+        """
         self.path = path
 
     def load(self) -> WatcherConfig:
-        """Load the configuration file, returning defaults when it is missing."""
+        """
+        Load the configuration file.
+
+        Invalid, missing, or non-object JSON content falls back to defaults. The
+        watcher should remain startable even after a user accidentally damages
+        the local config file.
+
+        @return: Loaded configuration, or defaults when the file is unusable.
+        """
         if not self.path.is_file():
             return WatcherConfig()
         try:
@@ -109,7 +168,16 @@ class ConfigStore:
             return WatcherConfig()
 
     def save(self, config: WatcherConfig) -> None:
-        """Persist configuration atomically."""
+        """
+        Persist configuration atomically.
+
+        The temporary file plus replace pattern avoids leaving a half-written
+        config if Windows, antivirus, or the process interrupts the write.
+
+        @param config: Configuration object to persist.
+        @return: None.
+        @raises OSError: Propagated when the file cannot be written.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.path.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
@@ -117,11 +185,23 @@ class ConfigStore:
 
 
 class UploadState:
-    """Tracks completed uploads and retry scheduling."""
+    """
+    Tracks successful uploads, duplicate content, and retry scheduling.
+
+    State is deliberately local and conservative. The server remains the final
+    authority, but the helper avoids repeatedly uploading the same file content
+    when the user restarts the app or copies a duplicate image into the watched
+    folder.
+    """
 
     def __init__(self, path: Path = STATE_PATH) -> None:
+        """
+        Create and load the upload state store.
+
+        @param path: Path to the JSON state file.
+        """
         self.path = path
-        self.data: dict[str, Any] = {
+        self.data: Dict[str, Any] = {
             "uploaded_paths": {},
             "uploaded_hashes": {},
             "failures": {},
@@ -129,36 +209,71 @@ class UploadState:
         self.load()
 
     def load(self) -> None:
-        """Load upload state from disk."""
+        """
+        Load upload state from disk into memory.
+
+        Malformed sections are ignored individually so one damaged section does
+        not invalidate all upload history. This matters because state is only an
+        optimization and retry aid, not canonical gallery data.
+
+        @return: None.
+        """
         if not self.path.is_file():
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                self.data["uploaded_paths"] = data.get("uploaded_paths", {}) if isinstance(data.get("uploaded_paths", {}), dict) else {}
-                self.data["uploaded_hashes"] = data.get("uploaded_hashes", {}) if isinstance(data.get("uploaded_hashes", {}), dict) else {}
-                self.data["failures"] = data.get("failures", {}) if isinstance(data.get("failures", {}), dict) else {}
+                uploaded_paths = data.get("uploaded_paths", {})
+                uploaded_hashes = data.get("uploaded_hashes", {})
+                failures = data.get("failures", {})
+                self.data["uploaded_paths"] = uploaded_paths if isinstance(uploaded_paths, dict) else {}
+                self.data["uploaded_hashes"] = uploaded_hashes if isinstance(uploaded_hashes, dict) else {}
+                self.data["failures"] = failures if isinstance(failures, dict) else {}
         except (OSError, json.JSONDecodeError):
             return
 
     def save(self) -> None:
-        """Persist upload state atomically."""
+        """
+        Persist upload state atomically.
+
+        @return: None.
+        @raises OSError: Propagated when the state file cannot be written.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.path.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(self.data, indent=2), encoding="utf-8")
         tmp_path.replace(self.path)
 
     def already_uploaded_path(self, path: Path, file_hash: str) -> bool:
-        """Return true when this exact path and content already succeeded."""
+        """
+        Check whether the exact path and content were already uploaded.
+
+        @param path: Local image path being considered.
+        @param file_hash: SHA-256 hash of the current file content.
+        @return: True when this path already succeeded with the same content.
+        """
         entry = self.data["uploaded_paths"].get(str(path))
         return isinstance(entry, dict) and entry.get("sha256") == file_hash
 
     def already_uploaded_hash(self, file_hash: str) -> bool:
-        """Return true when this content already succeeded under any path."""
+        """
+        Check whether identical content already uploaded under any file name.
+
+        @param file_hash: SHA-256 hash of the current file content.
+        @return: True when this byte-identical file content is already known.
+        """
         return file_hash in self.data["uploaded_hashes"]
 
-    def mark_uploaded(self, path: Path, file_hash: str, size: int, response: dict[str, Any]) -> None:
-        """Record a successful upload after the server confirms it."""
+    def mark_uploaded(self, path: Path, file_hash: str, size: int, response: Dict[str, Any]) -> None:
+        """
+        Record a successful upload after the server confirms it.
+
+        @param path: Local file path that was uploaded.
+        @param file_hash: SHA-256 hash captured at upload time.
+        @param size: File size in bytes captured at upload time.
+        @param response: JSON object returned by the PHP Gallery endpoint.
+        @return: None.
+        """
         now = time.time()
         record = {
             "sha256": file_hash,
@@ -171,11 +286,22 @@ class UploadState:
             "first_path": str(path),
             "uploaded_at": now,
         }
+        # A confirmed upload clears any retry metadata for the same path.
         self.data["failures"].pop(str(path), None)
         self.save()
 
     def mark_duplicate(self, path: Path, file_hash: str, size: int) -> None:
-        """Record a skipped file whose content was already uploaded earlier."""
+        """
+        Record a skipped file whose content was already uploaded earlier.
+
+        The path-level record prevents the same duplicate file from being
+        repeatedly revisited during later scans.
+
+        @param path: Local duplicate file path.
+        @param file_hash: SHA-256 hash matching already uploaded content.
+        @param size: File size in bytes.
+        @return: None.
+        """
         self.data["uploaded_paths"][str(path)] = {
             "sha256": file_hash,
             "size": size,
@@ -186,7 +312,17 @@ class UploadState:
         self.save()
 
     def retry_allowed(self, path: Path, file_hash: str) -> bool:
-        """Return true when a failed file may be retried now."""
+        """
+        Determine whether a failed upload may be attempted now.
+
+        Retry delay is keyed by path and content hash. Replacing the file with
+        different content immediately clears the wait because it is no longer
+        the same failed upload attempt.
+
+        @param path: Local file path being considered.
+        @param file_hash: Current SHA-256 hash of the file.
+        @return: True when no backoff delay is active.
+        """
         failure = self.data["failures"].get(str(path))
         if not isinstance(failure, dict):
             return True
@@ -195,47 +331,90 @@ class UploadState:
         return time.time() >= float(failure.get("next_retry_at", 0) or 0)
 
     def mark_failure(self, path: Path, file_hash: str, message: str) -> None:
-        """Record a failed attempt and schedule a later retry."""
+        """
+        Record a failed upload attempt and schedule a later retry.
+
+        The retry delay uses exponential backoff capped at one hour. This avoids
+        hammering the gallery endpoint while still recovering automatically from
+        transient network, hosting, or maintenance failures.
+
+        @param path: Local file path that failed to upload.
+        @param file_hash: SHA-256 hash of the file at failure time.
+        @param message: Human-readable failure reason.
+        @return: None.
+        """
         previous = self.data["failures"].get(str(path))
         previous_attempts = int(previous.get("attempts", 0)) if isinstance(previous, dict) and previous.get("sha256") == file_hash else 0
         attempts = previous_attempts + 1
         retry_delay = min(3600, 5 * (2 ** min(attempts - 1, 7)))
+        now = time.time()
         self.data["failures"][str(path)] = {
             "sha256": file_hash,
             "attempts": attempts,
             "last_error": message,
-            "last_failed_at": time.time(),
-            "next_retry_at": time.time() + retry_delay,
+            "last_failed_at": now,
+            "next_retry_at": now + retry_delay,
         }
         self.save()
 
 
 class FileStabilityTracker:
-    """Detects when copied files have stopped changing."""
+    """
+    Detects when copied files have stopped changing.
+
+    Files copied into a watched folder are often visible before the copy is
+    complete. Uploading such a file would produce truncated images or server-side
+    errors. This tracker waits until size and modification time remain unchanged
+    for the configured duration.
+    """
 
     def __init__(self, stable_seconds: float) -> None:
+        """
+        Create a stability tracker.
+
+        @param stable_seconds: Required unchanged duration before a file is
+            considered ready. Values below 0.5 are clamped to 0.5 seconds.
+        """
         self.stable_seconds = max(0.5, stable_seconds)
-        self._seen: dict[Path, tuple[int, float, float]] = {}
+        self._seen: Dict[Path, Tuple[int, float, float]] = {}
 
     def stable(self, path: Path) -> bool:
-        """Return true when size and mtime have remained unchanged long enough."""
+        """
+        Check whether a path has remained unchanged long enough.
+
+        @param path: File path to inspect.
+        @return: True when size and modification time have been stable for the
+            configured duration. False when the file is new, changing, missing,
+            or temporarily unreadable.
+        """
         try:
             stat = path.stat()
         except OSError:
             self._seen.pop(path, None)
             return False
+
         size = int(stat.st_size)
         mtime = float(stat.st_mtime)
         now = time.time()
         previous = self._seen.get(path)
+
+        # First sighting, or a changed size/mtime, restarts the stability timer.
         if previous is None or previous[0] != size or previous[1] != mtime:
             self._seen[path] = (size, mtime, now)
             return False
+
         return now - previous[2] >= self.stable_seconds
 
 
 def setup_logging() -> None:
-    """Configure file logging for watcher diagnostics."""
+    """
+    Configure file logging for watcher diagnostics.
+
+    The GUI shows recent status in the window, but the file log survives restarts
+    and is more useful when diagnosing upload or hosting issues later.
+
+    @return: None.
+    """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         filename=str(LOG_PATH),
@@ -245,14 +424,26 @@ def setup_logging() -> None:
 
 
 def normalize_upload_url(value: str) -> str:
-    """Return a usable upload endpoint from either a site root or full endpoint."""
+    """
+    Convert a site root or endpoint-like value into the upload endpoint URL.
+
+    Accepted input forms include a bare host, a gallery root URL, index.php, an
+    index.php URL already containing page=upload_automation_upload, or a future
+    /api/upload style endpoint. The function is deliberately tolerant because
+    users are likely to paste whatever URL they currently have open.
+
+    @param value: User-provided site URL or upload endpoint.
+    @return: Normalized upload endpoint URL, or an empty string for blank input.
+    """
     raw = value.strip()
     if not raw:
         return ""
+
     parsed = parse.urlparse(raw)
     if not parsed.scheme:
         raw = "https://" + raw
         parsed = parse.urlparse(raw)
+
     query = parse.parse_qs(parsed.query)
     if query.get("page", [""])[0] == "upload_automation_upload" or parsed.path.rstrip("/").endswith("/api/upload"):
         return raw
@@ -262,7 +453,13 @@ def normalize_upload_url(value: str) -> str:
 
 
 def sha256_file(path: Path) -> str:
-    """Calculate SHA-256 without loading the whole file at once."""
+    """
+    Calculate a file SHA-256 hash without loading the whole file at once.
+
+    @param path: File to hash.
+    @return: Hex-encoded SHA-256 digest.
+    @raises OSError: Propagated when the file cannot be opened or read.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
@@ -273,28 +470,58 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def iter_candidate_files(folder: Path) -> list[Path]:
-    """Return supported image files directly inside the watched folder."""
+def iter_candidate_files(folder: Path) -> List[Path]:
+    """
+    Return supported image files directly inside the watched folder.
+
+    The watcher is intentionally non-recursive. A watched import/drop folder is
+    expected to act as a flat staging area, while gallery hierarchy and final
+    placement remain controlled by PHP Gallery.
+
+    @param folder: Folder to scan.
+    @return: Sorted list of supported image paths. Missing or unreadable folders
+        return an empty list.
+    """
     try:
         candidates = [item for item in folder.iterdir() if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
     except OSError:
         return []
+
+    # Oldest first produces stable, predictable upload order when several files
+    # are copied into the folder at roughly the same time.
     return sorted(candidates, key=lambda item: (item.stat().st_mtime if item.exists() else 0, item.name.lower()))
 
 
-def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnails: bool) -> dict[str, Any]:
-    """Upload one image file using only Python standard-library HTTP tools."""
+def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnails: bool) -> Dict[str, Any]:
+    """
+    Upload one image file using standard-library HTTP multipart/form-data.
+
+    No third-party dependency is required. This matters for a small Windows
+    helper that should run from a normal Python installation without a packaging
+    or virtual environment requirement.
+
+    @param upload_url: Normalized PHP Gallery upload endpoint.
+    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param path: Local image path to upload.
+    @param create_thumbnails: Whether to ask the gallery to generate thumbnails.
+    @return: Parsed JSON response from the server.
+    @raises RuntimeError: Raised for HTTP errors, network errors, non-JSON
+        responses, malformed JSON payloads, or server-declared upload failure.
+    @raises OSError: Propagated when the image cannot be read.
+    """
     boundary = "PHPGalleryUpload" + uuid.uuid4().hex
     content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     fields = {
         "create_thumbnails": "1" if create_thumbnails else "0",
     }
-    body_parts: list[bytes] = []
+
+    body_parts: List[bytes] = []
     for name, value in fields.items():
         body_parts.append(f"--{boundary}\r\n".encode("ascii"))
         body_parts.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"))
         body_parts.append(str(value).encode("utf-8"))
         body_parts.append(b"\r\n")
+
     body_parts.append(f"--{boundary}\r\n".encode("ascii"))
     safe_name = path.name.replace('"', "_")
     body_parts.append(f'Content-Disposition: form-data; name="images[]"; filename="{safe_name}"\r\n'.encode("utf-8"))
@@ -316,10 +543,13 @@ def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnail
         },
         method="POST",
     )
+
     try:
         with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
             response_body = response.read().decode("utf-8", errors="replace")
     except error.HTTPError as exc:
+        # PHP Gallery should return a JSON error payload, but hosting errors or
+        # PHP fatal errors may return HTML. Preserve a safe excerpt for diagnosis.
         response_body = exc.read().decode("utf-8", errors="replace")
         try:
             payload = json.loads(response_body)
@@ -342,61 +572,111 @@ def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnail
 
 
 class WatcherThread(threading.Thread):
-    """Background worker that scans, uploads, and reports status events."""
+    """
+    Background worker that scans, uploads, and reports status events.
 
-    def __init__(self, config: WatcherConfig, events: "queue.Queue[tuple[str, str]]") -> None:
+    The worker uses polling rather than OS-specific filesystem notifications.
+    Polling is less elegant, but it is robust on Windows network folders, synced
+    folders, camera import folders, and other locations where notification APIs
+    can behave inconsistently.
+    """
+
+    def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
+        """
+        Create a watcher worker.
+
+        @param config: Runtime configuration captured when the worker starts.
+        @param events: Thread-safe queue used to send status messages to the GUI
+            or command-line runner.
+        """
         super().__init__(daemon=True)
         self.config = config
         self.events = events
         self.stop_event = threading.Event()
         self.state = UploadState()
         self.stability = FileStabilityTracker(config.stable_seconds)
-        self.initial_paths: set[Path] = set()
+        self.initial_paths: Set[Path] = set()
 
     def stop(self) -> None:
-        """Request the worker to stop."""
+        """
+        Request the worker to stop.
+
+        @return: None.
+        """
         self.stop_event.set()
 
     def emit(self, level: str, message: str) -> None:
-        """Send a message to the UI and log file."""
+        """
+        Send a message to the UI queue and the persistent log file.
+
+        @param level: Logging level name such as info, warning, or error.
+        @param message: Human-readable status message.
+        @return: None.
+        """
         self.events.put((level, message))
-        getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")(message)
+        log_method = getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")
+        log_method(message)
 
     def run(self) -> None:
-        """Run the polling loop until stopped."""
+        """
+        Run the polling loop until stopped.
+
+        Existing files are captured before the first scan and ignored for the
+        lifetime of this worker. That makes the app behave like a live import
+        bridge: only files added after Start watching are uploaded.
+
+        @return: None.
+        """
         folder = Path(self.config.watched_folder)
         upload_url = normalize_upload_url(self.config.gallery_url)
+
         if not folder.is_dir():
             self.emit("error", f"Watched folder does not exist: {folder}")
             return
         if not upload_url or not self.config.api_key.strip():
             self.emit("error", "Gallery URL and API key are required.")
             return
+
         self.initial_paths = set(iter_candidate_files(folder))
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
         if self.initial_paths:
             self.emit("info", f"Ignoring {len(self.initial_paths)} existing image file(s); only files added after watcher start will upload.")
+
         while not self.stop_event.is_set():
             self.scan_once(folder, upload_url)
             self.stop_event.wait(max(0.2, self.config.scan_interval_seconds))
+
         self.emit("info", "Watcher stopped.")
 
     def scan_once(self, folder: Path, upload_url: str) -> None:
-        """Scan the watched folder once and process files that are ready."""
+        """
+        Scan the watched folder once and process files that are ready.
+
+        @param folder: Folder to scan.
+        @param upload_url: Normalized endpoint used for uploads.
+        @return: None.
+        """
         for path in iter_candidate_files(folder):
             if self.stop_event.is_set():
                 return
+
+            # Files already present when the worker started are intentionally
+            # ignored. The watched folder can contain historical images without
+            # causing a mass upload on startup.
             if path in self.initial_paths:
                 continue
+
             if not self.stability.stable(path):
                 continue
+
             try:
                 file_hash = sha256_file(path)
                 size = path.stat().st_size
             except OSError as exc:
                 self.emit("warning", f"Cannot read {path.name}: {exc}")
                 continue
+
             if self.state.already_uploaded_path(path, file_hash):
                 continue
             if self.state.already_uploaded_hash(file_hash):
@@ -405,6 +685,7 @@ class WatcherThread(threading.Thread):
                 continue
             if not self.state.retry_allowed(path, file_hash):
                 continue
+
             try:
                 self.emit("info", f"Uploading {path.name}")
                 payload = multipart_upload(upload_url, self.config.api_key.strip(), path, self.config.create_thumbnails)
@@ -419,18 +700,34 @@ class WatcherThread(threading.Thread):
 
 
 class WatcherApp:
-    """Tkinter user interface for the watched-folder uploader."""
+    """
+    Tkinter user interface for the watched-folder uploader.
+
+    The GUI is intentionally small: it collects configuration, starts and stops
+    the worker, and mirrors worker events into a visible status log. Upload logic
+    stays in WatcherThread so the same behavior can be reused by command-line
+    mode.
+    """
 
     def __init__(self) -> None:
+        """
+        Initialize the Tkinter application and load saved configuration.
+
+        @return: None.
+        @raises RuntimeError: Raised when Tkinter is not available.
+        """
         if tk is None or ttk is None or filedialog is None or messagebox is None:
             raise RuntimeError("Tkinter is not available in this Python installation.")
+
         self.root = tk.Tk()
         self.root.title("PHP Gallery watched-folder uploader")
         self.root.geometry("860x620")
+
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
-        self.events: "queue.Queue[tuple[str, str]]" = queue.Queue()
-        self.worker: WatcherThread | None = None
+        self.events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
+        self.worker: Optional[WatcherThread] = None
+
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
         self.api_key_var = tk.StringVar(value=self.config.api_key)
@@ -438,14 +735,20 @@ class WatcherApp:
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
         self.status_var = tk.StringVar(value="Stopped")
+
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(200, self.drain_events)
 
     def build_ui(self) -> None:
-        """Create the visible controls."""
+        """
+        Create the visible controls and initial status text.
+
+        @return: None.
+        """
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
+
         title = ttk.Label(outer, text="PHP Gallery watched-folder uploader", font=("Segoe UI", 16, "bold"))
         title.pack(anchor="w")
         subtitle = ttk.Label(
@@ -499,12 +802,18 @@ class WatcherApp:
         self.write_log(f"Log: {LOG_PATH}")
 
     def current_config(self) -> WatcherConfig:
-        """Read and validate the current UI values."""
+        """
+        Read and validate the current UI values.
+
+        @return: WatcherConfig built from the current form state.
+        @raises ValueError: Raised when numeric settings cannot be parsed.
+        """
         try:
             interval = max(0.2, float(self.interval_var.get().strip() or DEFAULT_INTERVAL_SECONDS))
             stable = max(0.5, float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS))
         except ValueError as exc:
             raise ValueError("Scan interval and stable file seconds must be numeric.") from exc
+
         return WatcherConfig(
             watched_folder=self.watched_folder_var.get().strip(),
             gallery_url=self.gallery_url_var.get().strip(),
@@ -515,13 +824,21 @@ class WatcherApp:
         )
 
     def browse_folder(self) -> None:
-        """Open a folder picker and store the selected path in the UI."""
+        """
+        Open a folder picker and store the selected path in the UI.
+
+        @return: None.
+        """
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
             self.watched_folder_var.set(selected)
 
     def save_config(self) -> None:
-        """Persist current settings to the local config file."""
+        """
+        Persist current settings to the local config file.
+
+        @return: None.
+        """
         try:
             config = self.current_config()
             self.config_store.save(config)
@@ -531,10 +848,18 @@ class WatcherApp:
             messagebox.showerror("Configuration error", str(exc))
 
     def start(self) -> None:
-        """Start the watcher worker."""
+        """
+        Start the watcher worker using the current form values.
+
+        The configuration is saved before starting so command-line mode and later
+        GUI launches use the same values.
+
+        @return: None.
+        """
         if self.worker and self.worker.is_alive():
             self.write_log("Watcher is already running.")
             return
+
         try:
             config = self.current_config()
             self.config_store.save(config)
@@ -542,29 +867,50 @@ class WatcherApp:
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
+
         self.worker = WatcherThread(config, self.events)
         self.worker.start()
         self.status_var.set("Running")
         self.write_log("Watcher started.")
 
     def stop(self) -> None:
-        """Stop the watcher worker."""
+        """
+        Stop the watcher worker if one exists.
+
+        @return: None.
+        """
         if self.worker:
             self.worker.stop()
         self.status_var.set("Stopped")
 
     def close(self) -> None:
-        """Stop background work and close the window."""
+        """
+        Stop background work and close the window.
+
+        @return: None.
+        """
         self.stop()
         self.root.after(150, self.root.destroy)
 
     def open_config_folder(self) -> None:
-        """Open the folder containing config, state, and log files."""
+        """
+        Open the folder containing config, state, and log files.
+
+        @return: None.
+        """
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         webbrowser.open(str(CONFIG_DIR))
 
     def drain_events(self) -> None:
-        """Move worker events into the visible log."""
+        """
+        Move worker events into the visible log.
+
+        This method is scheduled on the Tkinter event loop instead of being
+        called directly from the worker thread. Tkinter widgets must only be
+        updated by the main UI thread.
+
+        @return: None.
+        """
         while True:
             try:
                 level, message = self.events.get_nowait()
@@ -573,10 +919,16 @@ class WatcherApp:
             self.write_log(f"{level.upper()}: {message}")
             if level == "error":
                 self.status_var.set("Running with errors")
+
         self.root.after(200, self.drain_events)
 
     def write_log(self, message: str) -> None:
-        """Append one line to the status log."""
+        """
+        Append one line to the status log.
+
+        @param message: Message text to append.
+        @return: None.
+        """
         stamp = time.strftime("%H:%M:%S")
         self.log_text.configure(state="normal")
         self.log_text.insert("end", f"[{stamp}] {message}\n")
@@ -584,40 +936,68 @@ class WatcherApp:
         self.log_text.configure(state="disabled")
 
     def run(self) -> None:
-        """Run the Tkinter event loop."""
+        """
+        Run the Tkinter event loop.
+
+        @return: None.
+        """
         self.root.mainloop()
 
 
 def run_once(config: WatcherConfig) -> int:
-    """Run one scan without showing the GUI."""
+    """
+    Run one scan without showing the GUI.
+
+    This is mostly useful for testing and scheduled execution. Note that the
+    live watcher behavior of ignoring pre-existing files is not applied here
+    unless initial_paths is explicitly populated before calling scan_once().
+
+    @param config: Configuration to use for the scan.
+    @return: Process exit code. Zero means the scan command completed.
+    """
     setup_logging()
-    events: "queue.Queue[tuple[str, str]]" = queue.Queue()
+    events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
     worker = WatcherThread(config, events)
     folder = Path(config.watched_folder)
     upload_url = normalize_upload_url(config.gallery_url)
     worker.scan_once(folder, upload_url)
+
     while not events.empty():
         level, message = events.get()
         print(f"{level.upper()}: {message}")
+
     return 0
 
 
-def parse_args(argv: list[str]) -> argparse.Namespace:
-    """Parse optional command-line switches."""
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    """
+    Parse optional command-line switches.
+
+    @param argv: Command-line argument list without the executable name.
+    @return: Parsed argparse namespace.
+    """
     parser = argparse.ArgumentParser(description="Watch a folder and upload new images to PHP Gallery.")
     parser.add_argument("--once", action="store_true", help="Run one scan using saved configuration and exit.")
     parser.add_argument("--config", default=str(CONFIG_PATH), help="Path to a config JSON file.")
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Application entry point."""
+def main(argv: Optional[List[str]] = None) -> int:
+    """
+    Application entry point.
+
+    @param argv: Optional command-line argument list. When omitted, sys.argv is
+        used.
+    @return: Process exit code.
+    """
     setup_logging()
-    args = parse_args(list(argv if argv is not None else sys.argv[1:]))
+    args = parse_args(list(argv) if argv is not None else sys.argv[1:])
     store = ConfigStore(Path(args.config))
     config = store.load()
+
     if args.once:
         return run_once(config)
+
     app = WatcherApp()
     app.run()
     return 0
