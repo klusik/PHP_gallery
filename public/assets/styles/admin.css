@@ -4691,3 +4691,73 @@ button.gallery-row-action.secondary {
         flex-basis: calc(100% - 2.5rem);
     }
 }
+
+/* Upload automation panel. */
+.admin-upload-automation-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-upload-automation-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-upload-automation-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.8fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.admin-upload-automation-copy,
+.admin-upload-automation-list,
+.admin-upload-automation-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-upload-automation-copy label,
+.admin-upload-automation-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 700;
+}
+
+.admin-upload-automation-copy input,
+.admin-upload-automation-form input,
+.admin-upload-automation-key {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.admin-upload-automation-key {
+    min-height: 5rem;
+    resize: vertical;
+}
+
+.admin-upload-automation-list table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-upload-automation-list th,
+.admin-upload-automation-list td {
+    padding: 0.5rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 35%);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.admin-upload-automation-list th {
+    font-size: 0.85rem;
+    color: var(--muted-text);
+}
+
+@media (max-width: 900px) {
+    .admin-upload-automation-grid {
+        grid-template-columns: 1fr;
+    }
+}
