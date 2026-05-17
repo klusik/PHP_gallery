@@ -99,19 +99,214 @@ export function setupGalleryLightbox() {
     let cards = [];
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
+    // lightboxConfig stores the server-rendered async metadata settings.
+    const lightboxConfig = document.querySelector('[data-lightbox-config]');
+    // lightboxEndpoint stores the JSON endpoint used when a requested image is not in the DOM yet.
+    const lightboxEndpoint = lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxEndpoint || '' : '';
+    // lightboxTotal stores the visitor-visible number of images in the full lightbox order.
+    const lightboxTotal = Math.max(0, Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0);
+    // lightboxWindowSize stores how many metadata records are fetched per async request.
+    const lightboxWindowSize = Math.max(12, Math.min(80, Number.parseInt(lightboxConfig?.dataset.lightboxWindowSize || '60', 10) || 60));
+    // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
+    const lightboxPendingWindows = new Map();
 
     /**
      * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
      *
      * Navigation must read the current DOM order so Next and Previous match the
-     * saved gallery order without requiring a full page reload.
+     * saved gallery order without requiring a full page reload. Paginated pages
+     * use a sparse client-side cache, so non-visible images are fetched only when
+     * the user approaches them in the viewer.
      *
      * @returns {void}
      */
     function refreshLightboxOrderFromDom() {
         const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
         const nextSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
-        cards = nextSourceCards.length > 0 ? nextSourceCards : nextVisibleCards;
+        if (nextSourceCards.length > 0) {
+            cards = nextSourceCards;
+            return;
+        }
+        if (lightboxEndpoint && lightboxTotal > nextVisibleCards.length) {
+            const sparseCards = Array.from({length: lightboxTotal}, () => null);
+            nextVisibleCards.forEach((card, fallbackIndex) => {
+                const index = lightboxIndexForCard(card, fallbackIndex);
+                if (index >= 0 && index < sparseCards.length) {
+                    sparseCards[index] = card;
+                }
+            });
+            cards = sparseCards;
+            return;
+        }
+        cards = nextVisibleCards;
+    }
+
+    /**
+     * Return a card's zero-based lightbox index.
+     *
+     * @param {Element} card Server-rendered or async-created lightbox source element.
+     * @param {number} fallbackIndex Position used by legacy markup without explicit indexes.
+     * @returns {number} Zero-based index, or -1 when no usable index exists.
+     */
+    function lightboxIndexForCard(card, fallbackIndex = -1) {
+        if (!(card instanceof HTMLElement)) {
+            return -1;
+        }
+        const explicitIndex = Number.parseInt(card.dataset.lightboxIndex || '', 10);
+        if (Number.isInteger(explicitIndex) && explicitIndex >= 0) {
+            return explicitIndex;
+        }
+        return Number.isInteger(fallbackIndex) && fallbackIndex >= 0 ? fallbackIndex : -1;
+    }
+
+    /**
+     * Build a detached source element from one lazy lightbox JSON item.
+     *
+     * @param {Object<string, *>} item JSON item returned by the lightbox endpoint.
+     * @returns {HTMLElement|null} Detached source element, or null when the payload is invalid.
+     */
+    function createLightboxCardFromItem(item) {
+        if (!item || typeof item !== 'object') {
+            return null;
+        }
+        const index = Number.parseInt(String(item.index ?? '-1'), 10);
+        const imageId = Number.parseInt(String(item.id ?? '0'), 10);
+        if (!Number.isInteger(index) || index < 0 || !Number.isInteger(imageId) || imageId <= 0) {
+            return null;
+        }
+        const card = document.createElement('div');
+        card.setAttribute('data-lightbox-source', '');
+        card.dataset.lightboxIndex = String(index);
+        card.dataset.imageId = String(imageId);
+        card.dataset.galleryId = String(item.gallery_id ?? '');
+        card.dataset.fullSrc = String(item.full_src || '');
+        card.dataset.previewSrc = String(item.preview_src || item.full_src || '');
+        card.dataset.pageUrl = String(item.page_url || '');
+        card.dataset.galleryUrl = String(item.gallery_url || '');
+        card.dataset.title = String(item.title || '');
+        card.dataset.description = String(item.description || '');
+        card.dataset.score = String(item.score ?? '0');
+        card.dataset.userVote = String(item.user_vote ?? '0');
+        card.dataset.imageWidth = String(item.width ?? '0');
+        card.dataset.imageHeight = String(item.height ?? '0');
+        if (item.voting_allowed) {
+            card.dataset.votingAllowed = '1';
+        }
+        if (typeof item.vote_form_html === 'string' && item.vote_form_html.trim() !== '') {
+            card.dataset.voteFormHtml = item.vote_form_html;
+        }
+        if (item.map_point && typeof item.map_point === 'object') {
+            card.dataset.mapPoint = JSON.stringify(item.map_point);
+        }
+        return card;
+    }
+
+    /**
+     * Store async lightbox items in the sparse client cache.
+     *
+     * @param {Array<Object<string, *>>} items JSON items returned by the endpoint.
+     * @returns {void}
+     */
+    function mergeLightboxItems(items) {
+        if (!Array.isArray(items)) {
+            return;
+        }
+        items.forEach((item) => {
+            const card = createLightboxCardFromItem(item);
+            if (!card) {
+                return;
+            }
+            const index = lightboxIndexForCard(card);
+            if (index >= 0 && index < cards.length && !cards[index]) {
+                cards[index] = card;
+            }
+        });
+    }
+
+    /**
+     * Return an async metadata window that contains the requested index.
+     *
+     * @param {number} index Zero-based lightbox index.
+     * @returns {{offset:number, limit:number}} Endpoint range parameters.
+     */
+    function lightboxWindowForIndex(index) {
+        if (cards.length <= 0) {
+            return {offset: 0, limit: lightboxWindowSize};
+        }
+        const leadingItems = Math.min(12, Math.max(4, Math.floor(lightboxWindowSize / 4)));
+        const maxOffset = Math.max(0, cards.length - lightboxWindowSize);
+        const offset = Math.max(0, Math.min(maxOffset, index - leadingItems));
+        const limit = Math.min(lightboxWindowSize, cards.length - offset);
+        return {offset, limit: Math.max(1, limit)};
+    }
+
+    /**
+     * Return true when the requested sparse cache range already has metadata.
+     *
+     * @param {number} offset Zero-based range offset.
+     * @param {number} limit Maximum number of positions to inspect.
+     * @returns {boolean} True when every position in the range has a card.
+     */
+    function lightboxRangeLoaded(offset, limit) {
+        const end = Math.min(cards.length, offset + limit);
+        for (let index = offset; index < end; index += 1) {
+            if (!cards[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fetch one async metadata range unless it is already loaded or in flight.
+     *
+     * @param {number} offset Zero-based range offset.
+     * @param {number} limit Maximum items to request.
+     * @returns {Promise<boolean>} True when the request completed successfully or was unnecessary.
+     */
+    function fetchLightboxRange(offset, limit) {
+        if (!lightboxEndpoint || cards.length === 0 || lightboxRangeLoaded(offset, limit)) {
+            return Promise.resolve(true);
+        }
+        const key = `${offset}:${limit}`;
+        if (lightboxPendingWindows.has(key)) {
+            return lightboxPendingWindows.get(key);
+        }
+        const url = new URL(lightboxEndpoint, window.location.href);
+        url.searchParams.set('offset', String(offset));
+        url.searchParams.set('limit', String(limit));
+        const promise = fetch(url.toString(), {
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json'},
+            signal: controller.signal,
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((payload) => {
+                mergeLightboxItems(payload?.items || []);
+                return true;
+            })
+            .catch(() => false)
+            .finally(() => {
+                lightboxPendingWindows.delete(key);
+            });
+        lightboxPendingWindows.set(key, promise);
+        return promise;
+    }
+
+    /**
+     * Ensure that metadata around one index is available.
+     *
+     * @param {number} index Zero-based lightbox index.
+     * @returns {Promise<boolean>} True when the surrounding metadata is available.
+     */
+    function fetchLightboxWindowAround(index) {
+        const range = lightboxWindowForIndex(index);
+        return fetchLightboxRange(range.offset, range.limit);
     }
 
     refreshLightboxOrderFromDom();
@@ -241,6 +436,7 @@ export function setupGalleryLightbox() {
         clearLightboxHudTimer();
         removeTransitionImage();
         preloadedSources.clear();
+        lightboxPendingWindows.clear();
         decodedLightboxImages.clear();
         if (galleryDevModeState.frameId) {
             window.cancelAnimationFrame(galleryDevModeState.frameId);
@@ -349,6 +545,9 @@ export function setupGalleryLightbox() {
         galleryDevModeState.canvasContext = galleryDevModeState.canvas ? galleryDevModeState.canvas.getContext('2d') : null;
         overlay.append(shell);
         cards.forEach((card, index) => {
+            if (!card) {
+                return;
+            }
             devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
             devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
         });
@@ -425,6 +624,9 @@ export function setupGalleryLightbox() {
             return '';
         }
         for (const card of cards) {
+            if (!card) {
+                continue;
+            }
             if (card.dataset.previewSrc === src && card.dataset.fullSrc === src) {
                 return 'preview+full';
             }
@@ -447,7 +649,7 @@ export function setupGalleryLightbox() {
         if (!src) {
             return -1;
         }
-        return cards.findIndex((card) => card.dataset.previewSrc === src || card.dataset.fullSrc === src);
+        return cards.findIndex((card) => card && (card.dataset.previewSrc === src || card.dataset.fullSrc === src));
     }
 
     /**
@@ -1148,13 +1350,28 @@ export function setupGalleryLightbox() {
 
     // Function `openAt` executes this focused behavior.
     function openAt(index) {
-        // Variable `card` stores this steps working value.
-        const card = cards[index];
-        if (!card) {
+        if (cards.length === 0) {
             return;
         }
-        currentIndex = index;
-        galleryDevModeState.currentIndex = index;
+        const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
+        // Variable `card` stores this steps working value.
+        const card = cards[normalizedIndex];
+        if (!card) {
+            currentIndex = normalizedIndex;
+            galleryDevModeState.currentIndex = normalizedIndex;
+            if (counter) {
+                counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
+            }
+            fetchLightboxWindowAround(normalizedIndex).then((loaded) => {
+                if (!loaded || controller.signal.aborted || currentIndex !== normalizedIndex) {
+                    return;
+                }
+                openAt(normalizedIndex);
+            });
+            return;
+        }
+        currentIndex = normalizedIndex;
+        galleryDevModeState.currentIndex = normalizedIndex;
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearPendingFullImageSwap();
@@ -1188,7 +1405,7 @@ export function setupGalleryLightbox() {
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
         if (counter) {
-            counter.textContent = `${index + 1} / ${cards.length}`;
+            counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
         }
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
@@ -1203,11 +1420,11 @@ export function setupGalleryLightbox() {
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
-        showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
-            if (!wasDisplayed || currentIndex !== index || activeLightboxImageToken !== imageToken) {
+        showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
+            if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;
             }
-            swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
+            swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             // mapPoint stores state or configuration for the gallery front-end flow.
@@ -1218,7 +1435,7 @@ export function setupGalleryLightbox() {
                 lightboxMapSplitTitle.textContent = card.dataset.title || title.textContent || 'Map';
             }
         }
-        preloadAdjacentImages(index);
+        preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
@@ -1296,6 +1513,15 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function preloadAdjacentImages(index) {
+        if (cards.length === 0) {
+            return;
+        }
+        const edgeDistance = Math.max(lightboxPreviewPreloadRadius + 4, 12);
+        const nearStart = index <= edgeDistance;
+        const nearEnd = index >= cards.length - edgeDistance - 1;
+        if (!cards[index] || nearStart || nearEnd) {
+            fetchLightboxWindowAround(index);
+        }
         if (shouldLimitLightboxPreloading()) {
             return;
         }
@@ -1309,6 +1535,10 @@ export function setupGalleryLightbox() {
             const normalizedIndex = (index + offset + cards.length) % cards.length;
             // card stores state or configuration for the gallery front-end flow.
             const card = cards[normalizedIndex];
+            if (!card) {
+                fetchLightboxWindowAround(normalizedIndex);
+                return;
+            }
             preloadCardLightboxImages(card, Math.abs(offset) <= lightboxFullPreloadRadius);
         });
     }
@@ -1342,7 +1572,10 @@ export function setupGalleryLightbox() {
         }
         refreshLightboxOrderFromDom();
         // index stores the card position in the complete viewer order.
-        const index = cards.findIndex((candidate) => candidate.dataset.imageId === card.dataset.imageId);
+        let index = lightboxIndexForCard(card);
+        if (index < 0 || index >= cards.length || cards[index]?.dataset.imageId !== card.dataset.imageId) {
+            index = cards.findIndex((candidate) => candidate && candidate.dataset.imageId === card.dataset.imageId);
+        }
         if (index < 0) {
             return;
         }

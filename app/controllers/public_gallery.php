@@ -167,32 +167,20 @@ function cms_gallery(): void
     public_render_profile_set_gallery((int) $gallery['id']);
     // Variable $publicOnly stores this steps working value.
     $publicOnly = !$viewer;
-
-    // Variable $stmt stores this steps working value.
-    $sql = "SELECT i.*, COALESCE(SUM(v.vote), 0) AS score
-        FROM images i
-        LEFT JOIN image_votes v ON v.image_id = i.id
-        WHERE i.gallery_id = ? AND i.relative_path NOT LIKE '%/%'";
-    if ($publicOnly) {
-        $sql .= " AND i.visibility = 'public'";
-    }
-    $sql .= "
-        GROUP BY i.id
-        ORDER BY i.sort_order, i.filename";
-    $images = public_render_profile_db('gallery_image_query', static function () use ($sql, $gallery): array {
-        // $stmt stores the prepared gallery image query.
-        $stmt = db()->prepare($sql);
-        $stmt->execute([(int) $gallery['id']]);
-        return $stmt->fetchAll();
-    });
-    // Variable $allImages stores the complete sorted image list before optional pagination slicing.
-    $allImages = $images;
-    // Variable $imageIds stores this steps working value.
-    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // $lightboxExcludesRestrictedNsfw stores whether the async lightbox list must omit restricted rows.
+    $lightboxExcludesRestrictedNsfw = gallery_lightbox_excludes_restricted_nsfw($gallery, $publicOnly);
+    // $imageTotalCount stores the complete top-level photo count used by public pagination.
+    $imageTotalCount = public_render_profile_db('gallery_image_count_query', static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, false));
+    // $lightboxTotalCount stores the async lightbox count after visitor-specific restrictions are applied.
+    $lightboxTotalCount = public_render_profile_db('gallery_lightbox_count_query', static fn (): int => gallery_lightbox_total_count($gallery, $publicOnly, true));
+    // Variable $images stores the visible page photo rows. It is filled after pagination knows the requested offset.
+    $images = [];
+    // Variable $allImages stores only the current visible photo set. Full-gallery lightbox data is loaded asynchronously.
+    $allImages = [];
     // Variable $imageTagsById stores this steps working value.
-    $imageTagsById = public_render_profile_span('image_tag_lookup', static fn (): array => tags_for_entities('image', $imageIds));
+    $imageTagsById = [];
     // Variable $votesById stores this steps working value.
-    $votesById = public_render_profile_span('image_vote_lookup', static fn (): array => current_votes_for_images($imageIds));
+    $votesById = [];
     // Variable $children stores this steps working value.
     public_render_profile_count('gallery_scan_calls');
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
@@ -225,22 +213,32 @@ function cms_gallery(): void
     // Variable $photoCurrentPage stores this steps working value.
     $photoCurrentPage = pagination_current_page('photo_page');
     if (!empty($paginationSettings['enabled']) && $requestedImage) {
-        foreach ($images as $imageIndex => $imageCandidate) {
-            if ((int) $imageCandidate['id'] === (int) $requestedImage['id']) {
-                // $photoCurrentPage stores the page that contains the explicitly requested image.
-                $photoCurrentPage = (int) floor($imageIndex / (int) $paginationSettings['items_per_page']) + 1;
-                break;
-            }
+        // $requestedImagePosition stores the zero-based sorted position of the direct-linked photo.
+        $requestedImagePosition = gallery_lightbox_image_position($requestedImage, $gallery, $publicOnly, false);
+        if ($requestedImagePosition >= 0) {
+            // $photoCurrentPage stores the page that contains the explicitly requested image.
+            $photoCurrentPage = (int) floor($requestedImagePosition / (int) $paginationSettings['items_per_page']) + 1;
         }
     }
     // Variable $photoPagination stores this steps working value.
-    $photoPagination = pagination_model(count($images), $photoCurrentPage, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'photo_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos'));
+    $photoPagination = pagination_model($imageTotalCount, $photoCurrentPage, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'photo_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos'));
     if (!empty($paginationSettings['enabled'])) {
         // $children stores the subgallery list after sorting has already been applied by child_galleries().
         $children = pagination_slice_items($children, $childPagination);
-        // $images stores the photo list after database sorting and metadata preparation have preserved order.
-        $images = pagination_slice_items($images, $photoPagination);
+        // $images stores only the visible photo page so large galleries do not render full-gallery metadata.
+        $images = public_render_profile_db('gallery_image_page_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, (int) $photoPagination['offset'], (int) $photoPagination['limit'], false));
+    } else {
+        // $images stores all rows only when the gallery grid explicitly has pagination disabled.
+        $images = public_render_profile_db('gallery_image_full_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, 0, null, false));
     }
+    // Variable $allImages stores only the visible image set for crawler metadata and social preview fallback.
+    $allImages = $images;
+    // Variable $imageIds stores this steps working value.
+    $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // Variable $imageTagsById stores this steps working value.
+    $imageTagsById = public_render_profile_span('image_tag_lookup', static fn (): array => tags_for_entities('image', $imageIds));
+    // Variable $votesById stores this steps working value.
+    $votesById = public_render_profile_span('image_vote_lookup', static fn (): array => current_votes_for_images($imageIds));
     // Variable $backgroundAssetUrl stores this steps working value.
     $backgroundAssetUrl = public_render_profile_span('background_asset_lookup', static fn (): string => gallery_background_asset_url($gallery, $publicOnly));
     // Variable $seo stores this steps working value.
@@ -306,12 +304,16 @@ function cms_gallery(): void
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     if ($images) {
-        render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), count($allImages));
+        render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list>';
+        $lightboxEndpointParams = ['id' => (int) $gallery['id']];
+        if ($anonymousPreview) {
+            $lightboxEndpointParams['view_as'] = 'anonymous';
+        }
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60">';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $lightboxExcludesRestrictedNsfw): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -338,6 +340,8 @@ function cms_gallery(): void
         $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
         // Variable $displayIndex stores this steps working value.
         $displayIndex = $index + 1 + (!empty($paginationSettings['enabled']) ? (int) $photoPagination['offset'] : 0);
+        // $lightboxIndex stores the zero-based index in the async lightbox order.
+        $lightboxIndex = $lightboxExcludesRestrictedNsfw ? gallery_lightbox_image_position($image, $gallery, $publicOnly, true) : $displayIndex - 1;
         // Variable $altText stores this steps working value.
         $altText = image_alt_text($image, $gallery, $displayIndex);
         // Variable $vote stores this steps working value.
@@ -345,7 +349,7 @@ function cms_gallery(): void
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
         $imageCardClass = $publicPhotoReorderEnabled ? 'image-card has-public-reorder-handle' : 'image-card';
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed) . '>';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
         }
@@ -382,9 +386,6 @@ function cms_gallery(): void
     });
     if ($images) {
         echo '</section>';
-        if (!empty($paginationSettings['enabled']) && count($allImages) > count($images)) {
-            render_lightbox_source_nodes($allImages, $gallery, $mapsAllowed, $votesById);
-        }
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
     }
     if ($children || $images) {
@@ -916,14 +917,17 @@ function render_public_image_admin_delete_form(array $image): void
  * Keeping visible cards and hidden pagination sources on the same attribute
  * contract prevents the lightbox from having a separate pagination-specific path.
  */
-function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true): string
+function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true, ?int $lightboxIndex = null): string
 {
     // $mapPointAttribute stores the optional GPS payload used by map-enabled photos.
     $mapPointAttribute = $imageMapPoint ? ' data-map-point="' . e(json_encode($imageMapPoint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"' : '';
     // $votingAttribute marks whether a cloned gallery-card vote form should exist for this image.
     $votingAttribute = $votingAllowed ? ' data-voting-allowed="1"' : '';
+    // $indexAttribute stores the zero-based async lightbox order position when known.
+    $indexAttribute = $lightboxIndex !== null ? ' data-lightbox-index="' . max(0, $lightboxIndex) . '"' : '';
     return $sourceAttribute
         . ' data-image-id="' . (int) $image['id'] . '"'
+        . $indexAttribute
         . ' data-gallery-id="' . (int) $gallery['id'] . '"'
         . ' data-full-src="' . e($mediaUrl) . '"'
         . ' data-preview-src="' . e($previewUrl) . '"'

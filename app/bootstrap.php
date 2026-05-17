@@ -166,6 +166,7 @@ function cms_run(): void
         'vote' => 'cms_vote',
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',
+        'gallery_lightbox_data' => 'cms_gallery_lightbox_data',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',
