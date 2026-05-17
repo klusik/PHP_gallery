@@ -47,7 +47,31 @@ declare(strict_types=1);
  */
 function upload_automation_schema_ready(): bool
 {
-    return db_table_exists('gallery_upload_tokens');
+    if (!db_table_exists('gallery_upload_tokens')) {
+        return false;
+    }
+
+    // $requiredColumns stores the minimum schema used by the upload automation service.
+    // Checking columns prevents partially-applied migrations from causing fatal SQL errors.
+    $requiredColumns = [
+        'id',
+        'gallery_id',
+        'token_hash',
+        'label',
+        'active',
+        'created_by_user_id',
+        'created_at',
+        'last_used_at',
+        'revoked_at',
+    ];
+
+    foreach ($requiredColumns as $column) {
+        if (!db_column_exists('gallery_upload_tokens', $column)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -143,6 +167,30 @@ function gallery_upload_automation_tokens(int $galleryId): array
     $stmt = db()->prepare('SELECT id, gallery_id, label, active, created_at, last_used_at, revoked_at FROM gallery_upload_tokens WHERE gallery_id = ? AND active = 1 AND revoked_at IS NULL ORDER BY created_at DESC, id DESC');
     $stmt->execute([$galleryId]);
     return $stmt->fetchAll() ?: [];
+}
+
+/**
+ * Return active upload automation API keys across all galleries.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function upload_automation_tokens_for_manager(): array
+{
+    if (!upload_automation_schema_ready()) {
+        return [];
+    }
+
+    // $sql stores the manager query. The users table in the base schema has
+    // username but no display_name column, so both admin identity aliases use
+    // username to keep the query compatible with existing installations.
+    $sql = 'SELECT t.id, t.gallery_id, t.label, t.active, t.created_at, t.last_used_at, t.revoked_at, g.title AS gallery_title, g.slug AS gallery_slug, u.username AS created_by_username, u.username AS created_by_display_name
+            FROM gallery_upload_tokens t
+            INNER JOIN galleries g ON g.id = t.gallery_id
+            LEFT JOIN users u ON u.id = t.created_by_user_id
+            WHERE t.active = 1 AND t.revoked_at IS NULL
+            ORDER BY g.title ASC, t.created_at DESC, t.id DESC';
+    $stmt = db()->query($sql);
+    return $stmt ? ($stmt->fetchAll() ?: []) : [];
 }
 
 /**

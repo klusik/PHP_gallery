@@ -185,6 +185,7 @@ function cms_run(): void
         'admin_upload' => 'cms_admin_upload',
         'admin_upload_automation_token' => 'cms_admin_upload_automation_token',
         'upload_automation_upload' => 'cms_upload_automation_upload',
+        'admin_api_manager' => 'cms_admin_api_manager',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
