@@ -49,8 +49,15 @@ Manual upload lets you choose pictures directly from the file picker. It does no
 
 The checkbox `Generate responsive thumbnails on this PC before upload` controls the faster path:
 
-- Enabled: the app generates PHP Gallery thumbnail variants locally using worker threads, uploads the original, and sends the generated JPG/WebP thumbnails to the existing gallery upload endpoint.
-- Disabled: the app uploads the original and asks the gallery server to create thumbnails, matching the previous server-side behavior.
+- Enabled: the app generates PHP Gallery thumbnail variants locally using separate worker processes, uploads originals in parallel upload threads, and sends the generated JPG/WebP thumbnails to the existing gallery upload endpoint.
+- Disabled: the app uploads originals in parallel upload threads and asks the gallery server to create thumbnails, matching the previous server-side behavior.
+
+The Manual upload tab has two performance controls:
+
+- Thumbnail processes: CPU-bound local resizing and JPG/WebP encoding workers. `Auto` uses a conservative value based on the CPU core count. On a 32-thread CPU, start with Auto or 12 to 16 before trying higher values.
+- Upload threads: network-bound multipart upload workers. `Auto` uses a small shared-hosting-friendly value. Increasing this too much can overload PHP process limits or the uplink.
+
+The app pipelines the work. It does not generate thumbnails for the whole selection first. It keeps a bounded number of thumbnail jobs and upload jobs in flight, uploads images as soon as their thumbnails are ready, and removes temporary thumbnail files after each upload finishes.
 
 Client-side thumbnails require Pillow. `install.bat` installs it from `requirements.txt` into the same Python runtime used by the Start Menu shortcut. This avoids the Windows file-association issue where `.pyw` files can start through a different Python version than the one used from Command Prompt.
 

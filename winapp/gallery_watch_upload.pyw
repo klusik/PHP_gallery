@@ -19,6 +19,7 @@ import importlib
 import json
 import logging
 import mimetypes
+import multiprocessing
 import os
 import shutil
 import queue
@@ -78,7 +79,10 @@ DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
 THUMBNAIL_SIZES = [300, 600, 800, 960, 1280, 1600]
-DEFAULT_THUMBNAIL_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
+DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
+DEFAULT_UPLOAD_WORKERS = 4
+MAX_THUMBNAIL_WORKERS = 32
+MAX_UPLOAD_WORKERS = 12
 
 
 
@@ -99,6 +103,10 @@ class WatcherConfig:
     @param stable_seconds: Minimum unchanged duration before a file is uploaded.
     @param create_thumbnails: Whether the server should create thumbnails after
         accepting the upload.
+    @param manual_thumbnail_workers: Manual upload process count for local
+        thumbnail generation. Zero means automatic.
+    @param manual_upload_workers: Manual upload thread count for multipart HTTP
+        upload requests. Zero means automatic.
     """
 
     watched_folder: str = ""
@@ -107,6 +115,8 @@ class WatcherConfig:
     scan_interval_seconds: float = DEFAULT_INTERVAL_SECONDS
     stable_seconds: float = DEFAULT_STABLE_SECONDS
     create_thumbnails: bool = True
+    manual_thumbnail_workers: int = 0
+    manual_upload_workers: int = 0
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
@@ -130,6 +140,8 @@ class WatcherConfig:
             scan_interval_seconds=float(data.get("scan_interval_seconds", DEFAULT_INTERVAL_SECONDS) or DEFAULT_INTERVAL_SECONDS),
             stable_seconds=float(data.get("stable_seconds", DEFAULT_STABLE_SECONDS) or DEFAULT_STABLE_SECONDS),
             create_thumbnails=bool(data.get("create_thumbnails", True)),
+            manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
+            manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -145,6 +157,8 @@ class WatcherConfig:
             "scan_interval_seconds": self.scan_interval_seconds,
             "stable_seconds": self.stable_seconds,
             "create_thumbnails": self.create_thumbnails,
+            "manual_thumbnail_workers": self.manual_thumbnail_workers,
+            "manual_upload_workers": self.manual_upload_workers,
         }
 
 
@@ -711,6 +725,110 @@ def thumbnail_runtime_status() -> str:
     return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}."
 
 
+def clamp_int(value: int, minimum: int, maximum: int) -> int:
+    """
+    Restrict an integer to a configured inclusive range.
+
+    @param value: Candidate integer value.
+    @param minimum: Lowest accepted value.
+    @param maximum: Highest accepted value.
+    @return: Value restricted to the accepted range.
+    """
+    return max(minimum, min(maximum, int(value)))
+
+
+def automatic_thumbnail_worker_count() -> int:
+    """
+    Choose a conservative multiprocessing thumbnail worker count.
+
+    The automatic value intentionally avoids using every logical CPU. Image
+    resizing and WebP encoding also consume disk I/O, memory bandwidth, and RAM.
+    On high-core CPUs, using roughly half the logical CPUs is usually faster and
+    more stable than launching one encoder process per thread.
+
+    @return: Worker process count for thumbnail generation.
+    """
+    cpu_count = os.cpu_count() or 4
+    return clamp_int(max(2, cpu_count // 2), 2, min(MAX_THUMBNAIL_WORKERS, cpu_count))
+
+
+def automatic_upload_worker_count() -> int:
+    """
+    Choose a conservative manual upload worker count.
+
+    Upload concurrency should remain lower than thumbnail concurrency because the
+    shared-hosting server, PHP process limits, and network uplink are often the
+    bottleneck. Too many concurrent uploads can make the gallery slower instead
+    of faster.
+
+    @return: Worker thread count for multipart uploads.
+    """
+    return DEFAULT_UPLOAD_WORKERS
+
+
+def resolve_thumbnail_worker_count(configured_value: int) -> int:
+    """
+    Resolve the manual thumbnail worker setting into a real process count.
+
+    @param configured_value: Stored UI value, where zero means automatic.
+    @return: Safe worker process count.
+    """
+    if int(configured_value) <= 0:
+        return automatic_thumbnail_worker_count()
+    return clamp_int(int(configured_value), 1, MAX_THUMBNAIL_WORKERS)
+
+
+def resolve_upload_worker_count(configured_value: int) -> int:
+    """
+    Resolve the manual upload worker setting into a real thread count.
+
+    @param configured_value: Stored UI value, where zero means automatic.
+    @return: Safe worker thread count.
+    """
+    if int(configured_value) <= 0:
+        return automatic_upload_worker_count()
+    return clamp_int(int(configured_value), 1, MAX_UPLOAD_WORKERS)
+
+
+def worker_choice_values(maximum: int) -> List[str]:
+    """
+    Build human-readable worker choices for the Tkinter comboboxes.
+
+    @param maximum: Highest explicit worker value to offer.
+    @return: List containing Auto plus numeric worker counts.
+    """
+    values = ["Auto"]
+    for value in [1, 2, 4, 6, 8, 12, 16, 24, 32]:
+        if value <= maximum:
+            values.append(str(value))
+    return values
+
+
+def parse_worker_choice(value: str) -> int:
+    """
+    Convert a UI worker choice into the persisted integer representation.
+
+    @param value: Combobox text, either Auto or a positive integer.
+    @return: Zero for Auto, otherwise a positive integer.
+    """
+    text = str(value).strip()
+    if not text or text.lower() == "auto":
+        return 0
+    return int(text)
+
+
+def format_worker_choice(value: int) -> str:
+    """
+    Convert a persisted worker value into combobox text.
+
+    @param value: Stored worker value, where zero means Auto.
+    @return: Combobox text.
+    """
+    if int(value) <= 0:
+        return "Auto"
+    return str(int(value))
+
+
 def install_pillow_for_current_runtime() -> Tuple[bool, str]:
     """
     Install or repair Pillow for the exact Python interpreter running the app.
@@ -975,7 +1093,15 @@ class ManualUploadThread(threading.Thread):
     runs in a worker pool before each image is uploaded.
     """
 
-    def __init__(self, config: WatcherConfig, paths: List[Path], client_thumbnails: bool, events: "queue.Queue[Tuple[str, str]]") -> None:
+    def __init__(
+        self,
+        config: WatcherConfig,
+        paths: List[Path],
+        client_thumbnails: bool,
+        thumbnail_workers: int,
+        upload_workers: int,
+        events: "queue.Queue[Tuple[str, str]]",
+    ) -> None:
         """
         Create a manual upload worker.
 
@@ -983,16 +1109,22 @@ class ManualUploadThread(threading.Thread):
         @param paths: Image paths selected by the user for manual upload.
         @param client_thumbnails: Whether to generate responsive thumbnails on
             this computer before uploading each original.
+        @param thumbnail_workers: Process count used for local thumbnail work.
+        @param upload_workers: Thread count used for concurrent HTTP uploads.
         @param events: Thread-safe queue used to send status messages to the GUI.
         """
         super().__init__(daemon=True)
         self.config = config
         self.paths = paths
         self.client_thumbnails = client_thumbnails
+        self.thumbnail_workers = resolve_thumbnail_worker_count(thumbnail_workers)
+        self.upload_workers = resolve_upload_worker_count(upload_workers)
         self.events = events
         self.stop_event = threading.Event()
         self.uploaded = 0
         self.failed = 0
+        self.completed_uploads = 0
+        self.progress_lock = threading.Lock()
 
     def stop(self) -> None:
         """
@@ -1042,25 +1174,63 @@ class ManualUploadThread(threading.Thread):
         """
         Upload selected originals and ask PHP Gallery to create thumbnails.
 
+        This mode still uses parallel HTTP uploads because multipart requests are
+        network-bound. The worker count is intentionally modest so shared hosting
+        is not overwhelmed by many simultaneous PHP upload requests.
+
         @param upload_url: Normalized PHP Gallery upload endpoint.
         @return: None.
         """
-        for index, path in enumerate(self.paths, start=1):
-            if self.stop_event.is_set():
-                self.emit("info", "Manual upload stopped by user.")
-                return
-            self.upload_one(upload_url, path, index, [], None, True)
+        self.emit("info", f"Uploading with {self.upload_workers} upload thread(s).")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.upload_workers) as executor:
+            pending: Dict[concurrent.futures.Future[None], Path] = {}
+            path_iterator = iter(enumerate(self.paths, start=1))
+            queue_limit = max(1, self.upload_workers * 2)
+
+            def submit_next() -> bool:
+                """
+                Submit one server-thumbnail upload when input remains.
+
+                @return: True when an upload task was queued.
+                """
+                try:
+                    index, path = next(path_iterator)
+                except StopIteration:
+                    return False
+                future = executor.submit(self.upload_one, upload_url, path, index, [], None, True)
+                pending[future] = path
+                return True
+
+            for _ in range(queue_limit):
+                if not submit_next():
+                    break
+
+            while pending:
+                if self.stop_event.is_set():
+                    self.emit("info", "Manual upload stopped by user.")
+                    return
+                done, _ = concurrent.futures.wait(pending.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                for future in done:
+                    pending.pop(future)
+                    try:
+                        future.result()
+                    except Exception as exc:  # noqa: BLE001
+                        with self.progress_lock:
+                            self.failed += 1
+                        self.emit("error", f"Manual upload worker crashed: {exc}")
+                    if not self.stop_event.is_set():
+                        submit_next()
 
     def run_with_client_thumbnails(self, upload_url: str) -> None:
         """
-        Generate thumbnails locally in a bounded worker pool and upload them.
+        Generate thumbnails in separate processes and upload in parallel threads.
 
-        The worker keeps only a small number of thumbnail jobs ahead of the
-        upload step. This keeps disk usage predictable for large selections while
-        still allowing thumbnail conversion to run in parallel. A failed local
-        thumbnail conversion does not discard the original photo. The worker falls
-        back to asking the server to generate thumbnails for that one image and
-        then continues with the remaining batch.
+        This is a producer-consumer pipeline tuned for large manual batches. CPU
+        heavy resize and encode work runs in a ProcessPoolExecutor so Windows can
+        schedule it across many CPU cores. Network-bound multipart uploads run in
+        a separate ThreadPoolExecutor. Thumbnail generation, uploading, and temp
+        file cleanup overlap, but both queues remain bounded so a 500-photo batch
+        does not fill the disk with completed thumbnail sets waiting to upload.
 
         @param upload_url: Normalized PHP Gallery upload endpoint.
         @return: None.
@@ -1070,55 +1240,145 @@ class ManualUploadThread(threading.Thread):
             return
 
         temp_root = Path(tempfile.mkdtemp(prefix="php_gallery_thumbs_"))
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THUMBNAIL_WORKERS)
-        pending: Dict[concurrent.futures.Future[List[LocalThumbnail]], Tuple[int, Path, str]] = {}
+        thumbnail_executor = concurrent.futures.ProcessPoolExecutor(max_workers=self.thumbnail_workers)
+        upload_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.upload_workers)
+        pending_thumbnails: Dict[concurrent.futures.Future[List[LocalThumbnail]], Tuple[int, Path, str]] = {}
+        pending_uploads: Dict[concurrent.futures.Future[None], Tuple[Path, Path]] = {}
         path_iterator = iter(enumerate(self.paths, start=1))
-        queue_limit = DEFAULT_THUMBNAIL_WORKERS * 2
+        thumbnail_queue_limit = max(1, self.thumbnail_workers * 2)
+        upload_queue_limit = max(1, self.upload_workers * 2)
 
-        def submit_next() -> bool:
+        def submit_next_thumbnail() -> bool:
             """
-            Queue the next thumbnail conversion task when one is available.
+            Submit one thumbnail job to the process pool when input remains.
 
-            @return: True when a task was queued.
+            @return: True when a thumbnail task was submitted.
             """
             try:
                 index, path = next(path_iterator)
             except StopIteration:
                 return False
             client_upload_id = uuid.uuid4().hex
-            future = executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
-            pending[future] = (index, path, client_upload_id)
+            future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
+            pending_thumbnails[future] = (index, path, client_upload_id)
             return True
 
+        def submit_upload(
+            path: Path,
+            index: int,
+            thumbnails: List[LocalThumbnail],
+            client_upload_id: Optional[str],
+            create_server_thumbnails: bool,
+            cleanup_dir: Path,
+        ) -> None:
+            """
+            Submit one upload job to the upload thread pool.
+
+            @param path: Original image path to upload.
+            @param index: One-based item index for progress messages.
+            @param thumbnails: Local thumbnail files to include in the request.
+            @param client_upload_id: Request-local ID mapping thumbnails to the
+                original image on the server.
+            @param create_server_thumbnails: Whether the server should generate
+                thumbnails after accepting the original.
+            @param cleanup_dir: Temporary directory to delete after upload.
+            @return: None.
+            """
+            future = upload_executor.submit(
+                self.upload_one,
+                upload_url,
+                path,
+                index,
+                thumbnails,
+                client_upload_id,
+                create_server_thumbnails,
+            )
+            pending_uploads[future] = (path, cleanup_dir)
+
+        def drain_completed_uploads(wait_for_one: bool) -> None:
+            """
+            Collect completed upload jobs and remove their temp directories.
+
+            @param wait_for_one: When True, wait until at least one upload has
+                completed. When False, only collect uploads already finished.
+            @return: None.
+            """
+            if not pending_uploads:
+                return
+            timeout = None if wait_for_one else 0
+            done, _ = concurrent.futures.wait(
+                pending_uploads.keys(),
+                timeout=timeout,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
+            for future in done:
+                _path, cleanup_dir = pending_uploads.pop(future)
+                try:
+                    future.result()
+                except Exception as exc:  # noqa: BLE001
+                    # upload_one already traps normal upload failures. This guard
+                    # is for unexpected programming errors inside the upload thread.
+                    with self.progress_lock:
+                        self.failed += 1
+                    self.emit("error", f"Manual upload worker crashed: {exc}")
+                finally:
+                    shutil.rmtree(cleanup_dir, ignore_errors=True)
+
         try:
-            for _ in range(queue_limit):
-                if not submit_next():
+            for _ in range(thumbnail_queue_limit):
+                if not submit_next_thumbnail():
                     break
 
-            self.emit("info", f"Generating thumbnails with {DEFAULT_THUMBNAIL_WORKERS} worker thread(s).")
-            while pending:
+            self.emit(
+                "info",
+                f"Generating thumbnails with {self.thumbnail_workers} worker process(es) and uploading with {self.upload_workers} thread(s).",
+            )
+
+            while pending_thumbnails or pending_uploads:
                 if self.stop_event.is_set():
                     self.emit("info", "Manual upload stopped by user.")
                     return
 
-                done, _ = concurrent.futures.wait(pending.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                while len(pending_uploads) >= upload_queue_limit:
+                    drain_completed_uploads(wait_for_one=True)
+                    if self.stop_event.is_set():
+                        self.emit("info", "Manual upload stopped by user.")
+                        return
+
+                drain_completed_uploads(wait_for_one=False)
+
+                if not pending_thumbnails:
+                    drain_completed_uploads(wait_for_one=True)
+                    continue
+
+                done, _ = concurrent.futures.wait(
+                    pending_thumbnails.keys(),
+                    timeout=0.1,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                if not done:
+                    continue
+
                 for future in done:
-                    index, path, client_upload_id = pending.pop(future)
+                    index, path, client_upload_id = pending_thumbnails.pop(future)
                     thumbnail_dir = temp_root / client_upload_id
                     try:
                         thumbnails = future.result()
                         self.emit("info", f"Generated {len(thumbnails)} thumbnail file(s) for {path.name}.")
-                        self.upload_one(upload_url, path, index, thumbnails, client_upload_id, False)
+                        submit_upload(path, index, thumbnails, client_upload_id, False, thumbnail_dir)
                     except Exception as exc:  # noqa: BLE001
                         self.emit("warning", f"Local thumbnails failed for {path.name}; asking server to create them: {exc}")
-                        self.upload_one(upload_url, path, index, [], None, True)
-                    finally:
-                        shutil.rmtree(thumbnail_dir, ignore_errors=True)
+                        submit_upload(path, index, [], None, True, thumbnail_dir)
 
-                    if not self.stop_event.is_set():
-                        submit_next()
+                    if not self.stop_event.is_set() and len(pending_thumbnails) < thumbnail_queue_limit:
+                        submit_next_thumbnail()
+
+            drain_completed_uploads(wait_for_one=False)
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            thumbnail_executor.shutdown(wait=False, cancel_futures=True)
+            upload_executor.shutdown(wait=True, cancel_futures=True)
+            for _path, cleanup_dir in list(pending_uploads.values()):
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
             shutil.rmtree(temp_root, ignore_errors=True)
 
     def upload_one(
@@ -1153,7 +1413,9 @@ class ManualUploadThread(threading.Thread):
                 thumbnails=thumbnails,
                 client_upload_id=client_upload_id,
             )
-            self.uploaded += int(payload.get("uploaded", 0) or 0)
+            with self.progress_lock:
+                self.uploaded += int(payload.get("uploaded", 0) or 0)
+                self.completed_uploads += 1
             installed = 0
             failed_thumbnails = 0
             thumbnail_errors: List[str] = []
@@ -1169,7 +1431,9 @@ class ManualUploadThread(threading.Thread):
                 details = "; ".join(thumbnail_errors) if thumbnail_errors else "no detailed server message"
                 self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}")
         except Exception as exc:  # noqa: BLE001
-            self.failed += 1
+            with self.progress_lock:
+                self.failed += 1
+                self.completed_uploads += 1
             self.emit("error", f"Manual upload failed for {path.name}: {exc}")
 
 
@@ -1211,6 +1475,8 @@ class WatcherApp:
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
         self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
+        self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
+        self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
         self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
         self.manual_selection_var = tk.StringVar(value="No files selected")
         self.status_var = tk.StringVar(value="Watcher stopped")
@@ -1314,7 +1580,7 @@ class WatcherApp:
 
         intro = ttk.Label(
             parent,
-            text="Select photos manually and upload them into the same gallery target as the API key. Local thumbnail conversion uses worker threads before upload.",
+            text="Select photos manually and upload them into the same gallery target as the API key. Local thumbnail conversion uses separate worker processes; uploads use parallel network threads.",
             wraplength=880,
         )
         intro.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
@@ -1330,8 +1596,30 @@ class WatcherApp:
         )
         self.thumbnail_check.grid(row=2, column=0, columnspan=4, sticky="w", pady=5)
 
+        performance = ttk.LabelFrame(parent, text="Manual upload performance")
+        performance.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(4, 8))
+        performance.columnconfigure(4, weight=1)
+        ttk.Label(performance, text="Thumbnail processes").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Combobox(
+            performance,
+            textvariable=self.manual_thumbnail_workers_var,
+            values=worker_choice_values(MAX_THUMBNAIL_WORKERS),
+            width=10,
+            state="readonly",
+        ).grid(row=0, column=1, sticky="w", padx=(0, 12), pady=6)
+        ttk.Label(performance, text="Upload threads").grid(row=0, column=2, sticky="w", padx=8, pady=6)
+        ttk.Combobox(
+            performance,
+            textvariable=self.manual_upload_workers_var,
+            values=worker_choice_values(MAX_UPLOAD_WORKERS),
+            width=10,
+            state="readonly",
+        ).grid(row=0, column=3, sticky="w", padx=(0, 12), pady=6)
+        auto_text = f"Auto uses {automatic_thumbnail_worker_count()} thumbnail process(es) and {automatic_upload_worker_count()} upload thread(s)."
+        ttk.Label(performance, text=auto_text).grid(row=0, column=4, sticky="w", padx=8, pady=6)
+
         runtime_row = ttk.Frame(parent)
-        runtime_row.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        runtime_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         runtime_row.columnconfigure(0, weight=1)
         ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=0, sticky="w")
         ttk.Button(runtime_row, text="Install or repair Pillow", command=self.repair_pillow).grid(row=0, column=1, sticky="e", padx=(8, 0))
@@ -1339,7 +1627,7 @@ class WatcherApp:
         self.refresh_thumbnail_controls()
 
         actions = ttk.Frame(parent)
-        actions.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        actions.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(10, 0))
         ttk.Button(actions, text="Start manual upload", command=self.start_manual_upload).pack(side="left")
         ttk.Button(actions, text="Stop manual upload", command=self.stop_manual_upload).pack(side="left", padx=8)
         ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
@@ -1383,8 +1671,10 @@ class WatcherApp:
         try:
             interval = max(0.2, float(self.interval_var.get().strip() or DEFAULT_INTERVAL_SECONDS))
             stable = max(0.5, float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS))
+            thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
+            upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
         except ValueError as exc:
-            raise ValueError("Scan interval and stable file seconds must be numeric.") from exc
+            raise ValueError("Scan interval, stable file seconds, and worker counts must be numeric.") from exc
 
         return WatcherConfig(
             watched_folder=self.watched_folder_var.get().strip(),
@@ -1393,6 +1683,8 @@ class WatcherApp:
             scan_interval_seconds=interval,
             stable_seconds=stable,
             create_thumbnails=bool(self.create_thumbnails_var.get()),
+            manual_thumbnail_workers=thumbnail_workers,
+            manual_upload_workers=upload_workers,
         )
 
     def browse_folder(self) -> None:
@@ -1527,6 +1819,8 @@ class WatcherApp:
             config,
             list(self.manual_paths),
             use_local_thumbnails,
+            config.manual_thumbnail_workers,
+            config.manual_upload_workers,
             self.events,
         )
         self.manual_worker.start()
@@ -1671,4 +1965,5 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     raise SystemExit(main())

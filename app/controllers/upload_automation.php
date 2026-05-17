@@ -110,10 +110,22 @@ function cms_upload_automation_upload(): void
         $clientThumbnailEntries = upload_automation_client_thumbnail_entries();
         // $entries stores validated upload entries returned by the existing upload validator.
         $entries = gallery_upload_entries($files);
+        // $uploadResult stores the gallery mutation result produced under a
+        // short gallery-scoped advisory lock. Manual bulk upload can run several
+        // HTTP requests in parallel, but the existing scanner reconciles the
+        // whole target folder. The lock prevents two PHP workers from inserting
+        // the same discovered image row concurrently.
+        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use ($galleryId, $gallery, $entries, $clientThumbnailEntries, $imageClientIds): array {
+            // $stored stores the existing upload pipeline result after filesystem storage and image scan.
+            $stored = store_uploaded_gallery_images($galleryId, $entries);
+            // $clientThumbnailResult stores the thumbnails installed from the client request.
+            $clientThumbnailResult = upload_automation_install_client_thumbnails($galleryId, $gallery, $clientThumbnailEntries, $imageClientIds, $stored);
+            return [$stored, $clientThumbnailResult];
+        });
         // $stored stores the existing upload pipeline result after filesystem storage and image scan.
-        $stored = store_uploaded_gallery_images($galleryId, $entries);
+        $stored = $uploadResult[0];
         // $clientThumbnailResult stores the thumbnails installed from the client request.
-        $clientThumbnailResult = upload_automation_install_client_thumbnails($galleryId, $gallery, $clientThumbnailEntries, $imageClientIds, $stored);
+        $clientThumbnailResult = $uploadResult[1];
         // $createThumbnails stores whether the watcher asked the server to create derivatives immediately.
         $createThumbnails = upload_automation_bool($_POST['create_thumbnails'] ?? '1', true);
         // $thumbnails stores the count of generated thumbnails and display derivatives.

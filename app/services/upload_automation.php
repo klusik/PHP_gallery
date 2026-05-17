@@ -457,13 +457,82 @@ function upload_automation_client_image_map(int $galleryId, array $clientIds, ar
         }
 
         // $image stores the database row created by the existing scan pipeline.
-        $image = find_image_by_path($galleryId, normalize_relative_path((string) $filename));
+        // Do not use find_image_by_path() here. During scan_gallery_images(), that
+        // helper may cache a negative lookup before inserting the new row. This
+        // upload request needs a fresh database read so client thumbnails can be
+        // attached immediately after the original was scanned.
+        $image = upload_automation_find_image_by_path_uncached($galleryId, normalize_relative_path((string) $filename));
         if (is_array($image)) {
             $map[$clientId] = $image;
         }
     }
 
     return $map;
+}
+
+/**
+ * Fetch one image row without using the process-local lookup cache.
+ *
+ * The normal finder intentionally caches misses for page rendering and repeated
+ * maintenance reads. Upload automation runs the scanner and then immediately
+ * needs the just-created image row in the same PHP request, so a stale cached
+ * miss would incorrectly reject every client-generated thumbnail.
+ *
+ * @param int $galleryId Gallery that should contain the image.
+ * @param string $relativePath Normalized image path inside the gallery folder.
+ * @return array<string, mixed>|null Fresh image row, or null when not found.
+ */
+function upload_automation_find_image_by_path_uncached(int $galleryId, string $relativePath): ?array
+{
+    // $normalizedPath stores the canonical path used by the image hash index.
+    $normalizedPath = normalize_relative_path($relativePath);
+    // $stmt stores the direct database lookup that bypasses static finder caches.
+    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
+    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
+    // $image stores the fetched row or false when the image was not indexed.
+    $image = $stmt->fetch();
+    return is_array($image) ? $image : null;
+}
+
+/**
+ * Execute upload automation work under a short gallery-scoped MySQL lock.
+ *
+ * Parallel manual uploads can send several requests to the same gallery at the
+ * same time. Each request moves one original file and then reuses the existing
+ * scanner, which scans the whole gallery folder. Without a gallery-level lock,
+ * two PHP workers can both decide that the same newly discovered file is absent
+ * and then race each other into the unique image-path index. The lock serializes
+ * only the server-side store/scan/thumbnail-install phase for one gallery while
+ * the Windows app can still generate thumbnails in parallel and upload request
+ * bodies concurrently.
+ *
+ * @param int $galleryId Gallery being modified by the automation endpoint.
+ * @param callable $callback Work to run while the gallery lock is held.
+ * @return mixed Value returned by the callback.
+ */
+function upload_automation_with_gallery_lock(int $galleryId, callable $callback): mixed
+{
+    // $lockName stores a short deterministic advisory lock name for this gallery.
+    $lockName = 'php_gallery_upload_automation_' . $galleryId;
+    // $pdo stores the shared connection used for GET_LOCK() and RELEASE_LOCK().
+    $pdo = db();
+    // $stmt stores the advisory lock request. Ten seconds is enough for normal
+    // small multipart requests while still failing clearly if a worker hangs.
+    $stmt = $pdo->prepare('SELECT GET_LOCK(?, 10)');
+    $stmt->execute([$lockName]);
+    // $locked stores MySQL's GET_LOCK result: 1 acquired, 0 timeout, null error.
+    $locked = (int) $stmt->fetchColumn();
+    if ($locked !== 1) {
+        throw new RuntimeException(t('upload_automation.error.gallery_busy', 'The target gallery is busy processing another upload. Please retry shortly.'));
+    }
+
+    try {
+        return $callback();
+    } finally {
+        // $releaseStmt stores the matching advisory lock release request.
+        $releaseStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $releaseStmt->execute([$lockName]);
+    }
 }
 
 /**
