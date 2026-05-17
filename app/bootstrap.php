@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.67';
+const CMS_VERSION = '0.68';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -183,6 +183,8 @@ function cms_run(): void
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',
         'admin_upload' => 'cms_admin_upload',
+        'admin_upload_automation_token' => 'cms_admin_upload_automation_token',
+        'upload_automation_upload' => 'cms_upload_automation_upload',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
@@ -263,6 +265,9 @@ function cms_route_from_request(): array
     }
     if ($segments === ['favicon.ico'] || $segments === ['favicon.png']) {
         return ['page' => 'favicon_asset', 'params' => ['s' => '32']];
+    }
+    if ($segments === ['api', 'upload']) {
+        return ['page' => 'upload_automation_upload', 'params' => []];
     }
     if ($segments[0] === 'galleries' && isset($segments[1]) && preg_match('/^[0-9]+$/', $segments[1]) === 1) {
         return ['page' => 'home', 'params' => ['gallery_page' => max(1, (int) $segments[1])]];

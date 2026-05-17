@@ -854,6 +854,7 @@ function cms_admin_edit_gallery(): void
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.tab_images', 'Images')) . '</p><h2>' . e(t('admin.gallery_editor.images_title', 'Photos and ordering')) . '</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.upload_workflow', 'Upload workflow')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.upload_photos', 'Upload photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here', 'Upload photos here')) . '</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form></div></div>';
+    render_admin_gallery_upload_automation_panel($gallery);
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';

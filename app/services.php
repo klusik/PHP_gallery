@@ -67,6 +67,7 @@ require_once __DIR__ . '/services/gallery_grid.php';
 require_once __DIR__ . '/services/gallery_mutations.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
+require_once __DIR__ . '/services/upload_automation.php';
 require_once __DIR__ . '/services/thumbnails.php';
 require_once __DIR__ . '/services/thumbnail_bounds.php';
 require_once __DIR__ . '/services/gallery_covers.php';
