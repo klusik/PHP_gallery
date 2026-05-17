@@ -1,5 +1,24 @@
 # Patch notes
 
+## Version 0.68
+
+Version 0.68 extends the Windows packaging and uploader workflow, keeps deployment paths aligned, and continues the release of the broader admin and gallery maintenance work.
+
+### Highlights
+
+#### Added Windows packaging and uploader workflow updates
+
+  - Added the Winapp installer script path to the release packaging surface.
+  - Added the Winapp uploader path so uploader changes can ship with the same release.
+  - Added the Winapp uploader companion entry to keep related tooling grouped together.
+  - Kept the deployment files aligned with the current branch structure.
+
+#### Continued admin and gallery maintenance
+
+  - Refined the admin and gallery release surface to match the current module split.
+  - Kept the core versioned files aligned for the 0.68 release.
+  - Preserved the existing patch notes format for the next tag.
+
 ## Version 0.67
 
 Version 0.67 is a large maintenance, update-system, diagnostics, and admin-workflow release. It focuses on making GitHub update checks safer and cheaper, adding optional automatic stable updates, improving URL rewrite compatibility handling, expanding telemetry exports, making admin logs more usable, preserving navigation context across login, upload, and lightbox flows, and refreshing the project documentation.
