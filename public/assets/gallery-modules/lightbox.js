@@ -290,7 +290,17 @@ export function setupGalleryLightbox() {
                 mergeLightboxItems(payload?.items || []);
                 return true;
             })
-            .catch(() => false)
+            .catch((error) => {
+                if (window.console && typeof window.console.warn === 'function') {
+                    window.console.warn('Lazy lightbox metadata request failed.', {
+                        endpoint: url.toString(),
+                        offset,
+                        limit,
+                        error,
+                    });
+                }
+                return false;
+            })
             .finally(() => {
                 lightboxPendingWindows.delete(key);
             });
