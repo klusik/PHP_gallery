@@ -13,20 +13,25 @@ second, divergent implementation of upload behavior.
 """
 
 import argparse
+import concurrent.futures
 import hashlib
+import importlib
 import json
 import logging
 import mimetypes
 import os
+import shutil
 import queue
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib import error, parse, request
 
 try:
@@ -41,12 +46,22 @@ except ImportError:  # pragma: no cover
     messagebox = None
     ttk = None
 
+try:
+    from PIL import Image, ImageOps
+except ImportError:  # pragma: no cover
+    # Pillow is optional for the watcher. Manual client-side thumbnail generation
+    # requires it, while normal watch-folder uploads keep working without it.
+    Image = None
+    ImageOps = None
+
 
 APP_NAME = "PHPGalleryUploader"
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
+APP_DIR = Path(__file__).resolve().parent
+REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 
 SUPPORTED_SUFFIXES = {
     ".jpg",
@@ -62,6 +77,9 @@ SUPPORTED_SUFFIXES = {
 DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
+THUMBNAIL_SIZES = [300, 600, 800, 960, 1280, 1600]
+DEFAULT_THUMBNAIL_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
+
 
 
 @dataclass
@@ -129,6 +147,20 @@ class WatcherConfig:
             "create_thumbnails": self.create_thumbnails,
         }
 
+
+@dataclass
+class LocalThumbnail:
+    """
+    One locally generated thumbnail variant waiting to be uploaded.
+
+    @param path: Temporary thumbnail file path on the client computer.
+    @param size: Long-side size in pixels, matching PHP Gallery thumbnail_sizes().
+    @param format: Output format accepted by the gallery, either jpg or webp.
+    """
+
+    path: Path
+    size: int
+    format: str
 
 class ConfigStore:
     """
@@ -492,42 +524,93 @@ def iter_candidate_files(folder: Path) -> List[Path]:
     return sorted(candidates, key=lambda item: (item.stat().st_mtime if item.exists() else 0, item.name.lower()))
 
 
-def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnails: bool) -> Dict[str, Any]:
+def multipart_field_part(boundary: str, name: str, value: str) -> bytes:
+    """
+    Build one text field for a multipart/form-data request body.
+
+    @param boundary: Multipart boundary string without the leading dashes.
+    @param name: Submitted field name.
+    @param value: Submitted field value.
+    @return: Encoded multipart field bytes.
+    """
+    return b"".join([
+        f"--{boundary}\r\n".encode("ascii"),
+        f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"),
+        str(value).encode("utf-8"),
+        b"\r\n",
+    ])
+
+
+def multipart_file_part(boundary: str, field_name: str, path: Path, filename: Optional[str] = None) -> bytes:
+    """
+    Build one file field for a multipart/form-data request body.
+
+    @param boundary: Multipart boundary string without the leading dashes.
+    @param field_name: Submitted file field name.
+    @param path: Local file path whose bytes should be sent.
+    @param filename: Optional remote file name. When omitted, path.name is used.
+    @return: Encoded multipart file bytes including the file content.
+    @raises OSError: Propagated when the file cannot be read.
+    """
+    safe_name = (filename or path.name).replace('"', "_")
+    content_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+    return b"".join([
+        f"--{boundary}\r\n".encode("ascii"),
+        f'Content-Disposition: form-data; name="{field_name}"; filename="{safe_name}"\r\n'.encode("utf-8"),
+        f"Content-Type: {content_type}\r\n\r\n".encode("ascii"),
+        path.read_bytes(),
+        b"\r\n",
+    ])
+
+
+def multipart_upload(
+    upload_url: str,
+    api_key: str,
+    path: Path,
+    create_thumbnails: bool,
+    thumbnails: Optional[List[LocalThumbnail]] = None,
+    client_upload_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Upload one image file using standard-library HTTP multipart/form-data.
 
-    No third-party dependency is required. This matters for a small Windows
-    helper that should run from a normal Python installation without a packaging
-    or virtual environment requirement.
+    The same endpoint is used for watch-folder uploads and manual uploads. Manual
+    uploads may include locally generated thumbnail files in the same request. The
+    server still stores the original image through the existing gallery upload
+    pipeline, then installs the supplied thumbnail variants beside the final image
+    record.
 
     @param upload_url: Normalized PHP Gallery upload endpoint.
     @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
     @param path: Local image path to upload.
     @param create_thumbnails: Whether to ask the gallery to generate thumbnails.
+    @param thumbnails: Optional local thumbnail variants to send with the image.
+    @param client_upload_id: Optional stable request-local ID used to map supplied
+        thumbnails to the stored image after server-side filename normalization.
     @return: Parsed JSON response from the server.
     @raises RuntimeError: Raised for HTTP errors, network errors, non-JSON
         responses, malformed JSON payloads, or server-declared upload failure.
-    @raises OSError: Propagated when the image cannot be read.
+    @raises OSError: Propagated when the image or a thumbnail cannot be read.
     """
     boundary = "PHPGalleryUpload" + uuid.uuid4().hex
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    fields = {
-        "create_thumbnails": "1" if create_thumbnails else "0",
-    }
+    field_entries: List[Tuple[str, str]] = [
+        ("create_thumbnails", "1" if create_thumbnails else "0"),
+    ]
+    if client_upload_id:
+        field_entries.append(("image_client_ids[]", client_upload_id))
 
     body_parts: List[bytes] = []
-    for name, value in fields.items():
-        body_parts.append(f"--{boundary}\r\n".encode("ascii"))
-        body_parts.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("ascii"))
-        body_parts.append(str(value).encode("utf-8"))
-        body_parts.append(b"\r\n")
+    for name, value in field_entries:
+        body_parts.append(multipart_field_part(boundary, name, value))
 
-    body_parts.append(f"--{boundary}\r\n".encode("ascii"))
-    safe_name = path.name.replace('"', "_")
-    body_parts.append(f'Content-Disposition: form-data; name="images[]"; filename="{safe_name}"\r\n'.encode("utf-8"))
-    body_parts.append(f"Content-Type: {content_type}\r\n\r\n".encode("ascii"))
-    body_parts.append(path.read_bytes())
-    body_parts.append(b"\r\n")
+    body_parts.append(multipart_file_part(boundary, "images[]", path, path.name))
+
+    for thumbnail in thumbnails or []:
+        body_parts.append(multipart_field_part(boundary, "thumbnail_client_ids[]", client_upload_id or ""))
+        body_parts.append(multipart_field_part(boundary, "thumbnail_sizes[]", str(int(thumbnail.size))))
+        body_parts.append(multipart_field_part(boundary, "thumbnail_formats[]", thumbnail.format))
+        body_parts.append(multipart_file_part(boundary, "client_thumbnails[]", thumbnail.path, thumbnail.path.name))
+
     body_parts.append(f"--{boundary}--\r\n".encode("ascii"))
     body = b"".join(body_parts)
 
@@ -539,7 +622,7 @@ def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnail
             "Content-Length": str(len(body)),
             "X-Gallery-API-Key": api_key,
             "Accept": "application/json",
-            "User-Agent": "PHPGalleryUploader/1.0",
+            "User-Agent": "PHPGalleryUploader/1.1",
         },
         method="POST",
     )
@@ -569,6 +652,189 @@ def multipart_upload(upload_url: str, api_key: str, path: Path, create_thumbnail
     if not payload.get("ok"):
         raise RuntimeError(str(payload.get("error") or "Upload failed."))
     return payload
+
+
+def selected_image_filetypes() -> List[Tuple[str, str]]:
+    """
+    Return file picker filters for manual image selection.
+
+    @return: Tkinter-compatible file type filters.
+    """
+    return [
+        ("Image files", "*.jpg *.jpeg *.png *.gif *.webp *.heic *.heif *.dng"),
+        ("JPEG", "*.jpg *.jpeg"),
+        ("PNG", "*.png"),
+        ("WebP", "*.webp"),
+        ("All files", "*.*"),
+    ]
+
+
+def filter_supported_paths(paths: Iterable[str]) -> List[Path]:
+    """
+    Normalize manually selected paths and keep only supported image suffixes.
+
+    @param paths: Raw path strings returned by Tkinter.
+    @return: Sorted, de-duplicated Path objects.
+    """
+    unique: Dict[str, Path] = {}
+    for raw_path in paths:
+        path = Path(raw_path)
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES:
+            unique[str(path)] = path
+    return [unique[key] for key in sorted(unique.keys(), key=str.lower)]
+
+
+def local_thumbnail_supported() -> bool:
+    """
+    Return whether Pillow is available for client-side thumbnail generation.
+
+    @return: True when Pillow imports are available.
+    """
+    return Image is not None and ImageOps is not None
+
+
+def thumbnail_runtime_status() -> str:
+    """
+    Build a clear status line for the Python runtime used by this process.
+
+    Windows can have multiple Python installations and Microsoft Store aliases.
+    The app must report the exact executable currently running the GUI because
+    Pillow has to be installed into this same interpreter.
+
+    @return: Human-readable runtime and Pillow availability status.
+    """
+    executable = sys.executable or "unknown Python executable"
+    version = sys.version.split()[0]
+    if local_thumbnail_supported():
+        pillow_version = getattr(Image, "__version__", "installed")
+        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}."
+    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}."
+
+
+def install_pillow_for_current_runtime() -> Tuple[bool, str]:
+    """
+    Install or repair Pillow for the exact Python interpreter running the app.
+
+    This avoids the common Windows issue where install.bat installs packages into
+    one Python version while a .pyw file association launches another version.
+
+    @return: Tuple containing success flag and command output text.
+    """
+    command = [sys.executable, "-m", "pip", "install", "--user"]
+    if REQUIREMENTS_PATH.is_file():
+        command.extend(["-r", str(REQUIREMENTS_PATH)])
+    else:
+        command.append("Pillow>=10.0")
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+    output = completed.stdout.strip() if completed.stdout else "pip produced no output"
+    if completed.returncode == 0:
+        try:
+            globals()["Image"] = importlib.import_module("PIL.Image")
+            globals()["ImageOps"] = importlib.import_module("PIL.ImageOps")
+        except Exception as exc:  # noqa: BLE001
+            return False, f"pip finished, but Pillow still cannot be imported by this process: {exc}\n{output}"
+    return completed.returncode == 0, output
+
+
+def image_has_alpha(image: Any) -> bool:
+    """
+    Return whether a Pillow image contains transparency that matters for output.
+
+    @param image: Pillow image instance.
+    @return: True when the image has an alpha channel or palette transparency.
+    """
+    return image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info)
+
+
+def prepare_jpeg_image(image: Any) -> Any:
+    """
+    Convert a Pillow image to the RGB canvas expected by JPEG output.
+
+    Transparent pixels are composited over white to match the gallery server's
+    JPEG thumbnail behavior.
+
+    @param image: Pillow image instance.
+    @return: RGB Pillow image suitable for JPEG encoding.
+    """
+    if image_has_alpha(image):
+        rgba = image.convert("RGBA")
+        background = Image.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel("A"))
+        return background
+    return image.convert("RGB")
+
+
+def prepare_webp_image(image: Any) -> Any:
+    """
+    Convert a Pillow image to a WebP-friendly mode while preserving alpha.
+
+    @param image: Pillow image instance.
+    @return: Pillow image suitable for WebP encoding.
+    """
+    if image_has_alpha(image):
+        return image.convert("RGBA")
+    return image.convert("RGB")
+
+
+def generate_local_thumbnails(source_path: Path, output_root: Path, client_upload_id: str) -> List[LocalThumbnail]:
+    """
+    Generate PHP Gallery responsive thumbnail variants on the client computer.
+
+    The size list and naming intent mirror PHP Gallery's thumbnail service:
+    300, 600, 800, 960, 1280, and 1600 pixels on the long side, emitted as JPG
+    and WebP. The server decides where those files belong after it stores the
+    original and resolves the final image record.
+
+    @param source_path: Original image selected for manual upload.
+    @param output_root: Temporary parent directory for generated files.
+    @param client_upload_id: Request-local ID shared with the server metadata.
+    @return: Generated thumbnail descriptors.
+    @raises RuntimeError: Raised when Pillow is unavailable.
+    @raises OSError: Propagated when files cannot be read or written.
+    @raises Exception: Propagated when Pillow cannot decode or encode the image.
+    """
+    if not local_thumbnail_supported():
+        raise RuntimeError("Client-side thumbnails require Pillow. Install it with: python -m pip install Pillow")
+
+    target_dir = output_root / client_upload_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    thumbnails: List[LocalThumbnail] = []
+
+    with Image.open(source_path) as opened:
+        try:
+            opened.seek(0)
+        except EOFError:
+            pass
+        source = ImageOps.exif_transpose(opened)
+        stem = source_path.stem.replace('"', "_")
+
+        for size in THUMBNAIL_SIZES:
+            resized = source.copy()
+            resized.thumbnail((size, size), Image.Resampling.LANCZOS)
+
+            jpeg_path = target_dir / f"{stem}_thumb{size}.jpg"
+            jpeg_image = prepare_jpeg_image(resized)
+            jpeg_image.save(jpeg_path, "JPEG", quality=82, optimize=True, progressive=True)
+            thumbnails.append(LocalThumbnail(path=jpeg_path, size=size, format="jpg"))
+
+            webp_path = target_dir / f"{stem}_thumb{size}.webp"
+            webp_image = prepare_webp_image(resized)
+            webp_image.save(webp_path, "WEBP", quality=82, method=6)
+            thumbnails.append(LocalThumbnail(path=webp_path, size=size, format="webp"))
+
+    return thumbnails
 
 
 class WatcherThread(threading.Thread):
@@ -699,6 +965,214 @@ class WatcherThread(threading.Thread):
                 self.emit("error", f"Upload failed for {path.name}: {message}")
 
 
+class ManualUploadThread(threading.Thread):
+    """
+    Background worker for manual bulk uploads.
+
+    The worker keeps manual uploading separate from watch-folder polling while
+    reusing the same config object, endpoint normalizer, API-key header, and
+    multipart upload function. Client-side thumbnail generation is optional and
+    runs in a worker pool before each image is uploaded.
+    """
+
+    def __init__(self, config: WatcherConfig, paths: List[Path], client_thumbnails: bool, events: "queue.Queue[Tuple[str, str]]") -> None:
+        """
+        Create a manual upload worker.
+
+        @param config: Shared connection configuration captured from the UI.
+        @param paths: Image paths selected by the user for manual upload.
+        @param client_thumbnails: Whether to generate responsive thumbnails on
+            this computer before uploading each original.
+        @param events: Thread-safe queue used to send status messages to the GUI.
+        """
+        super().__init__(daemon=True)
+        self.config = config
+        self.paths = paths
+        self.client_thumbnails = client_thumbnails
+        self.events = events
+        self.stop_event = threading.Event()
+        self.uploaded = 0
+        self.failed = 0
+
+    def stop(self) -> None:
+        """
+        Request the manual upload worker to stop after the current item.
+
+        @return: None.
+        """
+        self.stop_event.set()
+
+    def emit(self, level: str, message: str) -> None:
+        """
+        Send a status message to the GUI and persistent log.
+
+        @param level: Logging level name such as info, warning, or error.
+        @param message: Human-readable status message.
+        @return: None.
+        """
+        self.events.put((level, message))
+        log_method = getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")
+        log_method(message)
+
+    def run(self) -> None:
+        """
+        Run the selected manual upload mode.
+
+        @return: None.
+        """
+        upload_url = normalize_upload_url(self.config.gallery_url)
+        if not upload_url or not self.config.api_key.strip():
+            self.emit("error", "Gallery URL and API key are required.")
+            return
+        if not self.paths:
+            self.emit("warning", "No manual upload files were selected.")
+            return
+
+        self.emit("info", f"Manual upload started: {len(self.paths)} file(s).")
+        self.emit("info", f"Upload endpoint: {upload_url}")
+
+        if self.client_thumbnails:
+            self.run_with_client_thumbnails(upload_url)
+        else:
+            self.run_with_server_thumbnails(upload_url)
+
+        self.emit("info", f"Manual upload finished: uploaded={self.uploaded}, failed={self.failed}.")
+
+    def run_with_server_thumbnails(self, upload_url: str) -> None:
+        """
+        Upload selected originals and ask PHP Gallery to create thumbnails.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @return: None.
+        """
+        for index, path in enumerate(self.paths, start=1):
+            if self.stop_event.is_set():
+                self.emit("info", "Manual upload stopped by user.")
+                return
+            self.upload_one(upload_url, path, index, [], None, True)
+
+    def run_with_client_thumbnails(self, upload_url: str) -> None:
+        """
+        Generate thumbnails locally in a bounded worker pool and upload them.
+
+        The worker keeps only a small number of thumbnail jobs ahead of the
+        upload step. This keeps disk usage predictable for large selections while
+        still allowing thumbnail conversion to run in parallel. A failed local
+        thumbnail conversion does not discard the original photo. The worker falls
+        back to asking the server to generate thumbnails for that one image and
+        then continues with the remaining batch.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @return: None.
+        """
+        if not local_thumbnail_supported():
+            self.emit("error", "Client-side thumbnails require Pillow. Run: python -m pip install Pillow")
+            return
+
+        temp_root = Path(tempfile.mkdtemp(prefix="php_gallery_thumbs_"))
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THUMBNAIL_WORKERS)
+        pending: Dict[concurrent.futures.Future[List[LocalThumbnail]], Tuple[int, Path, str]] = {}
+        path_iterator = iter(enumerate(self.paths, start=1))
+        queue_limit = DEFAULT_THUMBNAIL_WORKERS * 2
+
+        def submit_next() -> bool:
+            """
+            Queue the next thumbnail conversion task when one is available.
+
+            @return: True when a task was queued.
+            """
+            try:
+                index, path = next(path_iterator)
+            except StopIteration:
+                return False
+            client_upload_id = uuid.uuid4().hex
+            future = executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
+            pending[future] = (index, path, client_upload_id)
+            return True
+
+        try:
+            for _ in range(queue_limit):
+                if not submit_next():
+                    break
+
+            self.emit("info", f"Generating thumbnails with {DEFAULT_THUMBNAIL_WORKERS} worker thread(s).")
+            while pending:
+                if self.stop_event.is_set():
+                    self.emit("info", "Manual upload stopped by user.")
+                    return
+
+                done, _ = concurrent.futures.wait(pending.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                for future in done:
+                    index, path, client_upload_id = pending.pop(future)
+                    thumbnail_dir = temp_root / client_upload_id
+                    try:
+                        thumbnails = future.result()
+                        self.emit("info", f"Generated {len(thumbnails)} thumbnail file(s) for {path.name}.")
+                        self.upload_one(upload_url, path, index, thumbnails, client_upload_id, False)
+                    except Exception as exc:  # noqa: BLE001
+                        self.emit("warning", f"Local thumbnails failed for {path.name}; asking server to create them: {exc}")
+                        self.upload_one(upload_url, path, index, [], None, True)
+                    finally:
+                        shutil.rmtree(thumbnail_dir, ignore_errors=True)
+
+                    if not self.stop_event.is_set():
+                        submit_next()
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+            shutil.rmtree(temp_root, ignore_errors=True)
+
+    def upload_one(
+        self,
+        upload_url: str,
+        path: Path,
+        index: int,
+        thumbnails: List[LocalThumbnail],
+        client_upload_id: Optional[str],
+        create_server_thumbnails: bool,
+    ) -> None:
+        """
+        Upload one original, optionally with locally generated thumbnails.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @param path: Original image path to upload.
+        @param index: One-based item index for status messages.
+        @param thumbnails: Local thumbnail files to submit with the original.
+        @param client_upload_id: Request-local ID used to map thumbnails to the
+            stored image record.
+        @param create_server_thumbnails: Whether PHP Gallery should generate
+            thumbnails after accepting the original.
+        @return: None.
+        """
+        try:
+            self.emit("info", f"Uploading {index}/{len(self.paths)}: {path.name}")
+            payload = multipart_upload(
+                upload_url,
+                self.config.api_key.strip(),
+                path,
+                create_server_thumbnails,
+                thumbnails=thumbnails,
+                client_upload_id=client_upload_id,
+            )
+            self.uploaded += int(payload.get("uploaded", 0) or 0)
+            installed = 0
+            failed_thumbnails = 0
+            thumbnail_errors: List[str] = []
+            client_result = payload.get("client_thumbnails")
+            if isinstance(client_result, dict):
+                installed = int(client_result.get("installed", 0) or 0)
+                failed_thumbnails = int(client_result.get("failed", 0) or 0)
+                raw_errors = client_result.get("errors")
+                if isinstance(raw_errors, list):
+                    thumbnail_errors = [str(item) for item in raw_errors[:3]]
+            self.emit("info", f"Uploaded {path.name}: uploaded={payload.get('uploaded', 0)}, scanned={payload.get('scanned', 0)}, client_thumbnails={installed}")
+            if failed_thumbnails or thumbnail_errors:
+                details = "; ".join(thumbnail_errors) if thumbnail_errors else "no detailed server message"
+                self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}")
+        except Exception as exc:  # noqa: BLE001
+            self.failed += 1
+            self.emit("error", f"Manual upload failed for {path.name}: {exc}")
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -720,13 +1194,15 @@ class WatcherApp:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
         self.root = tk.Tk()
-        self.root.title("PHP Gallery watched-folder uploader")
-        self.root.geometry("860x620")
+        self.root.title("PHP Gallery uploader")
+        self.root.geometry("980x760")
 
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
         self.events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
         self.worker: Optional[WatcherThread] = None
+        self.manual_worker: Optional[ManualUploadThread] = None
+        self.manual_paths: List[Path] = []
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
@@ -734,7 +1210,11 @@ class WatcherApp:
         self.interval_var = tk.StringVar(value=str(self.config.scan_interval_seconds))
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
-        self.status_var = tk.StringVar(value="Stopped")
+        self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
+        self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
+        self.manual_selection_var = tk.StringVar(value="No files selected")
+        self.status_var = tk.StringVar(value="Watcher stopped")
+        self.manual_status_var = tk.StringVar(value="Manual upload idle")
 
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -749,47 +1229,37 @@ class WatcherApp:
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
 
-        title = ttk.Label(outer, text="PHP Gallery watched-folder uploader", font=("Segoe UI", 16, "bold"))
+        title = ttk.Label(outer, text="PHP Gallery uploader", font=("Segoe UI", 16, "bold"))
         title.pack(anchor="w")
         subtitle = ttk.Label(
             outer,
-            text="Watches one local folder and uploads new image files through a gallery-scoped API key.",
+            text="Uploads images through one gallery-scoped API key, either from a watched folder or from a manual selection.",
         )
         subtitle.pack(anchor="w", pady=(2, 14))
 
-        form = ttk.Frame(outer)
-        form.pack(fill="x")
-        form.columnconfigure(1, weight=1)
+        connection = ttk.LabelFrame(outer, text="Shared connection settings")
+        connection.pack(fill="x", pady=(0, 12))
+        connection.columnconfigure(1, weight=1)
 
-        ttk.Label(form, text="Watched folder").grid(row=0, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.watched_folder_var).grid(row=0, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Button(form, text="Browse", command=self.browse_folder).grid(row=0, column=2, sticky="ew", pady=5)
+        ttk.Label(connection, text="Gallery URL or upload endpoint").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(connection, textvariable=self.gallery_url_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
 
-        ttk.Label(form, text="Gallery URL or upload endpoint").grid(row=1, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.gallery_url_var).grid(row=1, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Label(connection, text="API key").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(connection, textvariable=self.api_key_var, show="*").grid(row=1, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
 
-        ttk.Label(form, text="API key").grid(row=2, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.api_key_var, show="*").grid(row=2, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Button(connection, text="Save configuration", command=self.save_config).grid(row=2, column=1, sticky="w", padx=8, pady=(4, 8))
+        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=2, column=2, sticky="e", padx=8, pady=(4, 8))
 
-        ttk.Label(form, text="Scan interval seconds").grid(row=3, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.interval_var, width=12).grid(row=3, column=1, sticky="w", padx=8, pady=5)
+        notebook = ttk.Notebook(outer)
+        notebook.pack(fill="x", pady=(0, 12))
 
-        ttk.Label(form, text="Stable file seconds").grid(row=4, column=0, sticky="w", pady=5)
-        ttk.Entry(form, textvariable=self.stable_var, width=12).grid(row=4, column=1, sticky="w", padx=8, pady=5)
+        watch_tab = ttk.Frame(notebook, padding=12)
+        manual_tab = ttk.Frame(notebook, padding=12)
+        notebook.add(watch_tab, text="Watch folder")
+        notebook.add(manual_tab, text="Manual upload")
 
-        ttk.Checkbutton(
-            form,
-            text="Ask gallery to create thumbnails after upload",
-            variable=self.create_thumbnails_var,
-        ).grid(row=5, column=1, columnspan=2, sticky="w", padx=8, pady=5)
-
-        actions = ttk.Frame(outer)
-        actions.pack(fill="x", pady=14)
-        ttk.Button(actions, text="Save configuration", command=self.save_config).pack(side="left")
-        ttk.Button(actions, text="Start watching", command=self.start).pack(side="left", padx=8)
-        ttk.Button(actions, text="Stop", command=self.stop).pack(side="left")
-        ttk.Button(actions, text="Open config folder", command=self.open_config_folder).pack(side="left", padx=8)
-        ttk.Label(actions, textvariable=self.status_var).pack(side="right")
+        self.build_watch_tab(watch_tab)
+        self.build_manual_tab(manual_tab)
 
         log_frame = ttk.LabelFrame(outer, text="Status log")
         log_frame.pack(fill="both", expand=True)
@@ -800,6 +1270,108 @@ class WatcherApp:
         self.write_log(f"Configuration: {CONFIG_PATH}")
         self.write_log(f"State: {STATE_PATH}")
         self.write_log(f"Log: {LOG_PATH}")
+        self.write_log(thumbnail_runtime_status())
+
+    def build_watch_tab(self, parent: Any) -> None:
+        """
+        Build controls dedicated to watch-folder uploading.
+
+        @param parent: Tkinter frame that receives the controls.
+        @return: None.
+        """
+        parent.columnconfigure(1, weight=1)
+
+        ttk.Label(parent, text="Watched folder").grid(row=0, column=0, sticky="w", pady=5)
+        ttk.Entry(parent, textvariable=self.watched_folder_var).grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Button(parent, text="Browse", command=self.browse_folder).grid(row=0, column=2, sticky="ew", pady=5)
+
+        ttk.Label(parent, text="Scan interval seconds").grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Entry(parent, textvariable=self.interval_var, width=12).grid(row=1, column=1, sticky="w", padx=8, pady=5)
+
+        ttk.Label(parent, text="Stable file seconds").grid(row=2, column=0, sticky="w", pady=5)
+        ttk.Entry(parent, textvariable=self.stable_var, width=12).grid(row=2, column=1, sticky="w", padx=8, pady=5)
+
+        ttk.Checkbutton(
+            parent,
+            text="Ask gallery to create thumbnails after watched-folder upload",
+            variable=self.create_thumbnails_var,
+        ).grid(row=3, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+
+        actions = ttk.Frame(parent)
+        actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        ttk.Button(actions, text="Start watching", command=self.start).pack(side="left")
+        ttk.Button(actions, text="Stop", command=self.stop).pack(side="left", padx=8)
+        ttk.Label(actions, textvariable=self.status_var).pack(side="right")
+
+    def build_manual_tab(self, parent: Any) -> None:
+        """
+        Build controls dedicated to manual bulk uploading.
+
+        @param parent: Tkinter frame that receives the controls.
+        @return: None.
+        """
+        parent.columnconfigure(0, weight=1)
+
+        intro = ttk.Label(
+            parent,
+            text="Select photos manually and upload them into the same gallery target as the API key. Local thumbnail conversion uses worker threads before upload.",
+            wraplength=880,
+        )
+        intro.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+
+        ttk.Button(parent, text="Add pictures", command=self.select_manual_files).grid(row=1, column=0, sticky="w", pady=5)
+        ttk.Button(parent, text="Clear selection", command=self.clear_manual_files).grid(row=1, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(parent, textvariable=self.manual_selection_var).grid(row=1, column=2, columnspan=2, sticky="w", padx=8, pady=5)
+
+        self.thumbnail_check = ttk.Checkbutton(
+            parent,
+            text="Generate responsive thumbnails on this PC before upload",
+            variable=self.manual_local_thumbnails_var,
+        )
+        self.thumbnail_check.grid(row=2, column=0, columnspan=4, sticky="w", pady=5)
+
+        runtime_row = ttk.Frame(parent)
+        runtime_row.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        runtime_row.columnconfigure(0, weight=1)
+        ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=0, sticky="w")
+        ttk.Button(runtime_row, text="Install or repair Pillow", command=self.repair_pillow).grid(row=0, column=1, sticky="e", padx=(8, 0))
+
+        self.refresh_thumbnail_controls()
+
+        actions = ttk.Frame(parent)
+        actions.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        ttk.Button(actions, text="Start manual upload", command=self.start_manual_upload).pack(side="left")
+        ttk.Button(actions, text="Stop manual upload", command=self.stop_manual_upload).pack(side="left", padx=8)
+        ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
+
+    def refresh_thumbnail_controls(self) -> None:
+        """
+        Refresh local thumbnail availability in the manual upload tab.
+
+        @return: None.
+        """
+        self.thumbnail_runtime_var.set(thumbnail_runtime_status())
+        if local_thumbnail_supported():
+            self.thumbnail_check.state(["!disabled"])
+        else:
+            self.thumbnail_check.state(["disabled"])
+            self.manual_local_thumbnails_var.set(False)
+
+    def repair_pillow(self) -> None:
+        """
+        Install Pillow into the Python interpreter currently running the GUI.
+
+        @return: None.
+        """
+        self.write_log("Installing or repairing Pillow for the current Python runtime...")
+        ok, output = install_pillow_for_current_runtime()
+        for line in output.splitlines()[-12:]:
+            self.write_log(line)
+        if ok:
+            messagebox.showinfo("Pillow repair", "Pillow is available for this Python runtime.")
+        else:
+            messagebox.showerror("Pillow repair failed", output[-1200:] if output else "pip failed without output")
+        self.refresh_thumbnail_controls()
 
     def current_config(self) -> WatcherConfig:
         """
@@ -832,6 +1404,49 @@ class WatcherApp:
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
             self.watched_folder_var.set(selected)
+
+    def select_manual_files(self) -> None:
+        """
+        Open a file picker and add supported images to the manual upload list.
+
+        @return: None.
+        """
+        selected = filedialog.askopenfilenames(
+            title="Select pictures to upload",
+            initialdir=self.watched_folder_var.get() or str(Path.home()),
+            filetypes=selected_image_filetypes(),
+        )
+        if not selected:
+            return
+
+        existing = {str(path): path for path in self.manual_paths}
+        for path in filter_supported_paths(selected):
+            existing[str(path)] = path
+        self.manual_paths = [existing[key] for key in sorted(existing.keys(), key=str.lower)]
+        self.refresh_manual_file_label()
+
+    def clear_manual_files(self) -> None:
+        """
+        Clear the manual upload selection.
+
+        @return: None.
+        """
+        self.manual_paths = []
+        self.refresh_manual_file_label()
+
+    def refresh_manual_file_label(self) -> None:
+        """
+        Refresh the visible manual selection count.
+
+        @return: None.
+        """
+        count = len(self.manual_paths)
+        if count == 0:
+            self.manual_selection_var.set("No files selected")
+        elif count == 1:
+            self.manual_selection_var.set("1 file selected")
+        else:
+            self.manual_selection_var.set(f"{count} files selected")
 
     def save_config(self) -> None:
         """
@@ -883,6 +1498,51 @@ class WatcherApp:
             self.worker.stop()
         self.status_var.set("Stopped")
 
+    def start_manual_upload(self) -> None:
+        """
+        Start the manual upload worker using the current shared connection fields.
+
+        @return: None.
+        """
+        if self.manual_worker and self.manual_worker.is_alive():
+            self.write_log("Manual upload is already running.")
+            return
+        if not self.manual_paths:
+            messagebox.showwarning("Manual upload", "Select at least one image first.")
+            return
+
+        try:
+            config = self.current_config()
+            self.config_store.save(config)
+            self.config = config
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Configuration error", str(exc))
+            return
+
+        use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
+        if self.manual_local_thumbnails_var.get() and not local_thumbnail_supported():
+            self.write_log("WARNING: Local thumbnails were requested, but Pillow is unavailable. Server thumbnail generation will be used.")
+
+        self.manual_worker = ManualUploadThread(
+            config,
+            list(self.manual_paths),
+            use_local_thumbnails,
+            self.events,
+        )
+        self.manual_worker.start()
+        self.manual_status_var.set("Manual upload running")
+        self.write_log("Manual upload worker started.")
+
+    def stop_manual_upload(self) -> None:
+        """
+        Request the manual upload worker to stop.
+
+        @return: None.
+        """
+        if self.manual_worker:
+            self.manual_worker.stop()
+        self.manual_status_var.set("Manual upload stopped")
+
     def close(self) -> None:
         """
         Stop background work and close the window.
@@ -890,6 +1550,7 @@ class WatcherApp:
         @return: None.
         """
         self.stop()
+        self.stop_manual_upload()
         self.root.after(150, self.root.destroy)
 
     def open_config_folder(self) -> None:
@@ -917,8 +1578,14 @@ class WatcherApp:
             except queue.Empty:
                 break
             self.write_log(f"{level.upper()}: {message}")
-            if level == "error":
+            if message.startswith("Manual upload finished"):
+                self.manual_status_var.set("Manual upload idle")
+            elif message.startswith("Manual upload stopped"):
+                self.manual_status_var.set("Manual upload stopped")
+            elif level == "error":
                 self.status_var.set("Running with errors")
+                if self.manual_worker and self.manual_worker.is_alive():
+                    self.manual_status_var.set("Manual upload has errors")
 
         self.root.after(200, self.drain_events)
 
