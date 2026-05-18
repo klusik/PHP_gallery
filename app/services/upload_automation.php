@@ -47,7 +47,31 @@ declare(strict_types=1);
  */
 function upload_automation_schema_ready(): bool
 {
-    return db_table_exists('gallery_upload_tokens');
+    if (!db_table_exists('gallery_upload_tokens')) {
+        return false;
+    }
+
+    // $requiredColumns stores the minimum schema used by the upload automation service.
+    // Checking columns prevents partially-applied migrations from causing fatal SQL errors.
+    $requiredColumns = [
+        'id',
+        'gallery_id',
+        'token_hash',
+        'label',
+        'active',
+        'created_by_user_id',
+        'created_at',
+        'last_used_at',
+        'revoked_at',
+    ];
+
+    foreach ($requiredColumns as $column) {
+        if (!db_column_exists('gallery_upload_tokens', $column)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -146,6 +170,30 @@ function gallery_upload_automation_tokens(int $galleryId): array
 }
 
 /**
+ * Return active upload automation API keys across all galleries.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function upload_automation_tokens_for_manager(): array
+{
+    if (!upload_automation_schema_ready()) {
+        return [];
+    }
+
+    // $sql stores the manager query. The users table in the base schema has
+    // username but no display_name column, so both admin identity aliases use
+    // username to keep the query compatible with existing installations.
+    $sql = 'SELECT t.id, t.gallery_id, t.label, t.active, t.created_at, t.last_used_at, t.revoked_at, g.title AS gallery_title, g.slug AS gallery_slug, u.username AS created_by_username, u.username AS created_by_display_name
+            FROM gallery_upload_tokens t
+            INNER JOIN galleries g ON g.id = t.gallery_id
+            LEFT JOIN users u ON u.id = t.created_by_user_id
+            WHERE t.active = 1 AND t.revoked_at IS NULL
+            ORDER BY g.title ASC, t.created_at DESC, t.id DESC';
+    $stmt = db()->query($sql);
+    return $stmt ? ($stmt->fetchAll() ?: []) : [];
+}
+
+/**
  * Revoke one upload automation API key for a gallery.
  */
 function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): bool
@@ -239,6 +287,316 @@ function upload_automation_uploaded_files(): ?array
         'error' => [(int) ($file['error'] ?? UPLOAD_ERR_NO_FILE)],
         'size' => [(int) ($file['size'] ?? 0)],
     ];
+}
+
+/**
+ * Normalize one client-generated upload identifier.
+ *
+ * The identifier is not trusted for authorization. It is only a request-local
+ * correlation value used to connect one original image with the thumbnail files
+ * generated for it by the Windows companion app.
+ */
+function upload_automation_normalize_client_id(string $clientId): string
+{
+    // $clientId stores a compact ASCII-only correlation value supplied by the client.
+    $clientId = trim($clientId);
+    if ($clientId === '' || preg_match('/^[A-Za-z0-9_-]{1,80}$/', $clientId) !== 1) {
+        return '';
+    }
+
+    return $clientId;
+}
+
+/**
+ * Return request-local image IDs submitted beside images[].
+ *
+ * @return array<int, string>
+ */
+function upload_automation_image_client_ids(): array
+{
+    // $rawIds stores submitted IDs aligned with the images[] multipart field order.
+    $rawIds = $_POST['image_client_ids'] ?? [];
+    if (!is_array($rawIds)) {
+        $rawIds = [$rawIds];
+    }
+
+    // $ids stores normalized correlation values by original upload index.
+    $ids = [];
+    foreach ($rawIds as $index => $rawId) {
+        $ids[(int) $index] = upload_automation_normalize_client_id((string) $rawId);
+    }
+
+    return $ids;
+}
+
+/**
+ * Return validated client-generated thumbnail upload entries.
+ *
+ * The accepted format mirrors PHP Gallery's own responsive thumbnail cache:
+ * known thumbnail sizes only, JPG or WebP only, and image content validated with
+ * getimagesize(). Unknown, missing, or mismatched metadata causes the single
+ * submitted thumbnail to be rejected before it can be written into a gallery.
+ *
+ * @return array<int, array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}>
+ */
+function upload_automation_client_thumbnail_entries(): array
+{
+    if (!isset($_FILES['client_thumbnails']) || !is_array($_FILES['client_thumbnails'])) {
+        return [];
+    }
+
+    // $files stores the PHP multipart upload shape for all submitted thumbnails.
+    $files = $_FILES['client_thumbnails'];
+    if (empty($files['name']) || !is_array($files['name'])) {
+        return [];
+    }
+
+    // $clientIds stores thumbnail-to-image correlation IDs aligned by index.
+    $clientIds = $_POST['thumbnail_client_ids'] ?? [];
+    // $sizes stores target long-side sizes aligned by index.
+    $sizes = $_POST['thumbnail_sizes'] ?? [];
+    // $formats stores target file formats aligned by index.
+    $formats = $_POST['thumbnail_formats'] ?? [];
+    if (!is_array($clientIds)) {
+        $clientIds = [$clientIds];
+    }
+    if (!is_array($sizes)) {
+        $sizes = [$sizes];
+    }
+    if (!is_array($formats)) {
+        $formats = [$formats];
+    }
+
+    // $entries stores thumbnail files that passed all request-level validation.
+    $entries = [];
+    foreach ($files['name'] as $index => $name) {
+        // $error stores the PHP upload status for this thumbnail file.
+        $error = (int) ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            throw new RuntimeException(upload_error_message($error));
+        }
+
+        // $tmpName stores the uploaded temporary file that PHP created for this request.
+        $tmpName = (string) ($files['tmp_name'][$index] ?? '');
+        if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_unavailable', 'Uploaded client thumbnail is not available.'));
+        }
+
+        // $clientId stores the request-local image correlation value.
+        $clientId = upload_automation_normalize_client_id((string) ($clientIds[$index] ?? ''));
+        if ($clientId === '') {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_client_id_missing', 'Uploaded client thumbnail is missing its image correlation ID.'));
+        }
+
+        // $size stores the target long-side thumbnail size.
+        $size = (int) ($sizes[$index] ?? 0);
+        if (!in_array($size, thumbnail_sizes(), true)) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_size_invalid', 'Uploaded client thumbnail uses an unsupported size.'));
+        }
+
+        // $format stores the target thumbnail format.
+        $format = strtolower((string) ($formats[$index] ?? ''));
+        if (!in_array($format, ['jpg', 'webp'], true)) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_format_invalid', 'Uploaded client thumbnail uses an unsupported format.'));
+        }
+
+        // $info stores image metadata used to reject wrong or damaged thumbnail files.
+        $info = @getimagesize($tmpName);
+        if ($info === false || empty($info['mime'])) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_invalid', 'Uploaded client thumbnail is not a valid image.'));
+        }
+        // $mime stores the detected image MIME type for format validation.
+        $mime = (string) $info['mime'];
+        if ($format === 'jpg' && !in_array($mime, ['image/jpeg', 'image/pjpeg'], true)) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_format_mismatch', 'Uploaded client thumbnail MIME type does not match its target format.'));
+        }
+        if ($format === 'webp' && $mime !== 'image/webp') {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_format_mismatch', 'Uploaded client thumbnail MIME type does not match its target format.'));
+        }
+        // $longSide stores the decoded thumbnail long side for size validation.
+        $longSide = max((int) ($info[0] ?? 0), (int) ($info[1] ?? 0));
+        if ($longSide > $size + 4) {
+            throw new RuntimeException(t('upload_automation.error.thumbnail_dimensions_invalid', 'Uploaded client thumbnail is larger than its declared target size.'));
+        }
+
+        $entries[] = [
+            'tmp_name' => $tmpName,
+            'name' => (string) $name,
+            'size_px' => $size,
+            'format' => $format,
+            'client_id' => $clientId,
+        ];
+    }
+
+    return $entries;
+}
+
+/**
+ * Build a map from client upload IDs to stored gallery image records.
+ *
+ * @param int $galleryId Gallery that received the originals.
+ * @param array<int, string> $clientIds Request-local image IDs aligned with images[].
+ * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
+ * @return array<string, array<string, mixed>>
+ */
+function upload_automation_client_image_map(int $galleryId, array $clientIds, array $stored): array
+{
+    // $filenames stores final filenames after PHP Gallery normalized and de-duplicated them.
+    $filenames = array_values((array) ($stored['filenames'] ?? []));
+    // $map stores stored image rows by request-local client ID.
+    $map = [];
+
+    foreach ($filenames as $index => $filename) {
+        // $clientId stores the ID originally submitted beside this image index.
+        $clientId = upload_automation_normalize_client_id((string) ($clientIds[$index] ?? ''));
+        if ($clientId === '') {
+            continue;
+        }
+
+        // $image stores the database row created by the existing scan pipeline.
+        // Do not use find_image_by_path() here. During scan_gallery_images(), that
+        // helper may cache a negative lookup before inserting the new row. This
+        // upload request needs a fresh database read so client thumbnails can be
+        // attached immediately after the original was scanned.
+        $image = upload_automation_find_image_by_path_uncached($galleryId, normalize_relative_path((string) $filename));
+        if (is_array($image)) {
+            $map[$clientId] = $image;
+        }
+    }
+
+    return $map;
+}
+
+/**
+ * Fetch one image row without using the process-local lookup cache.
+ *
+ * The normal finder intentionally caches misses for page rendering and repeated
+ * maintenance reads. Upload automation runs the scanner and then immediately
+ * needs the just-created image row in the same PHP request, so a stale cached
+ * miss would incorrectly reject every client-generated thumbnail.
+ *
+ * @param int $galleryId Gallery that should contain the image.
+ * @param string $relativePath Normalized image path inside the gallery folder.
+ * @return array<string, mixed>|null Fresh image row, or null when not found.
+ */
+function upload_automation_find_image_by_path_uncached(int $galleryId, string $relativePath): ?array
+{
+    // $normalizedPath stores the canonical path used by the image hash index.
+    $normalizedPath = normalize_relative_path($relativePath);
+    // $stmt stores the direct database lookup that bypasses static finder caches.
+    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
+    $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
+    // $image stores the fetched row or false when the image was not indexed.
+    $image = $stmt->fetch();
+    return is_array($image) ? $image : null;
+}
+
+/**
+ * Execute upload automation work under a short gallery-scoped MySQL lock.
+ *
+ * Parallel manual uploads can send several requests to the same gallery at the
+ * same time. Each request moves one original file and then reuses the existing
+ * scanner, which scans the whole gallery folder. Without a gallery-level lock,
+ * two PHP workers can both decide that the same newly discovered file is absent
+ * and then race each other into the unique image-path index. The lock serializes
+ * only the server-side store/scan/thumbnail-install phase for one gallery while
+ * the Windows app can still generate thumbnails in parallel and upload request
+ * bodies concurrently.
+ *
+ * @param int $galleryId Gallery being modified by the automation endpoint.
+ * @param callable $callback Work to run while the gallery lock is held.
+ * @return mixed Value returned by the callback.
+ */
+function upload_automation_with_gallery_lock(int $galleryId, callable $callback): mixed
+{
+    // $lockName stores a short deterministic advisory lock name for this gallery.
+    $lockName = 'php_gallery_upload_automation_' . $galleryId;
+    // $pdo stores the shared connection used for GET_LOCK() and RELEASE_LOCK().
+    $pdo = db();
+    // $stmt stores the advisory lock request. Ten seconds is enough for normal
+    // small multipart requests while still failing clearly if a worker hangs.
+    $stmt = $pdo->prepare('SELECT GET_LOCK(?, 10)');
+    $stmt->execute([$lockName]);
+    // $locked stores MySQL's GET_LOCK result: 1 acquired, 0 timeout, null error.
+    $locked = (int) $stmt->fetchColumn();
+    if ($locked !== 1) {
+        throw new RuntimeException(t('upload_automation.error.gallery_busy', 'The target gallery is busy processing another upload. Please retry shortly.'));
+    }
+
+    try {
+        return $callback();
+    } finally {
+        // $releaseStmt stores the matching advisory lock release request.
+        $releaseStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $releaseStmt->execute([$lockName]);
+    }
+}
+
+/**
+ * Install client-generated thumbnails into the gallery thumbnail cache.
+ *
+ * This function writes only files that correspond to images accepted by the
+ * existing upload pipeline. It does not create image records and it does not
+ * decide the target gallery independently from the API key.
+ *
+ * @param int $galleryId Target gallery authorized by the API key.
+ * @param array<string, mixed> $gallery Target gallery row.
+ * @param array<int, array<string, mixed>> $thumbnailEntries Validated client thumbnail uploads.
+ * @param array<int, string> $imageClientIds Request-local IDs aligned with images[].
+ * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
+ * @return array{installed:int,skipped:int,failed:int,errors:array<int,string>}
+ */
+function upload_automation_install_client_thumbnails(int $galleryId, array $gallery, array $thumbnailEntries, array $imageClientIds, array $stored): array
+{
+    if (!$thumbnailEntries) {
+        return ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+    }
+
+    // $imageMap stores accepted original images by their request-local client ID.
+    $imageMap = upload_automation_client_image_map($galleryId, $imageClientIds, $stored);
+    // $result stores counters returned to the client and admin logs.
+    $result = ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+
+    gallery_thumbs_dir($gallery, true);
+    foreach ($thumbnailEntries as $entry) {
+        // $clientId stores the original image correlation value for this thumbnail.
+        $clientId = upload_automation_normalize_client_id((string) ($entry['client_id'] ?? ''));
+        // $image stores the final image row belonging to this thumbnail.
+        $image = $imageMap[$clientId] ?? null;
+        if (!is_array($image)) {
+            $result['skipped']++;
+            $result['errors'][] = 'No stored image matched one uploaded client thumbnail.';
+            continue;
+        }
+
+        try {
+            // $targetPath stores the final gallery thumbnail cache path.
+            $targetPath = thumbnail_abs_path($image, $gallery, (int) $entry['size_px'], (string) $entry['format']);
+            // $targetDir stores the parent folder for the generated thumbnail file.
+            $targetDir = dirname($targetPath);
+            if (!is_dir($targetDir) && !mkdir($targetDir, 0775, true)) {
+                throw new RuntimeException(t('upload_automation.error.thumbnail_target_dir_failed', 'Could not create the gallery thumbnail folder.'));
+            }
+            if (!move_uploaded_file((string) $entry['tmp_name'], $targetPath)) {
+                throw new RuntimeException(t('upload_automation.error.thumbnail_store_failed', 'Could not store a client-generated thumbnail.'));
+            }
+            @touch($targetPath, time());
+            $result['installed']++;
+        } catch (Throwable $exception) {
+            $result['failed']++;
+            $result['errors'][] = $exception->getMessage();
+        }
+    }
+
+    $result['errors'] = array_values(array_unique(array_filter(array_map('strval', $result['errors']))));
+    if ($result['installed'] > 0 && function_exists('thumbnail_maintenance_summary_cache_clear')) {
+        thumbnail_maintenance_summary_cache_clear();
+    }
+
+    return $result;
 }
 
 /**

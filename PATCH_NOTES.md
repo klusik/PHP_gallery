@@ -1,5 +1,237 @@
 # Patch notes
 
+## Version 0.69
+
+Version 0.69 is a major large-gallery scalability, fullscreen-map stability, uploader automation, and deferred lightbox-loading release. It focuses on making very large galleries usable without blocking the browser, improving fullscreen map behavior, introducing lazy lightbox dataset generation, expanding the Windows uploader tooling, and stabilizing dynamic public refresh behavior for galleries with thousands of images.
+
+### Highlights
+
+#### Added deferred lazy lightbox dataset generation
+
+  - Added deferred lightbox dataset generation for large galleries.
+  - Added asynchronous background preparation of remaining lightbox items.
+  - Added progressive lightbox-state hydration instead of requiring full blocking initialization.
+  - Added gallery-aware lazy item expansion for paginated galleries.
+  - Added safer initialization guards for race conditions during rapid opening and closing.
+  - Preserved keyboard navigation, fullscreen mode, voting, EXIF overlays, pagination, and public admin controls during deferred loading.
+
+#### Added fullscreen lightbox loading progress UI
+
+  - Added a dedicated lightbox loading state.
+  - Added a loading overlay inside the lightbox frame.
+  - Added progress text such as `Preparing photo 1 of 1500`.
+  - Added animated progress behavior while lazy lightbox data are generated.
+  - Prevented empty fullscreen frames during initial lightbox preparation.
+  - Limited the progress UI to initial lightbox loading, not normal photo switching.
+
+#### Improved fullscreen map mode
+
+  - Fixed fullscreen map mode for galleries where some photos have GPS EXIF data and some do not.
+  - Photos without GPS now keep the map split area visible but show it as unavailable instead of reusing the previous photo map.
+  - Added disabled-map messaging for photos without coordinates.
+  - Blocked fullscreen map behavior when gallery EXIF or GPS map support is disabled.
+  - Fixed keyboard shortcut behavior so maps cannot be activated when the gallery does not allow GPS maps.
+  - Fixed horizontal image fitting in fullscreen map split mode so images fit by their longest dimension instead of being cropped or zoomed.
+  - Preserved fullscreen map mode while navigating between GPS and non-GPS photos.
+
+#### Added lazy lightbox JSON endpoint
+
+  - Added the `gallery_lightbox_data` public route.
+  - Added `app/controllers/gallery_lightbox.php`.
+  - Added `app/services/lightbox_metadata.php`.
+  - The endpoint returns ordered windows of image metadata for asynchronous lightbox navigation.
+  - The endpoint enforces the same gallery access checks as the public gallery page.
+  - The endpoint respects public-only visibility rules.
+  - The endpoint avoids exposing restricted NSFW image rows to anonymous visitors.
+  - The endpoint keeps visitor vote state private and disables shared caching.
+  - The endpoint returns map metadata only when GPS maps are allowed for the gallery.
+
+#### Optimized public gallery rendering for very large galleries
+
+  - Public gallery pages now query only the currently visible photo page when pagination is enabled.
+  - Full-gallery lightbox metadata is no longer rendered eagerly into hidden DOM nodes.
+  - Gallery photo counts are queried separately from visible photo rows.
+  - Lightbox counts are computed separately from normal grid pagination counts when restricted items must be hidden.
+  - Direct image links now compute the requested image position without loading the whole gallery image list.
+  - Public image cards now expose stable `data-lightbox-index` values for asynchronous lightbox order.
+  - Public reorder toolbar totals now use the full image count instead of the current visible slice.
+  - SEO and social-preview fallback metadata stay bounded to visible content.
+
+#### Improved lightbox browser modules
+
+  - Updated deferred lightbox activation to work with asynchronous dataset loading.
+  - Updated full lightbox navigation to request missing metadata windows as needed.
+  - Added lazy window loading around the active image.
+  - Added item cache handling for fetched lightbox metadata.
+  - Added loading-state rendering for the first requested image.
+  - Added progress animation while initial metadata are still being prepared.
+  - Added safer teardown behavior for pending lazy-load operations.
+  - Preserved voting panel synchronization after asynchronous lightbox item insertion.
+  - Preserved map split state when navigating through lazily loaded items.
+  - Improved resilience when users click photos before the full lightbox module has finished loading.
+
+#### Added upload API manager
+
+  - Added the `admin_api_manager` route.
+  - Added an admin-wide API manager page for upload automation keys.
+  - Added an API manager entry to the admin menu.
+  - Added a dedicated API tab to the gallery editor.
+  - Moved gallery-scoped upload API key management out of the image-management tab.
+  - API keys remain scoped to one gallery.
+  - The global manager lists active upload API keys across all galleries.
+  - Admins can revoke keys from either the gallery editor or the global API manager.
+  - Revocation redirects now preserve the correct return context.
+  - Added schema-readiness guards to avoid fatal errors on partially migrated installations.
+  - Fixed the API manager query to use existing user schema fields instead of a missing `display_name` column.
+
+#### Improved upload automation concurrency
+
+  - Added a gallery-scoped advisory lock around upload automation storage, scanning, and thumbnail installation.
+  - Parallel Windows uploader requests can still run, but server-side mutation of one target gallery is serialized.
+  - Prevented duplicate image insertion races when multiple upload requests scan the same gallery folder at the same time.
+  - Added a clear busy-gallery error when the target gallery is already being processed.
+  - Kept the existing gallery upload pipeline as the source of truth.
+
+#### Added client-generated thumbnail upload support
+
+  - Upload automation can now accept thumbnails generated by the Windows companion app.
+  - Added request-local client IDs to correlate original images with uploaded thumbnails.
+  - Added validation for client thumbnail size, format, MIME type, dimensions, and uploaded-file integrity.
+  - Accepted thumbnail formats are limited to supported gallery thumbnail formats.
+  - Client thumbnails are installed only for images accepted by the existing upload pipeline.
+  - Added fresh uncached image lookup after scanning so thumbnails can attach to newly imported images in the same request.
+  - Added counters for installed, skipped, and failed client thumbnails.
+  - Added thumbnail installation diagnostics to upload automation JSON responses and admin logs.
+
+#### Improved Windows uploader behavior
+
+  - Extended the Windows uploader workflow for manual bulk upload alongside watch-folder uploading.
+  - Preserved existing watch-folder behavior.
+  - Added support for ignoring files that already existed before watch mode starts.
+  - Added client-side thumbnail generation mode.
+  - Improved installer behavior for launching the `.pyw` app without a console window.
+  - Improved dependency installation handling for Windows environments with multiple Python versions.
+  - Added multiprocessing-style parallel worker behavior for faster thumbnail generation and uploading on many-core CPUs.
+  - Improved worker communication and upload-result reporting.
+  - Clarified rejection and skip reporting in the uploader output.
+
+#### Improved admin side-panel refresh behavior
+
+  - Updated admin side-panel JavaScript to handle refreshed gallery content more safely.
+  - Preserved side-panel workflow context after upload and gallery-editor transitions.
+  - Improved handling for dynamically loaded admin tabs inside panel content.
+  - Reduced stale DOM state after public gallery fragments are replaced.
+  - Kept responsive thumbnails, back-to-top behavior, and lightbox modules aligned after dynamic refreshes.
+
+#### Added and updated translations
+
+  - Added English and Czech strings for lightbox initial loading.
+  - Added English and Czech strings for lightbox loading progress counts.
+  - Added English and Czech strings for unavailable fullscreen map state.
+  - Added admin strings for the API manager and gallery upload automation tab.
+  - Added upload automation error strings for client thumbnail validation and gallery busy states.
+  - Updated browser-side i18n exports for no-GPS fullscreen map messaging.
+
+### Technical Details
+
+#### Backend
+
+  - Added route registration for `gallery_lightbox_data`.
+  - Added route registration for `admin_api_manager`.
+  - Added `app/controllers/gallery_lightbox.php`.
+  - Added `app/services/lightbox_metadata.php`.
+  - Loaded the new lightbox metadata service from `app/services.php`.
+  - Loaded the new lightbox controller from `app/controllers.php`.
+  - Added reusable lightbox metadata helpers for:
+    - total photo counts
+    - paged image fetching
+    - gallery-local image position lookup
+    - public visibility filtering
+    - restricted NSFW filtering
+  - Refactored public gallery image loading to avoid eager full-gallery row loading.
+  - Added JSON serialization helpers for lightbox image metadata.
+  - Added private no-store cache headers for lightbox JSON responses.
+  - Added gallery-scoped upload automation locking.
+  - Added client thumbnail validation and installation helpers.
+  - Added API key manager query helpers.
+
+#### Frontend
+
+  - Updated `public/assets/gallery-modules/lightbox.js`.
+  - Updated `public/assets/gallery-modules/lightbox-deferred.js`.
+  - Updated `public/assets/gallery-modules/admin-side-panel.js`.
+  - Updated `public/assets/gallery.js`.
+  - Updated `public/assets/styles/lightbox.css`.
+  - Added loading-state UI inside the existing lightbox frame.
+  - Added animated loading progress styling.
+  - Added disabled fullscreen-map styling for photos without GPS.
+  - Added lightbox map availability checks.
+  - Added lazy lightbox metadata fetching and caching behavior.
+  - Preserved teardown support for dynamic public content replacement.
+
+#### Upload automation
+
+  - Added multipart handling for client-generated thumbnails.
+  - Added `image_client_ids[]`, `thumbnail_client_ids[]`, `thumbnail_sizes[]`, and `thumbnail_formats[]` request handling.
+  - Added strict server-side validation before any client thumbnail is written into the cache.
+  - Added support for reporting client thumbnail installation results in JSON responses.
+  - Added compatibility checks for the upload automation token schema.
+  - Added a global admin manager for active upload API keys.
+
+### User Impact
+
+#### For visitors
+
+  - Large galleries open faster.
+  - The first fullscreen photo appears without waiting for the full gallery dataset.
+  - Initial fullscreen loading now shows progress instead of an empty frame.
+  - Fullscreen map mode behaves correctly when navigating between GPS and non-GPS photos.
+  - Horizontal photos fit correctly in fullscreen map split mode.
+  - Galleries with many photos should feel lighter and less likely to stall the browser.
+
+#### For administrators
+
+  - Large paginated galleries are cheaper to render and easier to browse.
+  - Upload automation keys can be reviewed globally from the API manager.
+  - Gallery-specific API keys have a dedicated gallery editor tab.
+  - Parallel uploader activity is safer against duplicate scan/import races.
+  - Windows uploader bulk uploads can use client-generated thumbnails for faster server-side processing.
+  - Upload logs now expose client thumbnail install, skip, and failure counts.
+  - The uploader workflow is better suited for many-core Windows systems.
+
+### Notes
+
+  - The lazy lightbox endpoint intentionally returns private, no-store JSON because vote state can be visitor-specific.
+  - Full-gallery hidden lightbox source nodes are no longer emitted for paginated galleries.
+  - The public gallery grid still renders only visible page content.
+  - The lightbox can still navigate across the whole gallery by fetching metadata windows as needed.
+  - GPS map controls are disabled when gallery EXIF map support is not available.
+  - Photos without GPS no longer reuse the last valid map while fullscreen map mode is active.
+  - Client-generated thumbnails are accepted only after the original image is accepted by the existing upload pipeline.
+  - The upload automation gallery lock serializes server-side mutation for one gallery, not the entire site.
+  - The core manifest was refreshed for the new controllers, services, scripts, styles, translations, and upload automation changes.
+
+### Files changed
+
+  - `app/bootstrap.php`
+  - `app/controllers.php`
+  - `app/controllers/admin_galleries_edit.php`
+  - `app/controllers/gallery_lightbox.php`
+  - `app/controllers/public_gallery.php`
+  - `app/controllers/upload_automation.php`
+  - `app/core-manifest.json`
+  - `app/helpers.php`
+  - `app/lang/cs.json`
+  - `app/lang/en.json`
+  - `app/services.php`
+  - `app/services/lightbox_metadata.php`
+  - `app/services/upload_automation.php`
+  - `public/assets/gallery-modules/admin-side-panel.js`
+  - `public/assets/gallery-modules/lightbox-deferred.js`
+  - `public/assets/gallery-modules/lightbox.js`
+  - `public/assets/gallery.js`
+  - `public/assets/styles/lightbox.css`
+
 ## Version 0.68
 
 Version 0.68 extends the Windows packaging and uploader workflow, keeps deployment paths aligned, and continues the release of the broader admin and gallery maintenance work.

@@ -63,7 +63,7 @@ function cms_admin_scan_images(): void
 function admin_edit_gallery_tab_id(string $tab): string
 {
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
-    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-images'];
+    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images'];
     return in_array($tab, $allowedTabs, true) ? $tab : '';
 }
 
@@ -674,6 +674,7 @@ function cms_admin_edit_gallery(): void
         ['id' => 'admin-edit-access', 'label' => t('admin.gallery_editor.tab_access')],
         ['id' => 'admin-edit-display', 'label' => t('admin.gallery_editor.tab_display')],
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
+        ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
     ];
 
@@ -854,7 +855,6 @@ function cms_admin_edit_gallery(): void
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.tab_images', 'Images')) . '</p><h2>' . e(t('admin.gallery_editor.images_title', 'Photos and ordering')) . '</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.upload_workflow', 'Upload workflow')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.upload_photos', 'Upload photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here', 'Upload photos here')) . '</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form></div></div>';
-    render_admin_gallery_upload_automation_panel($gallery);
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
@@ -870,6 +870,11 @@ function cms_admin_edit_gallery(): void
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
+    ob_start();
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
+    render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+    echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
+    render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();

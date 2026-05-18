@@ -1371,6 +1371,8 @@
   "lightbox.close_map_split": "Close map split",
   "lightbox.fullscreen": "fullscreen",
   "lightbox.map": "Map",
+  "lightbox.no_gps_detail": "This photo has no coordinates, so the fullscreen map is unavailable for this item.",
+  "lightbox.no_gps_title": "No GPS EXIF data",
   "lightbox.next_image": "Next image",
   "lightbox.previous_image": "Previous image",
   "lightbox.score": "Score",
@@ -1495,5 +1497,7 @@
   "vote.no_like": "No like",
   "admin.updates.github_api_cache_hit": "served from local ETag cache",
   "admin.updates.github_api_etag": "ETag",
-  "admin.updates.github_api_status_code": "Last HTTP status"
+  "admin.updates.github_api_status_code": "Last HTTP status",
+  "lightbox.initial_loader": "Preparing lightbox",
+  "lightbox.initial_loader_count": "Preparing photo {current} of {total}"
 }

@@ -99,19 +99,230 @@ export function setupGalleryLightbox() {
     let cards = [];
     // Variable `overlay` stores this steps working value.
     const overlay = document.querySelector('[data-lightbox]');
+    // lightboxConfig stores the server-rendered async metadata settings.
+    const lightboxConfig = document.querySelector('[data-lightbox-config]');
+    // lightboxEndpoint stores the JSON endpoint used when a requested image is not in the DOM yet.
+    const lightboxEndpoint = lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxEndpoint || '' : '';
+    // lightboxTotal stores the visitor-visible number of images in the full lightbox order.
+    const lightboxTotal = Math.max(0, Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0);
+    // lightboxWindowSize stores how many metadata records are fetched per async request.
+    const lightboxWindowSize = Math.max(12, Math.min(80, Number.parseInt(lightboxConfig?.dataset.lightboxWindowSize || '60', 10) || 60));
+    // lightboxMapsEnabled stores whether this gallery branch may expose EXIF GPS maps.
+    const lightboxMapsEnabled = (
+        lightboxConfig instanceof HTMLElement && lightboxConfig.dataset.lightboxMapsEnabled === '1'
+    ) || (
+        overlay instanceof HTMLElement && overlay.dataset.lightboxMapsEnabled === '1'
+    );
+    // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
+    const lightboxPendingWindows = new Map();
 
     /**
      * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
      *
      * Navigation must read the current DOM order so Next and Previous match the
-     * saved gallery order without requiring a full page reload.
+     * saved gallery order without requiring a full page reload. Paginated pages
+     * use a sparse client-side cache, so non-visible images are fetched only when
+     * the user approaches them in the viewer.
      *
      * @returns {void}
      */
     function refreshLightboxOrderFromDom() {
         const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
         const nextSourceCards = Array.from(document.querySelectorAll('[data-lightbox-source]'));
-        cards = nextSourceCards.length > 0 ? nextSourceCards : nextVisibleCards;
+        if (nextSourceCards.length > 0) {
+            cards = nextSourceCards;
+            return;
+        }
+        if (lightboxEndpoint && lightboxTotal > nextVisibleCards.length) {
+            const sparseCards = Array.from({length: lightboxTotal}, () => null);
+            nextVisibleCards.forEach((card, fallbackIndex) => {
+                const index = lightboxIndexForCard(card, fallbackIndex);
+                if (index >= 0 && index < sparseCards.length) {
+                    sparseCards[index] = card;
+                }
+            });
+            cards = sparseCards;
+            return;
+        }
+        cards = nextVisibleCards;
+    }
+
+    /**
+     * Return a card's zero-based lightbox index.
+     *
+     * @param {Element} card Server-rendered or async-created lightbox source element.
+     * @param {number} fallbackIndex Position used by legacy markup without explicit indexes.
+     * @returns {number} Zero-based index, or -1 when no usable index exists.
+     */
+    function lightboxIndexForCard(card, fallbackIndex = -1) {
+        if (!(card instanceof HTMLElement)) {
+            return -1;
+        }
+        const explicitIndex = Number.parseInt(card.dataset.lightboxIndex || '', 10);
+        if (Number.isInteger(explicitIndex) && explicitIndex >= 0) {
+            return explicitIndex;
+        }
+        return Number.isInteger(fallbackIndex) && fallbackIndex >= 0 ? fallbackIndex : -1;
+    }
+
+    /**
+     * Build a detached source element from one lazy lightbox JSON item.
+     *
+     * @param {Object<string, *>} item JSON item returned by the lightbox endpoint.
+     * @returns {HTMLElement|null} Detached source element, or null when the payload is invalid.
+     */
+    function createLightboxCardFromItem(item) {
+        if (!item || typeof item !== 'object') {
+            return null;
+        }
+        const index = Number.parseInt(String(item.index ?? '-1'), 10);
+        const imageId = Number.parseInt(String(item.id ?? '0'), 10);
+        if (!Number.isInteger(index) || index < 0 || !Number.isInteger(imageId) || imageId <= 0) {
+            return null;
+        }
+        const card = document.createElement('div');
+        card.setAttribute('data-lightbox-source', '');
+        card.dataset.lightboxIndex = String(index);
+        card.dataset.imageId = String(imageId);
+        card.dataset.galleryId = String(item.gallery_id ?? '');
+        card.dataset.fullSrc = String(item.full_src || '');
+        card.dataset.previewSrc = String(item.preview_src || item.full_src || '');
+        card.dataset.pageUrl = String(item.page_url || '');
+        card.dataset.galleryUrl = String(item.gallery_url || '');
+        card.dataset.title = String(item.title || '');
+        card.dataset.description = String(item.description || '');
+        card.dataset.score = String(item.score ?? '0');
+        card.dataset.userVote = String(item.user_vote ?? '0');
+        card.dataset.imageWidth = String(item.width ?? '0');
+        card.dataset.imageHeight = String(item.height ?? '0');
+        if (item.voting_allowed) {
+            card.dataset.votingAllowed = '1';
+        }
+        if (typeof item.vote_form_html === 'string' && item.vote_form_html.trim() !== '') {
+            card.dataset.voteFormHtml = item.vote_form_html;
+        }
+        if (item.map_point && typeof item.map_point === 'object') {
+            card.dataset.mapPoint = JSON.stringify(item.map_point);
+        }
+        return card;
+    }
+
+    /**
+     * Store async lightbox items in the sparse client cache.
+     *
+     * @param {Array<Object<string, *>>} items JSON items returned by the endpoint.
+     * @returns {void}
+     */
+    function mergeLightboxItems(items) {
+        if (!Array.isArray(items)) {
+            return;
+        }
+        items.forEach((item) => {
+            const card = createLightboxCardFromItem(item);
+            if (!card) {
+                return;
+            }
+            const index = lightboxIndexForCard(card);
+            if (index >= 0 && index < cards.length && !cards[index]) {
+                cards[index] = card;
+            }
+        });
+    }
+
+    /**
+     * Return an async metadata window that contains the requested index.
+     *
+     * @param {number} index Zero-based lightbox index.
+     * @returns {{offset:number, limit:number}} Endpoint range parameters.
+     */
+    function lightboxWindowForIndex(index) {
+        if (cards.length <= 0) {
+            return {offset: 0, limit: lightboxWindowSize};
+        }
+        const leadingItems = Math.min(12, Math.max(4, Math.floor(lightboxWindowSize / 4)));
+        const maxOffset = Math.max(0, cards.length - lightboxWindowSize);
+        const offset = Math.max(0, Math.min(maxOffset, index - leadingItems));
+        const limit = Math.min(lightboxWindowSize, cards.length - offset);
+        return {offset, limit: Math.max(1, limit)};
+    }
+
+    /**
+     * Return true when the requested sparse cache range already has metadata.
+     *
+     * @param {number} offset Zero-based range offset.
+     * @param {number} limit Maximum number of positions to inspect.
+     * @returns {boolean} True when every position in the range has a card.
+     */
+    function lightboxRangeLoaded(offset, limit) {
+        const end = Math.min(cards.length, offset + limit);
+        for (let index = offset; index < end; index += 1) {
+            if (!cards[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Fetch one async metadata range unless it is already loaded or in flight.
+     *
+     * @param {number} offset Zero-based range offset.
+     * @param {number} limit Maximum items to request.
+     * @returns {Promise<boolean>} True when the request completed successfully or was unnecessary.
+     */
+    function fetchLightboxRange(offset, limit) {
+        if (!lightboxEndpoint || cards.length === 0 || lightboxRangeLoaded(offset, limit)) {
+            return Promise.resolve(true);
+        }
+        const key = `${offset}:${limit}`;
+        if (lightboxPendingWindows.has(key)) {
+            return lightboxPendingWindows.get(key);
+        }
+        const url = new URL(lightboxEndpoint, window.location.href);
+        url.searchParams.set('offset', String(offset));
+        url.searchParams.set('limit', String(limit));
+        const promise = fetch(url.toString(), {
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json'},
+            signal: controller.signal,
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((payload) => {
+                mergeLightboxItems(payload?.items || []);
+                return true;
+            })
+            .catch((error) => {
+                if (window.console && typeof window.console.warn === 'function') {
+                    window.console.warn('Lazy lightbox metadata request failed.', {
+                        endpoint: url.toString(),
+                        offset,
+                        limit,
+                        error,
+                    });
+                }
+                return false;
+            })
+            .finally(() => {
+                lightboxPendingWindows.delete(key);
+            });
+        lightboxPendingWindows.set(key, promise);
+        return promise;
+    }
+
+    /**
+     * Ensure that metadata around one index is available.
+     *
+     * @param {number} index Zero-based lightbox index.
+     * @returns {Promise<boolean>} True when the surrounding metadata is available.
+     */
+    function fetchLightboxWindowAround(index) {
+        const range = lightboxWindowForIndex(index);
+        return fetchLightboxRange(range.offset, range.limit);
     }
 
     refreshLightboxOrderFromDom();
@@ -147,6 +358,12 @@ export function setupGalleryLightbox() {
     const image = overlay.querySelector('[data-lightbox-img]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    // initialLoader stores the progress UI shown before the first lazy item is ready.
+    const initialLoader = overlay.querySelector('[data-lightbox-initial-loader]');
+    // initialLoaderFill stores the visual bar that receives estimated progress.
+    const initialLoaderFill = overlay.querySelector('[data-lightbox-initial-loader-fill]');
+    // initialLoaderCount stores the optional loaded-range estimate for large galleries.
+    const initialLoaderCount = overlay.querySelector('[data-lightbox-initial-loader-count]');
     // lightboxMeta stores state or configuration for the gallery front-end flow.
     const lightboxMeta = overlay.querySelector('.lightbox-meta');
     // lightboxImageTransitionDuration stores state or configuration for the gallery front-end flow.
@@ -189,6 +406,8 @@ export function setupGalleryLightbox() {
     let lightboxReturnUrl = window.location.href;
     // lightboxHistoryActive stores state or configuration for the gallery front-end flow.
     let lightboxHistoryActive = false;
+    // initialLightboxLoadActive is true only before the first requested photo is displayed.
+    let initialLightboxLoadActive = false;
     // Variable `preloadedSources` stores this steps working value.
     const preloadedSources = new Set();
     // decodedLightboxImages stores state or configuration for the gallery front-end flow.
@@ -241,6 +460,7 @@ export function setupGalleryLightbox() {
         clearLightboxHudTimer();
         removeTransitionImage();
         preloadedSources.clear();
+        lightboxPendingWindows.clear();
         decodedLightboxImages.clear();
         if (galleryDevModeState.frameId) {
             window.cancelAnimationFrame(galleryDevModeState.frameId);
@@ -285,7 +505,7 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
-        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split');
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled');
         overlay.removeAttribute('data-current-image-id');
         overlay.removeAttribute('data-current-title');
         if (image) {
@@ -349,6 +569,9 @@ export function setupGalleryLightbox() {
         galleryDevModeState.canvasContext = galleryDevModeState.canvas ? galleryDevModeState.canvas.getContext('2d') : null;
         overlay.append(shell);
         cards.forEach((card, index) => {
+            if (!card) {
+                return;
+            }
             devRegisterSource(card.dataset.previewSrc || card.dataset.fullSrc || '', 'preview', index, 'idle');
             devRegisterSource(card.dataset.fullSrc || card.dataset.previewSrc || '', 'full', index, 'idle');
         });
@@ -425,6 +648,9 @@ export function setupGalleryLightbox() {
             return '';
         }
         for (const card of cards) {
+            if (!card) {
+                continue;
+            }
             if (card.dataset.previewSrc === src && card.dataset.fullSrc === src) {
                 return 'preview+full';
             }
@@ -447,7 +673,7 @@ export function setupGalleryLightbox() {
         if (!src) {
             return -1;
         }
-        return cards.findIndex((card) => card.dataset.previewSrc === src || card.dataset.fullSrc === src);
+        return cards.findIndex((card) => card && (card.dataset.previewSrc === src || card.dataset.fullSrc === src));
     }
 
     /**
@@ -1146,15 +1372,102 @@ export function setupGalleryLightbox() {
         }
     }
 
-    // Function `openAt` executes this focused behavior.
-    function openAt(index) {
-        // Variable `card` stores this steps working value.
-        const card = cards[index];
-        if (!card) {
+    /**
+     * Show or update the initial lazy-loading progress indicator.
+     *
+     * The gallery can know the total image count and the requested index, but it
+     * cannot know server-side metadata generation progress precisely. This uses
+     * a bounded estimate based on the requested metadata window so the visitor
+     * sees movement without pretending to report exact work completed.
+     *
+     * @param {number} index Zero-based requested lightbox index.
+     * @param {number} progressPercent Estimated progress between 1 and 100.
+     * @returns {void}
+     */
+    function showInitialLightboxLoader(index, progressPercent = 12) {
+        if (!(initialLoader instanceof HTMLElement)) {
             return;
         }
-        currentIndex = index;
-        galleryDevModeState.currentIndex = index;
+        const safeProgress = Math.max(1, Math.min(100, Math.round(progressPercent)));
+        initialLightboxLoadActive = true;
+        initialLoader.hidden = false;
+        initialLoader.setAttribute('aria-busy', 'true');
+        overlay.classList.add('is-initial-loading');
+        if (initialLoaderFill instanceof HTMLElement) {
+            initialLoaderFill.style.setProperty('--lightbox-initial-loader-progress', `${safeProgress}%`);
+        }
+        if (initialLoaderCount instanceof HTMLElement) {
+            const safeTotal = Math.max(cards.length, lightboxTotal, 0);
+            initialLoaderCount.textContent = safeTotal > 0
+                ? i18n('lightbox.initial_loader_count', 'Preparing photo {current} of {total}', {current: index + 1, total: safeTotal})
+                : '';
+        }
+        if (counter) {
+            counter.textContent = cards.length > 0 ? `${index + 1} / ${cards.length}` : '';
+        }
+        overlay.hidden = false;
+        document.body.classList.add('has-lightbox');
+        updateLightboxViewportMode();
+    }
+
+    /**
+     * Hide the initial lazy-loading progress indicator.
+     *
+     * @returns {void}
+     */
+    function hideInitialLightboxLoader() {
+        initialLightboxLoadActive = false;
+        overlay.classList.remove('is-initial-loading');
+        if (initialLoader instanceof HTMLElement) {
+            initialLoader.hidden = true;
+            initialLoader.removeAttribute('aria-busy');
+        }
+    }
+
+    /**
+     * Estimate first-open progress from the metadata window requested for one index.
+     *
+     * @param {number} index Zero-based requested lightbox index.
+     * @returns {number} Estimated progress percentage.
+     */
+    function estimateInitialLightboxProgress(index) {
+        if (cards.length <= 0) {
+            return 12;
+        }
+        const range = lightboxWindowForIndex(index);
+        const loadedBefore = cards.reduce((count, candidate) => count + (candidate ? 1 : 0), 0);
+        const expectedAfter = Math.min(cards.length, loadedBefore + range.limit);
+        return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
+    }
+
+    // Function `openAt` executes this focused behavior.
+    function openAt(index) {
+        if (cards.length === 0) {
+            return;
+        }
+        const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
+        // Variable `card` stores this steps working value.
+        const card = cards[normalizedIndex];
+        const isInitialPhotoOpen = overlay.hidden || !image.getAttribute('src') || overlay.classList.contains('is-initial-loading');
+        if (isInitialPhotoOpen) {
+            showInitialLightboxLoader(normalizedIndex, estimateInitialLightboxProgress(normalizedIndex));
+        }
+        if (!card) {
+            currentIndex = normalizedIndex;
+            galleryDevModeState.currentIndex = normalizedIndex;
+            fetchLightboxWindowAround(normalizedIndex).then((loaded) => {
+                if (!loaded || controller.signal.aborted || currentIndex !== normalizedIndex) {
+                    return;
+                }
+                openAt(normalizedIndex);
+            });
+            return;
+        }
+        if (!isInitialPhotoOpen) {
+            hideInitialLightboxLoader();
+        }
+        currentIndex = normalizedIndex;
+        galleryDevModeState.currentIndex = normalizedIndex;
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearPendingFullImageSwap();
@@ -1188,37 +1501,43 @@ export function setupGalleryLightbox() {
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
         if (counter) {
-            counter.textContent = `${index + 1} / ${cards.length}`;
+            counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
         }
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
         syncLightboxVote(card, lightboxVotePanel);
+        const mapPoint = lightboxMapPointForCard(card);
         if (lightboxMapButton) {
-            // hasMapPoint stores state or configuration for the gallery front-end flow.
-            const hasMapPoint = Boolean(card.dataset.mapPoint && card.dataset.mapPoint.trim());
+            // hasMapPoint stores whether the active photo can open a concrete marker map.
+            const hasMapPoint = mapPoint !== '';
             lightboxMapButton.hidden = !hasMapPoint;
-            lightboxMapButton.dataset.mapPoint = hasMapPoint ? card.dataset.mapPoint.trim() : '';
+            lightboxMapButton.dataset.mapPoint = hasMapPoint ? mapPoint : '';
         }
         updateNormalLightboxStageSize(card);
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
-        showLightboxImageSource(index, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
-            if (!wasDisplayed || currentIndex !== index || activeLightboxImageToken !== imageToken) {
+        const showInitialPreview = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        const initialPreviewPromise = isInitialPhotoOpen && previewSrc
+            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(showInitialPreview)
+            : showInitialPreview();
+        initialPreviewPromise.then((wasDisplayed) => {
+            if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;
             }
-            swapLightboxImageAfterDecode(index, imageToken, previewSrc, fullSrc, altText);
+            hideInitialLightboxLoader();
+            swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
-            // mapPoint stores state or configuration for the gallery front-end flow.
-            const mapPoint = card.dataset.mapPoint || '';
-            if (mapPoint.trim()) {
+            if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
+                closeLightboxMapSplit();
+            } else if (mapPoint) {
                 openLightboxMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
-            } else if (lightboxMapSplitTitle) {
-                lightboxMapSplitTitle.textContent = card.dataset.title || title.textContent || 'Map';
+            } else {
+                openLightboxMapUnavailable(card.dataset.title || title.textContent || 'Map');
             }
         }
-        preloadAdjacentImages(index);
+        preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
@@ -1248,6 +1567,7 @@ export function setupGalleryLightbox() {
         overlay.classList.remove('is-ui-visible');
         clearTouchGesture();
         updateLightboxViewportMode();
+        hideInitialLightboxLoader();
         overlay.hidden = true;
         clearPendingFullImageSwap();
         removeTransitionImage();
@@ -1296,6 +1616,15 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function preloadAdjacentImages(index) {
+        if (cards.length === 0) {
+            return;
+        }
+        const edgeDistance = Math.max(lightboxPreviewPreloadRadius + 4, 12);
+        const nearStart = index <= edgeDistance;
+        const nearEnd = index >= cards.length - edgeDistance - 1;
+        if (!cards[index] || nearStart || nearEnd) {
+            fetchLightboxWindowAround(index);
+        }
         if (shouldLimitLightboxPreloading()) {
             return;
         }
@@ -1309,6 +1638,10 @@ export function setupGalleryLightbox() {
             const normalizedIndex = (index + offset + cards.length) % cards.length;
             // card stores state or configuration for the gallery front-end flow.
             const card = cards[normalizedIndex];
+            if (!card) {
+                fetchLightboxWindowAround(normalizedIndex);
+                return;
+            }
             preloadCardLightboxImages(card, Math.abs(offset) <= lightboxFullPreloadRadius);
         });
     }
@@ -1342,7 +1675,10 @@ export function setupGalleryLightbox() {
         }
         refreshLightboxOrderFromDom();
         // index stores the card position in the complete viewer order.
-        const index = cards.findIndex((candidate) => candidate.dataset.imageId === card.dataset.imageId);
+        let index = lightboxIndexForCard(card);
+        if (index < 0 || index >= cards.length || cards[index]?.dataset.imageId !== card.dataset.imageId) {
+            index = cards.findIndex((candidate) => candidate && candidate.dataset.imageId === card.dataset.imageId);
+        }
         if (index < 0) {
             return;
         }
@@ -1359,6 +1695,9 @@ export function setupGalleryLightbox() {
         const action = actionTarget?.dataset.lightboxAction;
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
+            if (initialLightboxLoadActive) {
+                return;
+            }
             clearLightboxStageFocus();
             toggleLightboxFullscreen().finally(clearLightboxStageFocus);
             return;
@@ -1421,6 +1760,7 @@ export function setupGalleryLightbox() {
             return;
         }
         updateNormalLightboxStageSize(cards[currentIndex]);
+        updateFullscreenMapImageFit(cards[currentIndex]);
     }, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
@@ -2113,21 +2453,127 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Return the current photo map payload only when the gallery allows GPS maps.
+     *
+     * @param {HTMLElement|null} card Active lightbox source element.
+     * @returns {string} JSON marker payload, or an empty string when unavailable.
+     */
+    function lightboxMapPointForCard(card) {
+        if (!lightboxMapsEnabled || !(card instanceof HTMLElement)) {
+            return '';
+        }
+        return (card.dataset.mapPoint || '').trim();
+    }
+
+    /**
+     * Remove any live Leaflet instance and leave the split-map panel ready for new content.
+     *
+     * @returns {void}
+     */
+    function clearLightboxSplitMapRuntime() {
+        if (overlay.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        if (overlay.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+    }
+
+    /**
+     * Center and scale the fullscreen split image inside its current pane.
+     *
+     * Browser object-fit should handle this alone, but setting exact fit values
+     * prevents wide photos from using stale intrinsic dimensions while the map
+     * panel changes the available width.
+     *
+     * @param {HTMLElement|null} card Active lightbox source element.
+     * @returns {void}
+     */
+    function updateFullscreenMapImageFit(card) {
+        if (!stageLink || !(card instanceof HTMLElement) || !isLightboxFullscreen() || overlay.classList.contains('is-mobile-fullscreen') || !lightboxMapSplit || lightboxMapSplit.hidden) {
+            clearFullscreenMapImageFit();
+            return;
+        }
+        // naturalWidth stores the media width recorded during image indexing.
+        const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
+        // naturalHeight stores the media height recorded during image indexing.
+        const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
+        if (!naturalWidth || !naturalHeight) {
+            clearFullscreenMapImageFit();
+            return;
+        }
+        const rect = stageLink.getBoundingClientRect();
+        const availableWidth = Math.max(1, rect.width);
+        const availableHeight = Math.max(1, rect.height);
+        const imageRatio = naturalWidth / naturalHeight;
+        let fitWidth = availableWidth;
+        let fitHeight = fitWidth / imageRatio;
+        if (fitHeight > availableHeight) {
+            fitHeight = availableHeight;
+            fitWidth = fitHeight * imageRatio;
+        }
+        stageLink.style.setProperty('--lightbox-map-fit-width', `${Math.round(fitWidth)}px`);
+        stageLink.style.setProperty('--lightbox-map-fit-height', `${Math.round(fitHeight)}px`);
+    }
+
+    /**
+     * Clear split-map image fit values when the viewer leaves split-map layout.
+     *
+     * @returns {void}
+     */
+    function clearFullscreenMapImageFit() {
+        if (!stageLink) {
+            return;
+        }
+        stageLink.style.removeProperty('--lightbox-map-fit-width');
+        stageLink.style.removeProperty('--lightbox-map-fit-height');
+    }
+
+    /**
+     * Show the fullscreen map pane as unavailable for a photo without GPS EXIF.
+     *
+     * @param {string} title Current photo title.
+     * @returns {void}
+     */
+    function openLightboxMapUnavailable(title) {
+        if (!lightboxMapsEnabled || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
+            return;
+        }
+        clearLightboxSplitMapRuntime();
+        lightboxMapSplit.hidden = false;
+        lightboxMapSplit.classList.add('is-map-unavailable');
+        lightboxMapSplit.setAttribute('aria-disabled', 'true');
+        overlay.classList.add('is-map-split', 'is-map-split-disabled');
+        if (lightboxMapSplitTitle) {
+            lightboxMapSplitTitle.textContent = title || 'Map';
+        }
+        lightboxMapSplitCanvas.innerHTML = `<div class="lightbox-map-unavailable" role="status"><strong>${escapeHtml(i18n('lightbox.no_gps_title', 'No GPS EXIF data'))}</strong><span>${escapeHtml(i18n('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'))}</span></div>`;
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
+    }
+
+    /**
      * Handles toggle current lightbox map behavior for the gallery UI.
      * @param {*} json Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleCurrentLightboxMap(json = '') {
-        // card stores state or configuration for the gallery front-end flow.
-        const card = cards[currentIndex] || null;
-        // mapPoint stores state or configuration for the gallery front-end flow.
-        const mapPoint = (json || card?.dataset.mapPoint || lightboxMapButton?.dataset.mapPoint || '').trim();
-        if (!mapPoint) {
+        if (!lightboxMapsEnabled) {
+            closeLightboxMapSplit();
+            closeMapOverlay();
             return;
         }
+        // card stores state or configuration for the gallery front-end flow.
+        const card = cards[currentIndex] || null;
+        // mapPoint stores the active photo marker payload when one is available.
+        const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
             toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
             showLightboxHud();
+            return;
+        }
+        if (!mapPoint) {
             return;
         }
         // mapOverlay stores state or configuration for the gallery front-end flow.
@@ -2146,14 +2592,18 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleLightboxMapSplit(json, title) {
-        if (!json || !isLightboxFullscreen()) {
+        if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
             return;
         }
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             closeLightboxMapSplit();
             return;
         }
-        openLightboxMapSplit(json, title);
+        if (json && json.trim()) {
+            openLightboxMapSplit(json, title);
+            return;
+        }
+        openLightboxMapUnavailable(title);
     }
 
     /**
@@ -2163,20 +2613,24 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function openLightboxMapSplit(json, title) {
+        if (!lightboxMapsEnabled) {
+            return;
+        }
         // points stores state or configuration for the gallery front-end flow.
         const points = parseMapPoints(json);
         if (!points.length || !lightboxMapSplit || !lightboxMapSplitCanvas) {
             return;
         }
         await ensureLeaflet();
+        clearLightboxSplitMapRuntime();
         lightboxMapSplit.hidden = false;
+        lightboxMapSplit.classList.remove('is-map-unavailable');
+        lightboxMapSplit.removeAttribute('aria-disabled');
         lightboxMapSplitTitle.textContent = title || 'Map';
         overlay.classList.add('is-map-split');
+        overlay.classList.remove('is-map-split-disabled');
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
         await waitForElementSize(lightboxMapSplitCanvas);
-        if (overlay.galleryLeafletSplitMap) {
-            overlay.galleryLeafletSplitMap.remove();
-            overlay.galleryLeafletSplitMap = null;
-        }
         lightboxMapSplitCanvas.innerHTML = '';
         // map stores state or configuration for the gallery front-end flow.
         const map = L.map(lightboxMapSplitCanvas, {
@@ -2214,6 +2668,7 @@ export function setupGalleryLightbox() {
         overlay.galleryLeafletSplitResizeObserver.observe(lightboxMapSplitCanvas);
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+                updateFullscreenMapImageFit(cards[currentIndex] || null);
                 if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                     overlay.galleryLeafletSplitMap.invalidateSize(false);
                 }
@@ -2294,18 +2749,14 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function closeLightboxMapSplit() {
-        if (overlay.galleryLeafletSplitResizeObserver) {
-            overlay.galleryLeafletSplitResizeObserver.disconnect();
-            overlay.galleryLeafletSplitResizeObserver = null;
-        }
+        clearLightboxSplitMapRuntime();
+        clearFullscreenMapImageFit();
         if (lightboxMapSplit) {
             lightboxMapSplit.hidden = true;
+            lightboxMapSplit.classList.remove('is-map-unavailable');
+            lightboxMapSplit.removeAttribute('aria-disabled');
         }
-        overlay.classList.remove('is-map-split');
-        if (overlay.galleryLeafletSplitMap) {
-            overlay.galleryLeafletSplitMap.remove();
-            overlay.galleryLeafletSplitMap = null;
-        }
+        overlay.classList.remove('is-map-split', 'is-map-split-disabled');
         if (lightboxMapSplitCanvas) {
             lightboxMapSplitCanvas.innerHTML = '';
         }

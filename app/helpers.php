@@ -916,6 +916,7 @@ function admin_menu_structure(): array
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
+                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager')],
                 ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags')],
             ],
         ],
@@ -1379,6 +1380,8 @@ function cms_browser_i18n_strings(): array
         'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
         'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
         'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
+        'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
+        'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
     ];
 }
 
