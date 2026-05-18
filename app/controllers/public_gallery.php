@@ -310,7 +310,7 @@ function cms_gallery(): void
         if ($anonymousPreview) {
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60">';
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '">';
     }
     public_render_profile_count('rendered_images', count($images));
     public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $lightboxExcludesRestrictedNsfw): void {
@@ -393,7 +393,7 @@ function cms_gallery(): void
         render_back_to_top_button();
         echo '</div>';
     }
-    render_lightbox($votingAllowed);
+    render_lightbox($votingAllowed, $mapsAllowed);
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
@@ -1007,13 +1007,13 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
  * @param mixed $votingAllowed Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_lightbox(bool $votingAllowed = true): void
+function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false): void
 {
     // $votePanelHtml is a host for the exact gallery-card vote widget.
     // JavaScript clones the current image's server-rendered form into it.
     $votePanelHtml = $votingAllowed ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>' : '';
 
-    echo '<div class="lightbox" data-lightbox hidden>';
+    echo '<div class="lightbox" data-lightbox data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
     echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><img decoding="async" data-lightbox-img alt=""></button><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';

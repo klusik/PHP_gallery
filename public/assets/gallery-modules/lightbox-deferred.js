@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260517-lazy-lightbox-v2';
+const lightboxModuleUrl = './lightbox.js?v=20260518-fullscreen-map-v1';
 
 const deferredLightboxState = {
     controller: null,

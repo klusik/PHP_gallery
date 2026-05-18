@@ -1380,6 +1380,8 @@ function cms_browser_i18n_strings(): array
         'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
         'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
         'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
+        'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
+        'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
     ];
 }
 

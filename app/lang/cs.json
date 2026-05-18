@@ -1371,6 +1371,8 @@
   "lightbox.close_map_split": "Zavřít oddělenou mapu",
   "lightbox.fullscreen": "celá obrazovka",
   "lightbox.map": "Mapa",
+  "lightbox.no_gps_detail": "Tato fotografie nemá souřadnice, takže pro ni mapa v režimu celé obrazovky není dostupná.",
+  "lightbox.no_gps_title": "Fotografie nemá GPS EXIF data",
   "lightbox.next_image": "Další obrázek",
   "lightbox.previous_image": "Předchozí obrázek",
   "lightbox.score": "Skóre",

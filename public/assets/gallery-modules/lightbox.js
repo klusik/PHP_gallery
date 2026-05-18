@@ -107,6 +107,12 @@ export function setupGalleryLightbox() {
     const lightboxTotal = Math.max(0, Number.parseInt(lightboxConfig?.dataset.lightboxTotal || '0', 10) || 0);
     // lightboxWindowSize stores how many metadata records are fetched per async request.
     const lightboxWindowSize = Math.max(12, Math.min(80, Number.parseInt(lightboxConfig?.dataset.lightboxWindowSize || '60', 10) || 60));
+    // lightboxMapsEnabled stores whether this gallery branch may expose EXIF GPS maps.
+    const lightboxMapsEnabled = (
+        lightboxConfig instanceof HTMLElement && lightboxConfig.dataset.lightboxMapsEnabled === '1'
+    ) || (
+        overlay instanceof HTMLElement && overlay.dataset.lightboxMapsEnabled === '1'
+    );
     // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
     const lightboxPendingWindows = new Map();
 
@@ -491,7 +497,7 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
-        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split');
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled');
         overlay.removeAttribute('data-current-image-id');
         overlay.removeAttribute('data-current-title');
         if (image) {
@@ -1420,11 +1426,12 @@ export function setupGalleryLightbox() {
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
         syncLightboxVote(card, lightboxVotePanel);
+        const mapPoint = lightboxMapPointForCard(card);
         if (lightboxMapButton) {
-            // hasMapPoint stores state or configuration for the gallery front-end flow.
-            const hasMapPoint = Boolean(card.dataset.mapPoint && card.dataset.mapPoint.trim());
+            // hasMapPoint stores whether the active photo can open a concrete marker map.
+            const hasMapPoint = mapPoint !== '';
             lightboxMapButton.hidden = !hasMapPoint;
-            lightboxMapButton.dataset.mapPoint = hasMapPoint ? card.dataset.mapPoint.trim() : '';
+            lightboxMapButton.dataset.mapPoint = hasMapPoint ? mapPoint : '';
         }
         updateNormalLightboxStageSize(card);
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
@@ -1437,12 +1444,12 @@ export function setupGalleryLightbox() {
             swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
-            // mapPoint stores state or configuration for the gallery front-end flow.
-            const mapPoint = card.dataset.mapPoint || '';
-            if (mapPoint.trim()) {
+            if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
+                closeLightboxMapSplit();
+            } else if (mapPoint) {
                 openLightboxMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
-            } else if (lightboxMapSplitTitle) {
-                lightboxMapSplitTitle.textContent = card.dataset.title || title.textContent || 'Map';
+            } else {
+                openLightboxMapUnavailable(card.dataset.title || title.textContent || 'Map');
             }
         }
         preloadAdjacentImages(normalizedIndex);
@@ -1664,6 +1671,7 @@ export function setupGalleryLightbox() {
             return;
         }
         updateNormalLightboxStageSize(cards[currentIndex]);
+        updateFullscreenMapImageFit(cards[currentIndex]);
     }, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
@@ -2356,21 +2364,127 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Return the current photo map payload only when the gallery allows GPS maps.
+     *
+     * @param {HTMLElement|null} card Active lightbox source element.
+     * @returns {string} JSON marker payload, or an empty string when unavailable.
+     */
+    function lightboxMapPointForCard(card) {
+        if (!lightboxMapsEnabled || !(card instanceof HTMLElement)) {
+            return '';
+        }
+        return (card.dataset.mapPoint || '').trim();
+    }
+
+    /**
+     * Remove any live Leaflet instance and leave the split-map panel ready for new content.
+     *
+     * @returns {void}
+     */
+    function clearLightboxSplitMapRuntime() {
+        if (overlay.galleryLeafletSplitResizeObserver) {
+            overlay.galleryLeafletSplitResizeObserver.disconnect();
+            overlay.galleryLeafletSplitResizeObserver = null;
+        }
+        if (overlay.galleryLeafletSplitMap) {
+            overlay.galleryLeafletSplitMap.remove();
+            overlay.galleryLeafletSplitMap = null;
+        }
+    }
+
+    /**
+     * Center and scale the fullscreen split image inside its current pane.
+     *
+     * Browser object-fit should handle this alone, but setting exact fit values
+     * prevents wide photos from using stale intrinsic dimensions while the map
+     * panel changes the available width.
+     *
+     * @param {HTMLElement|null} card Active lightbox source element.
+     * @returns {void}
+     */
+    function updateFullscreenMapImageFit(card) {
+        if (!stageLink || !(card instanceof HTMLElement) || !isLightboxFullscreen() || overlay.classList.contains('is-mobile-fullscreen') || !lightboxMapSplit || lightboxMapSplit.hidden) {
+            clearFullscreenMapImageFit();
+            return;
+        }
+        // naturalWidth stores the media width recorded during image indexing.
+        const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
+        // naturalHeight stores the media height recorded during image indexing.
+        const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
+        if (!naturalWidth || !naturalHeight) {
+            clearFullscreenMapImageFit();
+            return;
+        }
+        const rect = stageLink.getBoundingClientRect();
+        const availableWidth = Math.max(1, rect.width);
+        const availableHeight = Math.max(1, rect.height);
+        const imageRatio = naturalWidth / naturalHeight;
+        let fitWidth = availableWidth;
+        let fitHeight = fitWidth / imageRatio;
+        if (fitHeight > availableHeight) {
+            fitHeight = availableHeight;
+            fitWidth = fitHeight * imageRatio;
+        }
+        stageLink.style.setProperty('--lightbox-map-fit-width', `${Math.round(fitWidth)}px`);
+        stageLink.style.setProperty('--lightbox-map-fit-height', `${Math.round(fitHeight)}px`);
+    }
+
+    /**
+     * Clear split-map image fit values when the viewer leaves split-map layout.
+     *
+     * @returns {void}
+     */
+    function clearFullscreenMapImageFit() {
+        if (!stageLink) {
+            return;
+        }
+        stageLink.style.removeProperty('--lightbox-map-fit-width');
+        stageLink.style.removeProperty('--lightbox-map-fit-height');
+    }
+
+    /**
+     * Show the fullscreen map pane as unavailable for a photo without GPS EXIF.
+     *
+     * @param {string} title Current photo title.
+     * @returns {void}
+     */
+    function openLightboxMapUnavailable(title) {
+        if (!lightboxMapsEnabled || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
+            return;
+        }
+        clearLightboxSplitMapRuntime();
+        lightboxMapSplit.hidden = false;
+        lightboxMapSplit.classList.add('is-map-unavailable');
+        lightboxMapSplit.setAttribute('aria-disabled', 'true');
+        overlay.classList.add('is-map-split', 'is-map-split-disabled');
+        if (lightboxMapSplitTitle) {
+            lightboxMapSplitTitle.textContent = title || 'Map';
+        }
+        lightboxMapSplitCanvas.innerHTML = `<div class="lightbox-map-unavailable" role="status"><strong>${escapeHtml(i18n('lightbox.no_gps_title', 'No GPS EXIF data'))}</strong><span>${escapeHtml(i18n('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'))}</span></div>`;
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
+    }
+
+    /**
      * Handles toggle current lightbox map behavior for the gallery UI.
      * @param {*} json Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleCurrentLightboxMap(json = '') {
-        // card stores state or configuration for the gallery front-end flow.
-        const card = cards[currentIndex] || null;
-        // mapPoint stores state or configuration for the gallery front-end flow.
-        const mapPoint = (json || card?.dataset.mapPoint || lightboxMapButton?.dataset.mapPoint || '').trim();
-        if (!mapPoint) {
+        if (!lightboxMapsEnabled) {
+            closeLightboxMapSplit();
+            closeMapOverlay();
             return;
         }
+        // card stores state or configuration for the gallery front-end flow.
+        const card = cards[currentIndex] || null;
+        // mapPoint stores the active photo marker payload when one is available.
+        const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
             toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
             showLightboxHud();
+            return;
+        }
+        if (!mapPoint) {
             return;
         }
         // mapOverlay stores state or configuration for the gallery front-end flow.
@@ -2389,14 +2503,18 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleLightboxMapSplit(json, title) {
-        if (!json || !isLightboxFullscreen()) {
+        if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
             return;
         }
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             closeLightboxMapSplit();
             return;
         }
-        openLightboxMapSplit(json, title);
+        if (json && json.trim()) {
+            openLightboxMapSplit(json, title);
+            return;
+        }
+        openLightboxMapUnavailable(title);
     }
 
     /**
@@ -2406,20 +2524,24 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function openLightboxMapSplit(json, title) {
+        if (!lightboxMapsEnabled) {
+            return;
+        }
         // points stores state or configuration for the gallery front-end flow.
         const points = parseMapPoints(json);
         if (!points.length || !lightboxMapSplit || !lightboxMapSplitCanvas) {
             return;
         }
         await ensureLeaflet();
+        clearLightboxSplitMapRuntime();
         lightboxMapSplit.hidden = false;
+        lightboxMapSplit.classList.remove('is-map-unavailable');
+        lightboxMapSplit.removeAttribute('aria-disabled');
         lightboxMapSplitTitle.textContent = title || 'Map';
         overlay.classList.add('is-map-split');
+        overlay.classList.remove('is-map-split-disabled');
+        requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
         await waitForElementSize(lightboxMapSplitCanvas);
-        if (overlay.galleryLeafletSplitMap) {
-            overlay.galleryLeafletSplitMap.remove();
-            overlay.galleryLeafletSplitMap = null;
-        }
         lightboxMapSplitCanvas.innerHTML = '';
         // map stores state or configuration for the gallery front-end flow.
         const map = L.map(lightboxMapSplitCanvas, {
@@ -2457,6 +2579,7 @@ export function setupGalleryLightbox() {
         overlay.galleryLeafletSplitResizeObserver.observe(lightboxMapSplitCanvas);
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+                updateFullscreenMapImageFit(cards[currentIndex] || null);
                 if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                     overlay.galleryLeafletSplitMap.invalidateSize(false);
                 }
@@ -2537,18 +2660,14 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function closeLightboxMapSplit() {
-        if (overlay.galleryLeafletSplitResizeObserver) {
-            overlay.galleryLeafletSplitResizeObserver.disconnect();
-            overlay.galleryLeafletSplitResizeObserver = null;
-        }
+        clearLightboxSplitMapRuntime();
+        clearFullscreenMapImageFit();
         if (lightboxMapSplit) {
             lightboxMapSplit.hidden = true;
+            lightboxMapSplit.classList.remove('is-map-unavailable');
+            lightboxMapSplit.removeAttribute('aria-disabled');
         }
-        overlay.classList.remove('is-map-split');
-        if (overlay.galleryLeafletSplitMap) {
-            overlay.galleryLeafletSplitMap.remove();
-            overlay.galleryLeafletSplitMap = null;
-        }
+        overlay.classList.remove('is-map-split', 'is-map-split-disabled');
         if (lightboxMapSplitCanvas) {
             lightboxMapSplitCanvas.innerHTML = '';
         }
