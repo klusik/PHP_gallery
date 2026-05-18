@@ -498,6 +498,57 @@ def normalize_upload_url(value: str) -> str:
     return raw.rstrip("/") + "/index.php?page=upload_automation_upload"
 
 
+def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
+    """
+    Revoke the active upload automation key through the gallery endpoint.
+
+    The gallery revokes the token identified by the authenticated API key, so
+    the companion app does not need a second admin-only credential or token id.
+
+    @param upload_url: Normalized PHP Gallery upload endpoint.
+    @param api_key: Current gallery-scoped API key.
+    @return: Parsed JSON response from the server.
+    @raises RuntimeError: Raised for network, HTTP, or non-JSON failures.
+    """
+    body = parse.urlencode({"action": "revoke"}).encode("ascii")
+    http_request = request.Request(
+        upload_url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": str(len(body)),
+            "X-Gallery-API-Key": api_key,
+            "Accept": "application/json",
+            "User-Agent": "PHPGalleryUploader/1.1",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
+            response_body = response.read().decode("utf-8", errors="replace")
+    except error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(response_body)
+            message = payload.get("error") if isinstance(payload, dict) else None
+        except json.JSONDecodeError:
+            message = None
+        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+    except error.URLError as exc:
+        raise RuntimeError(str(exc.reason)) from exc
+
+    try:
+        payload = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("Server returned an invalid JSON response.")
+    if not payload.get("ok"):
+        raise RuntimeError(str(payload.get("error") or "API key revocation failed."))
+    return payload
+
+
 def sha256_file(path: Path) -> str:
     """
     Calculate a file SHA-256 hash without loading the whole file at once.
@@ -1514,7 +1565,9 @@ class WatcherApp:
         ttk.Entry(connection, textvariable=self.api_key_var, show="*").grid(row=1, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
 
         ttk.Button(connection, text="Save configuration", command=self.save_config).grid(row=2, column=1, sticky="w", padx=8, pady=(4, 8))
-        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=2, column=2, sticky="e", padx=8, pady=(4, 8))
+        self.revoke_button = ttk.Button(connection, text="Revoke API key", command=self.revoke_api_key)
+        self.revoke_button.grid(row=2, column=2, sticky="e", padx=8, pady=(4, 8))
+        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=2, column=3, sticky="e", padx=8, pady=(4, 8))
 
         notebook = ttk.Notebook(outer)
         notebook.pack(fill="x", pady=(0, 12))
@@ -1537,6 +1590,7 @@ class WatcherApp:
         self.write_log(f"State: {STATE_PATH}")
         self.write_log(f"Log: {LOG_PATH}")
         self.write_log(thumbnail_runtime_status())
+        self.refresh_revoke_button_state()
 
     def build_watch_tab(self, parent: Any) -> None:
         """
@@ -1751,6 +1805,7 @@ class WatcherApp:
             self.config_store.save(config)
             self.config = config
             self.write_log("Configuration saved.")
+            self.refresh_revoke_button_state()
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
 
@@ -1779,6 +1834,7 @@ class WatcherApp:
         self.worker.start()
         self.status_var.set("Running")
         self.write_log("Watcher started.")
+        self.refresh_revoke_button_state()
 
     def stop(self) -> None:
         """
@@ -1789,6 +1845,7 @@ class WatcherApp:
         if self.worker:
             self.worker.stop()
         self.status_var.set("Stopped")
+        self.refresh_revoke_button_state()
 
     def start_manual_upload(self) -> None:
         """
@@ -1836,6 +1893,58 @@ class WatcherApp:
         if self.manual_worker:
             self.manual_worker.stop()
         self.manual_status_var.set("Manual upload stopped")
+        self.refresh_revoke_button_state()
+
+    def refresh_revoke_button_state(self) -> None:
+        """
+        Enable revocation only when the watcher and manual uploader are idle.
+
+        @return: None.
+        """
+        if not hasattr(self, "revoke_button"):
+            return
+        api_key_present = bool(self.api_key_var.get().strip())
+        watcher_running = bool(self.worker and self.worker.is_alive())
+        manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
+        if api_key_present and not watcher_running and not manual_running:
+            self.revoke_button.state(["!disabled"])
+        else:
+            self.revoke_button.state(["disabled"])
+
+    def revoke_api_key(self) -> None:
+        """
+        Revoke the saved API key on the gallery and clear it locally.
+
+        @return: None.
+        """
+        if self.worker and self.worker.is_alive():
+            messagebox.showwarning("Revoke API key", "Stop watching before revoking the key.")
+            return
+        if self.manual_worker and self.manual_worker.is_alive():
+            messagebox.showwarning("Revoke API key", "Wait for manual upload to finish before revoking the key.")
+            return
+
+        upload_url = normalize_upload_url(self.gallery_url_var.get())
+        api_key = self.api_key_var.get().strip()
+        if not upload_url or not api_key:
+            messagebox.showwarning("Revoke API key", "Gallery URL and API key are required.")
+            return
+
+        if not messagebox.askyesno("Revoke API key", "Revoke this API key on the gallery and remove it from this app?"):
+            return
+
+        self.write_log("Revoking API key on the gallery...")
+        try:
+            result = revoke_upload_key(upload_url, api_key)
+            self.api_key_var.set("")
+            self.config.api_key = ""
+            self.config_store.save(self.current_config())
+            self.write_log(str(result.get("message") or "API key revoked."))
+            messagebox.showinfo("Revoke API key", str(result.get("message") or "API key revoked."))
+            self.refresh_revoke_button_state()
+        except Exception as exc:  # noqa: BLE001
+            self.write_log(f"ERROR: {exc}")
+            messagebox.showerror("Revoke API key failed", str(exc))
 
     def close(self) -> None:
         """
@@ -1876,6 +1985,10 @@ class WatcherApp:
                 self.manual_status_var.set("Manual upload idle")
             elif message.startswith("Manual upload stopped"):
                 self.manual_status_var.set("Manual upload stopped")
+                self.refresh_revoke_button_state()
+            elif message.startswith("Watcher stopped"):
+                self.status_var.set("Stopped")
+                self.refresh_revoke_button_state()
             elif level == "error":
                 self.status_var.set("Running with errors")
                 if self.manual_worker and self.manual_worker.is_alive():

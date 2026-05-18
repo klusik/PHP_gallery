@@ -9,6 +9,8 @@ It supports two modes in the same app:
 
 Both modes use the same saved gallery URL or upload endpoint and the same API key.
 
+The shared connection area also includes `Revoke API key`. It is only usable when the watcher is stopped. When you revoke the key, the app asks the gallery to invalidate that token and then clears the saved API key locally.
+
 ## Setup
 
 1. Open the target gallery in the PHP Gallery admin editor.

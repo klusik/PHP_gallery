@@ -89,6 +89,33 @@ function cms_upload_automation_upload(): void
         return;
     }
 
+    // $action stores the requested automation command. Revoke is allowed when the request is authenticated by the current API key.
+    $action = (string) ($_POST['action'] ?? 'upload');
+    if ($action === 'revoke') {
+        $tokenId = (int) ($tokenRow['id'] ?? 0);
+        if ($tokenId <= 0 || !revoke_gallery_upload_automation_token($galleryId, $tokenId)) {
+            admin_log_event('error', 'upload_automation.revoke_failed', 'Upload automation API-key revocation failed.', [
+                'token_id' => $tokenId,
+                'gallery_id' => $galleryId,
+            ]);
+            upload_automation_json(['ok' => false, 'error' => 'API key could not be revoked.'], 422);
+            return;
+        }
+
+        admin_log_event('info', 'upload_automation.token_revoked', 'Upload automation API key revoked through the companion app.', [
+            'token_id' => $tokenId,
+            'gallery_id' => $galleryId,
+        ]);
+        upload_automation_json([
+            'ok' => true,
+            'action' => 'revoke',
+            'gallery_id' => $galleryId,
+            'token_id' => $tokenId,
+            'message' => 'API key revoked.',
+        ]);
+        return;
+    }
+
     // $submittedGalleryId stores an optional client-side assertion, not the source of authority.
     $submittedGalleryId = (int) ($_POST['gallery_id'] ?? 0);
     if ($submittedGalleryId > 0 && $submittedGalleryId !== $galleryId) {
@@ -188,7 +215,6 @@ function cms_upload_automation_upload(): void
             ],
         ]);
     } catch (Throwable $exception) {
-        $actionOk = false;
         admin_log_event('error', 'upload_automation.upload_failed', 'Upload automation request failed.', [
             'token_id' => (int) $tokenRow['id'],
             'gallery_id' => $galleryId,
