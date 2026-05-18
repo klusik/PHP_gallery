@@ -74,7 +74,7 @@ import {
     setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260514-admin-sidebar-hash-v2';
+} from './gallery-modules/admin-operations.js?v=20260518-api-token-panel-v5';
 
 /**
  * Runs a setup callback after the DOM is ready.

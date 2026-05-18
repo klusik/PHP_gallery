@@ -32,7 +32,7 @@
 
 export { setupAdminTabs } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260512-modular-admin-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260512-modular-admin-v1';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260518-api-token-panel-v5';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260512-modular-admin-v1';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
 export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20260512-modular-admin-v1';

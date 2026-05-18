@@ -258,6 +258,22 @@ export function setupAdminGallerySidePanel() {
         await submitAdminPanelEditForm(form);
     });
 
+    document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-upload-automation-token-form]')) {
+            return;
+        }
+        if (!form.closest('[data-admin-side-panel]')) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        await submitAdminPanelUploadAutomationTokenForm(form);
+    }, true);
+
     document.addEventListener('click', (event) => {
         const submitter = event.target instanceof Element ? event.target.closest('button, input[type="submit"]') : null;
         if (!(submitter instanceof HTMLElement)) {
@@ -807,6 +823,98 @@ async function submitAdminGalleryPanelCreateForm(form) {
  * @param {HTMLFormElement} form Side-panel edit form.
  * @returns {Promise<void>} Resolves after success handling or error reporting.
  */
+/**
+ * Submit an upload-automation API-key form inside the side panel.
+ *
+ * The dedicated API manager can keep normal POST redirects, but the public
+ * admin side panel must stay mounted and refresh only its editor content.
+ *
+ * @param {HTMLFormElement} form API-key create or revoke form.
+ * @returns {Promise<void>} Resolves after the side-panel content is refreshed.
+ */
+async function submitAdminPanelUploadAutomationTokenForm(form) {
+    const panel = form.closest('[data-admin-side-panel]');
+    if (!(panel instanceof HTMLElement)) {
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+    }
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    writeAdminGallerySidePanelStatus(panel, 'Updating API key...', false);
+    try {
+        const body = new FormData(form);
+        body.set('ajax', '1');
+        body.set('panel', '1');
+
+        const activeTab = activeAdminTabId(panel.querySelector('[data-admin-side-panel-body]'));
+        const returnUrl = panelSourceUrlForRefresh(panel, String(panel.dataset.adminSidePanelWorkflow || 'gallery-edit'), '', activeTab || 'admin-edit-api');
+        const refreshUrl = String(returnUrl || '');
+        if (returnUrl !== '') {
+            body.set('return_url', sameSitePathForPost(returnUrl));
+        }
+
+        const requestUrl = uploadAutomationTokenRequestUrl(form);
+        if (requestUrl === '') {
+            throw new Error('API key update failed. Missing API key endpoint.');
+        }
+        const response = await fetch(requestUrl, {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const result = await readJsonResponseSafely(response, 'API key update failed.');
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || result.message || 'API key update failed.');
+        }
+        if (String(result.action || 'create') === 'create' && Number(result.token_id || 0) <= 0) {
+            throw new Error('API key update failed. The server did not report a created API key.');
+        }
+        const refreshed = await refreshAdminSidePanelFromServer(String(result.refresh_url || refreshUrl || ''));
+        writeAdminGallerySidePanelStatus(panel, String(result.message || 'API key updated.'), !refreshed);
+    } catch (error) {
+        writeAdminGallerySidePanelStatus(panel, error.message || 'API key update failed.', true);
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+/**
+ * Resolve the upload-automation token endpoint through the current browser origin.
+ *
+ * url_for() can render an absolute configured base URL. When the same local
+ * install is opened through another host alias or port, a direct fetch to that
+ * absolute URL loses same-origin cookies and receives an HTML admin page.
+ *
+ * @param {HTMLFormElement} form API-key create or revoke form.
+ * @returns {string} Same-origin URL for the token endpoint, or an empty string.
+ */
+function uploadAutomationTokenRequestUrl(form) {
+    const actionValue = String(form.getAttribute('action') || form.action || '').trim();
+    if (actionValue === '') {
+        return '';
+    }
+    try {
+        const url = new URL(actionValue, window.location.href);
+        if (String(url.searchParams.get('page') || '') === 'admin_upload_automation_token') {
+            return `${url.pathname}${url.search}${url.hash}`;
+        }
+        if (url.origin === window.location.origin) {
+            return `${url.pathname}${url.search}${url.hash}`;
+        }
+    } catch (error) {
+        return '';
+    }
+    return '';
+}
+
 async function submitAdminPanelEditForm(form) {
     const panel = form.closest('[data-admin-side-panel]');
     if (!(panel instanceof HTMLElement)) {
@@ -1115,8 +1223,11 @@ async function refreshAdminSidePanelFromServer(sourceUrl = '') {
         if (!(body instanceof HTMLElement) || resolvedUrl === '') {
             return false;
         }
-        const response = await fetch(resolvedUrl, {
+        const fetchUrl = new URL(resolvedUrl, window.location.href);
+        fetchUrl.searchParams.set('_panel_refresh', String(Date.now()));
+        const response = await fetch(fetchUrl.toString(), {
             credentials: 'same-origin',
+            cache: 'no-store',
             headers: {
                 'Accept': 'text/html',
                 'X-Requested-With': 'XMLHttpRequest',
@@ -1168,6 +1279,24 @@ function panelSourceUrlForRefresh(panel, workflowName, explicitSourceUrl, active
         url.hash = activeTabId;
     }
     return url.toString();
+}
+
+/**
+ * Convert a same-site URL into the path/query/hash format expected by PHP return-url validation.
+ *
+ * @param {string} urlValue URL generated by the side-panel refresh logic.
+ * @returns {string} Relative same-site URL, or an empty string when the URL is not usable.
+ */
+function sameSitePathForPost(urlValue) {
+    try {
+        const url = new URL(urlValue, window.location.href);
+        if (url.origin !== window.location.origin) {
+            return '';
+        }
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch (error) {
+        return '';
+    }
 }
 
 /**
@@ -1349,8 +1478,11 @@ async function reflectCreatedGalleryInCurrentView(result) {
 async function refreshCurrentGalleryContextFromServer(sourceUrl = '') {
     try {
         const source = document.querySelector('main.site-main .admin-edit-gallery-hero') ? window.location.href : (sourceUrl || window.location.href);
-        const response = await fetch(source, {
+        const fetchUrl = new URL(source, window.location.href);
+        fetchUrl.searchParams.set('_panel_refresh', String(Date.now()));
+        const response = await fetch(fetchUrl.toString(), {
             credentials: 'same-origin',
+            cache: 'no-store',
             headers: {
                 'Accept': 'text/html',
                 'X-Requested-With': 'XMLHttpRequest',
