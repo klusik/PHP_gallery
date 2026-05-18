@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260518-fullscreen-map-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260518-initial-loader-v2';
 
 const deferredLightboxState = {
     controller: null,
@@ -79,6 +79,95 @@ function cancelDeferredActivation() {
         window.clearTimeout(deferredLightboxState.idleTimer);
         deferredLightboxState.idleTimer = 0;
     }
+}
+
+
+/**
+ * Return the total number of photos declared by the current gallery markup.
+ *
+ * @returns {number} Visitor-visible lightbox image count, or 0 when unavailable.
+ */
+function deferredLightboxTotal() {
+    const config = document.querySelector('[data-lightbox-config]');
+    return Math.max(0, Number.parseInt(config?.dataset.lightboxTotal || '0', 10) || 0);
+}
+
+/**
+ * Return the zero-based lightbox index declared on a clicked photo card.
+ *
+ * @param {Element|null} target Clicked activation target.
+ * @returns {number} Zero-based index, or 0 when the markup does not expose one.
+ */
+function deferredLightboxIndex(target) {
+    if (!(target instanceof HTMLElement)) {
+        return 0;
+    }
+    const index = Number.parseInt(target.dataset.lightboxIndex || '0', 10);
+    return Number.isInteger(index) && index >= 0 ? index : 0;
+}
+
+/**
+ * Show a small initial progress indicator while the real lightbox module loads.
+ *
+ * @param {Element|null} target Clicked activation target.
+ * @returns {void}
+ */
+function showDeferredLightboxLoader(target) {
+    if (!(target instanceof HTMLElement) || !target.matches('[data-lightbox-image], [data-lightbox-source]')) {
+        return;
+    }
+    const overlay = document.querySelector('[data-lightbox]');
+    if (!(overlay instanceof HTMLElement) || !overlay.hidden) {
+        return;
+    }
+    const loader = overlay.querySelector('[data-lightbox-initial-loader]');
+    const loaderFill = overlay.querySelector('[data-lightbox-initial-loader-fill]');
+    const loaderCount = overlay.querySelector('[data-lightbox-initial-loader-count]');
+    const counter = overlay.querySelector('[data-lightbox-counter]');
+    if (!(loader instanceof HTMLElement)) {
+        return;
+    }
+    const total = deferredLightboxTotal();
+    const index = deferredLightboxIndex(target);
+    loader.hidden = false;
+    loader.setAttribute('aria-busy', 'true');
+    overlay.classList.add('is-initial-loading');
+    overlay.hidden = false;
+    document.body.classList.add('has-lightbox');
+    if (loaderFill instanceof HTMLElement) {
+        const progress = total > 0 ? Math.max(8, Math.min(35, ((index + 1) / total) * 100)) : 12;
+        loaderFill.style.setProperty('--lightbox-initial-loader-progress', `${Math.round(progress)}%`);
+    }
+    if (loaderCount instanceof HTMLElement) {
+        const template = loader.dataset.lightboxLoadingCountTemplate || 'Preparing photo {current} of {total}';
+        loaderCount.textContent = total > 0
+            ? template.split('{current}').join(String(index + 1)).split('{total}').join(String(total))
+            : '';
+    }
+    if (counter instanceof HTMLElement && total > 0) {
+        counter.textContent = `${index + 1} / ${total}`;
+    }
+}
+
+
+/**
+ * Hide the bootstrap progress indicator if full viewer activation fails.
+ *
+ * @returns {void}
+ */
+function hideDeferredLightboxLoader() {
+    const overlay = document.querySelector('[data-lightbox]');
+    if (!(overlay instanceof HTMLElement) || !overlay.classList.contains('is-initial-loading')) {
+        return;
+    }
+    const loader = overlay.querySelector('[data-lightbox-initial-loader]');
+    if (loader instanceof HTMLElement) {
+        loader.hidden = true;
+        loader.removeAttribute('aria-busy');
+    }
+    overlay.classList.remove('is-initial-loading');
+    overlay.hidden = true;
+    document.body.classList.remove('has-lightbox');
 }
 
 /**
@@ -189,7 +278,10 @@ export function setupGalleryLightbox() {
         }
         event.preventDefault();
         event.stopPropagation();
-        activateFullLightbox(setupToken, target).catch(() => {});
+        showDeferredLightboxLoader(target);
+        activateFullLightbox(setupToken, target).catch(() => {
+            hideDeferredLightboxLoader();
+        });
     }, {capture: true, signal: deferredLightboxState.controller.signal});
 
     document.addEventListener('publicGalleryPhotoOrderChanged', () => {

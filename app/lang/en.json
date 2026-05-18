@@ -1497,5 +1497,7 @@
   "vote.no_like": "No like",
   "admin.updates.github_api_cache_hit": "served from local ETag cache",
   "admin.updates.github_api_etag": "ETag",
-  "admin.updates.github_api_status_code": "Last HTTP status"
+  "admin.updates.github_api_status_code": "Last HTTP status",
+  "lightbox.initial_loader": "Preparing lightbox",
+  "lightbox.initial_loader_count": "Preparing photo {current} of {total}"
 }

@@ -358,6 +358,12 @@ export function setupGalleryLightbox() {
     const image = overlay.querySelector('[data-lightbox-img]');
     // stageLink stores state or configuration for the gallery front-end flow.
     const stageLink = image ? image.closest('.lightbox-stage-link') : null;
+    // initialLoader stores the progress UI shown before the first lazy item is ready.
+    const initialLoader = overlay.querySelector('[data-lightbox-initial-loader]');
+    // initialLoaderFill stores the visual bar that receives estimated progress.
+    const initialLoaderFill = overlay.querySelector('[data-lightbox-initial-loader-fill]');
+    // initialLoaderCount stores the optional loaded-range estimate for large galleries.
+    const initialLoaderCount = overlay.querySelector('[data-lightbox-initial-loader-count]');
     // lightboxMeta stores state or configuration for the gallery front-end flow.
     const lightboxMeta = overlay.querySelector('.lightbox-meta');
     // lightboxImageTransitionDuration stores state or configuration for the gallery front-end flow.
@@ -400,6 +406,8 @@ export function setupGalleryLightbox() {
     let lightboxReturnUrl = window.location.href;
     // lightboxHistoryActive stores state or configuration for the gallery front-end flow.
     let lightboxHistoryActive = false;
+    // initialLightboxLoadActive is true only before the first requested photo is displayed.
+    let initialLightboxLoadActive = false;
     // Variable `preloadedSources` stores this steps working value.
     const preloadedSources = new Set();
     // decodedLightboxImages stores state or configuration for the gallery front-end flow.
@@ -1364,6 +1372,74 @@ export function setupGalleryLightbox() {
         }
     }
 
+    /**
+     * Show or update the initial lazy-loading progress indicator.
+     *
+     * The gallery can know the total image count and the requested index, but it
+     * cannot know server-side metadata generation progress precisely. This uses
+     * a bounded estimate based on the requested metadata window so the visitor
+     * sees movement without pretending to report exact work completed.
+     *
+     * @param {number} index Zero-based requested lightbox index.
+     * @param {number} progressPercent Estimated progress between 1 and 100.
+     * @returns {void}
+     */
+    function showInitialLightboxLoader(index, progressPercent = 12) {
+        if (!(initialLoader instanceof HTMLElement)) {
+            return;
+        }
+        const safeProgress = Math.max(1, Math.min(100, Math.round(progressPercent)));
+        initialLightboxLoadActive = true;
+        initialLoader.hidden = false;
+        initialLoader.setAttribute('aria-busy', 'true');
+        overlay.classList.add('is-initial-loading');
+        if (initialLoaderFill instanceof HTMLElement) {
+            initialLoaderFill.style.setProperty('--lightbox-initial-loader-progress', `${safeProgress}%`);
+        }
+        if (initialLoaderCount instanceof HTMLElement) {
+            const safeTotal = Math.max(cards.length, lightboxTotal, 0);
+            initialLoaderCount.textContent = safeTotal > 0
+                ? i18n('lightbox.initial_loader_count', 'Preparing photo {current} of {total}', {current: index + 1, total: safeTotal})
+                : '';
+        }
+        if (counter) {
+            counter.textContent = cards.length > 0 ? `${index + 1} / ${cards.length}` : '';
+        }
+        overlay.hidden = false;
+        document.body.classList.add('has-lightbox');
+        updateLightboxViewportMode();
+    }
+
+    /**
+     * Hide the initial lazy-loading progress indicator.
+     *
+     * @returns {void}
+     */
+    function hideInitialLightboxLoader() {
+        initialLightboxLoadActive = false;
+        overlay.classList.remove('is-initial-loading');
+        if (initialLoader instanceof HTMLElement) {
+            initialLoader.hidden = true;
+            initialLoader.removeAttribute('aria-busy');
+        }
+    }
+
+    /**
+     * Estimate first-open progress from the metadata window requested for one index.
+     *
+     * @param {number} index Zero-based requested lightbox index.
+     * @returns {number} Estimated progress percentage.
+     */
+    function estimateInitialLightboxProgress(index) {
+        if (cards.length <= 0) {
+            return 12;
+        }
+        const range = lightboxWindowForIndex(index);
+        const loadedBefore = cards.reduce((count, candidate) => count + (candidate ? 1 : 0), 0);
+        const expectedAfter = Math.min(cards.length, loadedBefore + range.limit);
+        return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
+    }
+
     // Function `openAt` executes this focused behavior.
     function openAt(index) {
         if (cards.length === 0) {
@@ -1372,12 +1448,13 @@ export function setupGalleryLightbox() {
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
+        const isInitialPhotoOpen = overlay.hidden || !image.getAttribute('src') || overlay.classList.contains('is-initial-loading');
+        if (isInitialPhotoOpen) {
+            showInitialLightboxLoader(normalizedIndex, estimateInitialLightboxProgress(normalizedIndex));
+        }
         if (!card) {
             currentIndex = normalizedIndex;
             galleryDevModeState.currentIndex = normalizedIndex;
-            if (counter) {
-                counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
-            }
             fetchLightboxWindowAround(normalizedIndex).then((loaded) => {
                 if (!loaded || controller.signal.aborted || currentIndex !== normalizedIndex) {
                     return;
@@ -1385,6 +1462,9 @@ export function setupGalleryLightbox() {
                 openAt(normalizedIndex);
             });
             return;
+        }
+        if (!isInitialPhotoOpen) {
+            hideInitialLightboxLoader();
         }
         currentIndex = normalizedIndex;
         galleryDevModeState.currentIndex = normalizedIndex;
@@ -1437,10 +1517,15 @@ export function setupGalleryLightbox() {
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
-        showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately).then((wasDisplayed) => {
+        const showInitialPreview = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        const initialPreviewPromise = isInitialPhotoOpen && previewSrc
+            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(showInitialPreview)
+            : showInitialPreview();
+        initialPreviewPromise.then((wasDisplayed) => {
             if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;
             }
+            hideInitialLightboxLoader();
             swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
@@ -1482,6 +1567,7 @@ export function setupGalleryLightbox() {
         overlay.classList.remove('is-ui-visible');
         clearTouchGesture();
         updateLightboxViewportMode();
+        hideInitialLightboxLoader();
         overlay.hidden = true;
         clearPendingFullImageSwap();
         removeTransitionImage();
@@ -1609,6 +1695,9 @@ export function setupGalleryLightbox() {
         const action = actionTarget?.dataset.lightboxAction;
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
+            if (initialLightboxLoadActive) {
+                return;
+            }
             clearLightboxStageFocus();
             toggleLightboxFullscreen().finally(clearLightboxStageFocus);
             return;

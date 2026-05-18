@@ -1497,5 +1497,7 @@
   "vote.no_like": "Bez hlasu",
   "admin.updates.github_api_cache_hit": "obslouženo z lokální ETag cache",
   "admin.updates.github_api_etag": "ETag",
-  "admin.updates.github_api_status_code": "Poslední HTTP stav"
+  "admin.updates.github_api_status_code": "Poslední HTTP stav",
+  "lightbox.initial_loader": "Připravuji prohlížeč",
+  "lightbox.initial_loader_count": "Připravuji fotografii {current} z {total}"
 }
