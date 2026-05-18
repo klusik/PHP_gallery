@@ -45,6 +45,8 @@ require_once __DIR__ . '/services/database_helpers.php';
 require_once __DIR__ . '/services/public_render_profiler.php';
 // Load admin render profiling helpers before admin controllers can record dashboard timings.
 require_once __DIR__ . '/services/admin_render_profiler.php';
+// Load Admin dashboard data helpers before the dashboard controller is registered.
+require_once __DIR__ . '/services/admin_dashboard.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.
 require_once __DIR__ . '/services/custom_css.php';
 // Load theme settings and CSS default helpers after custom CSS paths are available.
