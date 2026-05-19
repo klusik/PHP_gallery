@@ -282,6 +282,8 @@ function cms_gallery(): void
     render_public_gallery_preview_toolbar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
+    // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
+    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active();
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -304,6 +306,7 @@ function cms_gallery(): void
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     if ($images) {
+        render_picture_manager_toolbar($gallery, count($children) > 0);
         render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
         $lightboxEndpointParams = ['id' => (int) $gallery['id']];
@@ -313,7 +316,7 @@ function cms_gallery(): void
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '">';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $lightboxExcludesRestrictedNsfw): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -348,10 +351,14 @@ function cms_gallery(): void
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
-        $imageCardClass = $publicPhotoReorderEnabled ? 'image-card has-public-reorder-handle' : 'image-card';
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) . '>';
+        $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
+        $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '"' : '';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
+        }
+        if ($pictureManagerEnabled) {
+            echo '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e(t('picture_manager.select_photo', 'Select photo')) . '" title="' . e(t('picture_manager.select_photo', 'Select photo')) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e(t('picture_manager.select_photo', 'Select photo')) . '</span></button>';
         }
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
@@ -438,6 +445,79 @@ function render_public_page_reorder_toolbar(string $kind, array $gallery, array 
     echo '<div><strong>' . e(t('public.reorder.move_visible_items', 'Move visible {items}', ['items' => $label])) . '</strong><p>' . e(t('public.reorder.visible_page_help', 'Drag only the cards shown on this page. Other pagination pages are not touched.')) . '</p></div>';
     echo '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">' . e(t('public.reorder.ready', 'Ready.')) . '</span>';
     echo '</div>';
+}
+
+/**
+ * Render the logged-in public gallery Picture manager toolbar.
+ *
+ * The toolbar keeps discovery visible instead of relying only on hidden
+ * modifier-key gestures. It intentionally stays on the public gallery page and
+ * posts to small JSON endpoints that delegate mutation work to services.
+ */
+function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTargets): void
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return;
+    }
+
+    // $galleryId stores the source gallery ID for all manager actions.
+    $galleryId = (int) $gallery['id'];
+    // $suggestedDestinationId stores the most likely child gallery destination for typeahead prefill.
+    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    // $dropHelp stores the drag-and-drop hint appropriate for the current visible page.
+    $dropHelp = $hasVisibleDropTargets
+        ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
+        : t('picture_manager.drop_help_hidden', 'No subgallery target is visible on this page. Use the destination list below.');
+
+    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e(csrf_token()) . '" data-move-url="' . e(url_for('picture_manager_move')) . '" data-copy-url="' . e(url_for('picture_manager_copy')) . '" data-create-url="' . e(url_for('picture_manager_create_gallery')) . '">';
+    echo '<div class="picture-manager-summary">';
+    echo '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
+    echo '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
+    echo '<span><strong>' . e(t('picture_manager.title', 'Picture manager')) . '</strong><small>' . e(t('picture_manager.collapsed_help', 'Select, move, copy, or create galleries from visible photos.')) . '</small></span>';
+    echo '</button>';
+    echo '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">' . e(t('picture_manager.none_selected', 'No photos selected.')) . '</span>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-panel" data-picture-manager-panel>';
+    echo '<div class="picture-manager-heading">';
+    echo '<div><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-actions">';
+    echo '<button type="button" class="button secondary" data-picture-manager-select-all>' . e(t('picture_manager.select_all', 'Select all')) . '</button>';
+    echo '<button type="button" class="button secondary" data-picture-manager-clear disabled>' . e(t('picture_manager.clear_selection', 'Clear selection')) . '</button>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-action-grid">';
+    echo '<div class="picture-manager-action-card">';
+    echo '<label for="picture-manager-destination-' . $galleryId . '">' . e(t('picture_manager.move_or_copy_to', 'Move or copy selected to gallery')) . '</label>';
+    echo '<div class="picture-manager-inline-fields">';
+    echo render_gallery_search_picker('', 0, $galleryId, [
+        'id' => 'picture-manager-destination-' . $galleryId,
+        'placeholder' => t('picture_manager.search_destination', 'Search target gallery'),
+        'prefill_gallery_id' => $suggestedDestinationId,
+        'hidden_attributes' => ['data-picture-manager-destination' => ''],
+    ]);
+    echo '<button type="button" class="button" data-picture-manager-move disabled>' . e(t('picture_manager.move_selected', 'Move selected')) . '</button>';
+    echo '<button type="button" class="button secondary" data-picture-manager-copy disabled>' . e(t('picture_manager.copy_selected', 'Copy selected')) . '</button>';
+    echo '</div>';
+    echo '<p>' . e(t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.')) . '</p>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-action-card">';
+    echo '<label for="picture-manager-new-title-' . $galleryId . '">' . e(t('picture_manager.create_from_selection', 'Create gallery from selected photos')) . '</label>';
+    echo '<div class="picture-manager-inline-fields">';
+    echo '<input id="picture-manager-new-title-' . $galleryId . '" type="text" data-picture-manager-new-title placeholder="' . e(t('picture_manager.new_gallery_title', 'New gallery title')) . '">';
+    echo '<input type="text" data-picture-manager-new-folder placeholder="' . e(t('picture_manager.optional_folder_name', 'Optional folder name')) . '">';
+    echo '<button type="button" class="button" data-picture-manager-create disabled>' . e(t('picture_manager.create_gallery', 'Create gallery')) . '</button>';
+    echo '</div>';
+    echo '<p>' . e(t('picture_manager.copy_warning', 'This copies selected photos into the new child gallery. Originals stay here.')) . '</p>';
+    echo '</div>';
+    echo '</div>';
+
+    echo '<p class="picture-manager-status" data-picture-manager-status aria-live="polite">' . e(t('picture_manager.ready', 'Ready.')) . '</p>';
+    echo '</div>';
+    echo '</section>';
 }
 
 function render_public_gallery_preview_toolbar(array $gallery): void

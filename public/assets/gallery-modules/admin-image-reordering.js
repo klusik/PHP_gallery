@@ -27,8 +27,10 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-05-19
  */
+
+import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
 
 /**
  * Enables visible pointer ordering for the Admin edit-gallery image table.
@@ -211,70 +213,26 @@ export function setupAdminImageReordering() {
     }
 
     /**
-     * Copies current column widths from the real row into the ghost row.
-     *
-     * Table cells otherwise shrink to their content when cloned into a fixed
-     * table outside the original layout. Explicit widths keep the ghost row
-     * visually aligned with the Admin table while it follows the pointer.
-     *
-     * @param {HTMLTableRowElement} sourceRow Real row being reordered.
-     * @param {HTMLTableRowElement} cloneRow Cloned row shown inside the ghost table.
-     * @returns {void}
-     */
-    function copyCellWidths(sourceRow, cloneRow) {
-        const sourceCells = Array.from(sourceRow.children);
-        const cloneCells = Array.from(cloneRow.children);
-        sourceCells.forEach((cell, index) => {
-            const cloneCell = cloneCells[index];
-            if (!cloneCell) {
-                return;
-            }
-            cloneCell.style.width = `${cell.getBoundingClientRect().width}px`;
-        });
-    }
-
-    /**
      * Creates a placeholder row with the same height and column count as the dragged row.
      *
      * @param {HTMLTableRowElement} row Real row being reordered.
-     * @returns {HTMLTableRowElement} Placeholder inserted into the table body.
+     * @returns {HTMLTableRowElement|null} Placeholder inserted into the table body.
      */
     function createPlaceholder(row) {
-        const placeholder = document.createElement('tr');
-        placeholder.className = 'admin-image-order-placeholder';
-        placeholder.setAttribute('aria-hidden', 'true');
-
-        const cell = document.createElement('td');
-        cell.colSpan = Math.max(1, row.children.length);
-        cell.style.height = `${row.getBoundingClientRect().height}px`;
-        placeholder.appendChild(cell);
-        return placeholder;
+        return createTableDragPlaceholder(row, {className: 'admin-image-order-placeholder'});
     }
 
     /**
      * Creates the fixed-position visual copy used while dragging.
      *
      * @param {HTMLTableRowElement} row Real row being reordered.
-     * @returns {HTMLTableElement} Ghost table appended to the document body.
+     * @returns {HTMLTableElement|null} Ghost table appended to the document body.
      */
     function createGhostTable(row) {
-        const rowBox = row.getBoundingClientRect();
-        const ghost = document.createElement('table');
-        const ghostBody = document.createElement('tbody');
-        const clonedRow = row.cloneNode(true);
-
-        copyCellWidths(row, clonedRow);
-        clonedRow.classList.add('is-ghost-row');
-        clonedRow.removeAttribute('data-admin-image-order-row');
-        clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
-
-        ghost.className = 'admin-image-order-ghost';
-        ghost.style.width = `${rowBox.width}px`;
-        ghost.style.left = `${rowBox.left}px`;
-        ghost.appendChild(ghostBody);
-        ghostBody.appendChild(clonedRow);
-        document.body.appendChild(ghost);
-        return ghost;
+        return createTableDragGhost(row, {
+            className: 'admin-image-order-ghost',
+            removeAttributes: ['data-admin-image-order-row'],
+        });
     }
 
     /**
@@ -284,10 +242,7 @@ export function setupAdminImageReordering() {
      * @returns {void}
      */
     function moveGhost(clientY) {
-        if (!ghostTable) {
-            return;
-        }
-        ghostTable.style.top = `${clientY - pointerOffsetY}px`;
+        moveTableDragGhostY(ghostTable, clientY, pointerOffsetY);
     }
 
     /**

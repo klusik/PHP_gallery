@@ -1373,3 +1373,16 @@ body.has-admin-side-panel {
     background: color-mix(in srgb, var(--field, #f8fafc) 78%, var(--accent, #2563eb) 10%);
     font-size: 0.88em;
 }
+
+.admin-image-move-target .gallery-search-picker {
+    width: 100%;
+    min-width: min(100%, 18rem);
+}
+
+.admin-image-move-target .gallery-search-picker-field input[type="text"] {
+    width: 100%;
+    min-height: 2.85rem;
+    border-color: #cad5e0;
+    border-radius: 10px;
+    background: #ffffff;
+}

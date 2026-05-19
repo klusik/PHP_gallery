@@ -42,6 +42,7 @@ require_once __DIR__ . '/controllers/theme_assets.php';
 require_once __DIR__ . '/controllers/http_helpers.php';
 require_once __DIR__ . '/controllers/public_gallery.php';
 require_once __DIR__ . '/controllers/gallery_lightbox.php';
+require_once __DIR__ . '/controllers/picture_manager.php';
 require_once __DIR__ . '/controllers/public_media.php';
 require_once __DIR__ . '/controllers/admin_auth.php';
 require_once __DIR__ . '/controllers/admin_integrity.php';

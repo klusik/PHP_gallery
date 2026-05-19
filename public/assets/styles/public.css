@@ -1,4 +1,4 @@
-﻿/* Shared navigation and buttons */
+/* Shared navigation and buttons */
 
 .site-header,
 .site-main,
@@ -807,6 +807,272 @@ td {
     }
 }
 
+
+/* Picture manager for logged-in public gallery views. */
+.picture-manager-toolbar {
+    display: grid;
+    gap: 0.9rem;
+    margin: 1rem 0;
+    padding: clamp(0.75rem, 1.8vw, 1rem);
+    border: 1px solid color-mix(in srgb, var(--accent-dark) 28%, var(--line));
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+    box-shadow: 0 14px 34px rgba(54, 38, 20, 0.08);
+}
+
+.picture-manager-summary,
+.picture-manager-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.picture-manager-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+    padding: 0.25rem 0.35rem;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.picture-manager-toggle strong {
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 1rem;
+}
+
+.picture-manager-toggle small {
+    display: block;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.35;
+}
+
+.picture-manager-toggle-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--panel) 86%, #ffffff 14%);
+    color: var(--accent-dark);
+    transition: transform 140ms ease;
+}
+
+.picture-manager-toolbar.is-picture-manager-expanded .picture-manager-toggle-icon {
+    transform: rotate(90deg);
+}
+
+.picture-manager-panel {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.picture-manager-panel[hidden] {
+    display: none;
+}
+
+.picture-manager-heading p,
+.picture-manager-action-card p,
+.picture-manager-status {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.picture-manager-heading p + p {
+    margin-top: 0.2rem;
+}
+
+.picture-manager-count {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--panel) 86%, #ffffff 14%);
+    color: var(--accent-dark);
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.picture-manager-actions,
+.picture-manager-inline-fields {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.picture-manager-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+}
+
+.picture-manager-action-card {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
+    background: color-mix(in srgb, var(--panel) 88%, #ffffff 12%);
+}
+
+.picture-manager-action-card label {
+    margin: 0;
+}
+
+.picture-manager-inline-fields > select,
+.picture-manager-inline-fields > input {
+    flex: 1 1 14rem;
+    min-width: min(100%, 12rem);
+}
+
+.picture-manager-inline-fields > button {
+    flex: 0 0 auto;
+}
+
+.picture-manager-status[data-state="ok"] {
+    color: color-mix(in srgb, var(--accent-dark) 72%, #166534);
+    font-weight: 700;
+}
+
+.picture-manager-status[data-state="error"] {
+    color: var(--danger, #b42318);
+    font-weight: 700;
+}
+
+.picture-manager-status[data-state="working"] {
+    color: var(--accent-dark);
+    font-weight: 700;
+}
+
+.image-card.has-picture-manager-select {
+    isolation: isolate;
+}
+
+.public-page .image-stage {
+    position: relative;
+    overflow: hidden;
+}
+
+.picture-manager-select-button {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.55rem;
+    z-index: 16;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--accent-dark) 36%, var(--line));
+    background: color-mix(in srgb, var(--panel) 82%, #ffffff 18%);
+    color: var(--accent-dark);
+    box-shadow: 0 8px 22px rgba(54, 38, 20, 0.16);
+}
+
+.picture-manager-select-button:hover,
+.picture-manager-select-button:focus-visible,
+.image-card.is-picture-manager-selected .picture-manager-select-button {
+    background: var(--accent);
+    color: #fffdf8;
+    border-color: var(--accent-dark);
+}
+
+.public-page .image-card.has-picture-manager-select .public-photo-reorder-handle {
+    left: 3.15rem;
+    max-width: calc(100% - 3.7rem);
+}
+
+.public-page .image-card.has-picture-manager-select .public-admin-delete-form-card,
+.public-page .image-card.has-picture-manager-select .public-admin-edit-button-card {
+    top: 3.05rem;
+}
+
+.image-card.is-picture-manager-selected {
+    outline: 3px solid color-mix(in srgb, var(--accent) 72%, #ffffff);
+    outline-offset: 3px;
+    box-shadow: 0 16px 42px rgba(54, 38, 20, 0.16);
+}
+
+.image-card.is-picture-manager-selected .image-stage::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.image-card[draggable="true"] {
+    cursor: grab;
+}
+
+body.picture-manager-drag-active .picture-manager-drop-target {
+    outline: 2px dashed color-mix(in srgb, var(--accent-dark) 64%, var(--line));
+    outline-offset: 4px;
+}
+
+.picture-manager-drop-target.is-picture-manager-drop-ready {
+    transition: transform 140ms ease, box-shadow 140ms ease, outline-color 140ms ease;
+}
+
+.picture-manager-drop-target.is-picture-manager-drop-hover {
+    transform: translateY(-2px);
+    outline-color: var(--accent-dark);
+    box-shadow: 0 18px 44px rgba(54, 38, 20, 0.18);
+}
+
+button:disabled,
+.button[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.56;
+}
+
+@media (max-width: 760px) {
+    .picture-manager-summary,
+    .picture-manager-heading,
+    .picture-manager-actions,
+    .picture-manager-inline-fields {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .picture-manager-toggle {
+        width: 100%;
+    }
+
+    .picture-manager-count,
+    .picture-manager-inline-fields > button,
+    .picture-manager-actions > button {
+        width: 100%;
+        text-align: center;
+    }
+
+    .picture-manager-action-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .picture-manager-inline-fields > select,
+    .picture-manager-inline-fields > input {
+        flex-basis: auto;
+        min-width: 0;
+    }
+}
+
 /* Admin-only public render timing panel. */
 .public-render-profile {
     margin: 1.5rem auto;
@@ -866,4 +1132,123 @@ td {
     padding: 0 1rem 1rem;
     color: #64748b;
     font-size: 0.8rem;
+}
+
+/* Shared searchable gallery destination picker. */
+.gallery-search-picker {
+    position: relative;
+    display: grid;
+    gap: 0.35rem;
+    min-width: min(100%, 18rem);
+    flex: 1 1 18rem;
+}
+
+.gallery-search-picker-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.gallery-search-picker-field input[type="text"] {
+    width: 100%;
+    min-height: 2.75rem;
+    padding-right: 2.5rem;
+    border: 1px solid var(--line, #cad5e0);
+    border-radius: min(var(--radius, 16px), 12px);
+    background: var(--panel, #ffffff);
+    color: var(--text, #1e2a3a);
+}
+
+.gallery-search-picker-field input[type="text"]:focus {
+    outline: 3px solid color-mix(in srgb, var(--accent, #3b82f6) 24%, transparent);
+    border-color: color-mix(in srgb, var(--accent-dark, #1d4ed8) 56%, var(--line, #cad5e0));
+}
+
+.gallery-search-picker-clear {
+    position: absolute;
+    right: 0.35rem;
+    width: 1.85rem;
+    height: 1.85rem;
+    min-width: 1.85rem;
+    min-height: 1.85rem;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--panel, #ffffff) 70%, var(--line, #cad5e0));
+    color: var(--muted, #65758b);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.gallery-search-picker-clear:hover,
+.gallery-search-picker-clear:focus-visible {
+    background: var(--accent, #3b82f6);
+    color: #ffffff;
+}
+
+.gallery-search-picker-menu {
+    position: absolute;
+    z-index: 80;
+    top: calc(100% + 0.25rem);
+    left: 0;
+    right: 0;
+    display: grid;
+    max-height: min(22rem, 60vh);
+    overflow: auto;
+    padding: 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--accent-dark, #1d4ed8) 28%, var(--line, #cad5e0));
+    border-radius: min(var(--radius, 16px), 14px);
+    background: var(--panel, #ffffff);
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+}
+
+.gallery-search-picker-menu[hidden] {
+    display: none;
+}
+
+.gallery-search-picker-option {
+    display: grid;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.62rem 0.75rem 0.62rem calc(0.75rem + (var(--gallery-picker-depth, 0) * 0.9rem));
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text, #1e2a3a);
+    text-align: left;
+    cursor: pointer;
+}
+
+.gallery-search-picker-option:hover,
+.gallery-search-picker-option:focus-visible,
+.gallery-search-picker-option.is-active {
+    background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent);
+    color: var(--accent-dark, #1d4ed8);
+}
+
+.gallery-search-picker-option-title {
+    font-weight: 800;
+}
+
+.gallery-search-picker-option-path,
+.gallery-search-picker-help,
+.gallery-search-picker-empty {
+    color: var(--muted, #65758b);
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.gallery-search-picker-empty {
+    margin: 0;
+    padding: 0.75rem;
+}
+
+.gallery-search-picker.is-gallery-search-uncommitted .gallery-search-picker-help {
+    color: var(--accent-dark, #1d4ed8);
+    font-weight: 700;
+}
+
+.picture-manager-inline-fields > .gallery-search-picker {
+    flex: 1 1 22rem;
 }

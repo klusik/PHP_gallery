@@ -891,8 +891,8 @@ function render_admin_image_bulk_toolbar(array $gallery): void
 {
     // $galleryId stores the gallery currently being edited.
     $galleryId = (int) $gallery['id'];
-    // $destinationOptions stores all galleries except the current source gallery.
-    $destinationOptions = gallery_options_for_select(0, $galleryId);
+    // $suggestedDestinationId stores a likely child gallery destination for the shared searchable picker.
+    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
     // $newGalleryParentOptions stores the selectable parent hierarchy for move-to-new-gallery actions.
     $newGalleryParentOptions = gallery_options_for_select($galleryId);
 
@@ -920,7 +920,11 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_new')) . '</strong><small>' . e(t('admin.gallery_editor.move_new_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
     echo '</div>';
     echo '<div class="admin-image-move-targets">';
-    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span><select name="destination_gallery_id"><option value="0">' . e(t('admin.gallery_editor.choose_existing_gallery')) . '</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
+    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span>' . render_gallery_search_picker('destination_gallery_id', 0, $galleryId, [
+        'id' => 'admin-image-move-destination-' . $galleryId,
+        'placeholder' => t('admin.gallery_editor.search_destination_gallery', 'Search destination gallery'),
+        'prefill_gallery_id' => $suggestedDestinationId,
+    ]) . '<small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
     echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>' . e(t('admin.gallery_editor.parent_gallery')) . '</span><select name="new_gallery_parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent')) . '</option>' . $newGalleryParentOptions . '</select></label><label><span>' . e(t('admin.gallery_editor.new_gallery_title')) . '</span><input type="text" name="new_gallery_title" placeholder="' . e(t('admin.gallery_editor.example_gallery_title')) . '"></label><label><span>' . e(t('admin.gallery_editor.optional_folder_slug')) . '</span><input type="text" name="new_gallery_folder_name" placeholder="' . e(t('admin.gallery_editor.derive_from_title')) . '"></label><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.new_gallery_move_help')) . '</small></div>';
     echo '</div>';
     echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>' . e(t('admin.gallery_editor.cancel')) . '</button><div><strong>' . e(t('admin.gallery_editor.move_summary')) . '</strong><p data-admin-image-move-summary>' . e(t('admin.gallery_editor.move_summary_empty')) . '</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>' . e(t('admin.gallery_editor.move_selected_now')) . '</button></div>';

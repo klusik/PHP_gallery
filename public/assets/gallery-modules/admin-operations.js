@@ -27,14 +27,14 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-05-19
  */
 
 export { setupAdminTabs } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260512-modular-admin-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260518-api-token-panel-v5';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260519-gallery-picker-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260512-modular-admin-v1';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
 export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20260512-modular-admin-v1';
-export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
-export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
+export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260519-public-drop-refactor-v1';
+export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260519-drag-ghost-v1';

@@ -30,7 +30,8 @@
  *   2026-05-12
  */
 
-import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260509-image-move-v2';
+import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
+import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260518-initial-loader-v1';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
@@ -505,6 +506,7 @@ function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupAdminPanelRangeDisplays(body);
     setupAdminPanelThumbnailBoundControls(body);
     setupTagSuggestions(body);
+    setupGallerySearchPickers();
     setupImageBulkMoveFields();
     if (workflow.name === 'gallery-edit') {
         prepareAdminPanelEditForm(body.querySelector('.admin-edit-gallery-form'), workflow.name, sourceUrl);
@@ -1009,9 +1011,9 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
             body.set('return_tab', returnTabInput.value);
         }
         if (action === 'move_existing') {
-            const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
-            if (destinationSelect instanceof HTMLSelectElement) {
-                body.set('destination_gallery_id', destinationSelect.value);
+            const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
+            if (destinationInput instanceof HTMLInputElement) {
+                body.set('destination_gallery_id', destinationInput.value);
             }
         }
         if (action === 'move_new') {

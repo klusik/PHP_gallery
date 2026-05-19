@@ -65,8 +65,11 @@ require_once __DIR__ . '/services/gallery_count_badges.php';
 require_once __DIR__ . '/services/gallery_dates.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.
 require_once __DIR__ . '/services/gallery_grid.php';
+// Load shared gallery picker data helpers before public and admin renderers build destination controls.
+require_once __DIR__ . '/services/gallery_picker.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
+require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
