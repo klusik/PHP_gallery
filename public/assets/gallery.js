@@ -61,7 +61,7 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260518-initial-loader-v2';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260519-slideshow-ui-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,

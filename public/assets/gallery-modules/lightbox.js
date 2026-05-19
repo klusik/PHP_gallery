@@ -366,8 +366,12 @@ export function setupGalleryLightbox() {
     const initialLoaderCount = overlay.querySelector('[data-lightbox-initial-loader-count]');
     // lightboxMeta stores state or configuration for the gallery front-end flow.
     const lightboxMeta = overlay.querySelector('.lightbox-meta');
-    // lightboxImageTransitionDuration stores state or configuration for the gallery front-end flow.
-    const lightboxImageTransitionDuration = 80;
+    // lightboxDefaultTransitionDuration stores the quick manual viewer blend duration.
+    const lightboxDefaultTransitionDuration = 80;
+    // lightboxSlideshowVisibleDuration stores how long one slideshow image remains stable before the next blend starts.
+    const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
+    // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
+    const lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
     // lightboxPreviewPreloadRadius stores state or configuration for the gallery front-end flow.
     const lightboxPreviewPreloadRadius = 8;
     // lightboxFullPreloadRadius stores state or configuration for the gallery front-end flow.
@@ -414,6 +418,10 @@ export function setupGalleryLightbox() {
     const decodedLightboxImages = new Map();
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
+    // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
+    let lightboxSlideshowTimer = null;
+    // lightboxSlideshowActive stores whether slideshow mode owns automatic fullscreen advancing.
+    let lightboxSlideshowActive = false;
     // touchGesture stores state or configuration for the gallery front-end flow.
     let touchGesture = null;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
@@ -458,6 +466,7 @@ export function setupGalleryLightbox() {
         cards = [];
         clearPendingFullImageSwap();
         clearLightboxHudTimer();
+        stopLightboxSlideshow(false);
         removeTransitionImage();
         preloadedSources.clear();
         lightboxPendingWindows.clear();
@@ -505,7 +514,7 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
-        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled');
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow');
         overlay.removeAttribute('data-current-image-id');
         overlay.removeAttribute('data-current-title');
         if (image) {
@@ -536,6 +545,39 @@ export function setupGalleryLightbox() {
             window.clearTimeout(pendingFullImageSwapTimer);
             pendingFullImageSwapTimer = null;
         }
+    }
+
+    /**
+     * Read one numeric lightbox timing setting from the server-rendered overlay.
+     *
+     * The current markup only exposes defaults. Keeping the values in data
+     * attributes makes future admin settings possible without changing the
+     * slideshow scheduler again.
+     *
+     * @param {string} datasetKey Overlay dataset key to read.
+     * @param {number} fallbackMs Fallback duration in milliseconds.
+     * @param {number} minimumMs Lowest accepted duration in milliseconds.
+     * @param {number} maximumMs Highest accepted duration in milliseconds.
+     * @returns {number} Safe duration in milliseconds.
+     */
+    function readLightboxTimingSetting(datasetKey, fallbackMs, minimumMs, maximumMs) {
+        const rawValue = Number.parseInt(overlay.dataset[datasetKey] || '', 10);
+        if (!Number.isFinite(rawValue)) {
+            return fallbackMs;
+        }
+        return Math.max(minimumMs, Math.min(maximumMs, rawValue));
+    }
+
+    /**
+     * Return the transition duration for the next image blend.
+     *
+     * Manual navigation keeps the existing snappy transition. Slideshow mode
+     * uses the slower configurable blend requested for automatic playback.
+     *
+     * @returns {number} Transition duration in milliseconds.
+     */
+    function currentLightboxTransitionDuration() {
+        return lightboxSlideshowActive ? lightboxSlideshowTransitionDuration : lightboxDefaultTransitionDuration;
     }
 
     /**
@@ -1258,21 +1300,19 @@ export function setupGalleryLightbox() {
             transitionNode.alt = '';
             transitionNode.setAttribute('aria-hidden', 'true');
             transitionNode.className = 'lightbox-transition-image';
+            // transitionDuration stores the exact duration used for this single blend.
+            // Capture it before scheduling frames so stopping slideshow mode mid-transition
+            // cannot shorten the active automatic picture blend.
+            const transitionDuration = currentLightboxTransitionDuration();
+            transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
             transitionImage = transitionNode;
             stageLink.append(transitionNode);
+            // Force the browser to commit the initial opacity before enabling the
+            // visible state. This makes slideshow blends reliable in fullscreen,
+            // especially when the decoded image is already hot in browser cache.
+            transitionNode.getBoundingClientRect();
             requestAnimationFrame(() => {
-                if (
-                    currentIndex !== index ||
-                    activeLightboxImageToken !== token ||
-                    activeLightboxTransitionToken !== transitionToken ||
-                    transitionImage !== transitionNode
-                ) {
-                    removeTransitionImage(transitionNode);
-                    resolve(false);
-                    return;
-                }
-                transitionNode.classList.add('is-visible');
-                window.setTimeout(() => {
+                requestAnimationFrame(() => {
                     if (
                         currentIndex !== index ||
                         activeLightboxImageToken !== token ||
@@ -1283,12 +1323,25 @@ export function setupGalleryLightbox() {
                         resolve(false);
                         return;
                     }
-                    applyLightboxImageSource(src, altText);
-                    requestAnimationFrame(() => {
-                        removeTransitionImage(transitionNode);
-                        resolve(true);
-                    });
-                }, lightboxImageTransitionDuration);
+                    transitionNode.classList.add('is-visible');
+                    window.setTimeout(() => {
+                        if (
+                            currentIndex !== index ||
+                            activeLightboxImageToken !== token ||
+                            activeLightboxTransitionToken !== transitionToken ||
+                            transitionImage !== transitionNode
+                        ) {
+                            removeTransitionImage(transitionNode);
+                            resolve(false);
+                            return;
+                        }
+                        applyLightboxImageSource(src, altText);
+                        requestAnimationFrame(() => {
+                            removeTransitionImage(transitionNode);
+                            resolve(true);
+                        });
+                    }, transitionDuration);
+                });
             });
         })).catch(() => false);
     }
@@ -1440,11 +1493,19 @@ export function setupGalleryLightbox() {
         return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
     }
 
-    // Function `openAt` executes this focused behavior.
-    function openAt(index) {
+    /**
+     * Open the lightbox at a specific index.
+     *
+     * @param {number} index Zero-based image index.
+     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
+     * @returns {void}
+     */
+    function openAt(index, options = {}) {
         if (cards.length === 0) {
             return;
         }
+        const revealHud = options.revealHud !== false;
+        clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
@@ -1527,6 +1588,7 @@ export function setupGalleryLightbox() {
             }
             hideInitialLightboxLoader();
             swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
+            scheduleLightboxSlideshowNext();
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
@@ -1541,27 +1603,131 @@ export function setupGalleryLightbox() {
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
-        showLightboxHud();
+        if (revealHud) {
+            showLightboxHud();
+        }
         telemetryPhotoOpened(card);
     }
 
     /**
      * Handles step behavior for the gallery UI.
-     * @param {*} offset Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @param {number} offset Relative image offset.
+     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
+     * @returns {void}
      */
-    function step(offset) {
+    function step(offset, options = {}) {
         if (cards.length === 0) {
             return;
         }
         // nextIndex stores state or configuration for the gallery front-end flow.
         const nextIndex = (currentIndex + offset + cards.length) % cards.length;
-        openAt(nextIndex);
+        openAt(nextIndex, options);
+    }
+
+    /**
+     * Clears any pending automatic slideshow advance.
+     *
+     * @returns {void}
+     */
+    function clearLightboxSlideshowTimer() {
+        if (lightboxSlideshowTimer) {
+            window.clearTimeout(lightboxSlideshowTimer);
+            lightboxSlideshowTimer = null;
+        }
+    }
+
+    /**
+     * Synchronize visible slideshow controls and overlay state.
+     *
+     * @returns {void}
+     */
+    function syncLightboxSlideshowControls() {
+        overlay.classList.toggle('is-slideshow', lightboxSlideshowActive);
+        overlay.querySelectorAll('[data-lightbox-action="slideshow"]').forEach((button) => {
+            if (!(button instanceof HTMLElement)) {
+                return;
+            }
+            button.classList.toggle('is-active', lightboxSlideshowActive);
+            button.setAttribute('aria-pressed', lightboxSlideshowActive ? 'true' : 'false');
+        });
+    }
+
+    /**
+     * Schedule the next automatic slideshow step after the stable image time.
+     *
+     * @returns {void}
+     */
+    function scheduleLightboxSlideshowNext() {
+        clearLightboxSlideshowTimer();
+        if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1) {
+            return;
+        }
+        lightboxSlideshowTimer = window.setTimeout(() => {
+            lightboxSlideshowTimer = null;
+            if (!lightboxSlideshowActive || overlay.hidden) {
+                return;
+            }
+            hideLightboxHud();
+            step(1, {revealHud: false});
+        }, lightboxSlideshowVisibleDuration);
+    }
+
+    /**
+     * Start fullscreen slideshow mode.
+     *
+     * @returns {Promise<void>} Resolves after fullscreen entry has been requested.
+     */
+    async function startLightboxSlideshow() {
+        if (lightboxSlideshowActive) {
+            scheduleLightboxSlideshowNext();
+            return;
+        }
+        lightboxSlideshowActive = true;
+        syncLightboxSlideshowControls();
+        if (!isLightboxFullscreen()) {
+            await enterLightboxFullscreen();
+        }
+        showLightboxHud();
+        scheduleLightboxSlideshowNext();
+    }
+
+    /**
+     * Stop slideshow mode while optionally keeping fullscreen active.
+     *
+     * @param {boolean} syncControls Whether button state should be refreshed immediately.
+     * @returns {void}
+     */
+    function stopLightboxSlideshow(syncControls = true) {
+        clearLightboxSlideshowTimer();
+        if (!lightboxSlideshowActive) {
+            return;
+        }
+        lightboxSlideshowActive = false;
+        if (syncControls) {
+            syncLightboxSlideshowControls();
+        } else {
+            overlay.classList.remove('is-slideshow');
+        }
+    }
+
+    /**
+     * Toggle slideshow mode from the toolbar, HUD, or S keyboard shortcut.
+     *
+     * @returns {Promise<void>} Resolves after any fullscreen state change request.
+     */
+    async function toggleLightboxSlideshow() {
+        if (lightboxSlideshowActive) {
+            stopLightboxSlideshow();
+            showLightboxHud();
+            return;
+        }
+        await startLightboxSlideshow();
     }
 
     // Function `close` executes this focused behavior.
     function close() {
         telemetryPhotoClosed();
+        stopLightboxSlideshow();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
         overlay.classList.remove('is-ui-visible');
@@ -1719,6 +1885,11 @@ export function setupGalleryLightbox() {
             toggleLightboxFullscreen();
             return;
         }
+        if (action === 'slideshow') {
+            event.preventDefault();
+            toggleLightboxSlideshow();
+            return;
+        }
         // mapButton stores state or configuration for the gallery front-end flow.
         const mapButton = target?.closest('[data-lightbox-map]');
         if (mapButton) {
@@ -1776,9 +1947,11 @@ export function setupGalleryLightbox() {
             close();
         }
         if (event.key === 'ArrowLeft') {
+            event.preventDefault();
             step(-1);
         }
         if (event.key === 'ArrowRight') {
+            event.preventDefault();
             step(1);
         }
         if (event.key === 'ArrowUp') {
@@ -1788,6 +1961,10 @@ export function setupGalleryLightbox() {
         if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'm') {
             event.preventDefault();
             toggleCurrentLightboxMap();
+        }
+        if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            toggleLightboxSlideshow();
         }
         if (event.key === 'f' || (event.key === 'F' && event.shiftKey === false) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f')) {
             event.preventDefault();
@@ -1832,6 +2009,7 @@ export function setupGalleryLightbox() {
             browserFullscreen: Boolean(document.fullscreenElement),
         });
         if (isLightboxFullscreen()) {
+            stopLightboxSlideshow();
             await exitLightboxFullscreen();
             debugLightbox('toggle:exit');
             return;
@@ -1874,6 +2052,7 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function exitLightboxFullscreen() {
+        stopLightboxSlideshow();
         overlay.classList.remove('is-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         closeLightboxMapSplit();
@@ -1902,6 +2081,7 @@ export function setupGalleryLightbox() {
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
             document.body.classList.remove('has-mobile-lightbox');
+            stopLightboxSlideshow();
             clearLightboxStageFocus();
             debugLightbox('sync:browser-exit');
             return;
@@ -1924,6 +2104,17 @@ export function setupGalleryLightbox() {
             clearTimeout(fullscreenHideTimer);
             fullscreenHideTimer = null;
         }
+    }
+
+
+    /**
+     * Hide the fullscreen controls immediately without stopping slideshow playback.
+     *
+     * @returns {void}
+     */
+    function hideLightboxHud() {
+        clearLightboxHudTimer();
+        overlay.classList.remove('is-ui-visible');
     }
 
     /**

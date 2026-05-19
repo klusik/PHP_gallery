@@ -1370,6 +1370,8 @@
   "lightbox.close_map": "Zavřít mapu",
   "lightbox.close_map_split": "Zavřít oddělenou mapu",
   "lightbox.fullscreen": "celá obrazovka",
+  "lightbox.slideshow": "prezentace",
+  "lightbox.toggle_slideshow": "Přepnout prezentaci",
   "lightbox.map": "Mapa",
   "lightbox.no_gps_detail": "Tato fotografie nemá souřadnice, takže pro ni mapa v režimu celé obrazovky není dostupná.",
   "lightbox.no_gps_title": "Fotografie nemá GPS EXIF data",

@@ -79,6 +79,7 @@
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-slideshow-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     display: inline-flex;
     align-items: center;
@@ -100,6 +101,12 @@
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button[hidden] {
     display: none !important;
 }
+.lightbox-toolbar > .lightbox-slideshow-link.is-active,
+.lightbox-slideshow-button.is-active {
+    border-color: rgba(255, 253, 248, 0.92);
+    background: rgba(255, 253, 248, 0.24);
+    box-shadow: 0 0 0 3px rgba(255, 253, 248, 0.16);
+}
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-meta {
     max-width: min(42rem, calc(100% - 2rem));
     padding: 0.32rem 0.48rem;
@@ -113,6 +120,7 @@
 }
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-slideshow-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
     width: auto;
     min-width: 0;
@@ -126,6 +134,12 @@
     position: absolute;
     top: 1rem;
     left: 1rem;
+    min-width: 2.6rem;
+}
+.lightbox-slideshow-button {
+    position: absolute;
+    top: 1rem;
+    left: 4rem;
     min-width: 2.6rem;
 }
 .lightbox-mobile-fullscreen-button {
@@ -350,7 +364,8 @@
 .lightbox-transition-image {
     opacity: 0;
     pointer-events: none;
-    transition: opacity 80ms ease;
+    transition: opacity var(--lightbox-transition-duration, 80ms) ease;
+    will-change: opacity;
 }
 .lightbox-transition-image.is-visible {
     opacity: 1;

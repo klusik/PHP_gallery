@@ -1370,6 +1370,8 @@
   "lightbox.close_map": "Close map",
   "lightbox.close_map_split": "Close map split",
   "lightbox.fullscreen": "fullscreen",
+  "lightbox.slideshow": "slideshow",
+  "lightbox.toggle_slideshow": "Toggle slideshow",
   "lightbox.map": "Map",
   "lightbox.no_gps_detail": "This photo has no coordinates, so the fullscreen map is unavailable for this item.",
   "lightbox.no_gps_title": "No GPS EXIF data",
