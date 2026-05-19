@@ -117,6 +117,7 @@ export function setupPictureManager() {
     function setPanelExpanded(expanded) {
         toolbar.classList.toggle('is-picture-manager-collapsed', !expanded);
         toolbar.classList.toggle('is-picture-manager-expanded', expanded);
+        toolbar.dataset.pictureManagerExpanded = expanded ? '1' : '0';
         if (toggleButton instanceof HTMLButtonElement) {
             toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         }
@@ -311,6 +312,7 @@ export function setupPictureManager() {
         selectedIds.clear();
         anchorCard = null;
         syncSelectionState();
+        setPanelExpanded(false);
         setStatus('Selection cleared.', 'idle');
     }
 
@@ -414,6 +416,23 @@ export function setupPictureManager() {
             return;
         }
         toggleCard(card);
+    }
+
+    /**
+     * Collapses the HUD when the user clicks away from it without an active selection.
+     *
+     * @param {PointerEvent} event Pointer event from the document.
+     * @returns {void}
+     */
+    function handleDocumentPointerDown(event) {
+        if (selectedIds.size > 0 || toolbar.dataset.pictureManagerExpanded !== '1') {
+            return;
+        }
+        if (!(event.target instanceof Node) || toolbar.contains(event.target)) {
+            return;
+        }
+        setPanelExpanded(false);
+        setStatus('Ready.', 'idle');
     }
 
     /**
@@ -810,6 +829,11 @@ export function setupPictureManager() {
      * @returns {void}
      */
     function handleDocumentKeyDown(event) {
+        if (event.key === 'Escape' && selectedIds.size === 0 && toolbar.dataset.pictureManagerExpanded === '1') {
+            setPanelExpanded(false);
+            setStatus('Ready.', 'idle');
+            return;
+        }
         if ((!event.ctrlKey && !event.metaKey) || event.key.toLowerCase() !== 'a') {
             return;
         }
@@ -872,6 +896,7 @@ export function setupPictureManager() {
         createButton.addEventListener('click', createGalleryFromSelection);
     }
     document.addEventListener('keydown', handleDocumentKeyDown);
+    document.addEventListener('pointerdown', handleDocumentPointerDown);
     document.addEventListener('dragover', handleDocumentDragOver, true);
     document.addEventListener('drop', handleDocumentDrop, true);
     document.addEventListener(PUBLIC_PHOTO_MOVE_EVENT, handleExternalDropMove);

@@ -480,12 +480,11 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
 
     echo '<div class="picture-manager-panel" data-picture-manager-panel>';
     echo '<div class="picture-manager-heading">';
-    echo '<div><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
+    echo '<div class="picture-manager-hints"><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
+    echo '<div class="picture-manager-actions" aria-label="' . e(t('picture_manager.selection_actions', 'Selection actions')) . '">';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-select-all title="' . e(t('picture_manager.select_all', 'Select all')) . '" aria-label="' . e(t('picture_manager.select_all', 'Select all')) . '"><span class="picture-manager-button-icon" aria-hidden="true">☑</span><span class="picture-manager-button-label">' . e(t('picture_manager.select_all_short', 'All')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-clear title="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" aria-label="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">×</span><span class="picture-manager-button-label">' . e(t('picture_manager.clear_selection_short', 'Clear')) . '</span></button>';
     echo '</div>';
-
-    echo '<div class="picture-manager-actions">';
-    echo '<button type="button" class="button secondary" data-picture-manager-select-all>' . e(t('picture_manager.select_all', 'Select all')) . '</button>';
-    echo '<button type="button" class="button secondary" data-picture-manager-clear disabled>' . e(t('picture_manager.clear_selection', 'Clear selection')) . '</button>';
     echo '</div>';
 
     echo '<div class="picture-manager-action-grid">';
@@ -498,8 +497,8 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
         'prefill_gallery_id' => $suggestedDestinationId,
         'hidden_attributes' => ['data-picture-manager-destination' => ''],
     ]);
-    echo '<button type="button" class="button" data-picture-manager-move disabled>' . e(t('picture_manager.move_selected', 'Move selected')) . '</button>';
-    echo '<button type="button" class="button secondary" data-picture-manager-copy disabled>' . e(t('picture_manager.copy_selected', 'Copy selected')) . '</button>';
+    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-move title="' . e(t('picture_manager.move_selected', 'Move selected')) . '" aria-label="' . e(t('picture_manager.move_selected', 'Move selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↪</span><span class="picture-manager-button-label">' . e(t('picture_manager.move_short', 'Move')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-copy title="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" aria-label="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">⧉</span><span class="picture-manager-button-label">' . e(t('picture_manager.copy_short', 'Copy')) . '</span></button>';
     echo '</div>';
     echo '<p>' . e(t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.')) . '</p>';
     echo '</div>';
@@ -509,7 +508,7 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     echo '<div class="picture-manager-inline-fields">';
     echo '<input id="picture-manager-new-title-' . $galleryId . '" type="text" data-picture-manager-new-title placeholder="' . e(t('picture_manager.new_gallery_title', 'New gallery title')) . '">';
     echo '<input type="text" data-picture-manager-new-folder placeholder="' . e(t('picture_manager.optional_folder_name', 'Optional folder name')) . '">';
-    echo '<button type="button" class="button" data-picture-manager-create disabled>' . e(t('picture_manager.create_gallery', 'Create gallery')) . '</button>';
+    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-create title="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" aria-label="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">＋</span><span class="picture-manager-button-label">' . e(t('picture_manager.create_short', 'Create')) . '</span></button>';
     echo '</div>';
     echo '<p>' . e(t('picture_manager.copy_warning', 'This copies selected photos into the new child gallery. Originals stay here.')) . '</p>';
     echo '</div>';
