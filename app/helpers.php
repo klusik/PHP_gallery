@@ -1183,6 +1183,11 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         echo '<link rel="stylesheet" href="' . e($customCss) . '?v=' . filemtime(custom_css_path()) . '">';
     }
     echo '<link rel="stylesheet" href="' . e(url_for('theme_css')) . '&v=' . rawurlencode((string) theme_cache_key($theme)) . '">';
+    $mobileGalleryStyle = 'assets/styles/mobile-gallery.css';
+    $mobileGalleryStylePath = dirname(__DIR__) . '/public/' . $mobileGalleryStyle;
+    if (is_file($mobileGalleryStylePath)) {
+        echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
+    }
     echo cms_head_extras_html();
     // $devModeActive stores an intermediate value used by the surrounding gallery workflow.
     $devModeActive = $user && dev_mode_enabled();

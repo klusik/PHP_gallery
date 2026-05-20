@@ -390,8 +390,8 @@ export function setupGalleryLightbox() {
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
     const description = overlay.querySelector('[data-lightbox-description]');
-    // counter stores state or configuration for the gallery front-end flow.
-    const counter = overlay.querySelector('[data-lightbox-counter]');
+    // counters stores desktop and mobile counter hosts that mirror the same position text.
+    const counters = Array.from(overlay.querySelectorAll('[data-lightbox-counter]'));
     // Variable `lightboxVotePanel` stores the host for the shared gallery-card vote widget.
     const lightboxVotePanel = overlay.querySelector('[data-lightbox-vote-panel]');
     // Variable `lightboxMapButton` stores this steps working value.
@@ -1457,9 +1457,7 @@ export function setupGalleryLightbox() {
                 ? i18n('lightbox.initial_loader_count', 'Preparing photo {current} of {total}', {current: index + 1, total: safeTotal})
                 : '';
         }
-        if (counter) {
-            counter.textContent = cards.length > 0 ? `${index + 1} / ${cards.length}` : '';
-        }
+        updateLightboxCounters(cards.length > 0 ? `${index + 1} / ${cards.length}` : '');
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
         updateLightboxViewportMode();
@@ -1563,9 +1561,7 @@ export function setupGalleryLightbox() {
         const descriptionText = (card.dataset.description || '').trim();
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
-        if (counter) {
-            counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
-        }
+        updateLightboxCounters(`${normalizedIndex + 1} / ${cards.length}`);
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
         syncLightboxVote(card, lightboxVotePanel);
@@ -2012,6 +2008,20 @@ export function setupGalleryLightbox() {
                 button.click();
             }
         }
+    }
+
+    /**
+     * Update every rendered counter copy used by desktop and mobile layouts.
+     *
+     * @param {string} text Position text to render.
+     * @returns {void}
+     */
+    function updateLightboxCounters(text) {
+        counters.forEach((counterElement) => {
+            if (counterElement instanceof HTMLElement) {
+                counterElement.textContent = text;
+            }
+        });
     }
 
     /**
