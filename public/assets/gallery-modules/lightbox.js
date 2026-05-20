@@ -424,6 +424,8 @@ export function setupGalleryLightbox() {
     let lightboxSlideshowActive = false;
     // touchGesture stores state or configuration for the gallery front-end flow.
     let touchGesture = null;
+    // suppressNextStageClick prevents a completed swipe from also toggling controls through a synthetic tap.
+    let suppressNextStageClick = false;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
     const isMobileTouchDevice = detectMobileTouchDevice();
     // galleryDevModeEnabled stores state or configuration for the gallery front-end flow.
@@ -1602,6 +1604,9 @@ export function setupGalleryLightbox() {
         preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
         document.body.classList.add('has-lightbox');
+        if (isMobileTouchDevice && !isLightboxFullscreen()) {
+            enterMobileLightboxFullscreen();
+        }
         updateLightboxViewportMode();
         if (revealHud) {
             showLightboxHud();
@@ -1859,17 +1864,31 @@ export function setupGalleryLightbox() {
         const actionTarget = target?.closest('[data-lightbox-action]');
         // Variable `action` stores this steps working value.
         const action = actionTarget?.dataset.lightboxAction;
+        if (action === 'close' || event.target === overlay) {
+            event.preventDefault();
+            close();
+            return;
+        }
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
+            if (suppressNextStageClick) {
+                suppressNextStageClick = false;
+                return;
+            }
             if (initialLightboxLoadActive) {
                 return;
             }
             clearLightboxStageFocus();
+            if (isMobileTouchDevice) {
+                if (overlay.classList.contains('is-mobile-fullscreen')) {
+                    toggleLightboxHud();
+                } else {
+                    toggleLightboxFullscreen().finally(clearLightboxStageFocus);
+                }
+                clearLightboxStageFocus();
+                return;
+            }
             toggleLightboxFullscreen().finally(clearLightboxStageFocus);
-            return;
-        }
-        if (action === 'close' || event.target === overlay) {
-            close();
             return;
         }
         if (action === 'previous') {
@@ -1911,19 +1930,24 @@ export function setupGalleryLightbox() {
     }
 
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
-    overlay.addEventListener('pointermove', showLightboxHud, {signal: controller.signal});
+    overlay.addEventListener('pointermove', showLightboxHudFromPointerMove, {signal: controller.signal});
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
-    if (supportsPointerGestures) {
-        overlay.addEventListener('pointerdown', startTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointermove', trackTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointerup', finishTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointercancel', clearTouchGesture, {signal: controller.signal});
-    } else {
-        overlay.addEventListener('touchstart', startTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchend', finishTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchcancel', clearTouchGesture, {signal: controller.signal});
+    if (stageLink && supportsPointerGestures) {
+        stageLink.addEventListener('pointerdown', startTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointermove', trackTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
+    } else if (stageLink) {
+        stageLink.addEventListener('touchstart', startTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        overlay.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        overlay.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        window.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
     }
+    document.addEventListener('touchmove', preventMobileLightboxPageGesture, {passive: false, capture: true, signal: controller.signal});
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     window.addEventListener('resize', () => {
@@ -1995,7 +2019,7 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function isLightboxFullscreen() {
-        return overlay.classList.contains('is-fullscreen');
+        return overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen');
     }
 
     /**
@@ -2019,6 +2043,17 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Enter the CSS-only mobile fullscreen viewer without requesting browser fullscreen.
+     * @returns {void}
+     */
+    function enterMobileLightboxFullscreen() {
+        overlay.classList.add('is-mobile-fullscreen');
+        overlay.classList.remove('is-fullscreen');
+        document.body.classList.add('has-mobile-lightbox');
+        debugLightbox('enter:mobile-auto');
+    }
+
+    /**
      * Handles enter lightbox fullscreen behavior for the gallery UI.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
@@ -2026,9 +2061,7 @@ export function setupGalleryLightbox() {
         overlay.classList.add('is-fullscreen');
         overlay.classList.remove('is-ui-visible');
         if (isMobileTouchDevice) {
-            overlay.classList.add('is-mobile-fullscreen');
-            document.body.classList.add('has-mobile-lightbox');
-            debugLightbox('enter:mobile-css');
+            enterMobileLightboxFullscreen();
             showLightboxHud();
             return;
         }
@@ -2041,8 +2074,7 @@ export function setupGalleryLightbox() {
         } catch {
             // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
         }
-        overlay.classList.add('is-mobile-fullscreen');
-        document.body.classList.add('has-mobile-lightbox');
+        enterMobileLightboxFullscreen();
         debugLightbox('enter:fallback-css');
         showLightboxHud();
     }
@@ -2127,10 +2159,36 @@ export function setupGalleryLightbox() {
         if (isLightboxFullscreen()) {
             fullscreenHideTimer = window.setTimeout(() => {
                 overlay.classList.remove('is-ui-visible');
-            }, 1800);
+            }, isMobileTouchDevice ? 2400 : 1800);
         } else {
             overlay.classList.remove('is-ui-visible');
         }
+    }
+
+    /**
+     * Keeps desktop pointer movement behavior without reopening the mobile HUD during a swipe.
+     *
+     * @param {PointerEvent|MouseEvent} event Browser pointer movement event.
+     * @returns {void}
+     */
+    function showLightboxHudFromPointerMove(event) {
+        if (isActiveMobileLightbox() && isMobileLightboxStageEvent(event)) {
+            return;
+        }
+        showLightboxHud();
+    }
+
+    /**
+     * Toggle mobile fullscreen controls from a deliberate stage tap.
+     * @returns {void}
+     */
+    function toggleLightboxHud() {
+        clearLightboxHudTimer();
+        if (overlay.classList.contains('is-ui-visible')) {
+            overlay.classList.remove('is-ui-visible');
+            return;
+        }
+        showLightboxHud();
     }
 
     /**
@@ -2158,13 +2216,46 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Reports whether the CSS-only mobile viewer is currently active.
+     *
+     * @returns {boolean} True when mobile Chrome style gestures should be trapped by the lightbox.
+     */
+    function isActiveMobileLightbox() {
+        return isMobileTouchDevice && !overlay.hidden;
+    }
+
+    /**
+     * Reports whether an event belongs to the photo stage instead of the surrounding document.
+     *
+     * @param {Event} event Browser event to inspect.
+     * @returns {boolean} True when the event started from the image swipe surface.
+     */
+    function isMobileLightboxStageEvent(event) {
+        const target = event.target instanceof Element ? event.target : null;
+        return Boolean(target?.closest('[data-lightbox-stage]'));
+    }
+
+    /**
+     * Prevents mobile Chrome from scrolling or swiping the page behind the lightbox.
+     *
+     * @param {TouchEvent} event Browser touch movement event.
+     * @returns {void}
+     */
+    function preventMobileLightboxPageGesture(event) {
+        if (!isActiveMobileLightbox()) {
+            return;
+        }
+        event.preventDefault();
+    }
+
+    /**
      * Handles clear touch gesture behavior for the gallery UI.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearTouchGesture() {
-        if (touchGesture && touchGesture.pointerId !== null) {
+        if (touchGesture && touchGesture.pointerId !== null && touchGesture.captureElement) {
             try {
-                overlay.releasePointerCapture?.(touchGesture.pointerId);
+                touchGesture.captureElement.releasePointerCapture?.(touchGesture.pointerId);
             } catch {
                 // Ignore pointer capture release failures from older mobile engines.
             }
@@ -2178,37 +2269,40 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function startTouchGesture(event) {
-        if (overlay.hidden || !isLightboxFullscreen()) {
+        if (overlay.hidden || (!isMobileTouchDevice && !isLightboxFullscreen())) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
+        if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0 || event.isPrimary === false)) {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-stage]') || isLightboxControlTarget(target)) {
+            return;
+        }
         const point = lightboxGesturePoint(event);
         if (!point) {
             return;
         }
-        if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0)) {
-            return;
+        if (isActiveMobileLightbox()) {
+            event.preventDefault();
         }
-        if (isMobileTouchDevice) {
-            showLightboxHud();
-        }
-        // target stores state or configuration for the gallery front-end flow.
-        const target = event.target instanceof Element ? event.target : null;
-        if (isLightboxControlTarget(target)) {
-            return;
-        }
+        const captureElement = event.currentTarget instanceof Element ? event.currentTarget : stageLink;
         touchGesture = {
             pointerId: event.type === 'pointerdown' ? event.pointerId : null,
+            captureElement,
             startX: point.clientX,
             startY: point.clientY,
             lastX: point.clientX,
             lastY: point.clientY,
             startedAt: Date.now(),
             active: true,
+            horizontalIntent: false,
+            verticalIntent: false,
+            moved: false,
         };
-        if (touchGesture.pointerId !== null) {
+        if (touchGesture.pointerId !== null && captureElement) {
             try {
-                overlay.setPointerCapture?.(touchGesture.pointerId);
+                captureElement.setPointerCapture?.(touchGesture.pointerId);
             } catch {
                 // Pointer capture is best-effort on mobile browsers.
             }
@@ -2227,22 +2321,29 @@ export function setupGalleryLightbox() {
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
         const point = lightboxGesturePoint(event);
         if (!point) {
             return;
         }
         touchGesture.lastX = point.clientX;
         touchGesture.lastY = point.clientY;
-        // dx stores state or configuration for the gallery front-end flow.
         const dx = touchGesture.lastX - touchGesture.startX;
-        // dy stores state or configuration for the gallery front-end flow.
         const dy = touchGesture.lastY - touchGesture.startY;
-        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        if (isActiveMobileLightbox()) {
             event.preventDefault();
         }
-        if (Math.abs(dx) > 18 || Math.abs(dy) > 18) {
-            overlay.classList.add('is-ui-visible');
+        if (absDx > 6 || absDy > 6) {
+            touchGesture.moved = true;
+        }
+        if (!touchGesture.horizontalIntent && !touchGesture.verticalIntent) {
+            if (absDx > 10 && absDx > absDy * 0.9) {
+                touchGesture.horizontalIntent = true;
+                hideLightboxHud();
+            } else if (absDy > 18 && absDy > absDx * 1.45) {
+                touchGesture.verticalIntent = true;
+            }
         }
     }
 
@@ -2258,23 +2359,34 @@ export function setupGalleryLightbox() {
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
         const point = lightboxGesturePoint(event) || {clientX: touchGesture.lastX, clientY: touchGesture.lastY};
-        // dx stores state or configuration for the gallery front-end flow.
         const dx = point.clientX - touchGesture.startX;
-        // dy stores state or configuration for the gallery front-end flow.
         const dy = point.clientY - touchGesture.startY;
-        // elapsed stores state or configuration for the gallery front-end flow.
-        const elapsed = Date.now() - touchGesture.startedAt;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const elapsed = Math.max(1, Date.now() - touchGesture.startedAt);
+        const velocityX = absDx / elapsed;
+        const hadHorizontalIntent = touchGesture.horizontalIntent;
+        const hadMovement = touchGesture.moved;
         clearTouchGesture();
-        if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) || elapsed > 1200) {
+        const isSwipe = (hadHorizontalIntent || absDx > 44)
+            && absDx > 34
+            && absDx > absDy * 0.72
+            && (absDx > 58 || velocityX >= 0.26);
+        if (!isSwipe) {
+            if (hadMovement) {
+                suppressNextStageClick = true;
+            }
             return;
         }
         event.preventDefault();
+        event.stopPropagation();
+        suppressNextStageClick = true;
+        hideLightboxHud();
         if (dx < 0) {
-            step(1);
+            step(1, {revealHud: false});
         } else {
-            step(-1);
+            step(-1, {revealHud: false});
         }
     }
 
