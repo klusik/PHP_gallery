@@ -422,8 +422,10 @@ export function setupGalleryLightbox() {
     let lightboxSlideshowTimer = null;
     // lightboxSlideshowActive stores whether slideshow mode owns automatic fullscreen advancing.
     let lightboxSlideshowActive = false;
-    // touchGesture stores state or configuration for the gallery front-end flow.
+    // touchGesture stores the active mobile stage swipe, when one is in progress.
     let touchGesture = null;
+    // mobileSwipeVisualTimer clears temporary swipe animation classes after they settle.
+    let mobileSwipeVisualTimer = 0;
     // suppressNextStageClick prevents a completed swipe from also toggling controls through a synthetic tap.
     let suppressNextStageClick = false;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
@@ -458,9 +460,13 @@ export function setupGalleryLightbox() {
     setupGalleryDevModeOverlay();
     // supportsPointerGestures stores state or configuration for the gallery front-end flow.
     const supportsPointerGestures = Boolean(window.PointerEvent);
+    // Touch events are the most reliable mobile signal for swipes in iOS Safari and Chrome mobile.
+    const supportsTouchGestures = Boolean('ontouchstart' in window || navigator.maxTouchPoints > 0);
     // isLightboxDebugEnabled stores state or configuration for the gallery front-end flow.
     const isLightboxDebugEnabled = detectLightboxDebugFlag();
     overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
+    prepareMobileLightboxOverlay();
+    updateMobileLightboxViewport();
     window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
 
     galleryLightboxState.cleanup = () => {
@@ -468,6 +474,7 @@ export function setupGalleryLightbox() {
         cards = [];
         clearPendingFullImageSwap();
         clearLightboxHudTimer();
+        resetMobileSwipeVisuals(false);
         stopLightboxSlideshow(false);
         removeTransitionImage();
         preloadedSources.clear();
@@ -522,8 +529,39 @@ export function setupGalleryLightbox() {
         if (image) {
             image.removeAttribute('src');
         }
+        document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
     };
+
+    /**
+     * Move the mobile overlay to the body root so fixed positioning is not affected by page layout wrappers.
+     *
+     * @returns {void}
+     */
+    function prepareMobileLightboxOverlay() {
+        if (!isMobileTouchDevice || overlay.parentElement === document.body) {
+            return;
+        }
+        document.body.append(overlay);
+    }
+
+    /**
+     * Keep the CSS fullscreen shell aligned with the currently visible mobile viewport.
+     *
+     * @returns {void}
+     */
+    function updateMobileLightboxViewport() {
+        if (!isMobileTouchDevice) {
+            return;
+        }
+        const viewport = window.visualViewport;
+        const viewportTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
+        const viewportWidth = Math.max(1, Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 1));
+        const viewportHeight = Math.max(1, Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 1));
+        overlay.style.setProperty('--lightbox-mobile-viewport-top', `${viewportTop}px`);
+        overlay.style.setProperty('--lightbox-mobile-viewport-width', `${viewportWidth}px`);
+        overlay.style.setProperty('--lightbox-mobile-viewport-height', `${viewportHeight}px`);
+    }
 
     /**
      * Handles clear lightbox stage focus behavior for the gallery UI.
@@ -1459,7 +1497,11 @@ export function setupGalleryLightbox() {
         }
         updateLightboxCounters(cards.length > 0 ? `${index + 1} / ${cards.length}` : '');
         overlay.hidden = false;
+        document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
+        if (isMobileTouchDevice && !isLightboxFullscreen()) {
+            enterMobileLightboxFullscreen();
+        }
         updateLightboxViewportMode();
     }
 
@@ -1599,6 +1641,7 @@ export function setupGalleryLightbox() {
         }
         preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
+        document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
         if (isMobileTouchDevice && !isLightboxFullscreen()) {
             enterMobileLightboxFullscreen();
@@ -1731,6 +1774,7 @@ export function setupGalleryLightbox() {
         stopLightboxSlideshow();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
+        resetMobileSwipeVisuals(false);
         overlay.classList.remove('is-ui-visible');
         clearTouchGesture();
         updateLightboxViewportMode();
@@ -1742,6 +1786,7 @@ export function setupGalleryLightbox() {
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
         galleryDevModeState.currentIndex = -1;
+        document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
             window.history.replaceState({}, '', lightboxReturnUrl);
@@ -1928,20 +1973,20 @@ export function setupGalleryLightbox() {
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
     overlay.addEventListener('pointermove', showLightboxHudFromPointerMove, {signal: controller.signal});
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
-    if (stageLink && supportsPointerGestures) {
+    if (stageLink && isMobileTouchDevice && supportsTouchGestures) {
+        stageLink.addEventListener('touchstart', startTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchmove', trackTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        window.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
+    } else if (stageLink && supportsPointerGestures) {
         stageLink.addEventListener('pointerdown', startTouchGesture, {capture: true, signal: controller.signal});
         overlay.addEventListener('pointermove', trackTouchGesture, {capture: true, signal: controller.signal});
         overlay.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
         overlay.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
         window.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
         window.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
-    } else if (stageLink) {
-        stageLink.addEventListener('touchstart', startTouchGesture, {passive: false, capture: true, signal: controller.signal});
-        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false, capture: true, signal: controller.signal});
-        overlay.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
-        overlay.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
-        window.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
-        window.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
     }
     document.addEventListener('touchmove', preventMobileLightboxPageGesture, {passive: false, capture: true, signal: controller.signal});
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
@@ -1950,9 +1995,12 @@ export function setupGalleryLightbox() {
         if (controller.signal.aborted || overlay.hidden || currentIndex < 0) {
             return;
         }
+        updateMobileLightboxViewport();
         updateNormalLightboxStageSize(cards[currentIndex]);
         updateFullscreenMapImageFit(cards[currentIndex]);
     }, {signal: controller.signal});
+    window.visualViewport?.addEventListener('resize', updateMobileLightboxViewport, {signal: controller.signal});
+    window.visualViewport?.addEventListener('scroll', updateMobileLightboxViewport, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {
@@ -2057,8 +2105,11 @@ export function setupGalleryLightbox() {
      * @returns {void}
      */
     function enterMobileLightboxFullscreen() {
+        prepareMobileLightboxOverlay();
+        updateMobileLightboxViewport();
         overlay.classList.add('is-mobile-fullscreen');
         overlay.classList.remove('is-fullscreen');
+        document.documentElement.classList.add('has-mobile-lightbox');
         document.body.classList.add('has-mobile-lightbox');
         debugLightbox('enter:mobile-auto');
     }
@@ -2098,6 +2149,7 @@ export function setupGalleryLightbox() {
         overlay.classList.remove('is-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         closeLightboxMapSplit();
+        document.documentElement.classList.remove('has-mobile-lightbox');
         document.body.classList.remove('has-mobile-lightbox');
         if (!isMobileTouchDevice && document.fullscreenElement) {
             try {
@@ -2122,6 +2174,7 @@ export function setupGalleryLightbox() {
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
+            document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
             stopLightboxSlideshow();
             clearLightboxStageFocus();
@@ -2131,6 +2184,7 @@ export function setupGalleryLightbox() {
         if (document.fullscreenElement === overlay) {
             overlay.classList.add('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
+            document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
             overlay.classList.remove('is-ui-visible');
             debugLightbox('sync:browser-enter');
@@ -2222,7 +2276,12 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function updateLightboxViewportMode() {
-        document.body.classList.toggle('has-mobile-lightbox', overlay.classList.contains('is-mobile-fullscreen'));
+        const mobileLightboxActive = overlay.classList.contains('is-mobile-fullscreen');
+        document.documentElement.classList.toggle('has-mobile-lightbox', mobileLightboxActive);
+        document.body.classList.toggle('has-mobile-lightbox', mobileLightboxActive);
+        if (mobileLightboxActive) {
+            updateMobileLightboxViewport();
+        }
     }
 
     /**
@@ -2255,6 +2314,10 @@ export function setupGalleryLightbox() {
         if (!isActiveMobileLightbox()) {
             return;
         }
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('.lightbox-meta, .lightbox-map-split, .lightbox-hud')) {
+            return;
+        }
         event.preventDefault();
     }
 
@@ -2274,12 +2337,77 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Reset the CSS variables/classes used to render mobile swipe drag feedback.
+     *
+     * @param {boolean} animate Whether the stage should glide back to center.
+     * @returns {void}
+     */
+    function resetMobileSwipeVisuals(animate = true) {
+        if (mobileSwipeVisualTimer) {
+            window.clearTimeout(mobileSwipeVisualTimer);
+            mobileSwipeVisualTimer = 0;
+        }
+        overlay.classList.remove('is-swipe-dragging', 'is-swipe-committing');
+        overlay.style.setProperty('--lightbox-swipe-x', '0px');
+        overlay.style.setProperty('--lightbox-swipe-progress', '0');
+        if (!animate) {
+            overlay.classList.remove('is-swipe-settling');
+            return;
+        }
+        overlay.classList.add('is-swipe-settling');
+        mobileSwipeVisualTimer = window.setTimeout(() => {
+            mobileSwipeVisualTimer = 0;
+            overlay.classList.remove('is-swipe-settling');
+        }, 190);
+    }
+
+    /**
+     * Move the active mobile image under the user's finger without letting it leave the stage too far.
+     *
+     * @param {number} offsetX Horizontal drag distance in pixels.
+     * @param {boolean} clamp Whether to cap the visual drag distance.
+     * @returns {void}
+     */
+    function setMobileSwipeOffset(offsetX, clamp = true) {
+        const stageWidth = Math.max(1, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 1);
+        const maxOffset = Math.max(72, Math.min(180, stageWidth * 0.36));
+        const visualOffset = clamp ? Math.max(-maxOffset, Math.min(maxOffset, offsetX)) : offsetX;
+        const progress = Math.min(1, Math.abs(visualOffset) / maxOffset);
+        overlay.style.setProperty('--lightbox-swipe-x', `${Math.round(visualOffset)}px`);
+        overlay.style.setProperty('--lightbox-swipe-progress', progress.toFixed(3));
+    }
+
+    /**
+     * Animate the current mobile image offscreen, then navigate to the adjacent photo.
+     *
+     * @param {number} dx Final horizontal movement in pixels.
+     * @returns {void}
+     */
+    function commitMobileSwipe(dx) {
+        const direction = dx < 0 ? 1 : -1;
+        const stageWidth = Math.max(320, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 320);
+        overlay.classList.remove('is-swipe-dragging', 'is-swipe-settling');
+        overlay.classList.add('is-swipe-committing');
+        setMobileSwipeOffset(direction > 0 ? -stageWidth : stageWidth, false);
+        mobileSwipeVisualTimer = window.setTimeout(() => {
+            mobileSwipeVisualTimer = 0;
+            if (!controller.signal.aborted && !overlay.hidden) {
+                step(direction, {revealHud: false});
+            }
+            resetMobileSwipeVisuals(false);
+        }, 150);
+    }
+
+    /**
      * Handles start touch gesture behavior for the gallery UI.
      * @param {*} event Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function startTouchGesture(event) {
-        if (overlay.hidden || (!isMobileTouchDevice && !isLightboxFullscreen())) {
+        if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1) {
+            return;
+        }
+        if (event.touches && event.touches.length > 1) {
             return;
         }
         if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0 || event.isPrimary === false)) {
@@ -2293,9 +2421,8 @@ export function setupGalleryLightbox() {
         if (!point) {
             return;
         }
-        if (isActiveMobileLightbox()) {
-            event.preventDefault();
-        }
+        event.preventDefault();
+        resetMobileSwipeVisuals(false);
         const captureElement = event.currentTarget instanceof Element ? event.currentTarget : stageLink;
         touchGesture = {
             pointerId: event.type === 'pointerdown' ? event.pointerId : null,
@@ -2328,6 +2455,11 @@ export function setupGalleryLightbox() {
         if (!touchGesture || !touchGesture.active) {
             return;
         }
+        if (event.touches && event.touches.length > 1) {
+            resetMobileSwipeVisuals();
+            clearTouchGesture();
+            return;
+        }
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
             return;
         }
@@ -2341,19 +2473,21 @@ export function setupGalleryLightbox() {
         const dy = touchGesture.lastY - touchGesture.startY;
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
-        if (isActiveMobileLightbox()) {
-            event.preventDefault();
-        }
+        event.preventDefault();
         if (absDx > 6 || absDy > 6) {
             touchGesture.moved = true;
         }
         if (!touchGesture.horizontalIntent && !touchGesture.verticalIntent) {
-            if (absDx > 10 && absDx > absDy * 0.9) {
+            if (absDx > 8 && absDx > absDy * 0.8) {
                 touchGesture.horizontalIntent = true;
+                overlay.classList.add('is-swipe-dragging');
                 hideLightboxHud();
-            } else if (absDy > 18 && absDy > absDx * 1.45) {
+            } else if (absDy > 24 && absDy > absDx * 1.6) {
                 touchGesture.verticalIntent = true;
             }
+        }
+        if (touchGesture.horizontalIntent) {
+            setMobileSwipeOffset(dx);
         }
     }
 
@@ -2376,16 +2510,24 @@ export function setupGalleryLightbox() {
         const absDy = Math.abs(dy);
         const elapsed = Math.max(1, Date.now() - touchGesture.startedAt);
         const velocityX = absDx / elapsed;
+        const stageWidth = Math.max(1, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 1);
+        const distanceThreshold = Math.max(30, Math.min(72, stageWidth * 0.12));
         const hadHorizontalIntent = touchGesture.horizontalIntent;
         const hadMovement = touchGesture.moved;
         clearTouchGesture();
-        const isSwipe = (hadHorizontalIntent || absDx > 44)
-            && absDx > 34
-            && absDx > absDy * 0.72
-            && (absDx > 58 || velocityX >= 0.26);
+        const isSwipe = (hadHorizontalIntent || absDx > distanceThreshold)
+            && absDx >= distanceThreshold
+            && absDx > absDy * 0.62
+            && (absDx > distanceThreshold * 1.35 || velocityX >= 0.22);
         if (!isSwipe) {
+            resetMobileSwipeVisuals(Boolean(hadMovement));
             if (hadMovement) {
                 suppressNextStageClick = true;
+            } else if (isActiveMobileLightbox()) {
+                event.preventDefault();
+                event.stopPropagation();
+                suppressNextStageClick = true;
+                toggleLightboxHud();
             }
             return;
         }
@@ -2393,11 +2535,7 @@ export function setupGalleryLightbox() {
         event.stopPropagation();
         suppressNextStageClick = true;
         hideLightboxHud();
-        if (dx < 0) {
-            step(1, {revealHud: false});
-        } else {
-            step(-1, {revealHud: false});
-        }
+        commitMobileSwipe(dx);
     }
 
     /**

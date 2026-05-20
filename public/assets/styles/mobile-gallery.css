@@ -109,6 +109,8 @@
         min-height: 9.5rem;
     }
 
+    html.has-lightbox,
+    html.has-mobile-lightbox,
     html:has(body.has-lightbox),
     html:has(body.has-mobile-lightbox),
     body.has-lightbox,
@@ -120,21 +122,26 @@
 
     .lightbox.is-mobile-device,
     .lightbox.is-mobile-fullscreen {
-        position: fixed;
-        inset: 0;
-        z-index: 80;
+        position: fixed !important;
+        inset: var(--lightbox-mobile-viewport-top, 0px) auto auto 0 !important;
+        z-index: 1400;
         display: grid;
         grid-template-columns: 1fr;
         grid-template-rows: 1fr;
         grid-template-areas: "stage";
         width: 100vw;
-        width: 100dvw;
+        width: var(--lightbox-mobile-viewport-width, 100dvw);
         height: 100vh;
-        height: 100dvh;
+        height: var(--lightbox-mobile-viewport-height, 100dvh);
+        min-height: var(--lightbox-mobile-viewport-height, 100dvh);
+        max-height: var(--lightbox-mobile-viewport-height, 100dvh);
         gap: 0;
         padding: 0;
+        overflow: hidden;
         background: #050505;
         color: #fffdf8;
+        box-sizing: border-box;
+        isolation: isolate;
         overscroll-behavior: none;
         touch-action: none;
     }
@@ -170,6 +177,7 @@
         cursor: default;
         touch-action: none;
         user-select: none;
+        -webkit-touch-callout: none;
         -webkit-user-drag: none;
         overscroll-behavior: contain;
     }
@@ -184,6 +192,27 @@
         max-height: none;
         border-radius: 0;
         object-fit: contain;
+        transform: translate3d(var(--lightbox-swipe-x, 0px), 0, 0);
+        transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        will-change: transform;
+    }
+
+    .lightbox.is-mobile-device.is-swipe-dragging .lightbox-stage-link > img,
+    .lightbox.is-mobile-device.is-swipe-dragging .lightbox-transition-image,
+    .lightbox.is-mobile-fullscreen.is-swipe-dragging .lightbox-stage-link > img,
+    .lightbox.is-mobile-fullscreen.is-swipe-dragging .lightbox-transition-image {
+        transition: none;
+    }
+
+    .lightbox.is-mobile-device.is-swipe-committing .lightbox-stage-link > img,
+    .lightbox.is-mobile-device.is-swipe-committing .lightbox-transition-image,
+    .lightbox.is-mobile-fullscreen.is-swipe-committing .lightbox-stage-link > img,
+    .lightbox.is-mobile-fullscreen.is-swipe-committing .lightbox-transition-image,
+    .lightbox.is-mobile-device.is-swipe-settling .lightbox-stage-link > img,
+    .lightbox.is-mobile-device.is-swipe-settling .lightbox-transition-image,
+    .lightbox.is-mobile-fullscreen.is-swipe-settling .lightbox-stage-link > img,
+    .lightbox.is-mobile-fullscreen.is-swipe-settling .lightbox-transition-image {
+        transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .lightbox-mobile-counter {
@@ -485,5 +514,14 @@
 @media (max-width: 380px) {
     .public-page .gallery-image-grid {
         gap: 0.32rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lightbox.is-mobile-device .lightbox-stage-link > img,
+    .lightbox.is-mobile-device .lightbox-transition-image,
+    .lightbox.is-mobile-fullscreen .lightbox-stage-link > img,
+    .lightbox.is-mobile-fullscreen .lightbox-transition-image {
+        transition: none;
     }
 }

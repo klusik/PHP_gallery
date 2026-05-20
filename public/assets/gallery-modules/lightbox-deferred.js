@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260520-mobile-gallery-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260520-mobile-swipe-fix-v2';
 
 const deferredLightboxState = {
     controller: null,
