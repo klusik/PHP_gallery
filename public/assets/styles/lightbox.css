@@ -564,7 +564,7 @@
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split figure {
     display: grid;
     grid-template-columns: minmax(0, 1.25fr) minmax(560px, 38vw);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
     align-items: stretch;
     gap: 0;
     width: 100%;
@@ -590,17 +590,22 @@
     object-position: center center;
 }
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-meta {
-    position: static;
-    inset: auto;
     grid-column: 1;
-    grid-row: 2;
-    width: 100%;
-    justify-self: center;
+    grid-row: 1;
+    position: absolute;
+    inset: auto 1rem 0.9rem;
+    justify-self: stretch;
+    width: auto;
+    max-width: min(58rem, calc(100% - 2rem));
+    padding: 0.38rem 0.5rem;
+    background: rgba(10, 10, 10, 0.36);
+    border-radius: var(--radius, 16px);
+    backdrop-filter: blur(8px);
 }
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split {
     position: relative;
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     width: 100%;
     height: 100%;
     display: grid;
