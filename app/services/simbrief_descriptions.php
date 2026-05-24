@@ -245,7 +245,9 @@ function simbrief_description_generate_for_identifier(string $pilotId, string $p
     $identifier = simbrief_description_identifier($pilotId, $pilotName);
     $payload = simbrief_description_fetch_latest_ofp($identifier);
     $details = simbrief_description_extract_details($payload);
-    $description = simbrief_description_build_markdown($details);
+    $description = function_exists('view_simbrief_description_markdown')
+        ? view_simbrief_description_markdown($details)
+        : simbrief_description_build_markdown($details);
 
     return [
         'description' => $description,
@@ -304,6 +306,9 @@ function simbrief_description_extract_details(array $payload): array
  */
 function simbrief_description_build_markdown(array $details): string
 {
+    if (function_exists('view_simbrief_description_markdown')) {
+        return view_simbrief_description_markdown($details);
+    }
     $originCode = simbrief_description_markdown_code($details['origin_code'] ?? '');
     $destinationCode = simbrief_description_markdown_code($details['destination_code'] ?? '');
     $originLabel = simbrief_description_place_label((string) ($details['origin_name'] ?? ''), $originCode);

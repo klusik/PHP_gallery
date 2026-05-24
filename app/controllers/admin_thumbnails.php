@@ -42,6 +42,11 @@ declare(strict_types=1);
 
 function render_admin_thumbnail_maintenance_notice(array $summary): void
 {
+    if (function_exists('view_render_admin_thumbnail_maintenance_notice')) {
+        view_render_admin_thumbnail_maintenance_notice($summary);
+        return;
+    }
+
     if (($summary['images_with_missing'] ?? 0) <= 0) {
         return;
     }

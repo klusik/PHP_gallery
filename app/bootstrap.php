@@ -43,6 +43,7 @@ require __DIR__ . '/database.php';
 require __DIR__ . '/security.php';
 require __DIR__ . '/migrations.php';
 require __DIR__ . '/services.php';
+require __DIR__ . '/views.php';
 require __DIR__ . '/integrity.php';
 require __DIR__ . '/controllers.php';
 

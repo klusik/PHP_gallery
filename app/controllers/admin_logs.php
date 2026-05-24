@@ -125,6 +125,10 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
  */
 function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
 {
+    if (function_exists('view_render_admin_feature_flag')) {
+        return view_render_admin_feature_flag($enabled, e($symbol), $label);
+    }
+
     if (!$enabled) {
         return '';
     }

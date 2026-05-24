@@ -248,8 +248,8 @@ function cms_gallery(): void
     // Variable $seo stores this steps working value.
     $seo = public_render_profile_span('seo_metadata_lookup', static fn (): array => public_gallery_metadata($gallery));
     ob_start();
-    render_public_seo_tags($gallery, $allImages);
-    render_gallery_json_ld($gallery, $images);
+    view_render_public_seo_tags($gallery, $allImages);
+    view_render_gallery_json_ld($gallery, $images);
     append_cms_head_extras((string) ob_get_clean());
     if ($backgroundAssetUrl !== '') {
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
@@ -578,7 +578,7 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
     echo '</div>';
     render_gallery_date($gallery, 'hero-gallery-date');
     if (trim($description) !== '') {
-        echo '<div class="hero-description gallery-description-rich">' . gallery_description_markdown_html($description) . '</div>';
+        echo '<div class="hero-description gallery-description-rich">' . view_gallery_description_markdown_html($description) . '</div>';
     }
 }
 
@@ -805,9 +805,9 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         return contained_tags_for_gallery($gallery, $publicOnly);
     });
     // $descriptionPreview stores the card-length Markdown source. Full text remains visible in the opened gallery hero.
-    $descriptionPreview = gallery_description_markdown_excerpt((string) ($gallery['description'] ?? ''));
+    $descriptionPreview = view_gallery_description_markdown_excerpt((string) ($gallery['description'] ?? ''));
     // $descriptionHtml stores the safe rendered card description.
-    $descriptionHtml = gallery_description_markdown_html($descriptionPreview);
+    $descriptionHtml = view_gallery_description_markdown_html($descriptionPreview);
     // $effectiveVisibility stores the normalized card visibility used for admin-only visual state markers.
     $effectiveVisibility = gallery_effective_visibility($gallery);
     // $showAdminUnpublishedMarker keeps unpublished galleries visible to admins while making their non-public state obvious.

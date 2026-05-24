@@ -78,15 +78,20 @@ function cms_admin_simbrief_description(): void
     }
 
     try {
-        $result = simbrief_description_generate_for_identifier(
+        $identifier = simbrief_description_identifier(
             (string) ($_POST['simbrief_pilot_id'] ?? ''),
             (string) ($_POST['simbrief_pilot_name'] ?? '')
         );
-        $details = $result['details'] ?? [];
+        $payload = simbrief_description_fetch_latest_ofp($identifier);
+        $details = simbrief_description_extract_details($payload);
+        $description = function_exists('view_simbrief_description_markdown')
+            ? view_simbrief_description_markdown($details)
+            : simbrief_description_build_markdown($details);
+
         if (function_exists('admin_log_event')) {
             admin_log_event('info', 'simbrief.description_generated', 'Admin generated a gallery description draft from SimBrief.', [
                 'gallery_id' => $galleryId,
-                'identifier_type' => (string) ($result['identifier_type'] ?? ''),
+                'identifier_type' => (string) ($identifier['label'] ?? ''),
                 'origin' => (string) ($details['origin_code'] ?? ''),
                 'destination' => (string) ($details['destination_code'] ?? ''),
                 'aircraft' => (string) ($details['aircraft'] ?? ''),
@@ -95,7 +100,7 @@ function cms_admin_simbrief_description(): void
 
         admin_simbrief_json_response([
             'ok' => true,
-            'description' => (string) ($result['description'] ?? ''),
+            'description' => $description,
             'message' => t('admin.simbrief.generated', 'SimBrief draft generated. Review it in the description field, then save the gallery.'),
             'details' => $details,
         ]);

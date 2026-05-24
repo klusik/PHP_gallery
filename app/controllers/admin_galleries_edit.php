@@ -210,6 +210,10 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  */
 function render_admin_simbrief_description_tool(int $galleryId): void
 {
+    if (function_exists('view_render_admin_simbrief_description_tool')) {
+        view_render_admin_simbrief_description_tool($galleryId);
+        return;
+    }
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
     echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</p></div></div>';
     echo '<div class="admin-simbrief-description-grid">';
