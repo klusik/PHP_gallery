@@ -201,6 +201,25 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
 }
 
 
+
+/**
+ * Render the SimBrief draft generator for the existing description textarea.
+ *
+ * @param int $galleryId Gallery edited by the current form.
+ * @return void
+ */
+function render_admin_simbrief_description_tool(int $galleryId): void
+{
+    echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
+    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</p></div></div>';
+    echo '<div class="admin-simbrief-description-grid">';
+    echo '<label>' . e(t('admin.simbrief.pilot_id', 'SimBrief Pilot ID')) . '<input name="simbrief_pilot_id" autocomplete="off" inputmode="text" data-simbrief-pilot-id><span class="muted">' . e(t('admin.simbrief.pilot_id_help', 'Pilot ID = the numeric or account identifier used by SimBrief. If both fields are filled, Pilot ID is used first.')) . '</span></label>';
+    echo '<label>' . e(t('admin.simbrief.pilot_name', 'SimBrief pilot name')) . '<input name="simbrief_pilot_name" autocomplete="off" data-simbrief-pilot-name><span class="muted">' . e(t('admin.simbrief.pilot_name_help', 'Pilot name = the SimBrief pilot name exactly as it appears in the SimBrief profile.')) . '</span></label>';
+    echo '</div>';
+    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+    echo '</div>';
+}
+
 /**
  * Return true when a partial gallery save contains any value from a field group.
  */
@@ -722,8 +741,9 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
     }
-    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
+    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-gallery-description-textarea>' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
+    render_admin_simbrief_description_tool((int) $gallery['id']);
     echo '</div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options($gallery) . '</select></label><label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';

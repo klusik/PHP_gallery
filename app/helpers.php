@@ -1385,6 +1385,17 @@ function cms_browser_i18n_strings(): array
         'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
         'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
         'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
+        'admin.simbrief.js_missing_form' => t('admin.simbrief.js_missing_form', 'The gallery form could not be found.'),
+        'admin.simbrief.js_missing_textarea' => t('admin.simbrief.js_missing_textarea', 'The description field could not be found.'),
+        'admin.simbrief.js_missing_identifier' => t('admin.simbrief.js_missing_identifier', 'Enter a SimBrief Pilot ID or pilot name first.'),
+        'admin.simbrief.js_replace_confirm' => t('admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'),
+        'admin.simbrief.js_not_configured' => t('admin.simbrief.js_not_configured', 'SimBrief generation is not configured correctly on this page.'),
+        'admin.simbrief.js_generating' => t('admin.simbrief.js_generating', 'Fetching SimBrief data and generating draft...'),
+        'admin.simbrief.js_failed' => t('admin.simbrief.js_failed', 'SimBrief generation failed.'),
+        'admin.simbrief.js_empty' => t('admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'),
+        'admin.simbrief.js_generated' => t('admin.simbrief.js_generated', 'Draft generated. Review it, then save the gallery.'),
+        'admin.simbrief.js_invalid_json' => t('admin.simbrief.js_invalid_json', 'The server returned an invalid SimBrief response.'),
+        'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
         'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
     ];
@@ -1430,6 +1441,7 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {

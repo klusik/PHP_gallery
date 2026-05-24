@@ -59,6 +59,7 @@ import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=2026051
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260519-picture-manager-v5';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
+import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260524-simbrief-description-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260521-flight-map-fullscreen-v1';
@@ -115,6 +116,7 @@ function bootGalleryBrowserFeatures() {
     setupThumbnailCacheDeleteConfirmation();
     setupAdminTabs();
     setupAdminDatePickers();
+    setupSimbriefDescriptionGenerator();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

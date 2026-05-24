@@ -98,6 +98,8 @@ require_once __DIR__ . '/services/database_observer.php';
 // Load the GitHub API gateway before update services perform remote checks.
 require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
+// Load SimBrief description helpers after the shared HTTP client is available.
+require_once __DIR__ . '/services/simbrief_descriptions.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
 require_once __DIR__ . '/services/flight_maps.php';
