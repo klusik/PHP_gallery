@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.70
+
+Version 0.70 expands gallery tooling around SimBrief route content, adds a dedicated picture manager workflow, and continues polishing mobile lightbox and admin usability. It also tightens uploader diagnostics, improves tag management, and cleans up backend boundaries around the newer admin features.
+
+### Highlights
+
+#### Added SimBrief route-backed gallery maps and descriptions
+
+  - Added SimBrief route-backed gallery maps for flight-themed galleries.
+  - Added automatic gallery description generation from SimBrief route data.
+  - Added a dedicated SimBrief admin workflow for managing route content.
+  - Added flight-map persistence support through a new database migration.
+  - Added translation and admin UI support for the new SimBrief tooling.
+  - Kept route generation and description generation integrated with the existing gallery admin model.
+
+#### Added a dedicated picture manager workflow
+
+  - Added a dedicated picture manager controller and service layer.
+  - Added picture manager browser modules for managing gallery images more directly.
+  - Added drag-and-drop and drop-action support for public and admin image handling.
+  - Added a HUD overlay for the picture manager so image actions stay visible on top of the photo.
+  - Added gallery picker and drag-ghost UI support for image organization tasks.
+  - Consolidated picture-management behavior into a more explicit workflow instead of spreading it across unrelated admin screens.
+
+#### Improved mobile gallery and lightbox behavior
+
+  - Reworked the mobile gallery into a more isolated layout layer.
+  - Improved mobile lightbox swipe handling and fullscreen interaction on touch devices.
+  - Refined viewport handling so the mobile lightbox behaves more predictably during gestures.
+  - Added a fullscreen slideshow path for lightbox viewing.
+  - Improved lightbox fullscreen presentation and supporting CSS for mobile and desktop layouts.
+  - Preserved the existing gallery navigation model while making touch behavior less fragile.
+
+#### Improved admin gallery management
+
+  - Refined admin tag management with sortable usage and usage links.
+  - Improved gallery list, reordering, and bulk action interactions in the admin UI.
+  - Added a safer admin side-panel refresh flow for updated gallery content.
+  - Fixed the API manager panel and upload API revoke flow.
+  - Cleaned up MVC boundaries and controller/service responsibilities around the newer admin pages.
+  - Improved admin dashboard rendering and telemetry handling for the updated admin stack.
+
+#### Improved upload watcher diagnostics
+
+  - Added a watcher health indicator for the Windows uploader.
+  - Added color-coded upload log output for easier scanning during batch uploads.
+  - Ignored Python cache files in the uploader workflow.
+  - Improved Windows companion app behavior for upload automation and API-key handling.
+  - Tightened upload automation behavior to better support the newer gallery workflows.
+
+#### Updated supporting frontend assets
+
+  - Updated gallery JavaScript modules for admin operations, side panels, navigation data, and image reordering.
+  - Updated public gallery and lightbox assets to support the new mobile, fullscreen, and picture-manager flows.
+  - Updated admin and public CSS to match the newer layouts and interaction patterns.
+
 ## Version 0.69
 
 Version 0.69 is a major large-gallery scalability, fullscreen-map stability, uploader automation, and deferred lightbox-loading release. It focuses on making very large galleries usable without blocking the browser, improving fullscreen map behavior, introducing lazy lightbox dataset generation, expanding the Windows uploader tooling, and stabilizing dynamic public refresh behavior for galleries with thousands of images.
