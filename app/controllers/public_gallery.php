@@ -186,10 +186,14 @@ function cms_gallery(): void
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
     // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
     $allChildren = $children;
-    // Variable $mapsAllowed stores this steps working value.
-    $mapsAllowed = gallery_allows_gps_maps($gallery);
-    // Variable $galleryMapAvailable stores whether the map button should be shown without building the full marker payload.
-    $galleryMapAvailable = $mapsAllowed ? gallery_has_map_points($gallery, $publicOnly, true) : false;
+    // Variable $photoMapsAllowed stores whether individual photos may expose EXIF GPS points.
+    $photoMapsAllowed = gallery_allows_gps_maps($gallery);
+    // Variable $galleryMapAvailable stores whether the map button should be shown without building the full payload.
+    $galleryMapAvailable = gallery_has_map_payload($gallery, $publicOnly, true);
+    // Variable $mapsAllowed stores whether the shared map UI can be opened from any source.
+    $mapsAllowed = $photoMapsAllowed || $galleryMapAvailable;
+    // Variable $galleryMapUrl stores the lazily loaded gallery map endpoint.
+    $galleryMapUrl = $galleryMapAvailable ? url_for('gallery_map_data', ['id' => $gallery['id']]) : '';
     // Variable $votingAllowed stores this steps working value.
     $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $pictureGameImages stores this steps working value.
@@ -262,7 +266,7 @@ function cms_gallery(): void
     render_public_gallery_admin_add_child_link($gallery, 'hero');
     echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.download', 'Download gallery')) . '" title="' . e(t('gallery.download', 'Download gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('gallery.download', 'Download gallery')) . '</span></a>';
     if ($galleryMapAvailable) {
-        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
+        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
     }
     if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.play_picture_game', 'Play picture game')) . '" title="' . e(t('gallery.play_picture_game', 'Play picture game')) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e(t('gallery.play_picture_game', 'Play picture game')) . '</span></a>';
@@ -313,10 +317,10 @@ function cms_gallery(): void
         if ($anonymousPreview) {
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '">';
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e((string) $gallery['title']) . '">';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -338,7 +342,7 @@ function cms_gallery(): void
         // Variable $imageTags stores this steps working value.
         $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
-        $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
+        $imageHasPublicGps = $photoMapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
         // Variable $displayIndex stores this steps working value.
@@ -400,7 +404,7 @@ function cms_gallery(): void
         render_back_to_top_button();
         echo '</div>';
     }
-    render_lightbox($votingAllowed, $mapsAllowed);
+    render_lightbox($votingAllowed, $mapsAllowed, $galleryMapUrl, (string) $gallery['title']);
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
@@ -1086,13 +1090,17 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
  * @param mixed $votingAllowed Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false): void
+function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, string $galleryMapUrl = '', string $galleryMapTitle = ''): void
 {
     // $votePanelHtml is a host for the exact gallery-card vote widget.
     // JavaScript clones the current image's server-rendered form into it.
     $votePanelHtml = $votingAllowed ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>' : '';
+    // $galleryMapAttributes stores optional route/gallery map metadata for keyboard map opening.
+    $galleryMapAttributes = $galleryMapUrl !== ''
+        ? ' data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e($galleryMapTitle) . '"'
+        : '';
 
-    echo '<div class="lightbox" data-lightbox data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" hidden>';
+    echo '<div class="lightbox" data-lightbox data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
@@ -1100,6 +1108,7 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false):
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
     echo '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>';
+    echo '<button type="button" class="lightbox-map-hud-button lightbox-hud" data-lightbox-map aria-label="' . e(t('lightbox.map', 'Map')) . '" title="' . e(t('lightbox.map', 'Map')) . '" hidden>M</button>';
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';
     echo '</div>';
 }

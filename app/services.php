@@ -100,4 +100,5 @@ require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
+require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';

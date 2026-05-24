@@ -61,7 +61,7 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260520-mobile-swipe-fix-v2';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260521-flight-map-fullscreen-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -76,7 +76,8 @@ import {
     setupAdminGallerySidePanel,
     setupPictureGame,
     setupThumbnailProgress,
-} from './gallery-modules/admin-operations.js?v=20260519-redundancy-refactor-v1';
+    setupAdminNavdataUpdateFeedback,
+} from './gallery-modules/admin-operations.js?v=20260521-navdata-feedback-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -132,6 +133,7 @@ function bootGalleryBrowserFeatures() {
     setupGalleryLightbox();
     setupPictureManager();
 
+    runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupResponsiveThumbnailSizes);
     runWhenDomReady(setupAdminImageReordering);
     runWhenDomReady(setupPublicGalleryPageReordering);

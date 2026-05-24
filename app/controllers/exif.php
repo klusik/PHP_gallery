@@ -58,12 +58,8 @@ function cms_gallery_map_data(): void
     }
     // Variable $publicOnly stores this steps working value.
     $publicOnly = !current_user();
-    // Variable $points stores this steps working value.
-    $points = gallery_map_points($gallery, $publicOnly, true);
+    // Variable $payload stores this steps working value.
+    $payload = gallery_map_payload($gallery, $publicOnly, true);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode([
-        'gallery_id' => (int) $gallery['id'],
-        'title' => (string) $gallery['title'],
-        'points' => $points,
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }

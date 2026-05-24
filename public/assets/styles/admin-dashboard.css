@@ -364,3 +364,40 @@
         grid-template-columns: 1fr;
     }
 }
+
+.admin-navdata-update-card[aria-busy="true"] {
+    opacity: 0.92;
+}
+
+
+.admin-navdata-update-card[aria-busy="true"] [data-navdata-update-submit].is-working {
+    cursor: progress;
+}
+
+body.is-navdata-updating {
+    cursor: progress;
+}
+
+.admin-navdata-update-status {
+    align-items: center;
+    display: flex;
+    gap: 0.55rem;
+    margin-top: 0.4rem;
+}
+
+.admin-navdata-update-spinner {
+    animation: admin-navdata-spin 0.8s linear infinite;
+    border: 2px solid color-mix(in srgb, var(--accent, #3b82f6) 28%, transparent);
+    border-top-color: var(--accent, #3b82f6);
+    border-radius: 999px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    height: 1rem;
+    width: 1rem;
+}
+
+@keyframes admin-navdata-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

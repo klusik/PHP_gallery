@@ -707,3 +707,10 @@
     overflow: hidden;
 }
 
+.lightbox-map-hud-button {
+    position: absolute;
+    top: 1rem;
+    left: 7rem;
+    min-width: 2.6rem;
+    font-weight: 700;
+}
