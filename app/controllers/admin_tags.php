@@ -60,6 +60,13 @@ function cms_admin_tags(): void
 
     // Variable $selectedId stores this steps working value.
     $selectedId = max(0, (int) ($_GET['id'] ?? 0));
+    // Variable $sortMode stores this steps working value.
+    $sortMode = strtolower((string) ($_GET['sort'] ?? 'usage'));
+    if (!in_array($sortMode, ['name', 'usage'], true)) {
+        $sortMode = 'usage';
+    }
+    // Variable $sortDirection stores this steps working value.
+    $sortDirection = $sortMode === 'name' ? 'asc' : 'desc';
     // Variable $notice stores this steps working value.
     $notice = flash_message('admin_tags_notice');
     // Variable $error stores this steps working value.
@@ -71,6 +78,11 @@ function cms_admin_tags(): void
         $tagId = max(0, (int) ($_POST['tag_id'] ?? 0));
         // Variable $action stores this steps working value.
         $action = (string) ($_POST['action'] ?? 'save');
+        // Variable $postedSort stores this steps working value.
+        $postedSort = strtolower((string) ($_POST['sort'] ?? $sortMode));
+        if (!in_array($postedSort, ['name', 'usage'], true)) {
+            $postedSort = $sortMode;
+        }
         // Variable $wantsJson stores this steps working value.
         $wantsJson = admin_tags_request_wants_json();
 
@@ -84,7 +96,7 @@ function cms_admin_tags(): void
                     admin_tags_json_response(['ok' => false, 'error' => admin_tags_error_message((string) ($result['error'] ?? 'delete_failed'))], 422);
                 }
                 flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'delete_failed')));
-                redirect_to(url_for('admin_tags', ['id' => $tagId]));
+                redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
             }
             admin_log_event('info', 'tags.deleted', 'Admin deleted tag.', [
                 'tag_id' => $tagId,
@@ -99,7 +111,7 @@ function cms_admin_tags(): void
                 ]);
             }
             flash_message('admin_tags_notice', t('admin.tags.deleted', 'Tag deleted.'));
-            redirect_to(admin_tags_safe_return_url((string) ($_POST['return_url'] ?? url_for('admin_tags'))));
+            redirect_to(admin_tags_safe_return_url((string) ($_POST['return_url'] ?? url_for('admin_tags', ['sort' => $postedSort]))));
         }
 
         // Variable $result stores this steps working value.
@@ -114,7 +126,7 @@ function cms_admin_tags(): void
                 admin_tags_json_response(['ok' => false, 'error' => admin_tags_error_message((string) ($result['error'] ?? 'save_failed'))], 422);
             }
             flash_message('admin_tags_error', admin_tags_error_message((string) ($result['error'] ?? 'save_failed')));
-            redirect_to(url_for('admin_tags', ['id' => $tagId]));
+            redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
         }
         // Variable $updatedTag stores this steps working value.
         $updatedTag = (array) ($result['tag'] ?? []);
@@ -135,16 +147,18 @@ function cms_admin_tags(): void
             ]);
         }
         flash_message('admin_tags_notice', t('admin.tags.saved', 'Tag saved.'));
-        redirect_to(url_for('admin_tags', ['id' => $tagId]));
+        redirect_to(url_for('admin_tags', ['id' => $tagId, 'sort' => $postedSort]));
     }
 
     // Variable $tags stores this steps working value.
-    $tags = admin_tag_rows();
+    $tags = admin_tag_rows($sortMode, $sortDirection);
     if ($selectedId <= 0 && $tags) {
         $selectedId = (int) $tags[0]['id'];
     }
     // Variable $selectedTag stores this steps working value.
     $selectedTag = $selectedId > 0 ? find_tag_by_id($selectedId) : null;
+    // Variable $selectedTagUsage stores this steps working value.
+    $selectedTagUsage = $selectedTag ? admin_tag_usage_rows((int) $selectedTag['id']) : ['galleries' => [], 'images' => []];
 
     if (isset($_GET['panel'])) {
         echo '<div class="admin-side-panel-stack admin-tags-panel-stack" data-admin-tag-edit-panel>';
@@ -157,7 +171,7 @@ function cms_admin_tags(): void
         if (!$selectedTag) {
             echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.tags.kicker', 'Metadata')) . '</p><h2>' . e(t('admin.tags.no_selection', 'No tag selected')) . '</h2><p class="muted">' . e(t('admin.tags.no_selection_help', 'Select a tag from the list to edit it.')) . '</p></div>';
         } else {
-            render_admin_tag_form($selectedTag);
+            render_admin_tag_form($selectedTag, $sortMode);
         }
         echo '</div>';
         return;
@@ -179,7 +193,17 @@ function cms_admin_tags(): void
 
     echo '<section class="admin-tags-layout">';
     echo '<div class="panel admin-tags-list-panel">';
+    echo '<div class="admin-tags-list-head">';
     echo '<h2>' . e(t('admin.tags.existing_tags', 'Existing tags')) . '</h2>';
+    $sortUrl = url_for('admin_tags', ['id' => $selectedId > 0 ? $selectedId : null, 'sort' => $sortMode]);
+    echo '<div class="admin-tags-sort-form">';
+    echo '<label><span>' . e(t('admin.tags.sort_label', 'Sort')) . '</span><select name="sort" data-admin-tags-sort data-admin-tags-sort-url="' . e(url_for('admin_tags', ['id' => $selectedId > 0 ? $selectedId : null, 'sort' => '__SORT__'])) . '" onchange="window.location.href=this.dataset.adminTagsSortUrl.replace(\'__SORT__\', encodeURIComponent(this.value));">';
+    echo '<option value="usage"' . ($sortMode === 'usage' ? ' selected' : '') . '>' . e(t('admin.tags.sort_usage', 'Most used')) . '</option>';
+    echo '<option value="name"' . ($sortMode === 'name' ? ' selected' : '') . '>' . e(t('admin.tags.sort_name', 'Alphabetical')) . '</option>';
+    echo '</select></label>';
+    echo '<noscript><a class="button secondary" href="' . e($sortUrl) . '">' . e(t('admin.tags.sort_apply', 'Apply')) . '</a></noscript>';
+    echo '</div>';
+    echo '</div>';
     if (!$tags) {
         echo '<p class="muted">' . e(t('admin.tags.empty', 'No tags exist yet. Add tags from a gallery or image editor first.')) . '</p>';
     } else {
@@ -189,7 +213,7 @@ function cms_admin_tags(): void
             $active = (int) $tag['id'] === $selectedId;
             // Variable $usage stores this steps working value.
             $usage = (int) $tag['gallery_count'] + (int) $tag['image_count'];
-            echo '<a class="admin-tag-row' . ($active ? ' is-active' : '') . '" role="listitem" href="' . e(url_for('admin_tags', ['id' => (int) $tag['id']])) . '">';
+            echo '<a class="admin-tag-row' . ($active ? ' is-active' : '') . '" role="listitem" href="' . e(url_for('admin_tags', ['id' => (int) $tag['id'], 'sort' => $sortMode])) . '">';
             echo '<span><strong>' . e((string) $tag['name']) . '</strong><small>/' . e((string) $tag['slug']) . '</small></span>';
             echo '<em>' . e(t('admin.tags.usage_count', '{count} uses', ['count' => $usage])) . '</em>';
             echo '</a>';
@@ -203,7 +227,38 @@ function cms_admin_tags(): void
         echo '<h2>' . e(t('admin.tags.no_selection', 'No tag selected')) . '</h2>';
         echo '<p class="muted">' . e(t('admin.tags.no_selection_help', 'Select a tag from the list to edit it.')) . '</p>';
     } else {
-        render_admin_tag_form($selectedTag);
+        render_admin_tag_form($selectedTag, $sortMode);
+        echo '<section class="admin-tags-usage-panel">';
+        echo '<h3>' . e(t('admin.tags.used_where', 'Used in')) . '</h3>';
+        if (!$selectedTagUsage['galleries'] && !$selectedTagUsage['images']) {
+            echo '<p class="muted">' . e(t('admin.tags.used_where_empty', 'This tag is not attached to any galleries or images yet.')) . '</p>';
+        } else {
+            if ($selectedTagUsage['galleries']) {
+                echo '<div class="admin-tags-usage-group">';
+                echo '<h4>' . e(t('admin.tags.used_in_galleries', 'Galleries')) . '</h4>';
+                echo '<ul class="admin-tags-usage-list">';
+                foreach ($selectedTagUsage['galleries'] as $gallery) {
+                    echo '<li><a href="' . e((string) $gallery['edit_url']) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="gallery-edit" data-admin-side-panel-kicker="' . e(t('gallery.editor', 'Gallery editor')) . '" data-admin-side-panel-title="' . e(t('gallery.edit', 'Edit gallery')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_gallery', ['id' => (int) $gallery['id'], 'panel' => 1])) . '">';
+                    echo e((string) $gallery['title']);
+                    echo '</a></li>';
+                }
+                echo '</ul>';
+                echo '</div>';
+            }
+            if ($selectedTagUsage['images']) {
+                echo '<div class="admin-tags-usage-group">';
+                echo '<h4>' . e(t('admin.tags.used_in_images', 'Images')) . '</h4>';
+                echo '<ul class="admin-tags-usage-list">';
+                foreach ($selectedTagUsage['images'] as $image) {
+                    echo '<li><a href="' . e((string) $image['edit_url']) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('gallery.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => (int) $image['id'], 'panel' => 1])) . '">';
+                    echo e((string) $image['relative_path']);
+                    echo '</a><small>' . e((string) $image['gallery_title']) . '</small></li>';
+                }
+                echo '</ul>';
+                echo '</div>';
+            }
+        }
+        echo '</section>';
     }
     echo '</div>';
     echo '</section>';
@@ -213,7 +268,7 @@ function cms_admin_tags(): void
 /**
  * Render the selected tag edit form.
  */
-function render_admin_tag_form(array $tag): void
+function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 {
     // Variable $description stores this steps working value.
     $description = tag_description_schema_ready() ? (string) ($tag['description'] ?? '') : '';
@@ -222,6 +277,7 @@ function render_admin_tag_form(array $tag): void
     echo csrf_field();
     echo '<input type="hidden" name="tag_id" value="' . (int) $tag['id'] . '">';
     echo '<input type="hidden" name="action" value="save">';
+    echo '<input type="hidden" name="sort" value="' . e(in_array($sortMode, ['name', 'usage'], true) ? $sortMode : 'usage') . '">';
     echo '<label>' . e(t('admin.tags.name', 'Tag name')) . '<input name="name" value="' . e((string) $tag['name']) . '" required maxlength="100" autocomplete="off"><span class="muted">' . e(t('admin.tags.name_help', 'Use lowercase letters, numbers, and hyphens only. Other input is normalized automatically when saved.')) . '</span></label>';
     echo '<label>' . e(t('admin.tags.slug', 'URL slug')) . '<input name="slug" value="' . e((string) $tag['slug']) . '" required maxlength="120" autocomplete="off"><span class="muted">' . e(t('admin.tags.slug_help', 'This controls the public tag URL. Keep it short and stable when possible.')) . '</span></label>';
     echo '<label>' . e(t('admin.tags.public_description', 'Public description')) . '<textarea name="description" rows="6">' . e($description) . '</textarea><span class="muted">' . e(t('admin.tags.description_help', 'Optional text shown on the public tag landing page.')) . '</span></label>';

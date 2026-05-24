@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260518-initial-loader-v2';
+const lightboxModuleUrl = './lightbox.js?v=20260521-flight-map-fullscreen-v1';
 
 const deferredLightboxState = {
     controller: null,

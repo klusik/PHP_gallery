@@ -45,6 +45,8 @@ require_once __DIR__ . '/services/database_helpers.php';
 require_once __DIR__ . '/services/public_render_profiler.php';
 // Load admin render profiling helpers before admin controllers can record dashboard timings.
 require_once __DIR__ . '/services/admin_render_profiler.php';
+// Load Admin dashboard data helpers before the dashboard controller is registered.
+require_once __DIR__ . '/services/admin_dashboard.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.
 require_once __DIR__ . '/services/custom_css.php';
 // Load theme settings and CSS default helpers after custom CSS paths are available.
@@ -63,8 +65,11 @@ require_once __DIR__ . '/services/gallery_count_badges.php';
 require_once __DIR__ . '/services/gallery_dates.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.
 require_once __DIR__ . '/services/gallery_grid.php';
+// Load shared gallery picker data helpers before public and admin renderers build destination controls.
+require_once __DIR__ . '/services/gallery_picker.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
+require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
@@ -93,6 +98,9 @@ require_once __DIR__ . '/services/database_observer.php';
 // Load the GitHub API gateway before update services perform remote checks.
 require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
+// Load SimBrief description helpers after the shared HTTP client is available.
+require_once __DIR__ . '/services/simbrief_descriptions.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
+require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';

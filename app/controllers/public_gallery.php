@@ -186,10 +186,14 @@ function cms_gallery(): void
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
     // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
     $allChildren = $children;
-    // Variable $mapsAllowed stores this steps working value.
-    $mapsAllowed = gallery_allows_gps_maps($gallery);
-    // Variable $galleryMapAvailable stores whether the map button should be shown without building the full marker payload.
-    $galleryMapAvailable = $mapsAllowed ? gallery_has_map_points($gallery, $publicOnly, true) : false;
+    // Variable $photoMapsAllowed stores whether individual photos may expose EXIF GPS points.
+    $photoMapsAllowed = gallery_allows_gps_maps($gallery);
+    // Variable $galleryMapAvailable stores whether the map button should be shown without building the full payload.
+    $galleryMapAvailable = gallery_has_map_payload($gallery, $publicOnly, true);
+    // Variable $mapsAllowed stores whether the shared map UI can be opened from any source.
+    $mapsAllowed = $photoMapsAllowed || $galleryMapAvailable;
+    // Variable $galleryMapUrl stores the lazily loaded gallery map endpoint.
+    $galleryMapUrl = $galleryMapAvailable ? url_for('gallery_map_data', ['id' => $gallery['id']]) : '';
     // Variable $votingAllowed stores this steps working value.
     $votingAllowed = gallery_voting_allowed($gallery);
     // Variable $pictureGameImages stores this steps working value.
@@ -262,7 +266,7 @@ function cms_gallery(): void
     render_public_gallery_admin_add_child_link($gallery, 'hero');
     echo '<a class="button hero-icon-button hero-download-button" href="' . e(url_for('download_gallery', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.download', 'Download gallery')) . '" title="' . e(t('gallery.download', 'Download gallery')) . '"><span aria-hidden="true">&#10515;</span><span class="visually-hidden">' . e(t('gallery.download', 'Download gallery')) . '</span></a>';
     if ($galleryMapAvailable) {
-        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e(url_for('gallery_map_data', ['id' => $gallery['id']])) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
+        echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
     }
     if (picture_game_available($gallery, $pictureGameImages)) {
         echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.play_picture_game', 'Play picture game')) . '" title="' . e(t('gallery.play_picture_game', 'Play picture game')) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e(t('gallery.play_picture_game', 'Play picture game')) . '</span></a>';
@@ -282,6 +286,8 @@ function cms_gallery(): void
     render_public_gallery_preview_toolbar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
+    // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
+    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active();
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -304,16 +310,17 @@ function cms_gallery(): void
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     if ($images) {
+        render_picture_manager_toolbar($gallery, count($children) > 0);
         render_public_page_reorder_toolbar('photo', $gallery, !empty($paginationSettings['enabled']) ? $photoPagination : [], count($images), $imageTotalCount);
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $photoPagination : [], t('pagination.photo_pages', 'Photo pages'));
         $lightboxEndpointParams = ['id' => (int) $gallery['id']];
         if ($anonymousPreview) {
             $lightboxEndpointParams['view_as'] = 'anonymous';
         }
-        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '">';
+        echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list data-lightbox-config data-lightbox-endpoint="' . e(url_for('gallery_lightbox_data', $lightboxEndpointParams)) . '" data-lightbox-total="' . (int) $lightboxTotalCount . '" data-lightbox-window-size="60" data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e((string) $gallery['title']) . '">';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $mapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $lightboxExcludesRestrictedNsfw): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -335,7 +342,7 @@ function cms_gallery(): void
         // Variable $imageTags stores this steps working value.
         $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
-        $imageHasPublicGps = $mapsAllowed && image_has_gps($image);
+        $imageHasPublicGps = $photoMapsAllowed && image_has_gps($image);
         // Variable $imageMapPoint stores this steps working value.
         $imageMapPoint = $imageHasPublicGps ? public_render_profile_with_thumbnail_purpose('image card map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle)) : null;
         // Variable $displayIndex stores this steps working value.
@@ -348,10 +355,14 @@ function cms_gallery(): void
         $vote = $votesById[(int) $image['id']] ?? 0;
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
-        $imageCardClass = $publicPhotoReorderEnabled ? 'image-card has-public-reorder-handle' : 'image-card';
-        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '" ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) . '>';
+        $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
+        $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '"' : '';
+        echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) . '>';
         if ($publicPhotoReorderEnabled) {
             echo '<button type="button" class="public-reorder-handle public-photo-reorder-handle" data-public-reorder-handle aria-label="' . e(t('public.reorder.drag_photo_label', 'Drag photo to reorder visible photos')) . '" title="' . e(t('public.reorder.drag_photo_title', 'Drag to reorder this visible photo')) . '"><span aria-hidden="true">↕</span><span>' . e(t('public.reorder.move_photo', 'Move photo')) . '</span></button>';
+        }
+        if ($pictureManagerEnabled) {
+            echo '<button type="button" class="picture-manager-select-button" data-picture-manager-select aria-pressed="false" aria-label="' . e(t('picture_manager.select_photo', 'Select photo')) . '" title="' . e(t('picture_manager.select_photo', 'Select photo')) . '"><span aria-hidden="true">✓</span><span class="visually-hidden">' . e(t('picture_manager.select_photo', 'Select photo')) . '</span></button>';
         }
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
@@ -393,7 +404,7 @@ function cms_gallery(): void
         render_back_to_top_button();
         echo '</div>';
     }
-    render_lightbox($votingAllowed, $mapsAllowed);
+    render_lightbox($votingAllowed, $mapsAllowed, $galleryMapUrl, (string) $gallery['title']);
     if ($requestedImage) {
         append_cms_footer_script('document.addEventListener("DOMContentLoaded",function(){var selector="[data-lightbox-image][data-image-id=\"' . (int) $requestedImage['id'] . '\"], [data-lightbox-source][data-image-id=\"' . (int) $requestedImage['id'] . '\"]";var card=document.querySelector(selector);if(card){card.click();}});');
     }
@@ -438,6 +449,78 @@ function render_public_page_reorder_toolbar(string $kind, array $gallery, array 
     echo '<div><strong>' . e(t('public.reorder.move_visible_items', 'Move visible {items}', ['items' => $label])) . '</strong><p>' . e(t('public.reorder.visible_page_help', 'Drag only the cards shown on this page. Other pagination pages are not touched.')) . '</p></div>';
     echo '<span class="public-reorder-status" data-public-reorder-status aria-live="polite">' . e(t('public.reorder.ready', 'Ready.')) . '</span>';
     echo '</div>';
+}
+
+/**
+ * Render the logged-in public gallery Picture manager toolbar.
+ *
+ * The toolbar keeps discovery visible instead of relying only on hidden
+ * modifier-key gestures. It intentionally stays on the public gallery page and
+ * posts to small JSON endpoints that delegate mutation work to services.
+ */
+function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTargets): void
+{
+    if (!current_user() || admin_anonymous_preview_active()) {
+        return;
+    }
+
+    // $galleryId stores the source gallery ID for all manager actions.
+    $galleryId = (int) $gallery['id'];
+    // $suggestedDestinationId stores the most likely child gallery destination for typeahead prefill.
+    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    // $dropHelp stores the drag-and-drop hint appropriate for the current visible page.
+    $dropHelp = $hasVisibleDropTargets
+        ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
+        : t('picture_manager.drop_help_hidden', 'No subgallery target is visible on this page. Use the destination list below.');
+
+    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e(csrf_token()) . '" data-move-url="' . e(url_for('picture_manager_move')) . '" data-copy-url="' . e(url_for('picture_manager_copy')) . '" data-create-url="' . e(url_for('picture_manager_create_gallery')) . '">';
+    echo '<div class="picture-manager-summary">';
+    echo '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
+    echo '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
+    echo '<span><strong>' . e(t('picture_manager.title', 'Picture manager')) . '</strong><small>' . e(t('picture_manager.collapsed_help', 'Select, move, copy, or create galleries from visible photos.')) . '</small></span>';
+    echo '</button>';
+    echo '<span class="picture-manager-count" data-picture-manager-count aria-live="polite">' . e(t('picture_manager.none_selected', 'No photos selected.')) . '</span>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-panel" data-picture-manager-panel>';
+    echo '<div class="picture-manager-heading">';
+    echo '<div class="picture-manager-hints"><p>' . e(t('picture_manager.help', 'Select photos with the checkmarks. Shift-click selects a range. Ctrl-click or Cmd-click toggles one photo.')) . '</p><p>' . e($dropHelp) . '</p></div>';
+    echo '<div class="picture-manager-actions" aria-label="' . e(t('picture_manager.selection_actions', 'Selection actions')) . '">';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-select-all title="' . e(t('picture_manager.select_all', 'Select all')) . '" aria-label="' . e(t('picture_manager.select_all', 'Select all')) . '"><span class="picture-manager-button-icon" aria-hidden="true">☑</span><span class="picture-manager-button-label">' . e(t('picture_manager.select_all_short', 'All')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-clear title="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" aria-label="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">×</span><span class="picture-manager-button-label">' . e(t('picture_manager.clear_selection_short', 'Clear')) . '</span></button>';
+    echo '</div>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-action-grid">';
+    echo '<div class="picture-manager-action-card">';
+    echo '<label for="picture-manager-destination-' . $galleryId . '">' . e(t('picture_manager.move_or_copy_to', 'Move or copy selected to gallery')) . '</label>';
+    echo '<div class="picture-manager-inline-fields">';
+    echo render_gallery_search_picker('', 0, $galleryId, [
+        'id' => 'picture-manager-destination-' . $galleryId,
+        'placeholder' => t('picture_manager.search_destination', 'Search target gallery'),
+        'prefill_gallery_id' => $suggestedDestinationId,
+        'hidden_attributes' => ['data-picture-manager-destination' => ''],
+    ]);
+    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-move title="' . e(t('picture_manager.move_selected', 'Move selected')) . '" aria-label="' . e(t('picture_manager.move_selected', 'Move selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↪</span><span class="picture-manager-button-label">' . e(t('picture_manager.move_short', 'Move')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-copy title="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" aria-label="' . e(t('picture_manager.copy_selected', 'Copy selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">⧉</span><span class="picture-manager-button-label">' . e(t('picture_manager.copy_short', 'Copy')) . '</span></button>';
+    echo '</div>';
+    echo '<p>' . e(t('picture_manager.move_copy_warning', 'Move removes photos from this gallery. Copy keeps the originals here and creates real file copies in the selected gallery.')) . '</p>';
+    echo '</div>';
+
+    echo '<div class="picture-manager-action-card">';
+    echo '<label for="picture-manager-new-title-' . $galleryId . '">' . e(t('picture_manager.create_from_selection', 'Create gallery from selected photos')) . '</label>';
+    echo '<div class="picture-manager-inline-fields">';
+    echo '<input id="picture-manager-new-title-' . $galleryId . '" type="text" data-picture-manager-new-title placeholder="' . e(t('picture_manager.new_gallery_title', 'New gallery title')) . '">';
+    echo '<input type="text" data-picture-manager-new-folder placeholder="' . e(t('picture_manager.optional_folder_name', 'Optional folder name')) . '">';
+    echo '<button type="button" class="button picture-manager-icon-button is-primary-action" data-picture-manager-create title="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" aria-label="' . e(t('picture_manager.create_gallery', 'Create gallery')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">＋</span><span class="picture-manager-button-label">' . e(t('picture_manager.create_short', 'Create')) . '</span></button>';
+    echo '</div>';
+    echo '<p>' . e(t('picture_manager.copy_warning', 'This copies selected photos into the new child gallery. Originals stay here.')) . '</p>';
+    echo '</div>';
+    echo '</div>';
+
+    echo '<p class="picture-manager-status" data-picture-manager-status aria-live="polite">' . e(t('picture_manager.ready', 'Ready.')) . '</p>';
+    echo '</div>';
+    echo '</section>';
 }
 
 function render_public_gallery_preview_toolbar(array $gallery): void
@@ -1007,18 +1090,25 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
  * @param mixed $votingAllowed Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false): void
+function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, string $galleryMapUrl = '', string $galleryMapTitle = ''): void
 {
     // $votePanelHtml is a host for the exact gallery-card vote widget.
     // JavaScript clones the current image's server-rendered form into it.
     $votePanelHtml = $votingAllowed ? '<div class="lightbox-vote-panel" data-lightbox-vote-panel hidden></div>' : '';
+    // $galleryMapAttributes stores optional route/gallery map metadata for keyboard map opening.
+    $galleryMapAttributes = $galleryMapUrl !== ''
+        ? ' data-lightbox-gallery-map-url="' . e($galleryMapUrl) . '" data-lightbox-gallery-map-title="' . e($galleryMapTitle) . '"'
+        : '';
 
-    echo '<div class="lightbox" data-lightbox data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '" hidden>';
+    echo '<div class="lightbox" data-lightbox data-lightbox-maps-enabled="' . ($mapsAllowed ? '1' : '0') . '"' . $galleryMapAttributes . ' data-lightbox-slideshow-visible-ms="2000" data-lightbox-slideshow-transition-ms="1000" hidden>';
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
+    echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
-    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="' . e(t('lightbox.initial_loader_count', 'Preparing photo {current} of {total}')) . '" hidden><span class="lightbox-initial-loader-label" data-lightbox-initial-loader-label>' . e(t('lightbox.initial_loader', 'Preparing lightbox')) . '</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span class="lightbox-initial-loader-count" data-lightbox-initial-loader-count></span></span><img decoding="async" data-lightbox-img alt=""></button><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
+    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="' . e(t('lightbox.initial_loader_count', 'Preparing photo {current} of {total}')) . '" hidden><span class="lightbox-initial-loader-label" data-lightbox-initial-loader-label>' . e(t('lightbox.initial_loader', 'Preparing lightbox')) . '</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span class="lightbox-initial-loader-count" data-lightbox-initial-loader-count></span></span><img decoding="async" data-lightbox-img alt=""></button><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-slideshow-link" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S ' . e(t('lightbox.slideshow', 'slideshow')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
+    echo '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>';
+    echo '<button type="button" class="lightbox-map-hud-button lightbox-hud" data-lightbox-map aria-label="' . e(t('lightbox.map', 'Map')) . '" title="' . e(t('lightbox.map', 'Map')) . '" hidden>M</button>';
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';
     echo '</div>';
 }

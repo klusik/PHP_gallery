@@ -27,10 +27,12 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-05-19
  */
 
 import { setGalleryRowHiddenReason } from './admin-core.js?v=20260512-modular-admin-v1';
+import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
+import { dispatchPublicPhotoMove, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoImageIdsFromItems, setPublicPhotoDropTargetsActive } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
 
 // Function `setupAdminGalleryFilters` executes this focused behavior.
 export function setupAdminGalleryFilters() {
@@ -434,65 +436,33 @@ export function setupAdminGalleryReordering() {
     }
 
     /**
-     * Copies current column widths from a real row into a cloned row.
-     *
-     * @param {HTMLTableRowElement} sourceRow Real row being cloned.
-     * @param {HTMLTableRowElement} cloneRow Cloned row shown inside the ghost table.
-     * @returns {void}
-     */
-    function copyCellWidths(sourceRow, cloneRow) {
-        const sourceCells = Array.from(sourceRow.children);
-        const cloneCells = Array.from(cloneRow.children);
-        sourceCells.forEach((cell, index) => {
-            const cloneCell = cloneCells[index];
-            if (!cloneCell) {
-                return;
-            }
-            cloneCell.style.width = `${cell.getBoundingClientRect().width}px`;
-        });
-    }
-
-    /**
-     * Creates the fixed visual copy used while a gallery subtree is moving.
-     *
-     * @param {HTMLTableRowElement[]} rows Real rows being moved.
-     * @returns {HTMLTableElement} Ghost table appended to the document body.
-     */
-    function createGalleryGhost(rows) {
-        const firstBox = rows[0].getBoundingClientRect();
-        const ghost = document.createElement('table');
-        const ghostBody = document.createElement('tbody');
-        ghost.className = 'admin-image-order-ghost admin-gallery-order-ghost';
-        ghost.style.width = `${firstBox.width}px`;
-        ghost.style.left = `${firstBox.left}px`;
-        const clonedRow = rows[0].cloneNode(true);
-        copyCellWidths(rows[0], clonedRow);
-        clonedRow.classList.add('is-ghost-row');
-        clonedRow.removeAttribute('data-gallery-row');
-        clonedRow.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
-        ghostBody.appendChild(clonedRow);
-        ghost.appendChild(ghostBody);
-        document.body.appendChild(ghost);
-        return ghost;
-    }
-
-    /**
      * Creates a placeholder row matching the moved subtree height.
      *
      * @param {HTMLTableRowElement[]} rows Rows being moved.
      * @returns {HTMLTableRowElement} Placeholder inserted into the table body.
      */
     function createGalleryPlaceholder(rows) {
-        const placeholder = document.createElement('tr');
-        const cell = document.createElement('td');
-        const totalHeight = rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
-        placeholder.className = 'admin-image-order-placeholder admin-gallery-order-placeholder';
-        placeholder.setAttribute('aria-hidden', 'true');
-        placeholder.dataset.depth = String(originalDepth);
-        cell.colSpan = Math.max(1, rows[0].children.length);
-        cell.style.height = `${Math.max(32, totalHeight)}px`;
-        placeholder.appendChild(cell);
+        const placeholder = createTableDragPlaceholder(rows, {
+            className: 'admin-image-order-placeholder admin-gallery-order-placeholder',
+            minHeight: 32,
+        });
+        if (placeholder) {
+            placeholder.dataset.depth = String(originalDepth);
+        }
         return placeholder;
+    }
+
+    /**
+     * Creates the fixed visual copy used while a gallery subtree is moving.
+     *
+     * @param {HTMLTableRowElement[]} rows Real rows being moved.
+     * @returns {HTMLTableElement|null} Ghost table appended to the document body.
+     */
+    function createGalleryGhost(rows) {
+        return createTableDragGhost(rows, {
+            className: 'admin-image-order-ghost admin-gallery-order-ghost',
+            removeAttributes: ['data-gallery-row'],
+        });
     }
 
     /**
@@ -502,10 +472,7 @@ export function setupAdminGalleryReordering() {
      * @returns {void}
      */
     function moveGhost(clientY) {
-        if (!ghostTable) {
-            return;
-        }
-        ghostTable.style.top = `${clientY - pointerOffsetY}px`;
+        moveTableDragGhostY(ghostTable, clientY, pointerOffsetY);
     }
 
     /**
@@ -862,143 +829,6 @@ export function setupAdminGalleryReordering() {
                 saveController = null;
             }
         }
-    }
-
-    /**
-     * Reads the filename value used by automatic Name-column sorting.
-     *
-     * PHP stores the canonical relative path in data-image-name so sorting does
-     * not depend on presentation markup. The visible cell is still used as a
-     * fallback for older cached markup during rolling updates.
-     *
-     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
-     * @returns {string} Trimmed name used for locale-aware comparison.
-     */
-    function sortableImageName(row) {
-        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
-        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
-    }
-
-    /**
-     * Synchronizes visual and accessibility state of the Name sorting header.
-     *
-     * @param {HTMLButtonElement} button Header button used to sort names.
-     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
-     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
-     * @returns {void}
-     */
-    function updateNameSortHeader(button, nextDirection, activeDirection) {
-        const sortHeader = button.closest('th');
-        const arrow = button.querySelector('[aria-hidden="true"]');
-        button.dataset.sortDirection = nextDirection;
-        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
-        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
-        if (arrow) {
-            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
-        }
-    }
-
-    /**
-     * Sorts rows by filename and persists the generated order immediately.
-     *
-     * Automatic name sorting intentionally reuses the same save endpoint as
-     * manual dragging. Server-side validation, CSRF checks, exact image-list
-     * comparison, transactional sort_order updates, and admin logging therefore
-     * stay identical for both ordering methods.
-     *
-     * @param {MouseEvent} event Click event from the Name header button.
-     * @returns {void}
-     */
-    function handleNameSortClick(event) {
-        if (draggedRow) {
-            return;
-        }
-        const button = event.currentTarget;
-        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
-        const multiplier = direction === 'asc' ? 1 : -1;
-        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
-        if (rows.length < 2) {
-            setStatus('There is only one image, so sorting is not needed.', 'idle');
-            return;
-        }
-
-        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
-        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
-            .sort((left, right) => {
-                const compared = collator.compare(left.name, right.name);
-                if (compared !== 0) {
-                    return compared * multiplier;
-                }
-                return left.index - right.index;
-            })
-            .forEach((entry) => body.appendChild(entry.row));
-
-        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
-        saveOrder();
-    }
-
-    /**
-     * Reads the filename value used by automatic Name-column sorting.
-     *
-     * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
-     * @returns {string} Trimmed name used for locale-aware comparison.
-     */
-    function sortableImageName(row) {
-        const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
-        return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
-    }
-
-    /**
-     * Synchronizes visual and accessibility state of the Name sorting header.
-     *
-     * @param {HTMLButtonElement} button Header button used to sort names.
-     * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
-     * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
-     * @returns {void}
-     */
-    function updateNameSortHeader(button, nextDirection, activeDirection) {
-        const sortHeader = button.closest('th');
-        const arrow = button.querySelector('[aria-hidden="true"]');
-        button.dataset.sortDirection = nextDirection;
-        button.setAttribute('aria-label', nextDirection === 'asc' ? 'Sort photos by name from A to Z' : 'Sort photos by name from Z to A');
-        sortHeader?.setAttribute('aria-sort', activeDirection === 'asc' ? 'ascending' : 'descending');
-        if (arrow) {
-            arrow.textContent = activeDirection === 'asc' ? '↑' : '↓';
-        }
-    }
-
-    /**
-     * Sorts rows by filename and persists the generated order immediately.
-     *
-     * @param {MouseEvent} event Click event from the Name header button.
-     * @returns {void}
-     */
-    function handleNameSortClick(event) {
-        if (draggedRow) {
-            return;
-        }
-        const button = event.currentTarget;
-        const direction = button.dataset.sortDirection === 'desc' ? 'desc' : 'asc';
-        const multiplier = direction === 'asc' ? 1 : -1;
-        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
-        if (rows.length < 2) {
-            setStatus('There is only one image, so sorting is not needed.', 'idle');
-            return;
-        }
-
-        const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
-        rows.map((row, index) => ({row, index, name: sortableImageName(row)}))
-            .sort((left, right) => {
-                const compared = collator.compare(left.name, right.name);
-                if (compared !== 0) {
-                    return compared * multiplier;
-                }
-                return left.index - right.index;
-            })
-            .forEach((entry) => body.appendChild(entry.row));
-
-        updateNameSortHeader(button, direction === 'asc' ? 'desc' : 'asc', direction);
-        saveOrder();
     }
 
     /**
@@ -1417,7 +1247,11 @@ export function setupPublicGalleryPageReordering() {
         }
 
         let draggedItem = null;
+        let draggedItems = [];
+        // draggedHandle stores the visible handle that started the card drag.
         let draggedHandle = null;
+        // draggedMoveImageIds stores the full selected image set used when the drag is released over a subgallery.
+        let draggedMoveImageIds = [];
         let placeholderItem = null;
         let ghostItem = null;
         let pointerOffsetX = 0;
@@ -1426,6 +1260,7 @@ export function setupPublicGalleryPageReordering() {
         let originalItems = [];
         let activePointerId = null;
         let activeMouseFallback = false;
+        let activePictureManagerTarget = null;
 
         /**
          * Updates the compact save status for one public reorder list.
@@ -1462,6 +1297,26 @@ export function setupPublicGalleryPageReordering() {
         }
 
         /**
+         * Returns the selected contiguous photo group that should move together.
+         *
+         * @param {HTMLElement} item Photo card where the drag started.
+         * @returns {HTMLElement[]} One item, or a contiguous selected set in DOM order.
+         */
+        function contiguousSelectedPhotoItems(item) {
+            if (kind !== 'photo' || !item.classList.contains('is-picture-manager-selected')) {
+                return [item];
+            }
+            const items = sortableItems();
+            const selected = items.filter((candidate) => candidate.classList.contains('is-picture-manager-selected'));
+            if (selected.length <= 1 || !selected.includes(item)) {
+                return [item];
+            }
+            const positions = selected.map((candidate) => items.indexOf(candidate)).sort((left, right) => left - right);
+            const isContiguous = positions.every((position, offset) => offset === 0 || position === positions[offset - 1] + 1);
+            return isContiguous ? selected : [item];
+        }
+
+        /**
          * Returns the current visible id order as strings.
          *
          * @returns {string[]} Ordered ids from the current DOM.
@@ -1494,6 +1349,12 @@ export function setupPublicGalleryPageReordering() {
             ghost.removeAttribute('data-public-photo-order-item');
             ghost.removeAttribute('data-lightbox-image');
             ghost.querySelectorAll('[name]').forEach((field) => field.removeAttribute('name'));
+            if (draggedItems.length > 1) {
+                const count = document.createElement('span');
+                count.className = 'public-reorder-ghost-count';
+                count.textContent = `${draggedItems.length} photos`;
+                ghost.appendChild(count);
+            }
             ghost.style.left = `${box.left}px`;
             ghost.style.top = `${box.top}px`;
             ghost.style.width = `${box.width}px`;
@@ -1514,7 +1375,7 @@ export function setupPublicGalleryPageReordering() {
             placeholder.className = `public-reorder-placeholder ${kind === 'gallery' ? 'gallery-card' : 'image-card'}`;
             placeholder.setAttribute('aria-hidden', 'true');
             placeholder.style.minHeight = `${Math.max(96, box.height)}px`;
-            placeholder.innerHTML = `<span>${kind === 'gallery' ? 'Drop gallery here' : 'Drop photo here'}</span>`;
+            placeholder.innerHTML = `<span>${kind === 'gallery' ? 'Drop gallery here' : (draggedItems.length > 1 ? `Drop ${draggedItems.length} photos here` : 'Drop photo here')}</span>`;
             return placeholder;
         }
 
@@ -1580,6 +1441,57 @@ export function setupPublicGalleryPageReordering() {
         }
 
         /**
+         * Returns the visible subgallery card currently under the pointer.
+         *
+         * Photo reorder dragging is pointer-based, so native drop events do not fire
+         * on gallery cards. This helper lets selected photos be moved into a
+         * subgallery when the pointer is released over that subgallery.
+         *
+         * @param {number} clientX Pointer X coordinate.
+         * @param {number} clientY Pointer Y coordinate.
+         * @returns {HTMLElement|null} Destination subgallery card, or null.
+         */
+        function pictureManagerTargetAt(clientX, clientY) {
+            if (kind !== 'photo' || draggedItems.length === 0) {
+                return null;
+            }
+            return publicPhotoDropTargetAtPoint(clientX, clientY, {
+                sourceGalleryId: galleryId,
+                ignoreWithinSelector: '[data-public-reorder-list="photo"]',
+            });
+        }
+
+        /**
+         * Updates the highlighted subgallery target during photo dragging.
+         *
+         * @param {HTMLElement|null} target Subgallery card under the pointer.
+         * @returns {void}
+         */
+        function setActivePictureManagerTarget(target) {
+            if (activePictureManagerTarget === target) {
+                return;
+            }
+            activePictureManagerTarget = target;
+            highlightPublicPhotoDropTarget(activePictureManagerTarget, galleryId);
+        }
+
+        /**
+         * Enables or disables subgallery drop affordances during selected photo drag.
+         *
+         * @param {boolean} isActive Whether subgallery targets should look active.
+         * @returns {void}
+         */
+        function setPictureManagerTargetsActive(isActive) {
+            if (kind !== 'photo') {
+                return;
+            }
+            setPublicPhotoDropTargetsActive(galleryId, isActive);
+            if (!isActive) {
+                activePictureManagerTarget = null;
+            }
+        }
+
+        /**
          * Moves the placeholder to the candidate drop position.
          *
          * @param {number} clientX Pointer X coordinate.
@@ -1588,6 +1500,11 @@ export function setupPublicGalleryPageReordering() {
          */
         function movePlaceholder(clientX, clientY) {
             if (!placeholderItem) {
+                return;
+            }
+            const managerTarget = pictureManagerTargetAt(clientX, clientY);
+            setActivePictureManagerTarget(managerTarget);
+            if (managerTarget) {
                 return;
             }
             const insertion = insertionTarget(clientX, clientY);
@@ -1732,16 +1649,22 @@ export function setupPublicGalleryPageReordering() {
             document.removeEventListener('mouseup', handleMouseEnd, true);
             document.removeEventListener('keydown', handleKeydown, true);
 
-            if (commit && draggedItem && placeholderItem?.parentElement === list) {
-                list.insertBefore(draggedItem, placeholderItem);
+            if (commit && draggedItems.length > 0 && placeholderItem?.parentElement === list) {
+                draggedItems.forEach((item) => {
+                    list.insertBefore(item, placeholderItem);
+                });
             }
-            draggedItem?.classList.remove('is-public-reorder-hidden');
+            draggedItems.forEach((item) => item.classList.remove('is-public-reorder-hidden'));
             draggedHandle?.classList.remove('is-dragging');
             placeholderItem?.remove();
             ghostItem?.remove();
             document.body.classList.remove('public-reorder-active');
+            document.body.classList.remove('picture-manager-drag-active');
+            setPictureManagerTargetsActive(false);
             draggedItem = null;
+            draggedItems = [];
             draggedHandle = null;
+            draggedMoveImageIds = [];
             placeholderItem = null;
             ghostItem = null;
             activePointerId = null;
@@ -1775,6 +1698,15 @@ export function setupPublicGalleryPageReordering() {
             }
             event.preventDefault();
             event.stopPropagation();
+            const destinationTarget = pictureManagerTargetAt(event.clientX, event.clientY) || activePictureManagerTarget;
+            const destinationGalleryId = publicPhotoDropTargetGalleryId(destinationTarget);
+            if (kind === 'photo' && destinationGalleryId !== '' && draggedItems.length > 0) {
+                const draggedImageIds = draggedMoveImageIds.length > 0 ? draggedMoveImageIds : publicPhotoImageIdsFromItems(draggedItems);
+                cleanupDrag(false);
+                dispatchPublicPhotoMove(destinationGalleryId, draggedImageIds);
+                setStatus(`Moving ${draggedImageIds.length} photo${draggedImageIds.length === 1 ? '' : 's'} to gallery ${destinationGalleryId}...`, 'dragging');
+                return;
+            }
             cleanupDrag(true);
             const nextSignature = currentSignature();
             if (nextSignature === originalSignature) {
@@ -1898,6 +1830,13 @@ export function setupPublicGalleryPageReordering() {
 
             const itemBox = item.getBoundingClientRect();
             draggedItem = item;
+            draggedItems = contiguousSelectedPhotoItems(item);
+            if (kind === 'photo' && item.classList.contains('is-picture-manager-selected')) {
+                const selectedPhotoItems = sortableItems().filter((candidate) => candidate.classList.contains('is-picture-manager-selected'));
+                draggedMoveImageIds = publicPhotoImageIdsFromItems(selectedPhotoItems.length > 0 ? selectedPhotoItems : draggedItems);
+            } else {
+                draggedMoveImageIds = publicPhotoImageIdsFromItems(draggedItems);
+            }
             draggedHandle = handle;
             originalSignature = currentSignature();
             originalItems = sortableItems();
@@ -1908,11 +1847,16 @@ export function setupPublicGalleryPageReordering() {
             placeholderItem = buildPlaceholder(item);
             ghostItem = buildGhost(item);
 
-            list.insertBefore(placeholderItem, item.nextElementSibling);
-            item.classList.add('is-public-reorder-hidden');
+            list.insertBefore(placeholderItem, draggedItems[draggedItems.length - 1].nextElementSibling);
+            draggedItems.forEach((draggedPhotoItem) => draggedPhotoItem.classList.add('is-public-reorder-hidden'));
             handle.classList.add('is-dragging');
             document.body.classList.add('public-reorder-active');
-            setStatus(`Dragging visible ${kind === 'gallery' ? 'gallery' : 'photo'}...`, 'dragging');
+            if (kind === 'photo') {
+                document.body.classList.add('picture-manager-drag-active');
+                setPictureManagerTargetsActive(true);
+            }
+            const draggedStatusCount = kind === 'photo' && draggedMoveImageIds.length > draggedItems.length ? draggedMoveImageIds.length : draggedItems.length;
+            setStatus(draggedStatusCount > 1 ? `Dragging ${draggedStatusCount} selected photos...` : `Dragging visible ${kind === 'gallery' ? 'gallery' : 'photo'}...`, 'dragging');
             moveGhost(event.clientX, event.clientY);
             movePlaceholder(event.clientX, event.clientY);
 

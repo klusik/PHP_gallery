@@ -201,6 +201,25 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
 }
 
 
+
+/**
+ * Render the SimBrief draft generator for the existing description textarea.
+ *
+ * @param int $galleryId Gallery edited by the current form.
+ * @return void
+ */
+function render_admin_simbrief_description_tool(int $galleryId): void
+{
+    echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
+    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</p></div></div>';
+    echo '<div class="admin-simbrief-description-grid">';
+    echo '<label>' . e(t('admin.simbrief.pilot_id', 'SimBrief Pilot ID')) . '<input name="simbrief_pilot_id" autocomplete="off" inputmode="text" data-simbrief-pilot-id><span class="muted">' . e(t('admin.simbrief.pilot_id_help', 'Pilot ID = the numeric or account identifier used by SimBrief. If both fields are filled, Pilot ID is used first.')) . '</span></label>';
+    echo '<label>' . e(t('admin.simbrief.pilot_name', 'SimBrief pilot name')) . '<input name="simbrief_pilot_name" autocomplete="off" data-simbrief-pilot-name><span class="muted">' . e(t('admin.simbrief.pilot_name_help', 'Pilot name = the SimBrief pilot name exactly as it appears in the SimBrief profile.')) . '</span></label>';
+    echo '</div>';
+    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+    echo '</div>';
+}
+
 /**
  * Return true when a partial gallery save contains any value from a field group.
  */
@@ -234,6 +253,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $pictureGameReady = picture_game_schema_ready();
     // $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready();
+    // $flightMapReady stores this steps working value.
+    $flightMapReady = flight_map_schema_ready();
     // $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     // $galleryId stores the gallery being edited.
@@ -323,6 +344,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
 
     // $shouldUpdateCover stores whether the title-picture fields are part of this request.
     $shouldUpdateCover = $completeForm || array_key_exists('cover_image_id', $input) || !empty($files['cover_upload']['name'] ?? '');
+    // $shouldUpdateFlightMap stores whether this request owns route-map input.
+    $shouldUpdateFlightMap = $flightMapReady && ($completeForm || array_key_exists('flight_route_text', $input));
     // Variable $coverImageId stores this steps working value.
     $coverImageId = (int) ($gallery['cover_image_id'] ?? 0);
     // $coverImagePath stores an intermediate value used by the surrounding gallery workflow.
@@ -550,6 +573,11 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
             $_SESSION['new_gallery_share_token_' . $galleryId] = regenerate_gallery_share_token($galleryId, $expiresAt);
         }
     }
+    // $flightMapResult stores the route resolver summary for the saved gallery.
+    $flightMapResult = null;
+    if ($shouldUpdateFlightMap) {
+        $flightMapResult = save_gallery_flight_path_route($galleryId, (string) ($input['flight_route_text'] ?? ''));
+    }
     if ($completeForm || array_key_exists('tags', $input)) {
         sync_entity_tags('gallery', $galleryId, (string) ($input['tags'] ?? ''));
     }
@@ -560,6 +588,12 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     }
     // $notice stores an intermediate value used by the surrounding gallery workflow.
     $notice = t('admin.gallery_editor.notice_saved', 'Gallery saved.');
+    if ($flightMapResult !== null && (int) ($flightMapResult['point_count'] ?? 0) > 0) {
+        $notice .= ' ' . t('admin.gallery_editor.flight_route_saved_notice', 'Flight route saved with {points} resolved points; {unresolved} unresolved points were skipped.', [
+            'points' => (string) (int) ($flightMapResult['point_count'] ?? 0),
+            'unresolved' => (string) (int) ($flightMapResult['unresolved_count'] ?? 0),
+        ]);
+    }
     if (!empty($moveResult['moved'])) {
         // $notice stores an intermediate value used by the surrounding gallery workflow.
         $notice = t('admin.gallery_editor.notice_saved_and_moved', 'Gallery saved and folder moved.');
@@ -590,6 +624,8 @@ function cms_admin_edit_gallery(): void
     $pictureGameReady = picture_game_schema_ready();
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready();
+    // Variable $flightMapReady stores this steps working value.
+    $flightMapReady = flight_map_schema_ready();
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     if (request_method() === 'POST') {
@@ -705,8 +741,9 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
     }
-    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description">' . e($gallery['description']) . '</textarea></label>';
+    echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-gallery-description-textarea>' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
+    render_admin_simbrief_description_tool((int) $gallery['id']);
     echo '</div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.slug', 'Slug')) . '<input name="slug" value="' . e($gallery['slug']) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.slug_help', 'Used in the public gallery URL.')) . '</span></label><label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" value="' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '" autocomplete="off" required><span class="muted">' . e(t('admin.gallery_editor.folder_rename_help', 'Changing this renames the folder on disk.')) . '</span></label></div>';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options($gallery) . '</select></label><label>' . e(t('admin.gallery_editor.sort_order', 'Sort order')) . '<input name="sort_order" type="number" value="' . (int) $gallery['sort_order'] . '"></label></div>';
@@ -771,6 +808,23 @@ function cms_admin_edit_gallery(): void
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="show_filenames" value="1"' . ((int) ($gallery['show_filenames'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label><p class="muted">' . e(t('admin.gallery_editor.show_file_names_help', 'Disabled by default. Custom photo titles and descriptions are still shown; raw uploaded file names stay hidden unless this is enabled.')) . '</p></div>';
     } else {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.filename_display_migration_hidden', 'File name display control will be available after the database migration is applied.')) . '</p></div>';
+    }
+    if ($flightMapReady) {
+        // $flightMapRow stores the existing route-map data shown in the editor.
+        $flightMapRow = gallery_flight_map_row((int) $gallery['id']);
+        // $flightRouteText stores the raw route text that will be resolved during save.
+        $flightRouteText = (string) ($flightMapRow['route_text'] ?? '');
+        // $flightPointCount stores how many route points are ready for display.
+        $flightPointCount = (int) ($flightMapRow['point_count'] ?? 0);
+        // $flightUnresolved stores unresolved diagnostics from the last save.
+        $flightUnresolved = $flightMapRow ? gallery_flight_map_unresolved_from_row($flightMapRow) : [];
+        echo '<div class="admin-edit-card is-wide"><h3>' . e(t('admin.gallery_editor.flight_route_map', 'Flight route map')) . '</h3>';
+        echo '<label>' . e(t('admin.gallery_editor.flight_route_label', 'Route text')) . '<textarea name="flight_route_text" rows="5" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e($flightRouteText) . '</textarea></label>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery can store one resolved route map. Route points are resolved when you save the gallery. The public map only receives stored coordinates. Unresolved points are skipped and valid points stay connected. Use Admin > Maintenance > Update navdata to import OurAirports airports and navaids into the local DB, or use manual NAME@latitude,longitude points.')) . '</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_status', 'Resolved points: {points}. Unresolved skipped: {unresolved}.', ['points' => (string) $flightPointCount, 'unresolved' => (string) count($flightUnresolved)])) . '</p>';
+        echo '</div>';
+    } else {
+        echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.')) . '</p></div>';
     }
     if ($gpsMapReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch')) . '</label><p class="muted">' . e(t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.')) . '</p></div>';
@@ -891,8 +945,8 @@ function render_admin_image_bulk_toolbar(array $gallery): void
 {
     // $galleryId stores the gallery currently being edited.
     $galleryId = (int) $gallery['id'];
-    // $destinationOptions stores all galleries except the current source gallery.
-    $destinationOptions = gallery_options_for_select(0, $galleryId);
+    // $suggestedDestinationId stores a likely child gallery destination for the shared searchable picker.
+    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
     // $newGalleryParentOptions stores the selectable parent hierarchy for move-to-new-gallery actions.
     $newGalleryParentOptions = gallery_options_for_select($galleryId);
 
@@ -920,7 +974,11 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     echo '<button type="button" class="admin-image-move-choice" data-admin-image-move-choice="move_new" aria-pressed="false"><span class="admin-image-move-choice-icon" aria-hidden="true">▭+</span><span class="admin-image-move-choice-copy"><strong>' . e(t('admin.gallery_editor.move_new')) . '</strong><small>' . e(t('admin.gallery_editor.move_new_help')) . '</small></span><span class="admin-image-move-choice-radio" aria-hidden="true"></span></button>';
     echo '</div>';
     echo '<div class="admin-image-move-targets">';
-    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span><select name="destination_gallery_id"><option value="0">' . e(t('admin.gallery_editor.choose_existing_gallery')) . '</option>' . $destinationOptions . '</select><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
+    echo '<label class="admin-image-move-target" data-admin-image-move-existing hidden><span>' . e(t('admin.gallery_editor.destination_gallery')) . '</span>' . render_gallery_search_picker('destination_gallery_id', 0, $galleryId, [
+        'id' => 'admin-image-move-destination-' . $galleryId,
+        'placeholder' => t('admin.gallery_editor.search_destination_gallery', 'Search destination gallery'),
+        'prefill_gallery_id' => $suggestedDestinationId,
+    ]) . '<small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.destination_help')) . '</small></label>';
     echo '<div class="admin-image-move-target admin-image-move-new" data-admin-image-move-new hidden><label><span>' . e(t('admin.gallery_editor.parent_gallery')) . '</span><select name="new_gallery_parent_id"><option value="0">' . e(t('admin.gallery_editor.no_parent')) . '</option>' . $newGalleryParentOptions . '</select></label><label><span>' . e(t('admin.gallery_editor.new_gallery_title')) . '</span><input type="text" name="new_gallery_title" placeholder="' . e(t('admin.gallery_editor.example_gallery_title')) . '"></label><label><span>' . e(t('admin.gallery_editor.optional_folder_slug')) . '</span><input type="text" name="new_gallery_folder_name" placeholder="' . e(t('admin.gallery_editor.derive_from_title')) . '"></label><small><span aria-hidden="true">ⓘ</span> ' . e(t('admin.gallery_editor.new_gallery_move_help')) . '</small></div>';
     echo '</div>';
     echo '<div class="admin-image-move-confirm"><button type="button" class="secondary admin-image-move-cancel-bottom" data-admin-image-move-cancel>' . e(t('admin.gallery_editor.cancel')) . '</button><div><strong>' . e(t('admin.gallery_editor.move_summary')) . '</strong><p data-admin-image-move-summary>' . e(t('admin.gallery_editor.move_summary_empty')) . '</p></div><button type="submit" name="move_images" value="1" data-admin-image-move-submit disabled>' . e(t('admin.gallery_editor.move_selected_now')) . '</button></div>';

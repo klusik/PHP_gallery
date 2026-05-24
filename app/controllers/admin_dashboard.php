@@ -62,6 +62,10 @@ function cms_admin(): void
     $publicPathReady = admin_render_profile_schema('schema_public_paths', static fn (): bool => public_path_schema_ready());
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
     $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
+    // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
+    $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready());
+    // $flightNavdataStatus stores maintenance information for the admin navdata card.
+    $flightNavdataStatus = admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status());
 
     if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
         // Self-heal voting/game state periodically instead of on every admin navigation.
@@ -289,6 +293,7 @@ function cms_admin(): void
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
+    render_admin_navdata_maintenance_card($flightNavdataReady, $flightNavdataStatus);
     render_admin_url_rewrite_card('admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-maintenance-card" data-delete-all-thumbnails-form>' . csrf_field();
@@ -313,25 +318,6 @@ function cms_admin(): void
     admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
 
-
-/**
- * Return the total byte size of imported original gallery files.
- *
- * The dashboard intentionally reads the image metadata table here instead of
- * scanning the filesystem. The value therefore represents source files already
- * imported into the gallery index and excludes generated thumbnails, DNG display
- * masters, caches, and any other derivative files stored beside the gallery.
- */
-function admin_dashboard_original_storage_bytes(): int
-{
-    try {
-        // $row stores the aggregate as a scalar-compatible result from the images table.
-        $row = db()->query('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images')->fetch();
-        return max(0, (int) ($row['original_bytes'] ?? 0));
-    } catch (Throwable) {
-        return 0;
-    }
-}
 
 /**
  * Format a byte count for compact dashboard display.
@@ -362,53 +348,6 @@ function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): str
     }
 
     return number_format($normalizedBytes, $precision) . ' ' . $units[$unitIndex];
-}
-
-/**
- * Return admin dashboard gallery rows with only columns used by the table.
- *
- * Optional columns are selected only when their migrations are present. This
- * keeps partially upgraded installations safe while avoiding SELECT * in the
- * dashboard hot path.
- */
-function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady): array
-{
-    // $selects stores the explicit gallery columns required by dashboard rendering.
-    $selects = [
-        'g.id',
-        'g.parent_id',
-        'g.folder_path',
-        'g.slug',
-        'g.title',
-        'g.sort_order',
-        'g.visibility',
-        'parent.title AS parent_title',
-        'COALESCE(image_counts.image_count, 0) AS image_count',
-    ];
-
-    $selects[] = $publicPathReady ? 'g.url_path' : "'' AS url_path";
-    $selects[] = $accessReady ? 'g.access_mode' : "'normal' AS access_mode";
-    $selects[] = $accessReady ? 'g.access_listing' : "'listed' AS access_listing";
-    $selects[] = $gpsMapReady ? 'g.gps_map_enabled' : '0 AS gps_map_enabled';
-    $selects[] = $backgroundSourceReady ? 'g.background_source' : 'NULL AS background_source';
-    $selects[] = $filenameDisplayReady ? 'g.show_filenames' : '0 AS show_filenames';
-    $selects[] = $votingReady ? 'g.voting_enabled' : '0 AS voting_enabled';
-    $selects[] = $pictureGameReady ? 'g.picture_game_enabled' : '0 AS picture_game_enabled';
-    $selects[] = $coverAssetReady ? 'g.cover_image_path' : 'NULL AS cover_image_path';
-
-    // $sql stores a one-pass gallery query with image counts pre-aggregated by gallery.
-    $sql = 'SELECT ' . implode(', ', $selects) . "
-        FROM galleries g
-        LEFT JOIN galleries parent ON parent.id = g.parent_id
-        LEFT JOIN (
-            SELECT gallery_id, COUNT(id) AS image_count
-            FROM images
-            WHERE relative_path NOT LIKE '%/%'
-            GROUP BY gallery_id
-        ) image_counts ON image_counts.gallery_id = g.id
-        ORDER BY COALESCE(g.parent_id, 0), g.sort_order, g.title";
-
-    return db()->query($sql)->fetchAll();
 }
 
 /**
@@ -482,26 +421,6 @@ function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): boo
 function admin_dashboard_mark_self_heal(string $settingKey): void
 {
     admin_render_profile_setting_write('self_heal_last_run_setting_write', static function () use ($settingKey): void { set_app_setting($settingKey, (string) time()); });
-}
-
-/**
- * Build a cheap fingerprint for gallery hierarchy state used by parent-id repair.
- */
-function admin_dashboard_parent_sync_fingerprint(): string
-{
-    try {
-        // $row stores aggregate gallery data that changes when indexed gallery rows change.
-        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn (): array => db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries")->fetch() ?: []);
-    } catch (Throwable) {
-        return '';
-    }
-
-    return hash('sha256', implode('|', [
-        (string) ($row['gallery_count'] ?? '0'),
-        (string) ($row['newest_id'] ?? '0'),
-        (string) ($row['newest_updated_at'] ?? ''),
-        (string) ($row['path_length_sum'] ?? '0'),
-    ]));
 }
 
 /**
@@ -645,6 +564,75 @@ function cms_admin_url_rewrite(): void
     set_url_rewrite_enabled(isset($_POST['url_rewrite_enabled']));
     flash_message('admin_notice', '' . t('admin.dashboard.notice_url_rewrite_saved', 'URL rewrite setting saved.') . '');
     redirect_to(url_for('admin', ['url_rewrite_saved' => 1]));
+}
+
+
+/**
+ * Render the admin maintenance card that refreshes local flight-map navdata.
+ */
+function render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void
+{
+    $confirmMessage = t('admin.dashboard.confirm_update_navdata', 'Download current OurAirports airports and navaids, then replace the local OurAirports lookup rows?');
+    $submittingText = t('admin.dashboard.updating_navdata', 'Updating navdata...');
+    echo '<form method="post" action="' . e(url_for('admin_update_navdata')) . '" class="admin-maintenance-card admin-navdata-update-card" data-navdata-update-form data-navdata-confirm="' . e($confirmMessage) . '" data-navdata-submitting-text="' . e($submittingText) . '">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.flight_navdata', 'Flight map navdata')) . '</strong>';
+
+    if (!$flightNavdataReady) {
+        echo '<span>' . e(t('admin.dashboard.flight_navdata_requires_migration', 'Run database migrations before importing flight-map navdata.')) . '</span>';
+        echo '<button type="submit" class="secondary" disabled>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></form>';
+        return;
+    }
+
+    $lastUpdate = trim((string) ($flightNavdataStatus['last_update'] ?? ''));
+    $total = (int) ($flightNavdataStatus['total'] ?? 0);
+    $airportCount = (int) ($flightNavdataStatus['last_airports'] ?? 0);
+    $navaidCount = (int) ($flightNavdataStatus['last_navaids'] ?? 0);
+    $skippedCount = (int) ($flightNavdataStatus['last_skipped'] ?? 0);
+
+    if ($lastUpdate !== '') {
+        echo '<span>' . e(t('admin.dashboard.flight_navdata_status', 'Local lookup rows: {total}. Last update: {updated}. Last import: {airports} airport identifier(s), {navaids} navaid(s), {skipped} skipped row(s).', [
+            'total' => $total,
+            'updated' => $lastUpdate,
+            'airports' => $airportCount,
+            'navaids' => $navaidCount,
+            'skipped' => $skippedCount,
+        ])) . '</span>';
+    } else {
+        echo '<span>' . e(t('admin.dashboard.flight_navdata_empty', 'No local route lookup data has been imported yet. Route maps can still use manual NAME@latitude,longitude points.')) . '</span>';
+    }
+
+    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_scope_hint', 'Imports airports and navaids from OurAirports. It does not include full IFR fixes or SID/STAR procedure geometry.')) . '</span>';
+    echo '<div class="admin-navdata-update-status" data-navdata-update-status role="status" aria-live="polite" hidden><span class="admin-navdata-update-spinner" aria-hidden="true"></span><span>' . e(t('admin.dashboard.navdata_update_in_progress', 'Downloading and importing navdata. Keep this page open until the update completes.')) . '</span></div>';
+    echo '<button type="submit" class="secondary" data-navdata-update-submit>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></form>';
+}
+
+/**
+ * Handles admin-triggered flight-map navdata refreshes.
+ */
+function cms_admin_update_navdata(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+
+    try {
+        $result = flight_map_update_navdata_from_ourairports();
+        admin_log_event('info', 'flight_map.navdata_updated', 'Admin updated flight-map navdata from OurAirports.', $result);
+        flash_message('admin_notice', t('admin.dashboard.notice_navdata_updated', 'Updated flight-map navdata. Imported {airports} airport identifier(s), {navaids} navaid(s), skipped {skipped} row(s), removed {deleted} stale row(s).', [
+            'airports' => (int) ($result['airports'] ?? 0),
+            'navaids' => (int) ($result['navaids'] ?? 0),
+            'skipped' => (int) ($result['skipped'] ?? 0),
+            'deleted' => (int) ($result['deleted'] ?? 0),
+        ]));
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'flight_map.navdata_failed', 'Admin flight-map navdata update failed.', ['exception' => $exception->getMessage()]);
+        flash_message('admin_notice', t('admin.dashboard.notice_navdata_failed', 'Flight-map navdata update failed: {error}', ['error' => $exception->getMessage()]));
+    }
+
+    redirect_to(url_for('admin'));
 }
 
 /**

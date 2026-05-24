@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.69';
+const CMS_VERSION = '0.70';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -167,6 +167,9 @@ function cms_run(): void
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',
         'gallery_lightbox_data' => 'cms_gallery_lightbox_data',
+        'picture_manager_move' => 'cms_picture_manager_move',
+        'picture_manager_copy' => 'cms_picture_manager_copy',
+        'picture_manager_create_gallery' => 'cms_picture_manager_create_gallery',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',
@@ -190,6 +193,7 @@ function cms_run(): void
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
+        'admin_update_navdata' => 'cms_admin_update_navdata',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
         'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',
         'admin_dismiss_thumbnail_notice' => 'cms_admin_dismiss_thumbnail_notice',
@@ -198,6 +202,7 @@ function cms_run(): void
         'admin_reorder_galleries' => 'cms_admin_reorder_galleries',
         'admin_reorder_public_galleries' => 'cms_admin_reorder_public_galleries',
         'admin_scan_images' => 'cms_admin_scan_images',
+        'admin_simbrief_description' => 'cms_admin_simbrief_description',
         'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',

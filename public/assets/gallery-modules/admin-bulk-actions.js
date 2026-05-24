@@ -156,8 +156,8 @@ export function setupImageBulkMoveFields() {
         const existingFields = form.querySelector('[data-admin-image-move-existing]');
         // Variable `newFields` stores the title and folder fields for new-gallery moves.
         const newFields = form.querySelector('[data-admin-image-move-new]');
-        // Variable `destinationSelect` stores the existing-gallery target field.
-        const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
+        // Variable `destinationInput` stores the existing-gallery target ID from the shared searchable picker.
+        const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
         // Variable `newGalleryTitle` stores the required title for the new gallery path.
         const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
         // Variable `summary` stores the live confirmation summary.
@@ -237,9 +237,10 @@ export function setupImageBulkMoveFields() {
          * @returns {string} Human-readable target label.
          */
         function targetLabel() {
-            if (moveAction === 'move_existing' && destinationSelect instanceof HTMLSelectElement) {
-                const selectedOption = destinationSelect.selectedOptions && destinationSelect.selectedOptions[0] ? destinationSelect.selectedOptions[0] : null;
-                return selectedOption && destinationSelect.value !== '0' ? selectedOption.textContent.trim() : '';
+            if (moveAction === 'move_existing' && destinationInput instanceof HTMLInputElement) {
+                const picker = destinationInput.closest('[data-gallery-search-picker]');
+                const committedLabel = picker instanceof HTMLElement ? picker.dataset.gallerySearchCommittedLabel || '' : '';
+                return destinationInput.value !== '' && destinationInput.value !== '0' ? committedLabel : '';
             }
             if (moveAction === 'move_new' && newGalleryTitle instanceof HTMLInputElement) {
                 return newGalleryTitle.value.trim();
@@ -380,7 +381,7 @@ export function setupImageBulkMoveFields() {
                     window.alert(i18n('admin.bulk.select_photo_move', 'Select at least one photo to move.'));
                     return;
                 }
-                if (moveAction === 'move_existing' && (!(destinationSelect instanceof HTMLSelectElement) || destinationSelect.value === '0')) {
+                if (moveAction === 'move_existing' && (!(destinationInput instanceof HTMLInputElement) || (destinationInput.value === '' || destinationInput.value === '0'))) {
                     event.preventDefault();
                     window.alert(i18n('admin.bulk.choose_destination', 'Choose the destination gallery.'));
                     return;
@@ -439,9 +440,9 @@ export function setupImageBulkDeleteConfirmation() {
         }
 
         if (isBulkMove) {
-            const destinationSelect = form.querySelector('select[name="destination_gallery_id"]');
+            const destinationInput = form.querySelector('input[name="destination_gallery_id"]');
             const newGalleryTitle = form.querySelector('input[name="new_gallery_title"]');
-            if (action.value === 'move_existing' && (!(destinationSelect instanceof HTMLSelectElement) || destinationSelect.value === '0')) {
+            if (action.value === 'move_existing' && (!(destinationInput instanceof HTMLInputElement) || (destinationInput.value === '' || destinationInput.value === '0'))) {
                 event.preventDefault();
                 window.alert(i18n('admin.bulk.choose_destination', 'Choose the destination gallery.'));
                 return;

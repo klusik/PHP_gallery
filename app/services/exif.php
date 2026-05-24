@@ -409,6 +409,48 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
 }
 
 /**
+ * Return true when a gallery can open the shared map viewer from any source.
+ *
+ * EXIF GPS keeps the existing photo-point behavior. A stored flight path belongs
+ * to the gallery container itself and is already resolved before display.
+ */
+function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): bool
+{
+    if (function_exists('gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
+        return true;
+    }
+
+    return gallery_has_map_points($gallery, $publicOnly, $recursive);
+}
+
+/**
+ * Return the unified map payload consumed by the browser Leaflet renderer.
+ *
+ * A saved flight path takes priority for the gallery-level map because it
+ * represents the whole simflying gallery. Without a route map, the legacy EXIF
+ * gallery markers are returned unchanged apart from the explicit source type.
+ */
+function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
+{
+    if (function_exists('gallery_flight_map_payload')) {
+        $flightPayload = gallery_flight_map_payload($gallery);
+        if (is_array($flightPayload) && !empty($flightPayload['points'])) {
+            return $flightPayload;
+        }
+    }
+
+    $points = gallery_map_points($gallery, $publicOnly, $recursive);
+    return [
+        'gallery_id' => (int) $gallery['id'],
+        'title' => (string) $gallery['title'],
+        'source_type' => GALLERY_MAP_SOURCE_EXIF_POINT,
+        'map_source_type' => GALLERY_MAP_SOURCE_EXIF_POINT,
+        'points' => $points,
+        'geometry' => null,
+    ];
+}
+
+/**
  * Return GPS map points for one gallery, optionally including subgalleries.
  */
 function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array

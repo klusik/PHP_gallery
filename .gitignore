@@ -12,3 +12,6 @@ config.php
 Thumbs.db
 .DS_Store
 *deploy*zip*
+__pycache__/
+*.pyc
+*.pyo

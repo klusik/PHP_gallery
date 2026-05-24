@@ -89,6 +89,33 @@ function cms_upload_automation_upload(): void
         return;
     }
 
+    // $action stores the requested automation command. Revoke is allowed when the request is authenticated by the current API key.
+    $action = (string) ($_POST['action'] ?? 'upload');
+    if ($action === 'revoke') {
+        $tokenId = (int) ($tokenRow['id'] ?? 0);
+        if ($tokenId <= 0 || !revoke_gallery_upload_automation_token($galleryId, $tokenId)) {
+            admin_log_event('error', 'upload_automation.revoke_failed', 'Upload automation API-key revocation failed.', [
+                'token_id' => $tokenId,
+                'gallery_id' => $galleryId,
+            ]);
+            upload_automation_json(['ok' => false, 'error' => 'API key could not be revoked.'], 422);
+            return;
+        }
+
+        admin_log_event('info', 'upload_automation.token_revoked', 'Upload automation API key revoked through the companion app.', [
+            'token_id' => $tokenId,
+            'gallery_id' => $galleryId,
+        ]);
+        upload_automation_json([
+            'ok' => true,
+            'action' => 'revoke',
+            'gallery_id' => $galleryId,
+            'token_id' => $tokenId,
+            'message' => 'API key revoked.',
+        ]);
+        return;
+    }
+
     // $submittedGalleryId stores an optional client-side assertion, not the source of authority.
     $submittedGalleryId = (int) ($_POST['gallery_id'] ?? 0);
     if ($submittedGalleryId > 0 && $submittedGalleryId !== $galleryId) {
@@ -202,21 +229,58 @@ function cms_upload_automation_upload(): void
  */
 function cms_admin_upload_automation_token(): void
 {
-    require_admin();
-    verify_csrf();
+    // $wantsJson records side-panel and AJAX requests before any legacy redirect helper can emit HTML.
+    $wantsJson = upload_automation_token_request_wants_json();
+
+    if ($wantsJson) {
+        // $user stores the current user for JSON requests. Anonymous or expired sessions must return JSON, not a login page.
+        $user = current_user();
+        if (!$user || (string) ($user['role'] ?? '') !== 'admin') {
+            upload_automation_token_json_response([
+                'ok' => false,
+                'error' => t('auth.admin_required', 'Admin access is required.'),
+            ], 403);
+            return;
+        }
+
+        if (!upload_automation_token_csrf_valid()) {
+            upload_automation_token_json_response([
+                'ok' => false,
+                'error' => t('security.invalid_csrf', 'Invalid CSRF token.'),
+            ], 400);
+            return;
+        }
+    } else {
+        require_admin();
+        verify_csrf();
+    }
 
     // $galleryId stores the gallery whose automation keys are being changed.
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
     // $gallery stores the gallery being edited.
     $gallery = find_gallery($galleryId, true) ?: find_gallery($galleryId);
     if (!$gallery) {
+        if ($wantsJson) {
+            upload_automation_token_json_response([
+                'ok' => false,
+                'error' => t('admin.gallery_not_found', 'Gallery not found.'),
+            ], 404);
+            return;
+        }
         cms_not_found();
         return;
     }
 
+    // $action stores the requested token management action.
+    $action = (string) ($_POST['action'] ?? 'create');
+    // $tokenId stores the created or revoked database row for JSON callers.
+    $tokenId = 0;
+    // $notice stores the message returned to the caller after a mutation.
+    $notice = '';
+    // $actionOk records whether the mutation completed or failed before the response is emitted.
+    $actionOk = true;
+
     try {
-        // $action stores the requested token management action.
-        $action = (string) ($_POST['action'] ?? 'create');
         if ($action === 'revoke') {
             // $tokenId stores the database row to revoke.
             $tokenId = (int) ($_POST['token_id'] ?? 0);
@@ -227,30 +291,163 @@ function cms_admin_upload_automation_token(): void
                 'gallery_id' => $galleryId,
                 'token_id' => $tokenId,
             ]);
-            flash_message('admin_notice', t('upload_automation.notice.revoked', 'Upload automation API key revoked.'));
+            $notice = t('upload_automation.notice.revoked', 'Upload automation API key revoked.');
+            flash_message('admin_notice', $notice);
         } else {
             // $user stores the current admin user that created the key.
             $user = current_user();
             // $created stores the new API key. The raw token is put into the session for one display only.
             $created = create_gallery_upload_automation_token($galleryId, $user ? (int) $user['id'] : null, (string) ($_POST['label'] ?? ''));
+            $tokenId = (int) $created['id'];
             $_SESSION['upload_automation_new_token_' . $galleryId] = $created['token'];
             admin_log_event('info', 'upload_automation.token_created', 'Admin created a gallery upload automation API key.', [
                 'gallery_id' => $galleryId,
-                'token_id' => (int) $created['id'],
+                'token_id' => $tokenId,
                 'label' => (string) $created['label'],
             ]);
-            flash_message('admin_notice', t('upload_automation.notice.created', 'Upload automation API key created. Copy it now. It will not be shown again.'));
+            $notice = t('upload_automation.notice.created', 'Upload automation API key created. Copy it now. It will not be shown again.');
+            flash_message('admin_notice', $notice);
         }
     } catch (Throwable $exception) {
+        $actionOk = false;
+        $notice = $exception->getMessage();
         admin_log_event('error', 'upload_automation.token_action_failed', 'Upload automation API-key management failed.', [
             'gallery_id' => $galleryId,
-            'error' => $exception->getMessage(),
+            'error' => $notice,
         ]);
-        flash_message('admin_notice', $exception->getMessage());
+        flash_message('admin_notice', $notice);
     }
 
+    // $returnUrl stores the page or panel route that should be refreshed after the mutation.
+    $returnUrl = upload_automation_token_return_url($galleryId);
+    if ($wantsJson) {
+        upload_automation_token_json_response([
+            'ok' => $actionOk,
+            'message' => $notice,
+            'refresh_url' => $returnUrl,
+            'gallery_id' => $galleryId,
+            'action' => $action === 'revoke' ? 'revoke' : 'create',
+            'token_id' => $tokenId,
+        ], $actionOk ? 200 : 422);
+        return;
+    }
+
+    redirect_to($returnUrl);
+}
+
+/**
+ * Return whether the API-key mutation request expects a JSON response.
+ *
+ * This mirrors the shared admin JSON detector, but it is local to this
+ * controller so the token endpoint can decide before legacy helpers have a
+ * chance to redirect to an HTML login or error page.
+ *
+ * @return bool True when the request came from the side panel or another AJAX caller.
+ */
+function upload_automation_token_request_wants_json(): bool
+{
+    return !empty($_POST['ajax'])
+        || !empty($_GET['ajax'])
+        || !empty($_POST['panel'])
+        || !empty($_GET['panel'])
+        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+}
+
+/**
+ * Return whether the submitted API-key form contains the current CSRF token.
+ *
+ * @return bool True when the submitted token matches the active session token.
+ */
+function upload_automation_token_csrf_valid(): bool
+{
+    // $token stores the submitted CSRF value from the API-key create or revoke form.
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    return $token !== '' && hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token);
+}
+
+/**
+ * Emit a JSON response for side-panel API-key mutations and stop no further processing.
+ *
+ * @param array<string,mixed> $payload JSON-safe response payload.
+ * @param int $status HTTP status code to send with the response.
+ * @return void
+ */
+function upload_automation_token_json_response(array $payload, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Resolve the post-action URL for upload automation API-key forms.
+ *
+ * @param int $galleryId Gallery id submitted by the token-management form.
+ * @return string Safe same-site admin URL that preserves the API manager context.
+ */
+function upload_automation_token_return_url(int $galleryId): string
+{
+    // $fallbackUrl keeps legacy gallery-editor forms working when no explicit return URL was submitted.
+    $fallbackUrl = admin_edit_gallery_tab_url($galleryId, 'admin-edit-api');
+    // $returnUrl stores the current admin page submitted by newer API-manager forms.
+    $returnUrl = trim((string) ($_POST['return_url'] ?? ''));
+    if ($returnUrl !== '') {
+        // $safeReturnUrl is same-site only and rejects login/setup targets through the existing redirect sanitizer.
+        $safeReturnUrl = sanitize_login_return_target($returnUrl, $fallbackUrl);
+        if (upload_automation_return_url_allowed($safeReturnUrl, $galleryId)) {
+            return $safeReturnUrl;
+        }
+    }
+
+    // $returnContext stores an explicit stable context for forms that should not map to gallery edit tabs.
+    $returnContext = (string) ($_POST['return_context'] ?? '');
+    if ($returnContext === 'api_manager') {
+        return url_for('admin_api_manager');
+    }
+
+    // $returnTab stores the older gallery-editor tab target used by existing forms.
     $returnTab = admin_edit_gallery_tab_id((string) ($_POST['return_tab'] ?? '')) ?: 'admin-edit-api';
-    redirect_to(admin_edit_gallery_tab_url($galleryId, $returnTab));
+    return admin_edit_gallery_tab_url($galleryId, $returnTab);
+}
+
+/**
+ * Return whether a token-management return URL is valid for API-manager workflows.
+ *
+ * @param string $url Same-site URL after base redirect sanitization.
+ * @param int $galleryId Gallery id submitted by the token-management form.
+ * @return bool True when the URL points back to the dedicated API manager or this gallery's API editor tab.
+ */
+function upload_automation_return_url_allowed(string $url, int $galleryId): bool
+{
+    // $parts stores the URL components used to validate the route without trusting the raw submitted string.
+    $parts = parse_url($url);
+    if (!is_array($parts) || isset($parts['scheme']) || isset($parts['host'])) {
+        return false;
+    }
+
+    // $queryParams stores index.php route parameters when the app is using query-string routing.
+    $queryParams = [];
+    parse_str((string) ($parts['query'] ?? ''), $queryParams);
+    // $page stores the front-controller page name.
+    $page = (string) ($queryParams['page'] ?? '');
+    if ($page === 'admin_api_manager') {
+        return true;
+    }
+
+    if ($page !== 'admin_edit_gallery') {
+        return false;
+    }
+
+    // $postedGalleryId stores the gallery id embedded in the return URL. It must match the form target.
+    $postedGalleryId = (int) ($queryParams['id'] ?? 0);
+    if ($postedGalleryId !== $galleryId) {
+        return false;
+    }
+
+    // $tab stores the tab requested by the return URL. Empty is accepted for older URLs, otherwise require a valid tab.
+    $tab = (string) ($queryParams['tab'] ?? '');
+    return $tab === '' || admin_edit_gallery_tab_id($tab) !== '';
 }
 
 /**
@@ -287,9 +484,12 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
         echo '<label><span>' . e(t('upload_automation.new_key', 'New API key')) . '</span><textarea readonly rows="3" class="admin-upload-automation-key">' . e($newToken) . '</textarea></label>';
         echo '<div class="notice">' . e(t('upload_automation.copy_now', 'Copy this API key now. For security, only its hash is stored and the raw value will not be shown again.')) . '</div>';
     }
-    echo '<form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="admin-upload-automation-form">' . csrf_field();
+    echo '<form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="admin-upload-automation-form" data-admin-upload-automation-token-form="1">' . csrf_field();
+    echo '<input type="hidden" name="ajax" value="1">';
+    echo '<input type="hidden" name="panel" value="1">';
     echo '<input type="hidden" name="gallery_id" value="' . $galleryId . '">';
     echo '<input type="hidden" name="return_tab" value="' . e($returnTab) . '">';
+    echo '<input type="hidden" name="return_url" value="' . e(admin_edit_gallery_tab_url($galleryId, $returnTab)) . '">';
     echo '<input type="hidden" name="action" value="create">';
     echo '<label><span>' . e(t('upload_automation.label', 'Label')) . '</span><input type="text" name="label" value="Folder watcher" maxlength="190"></label>';
     echo '<button type="submit" class="button secondary">' . e(t('upload_automation.generate_key', 'Generate API key')) . '</button>';
@@ -309,9 +509,12 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
             echo '<td>' . e((string) ($token['label'] ?? 'Folder watcher')) . '</td>';
             echo '<td>' . e((string) ($token['created_at'] ?? '')) . '</td>';
             echo '<td>' . e((string) ($token['last_used_at'] ?? t('upload_automation.never', 'Never'))) . '</td>';
-            echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form">' . csrf_field();
+            echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form" data-admin-upload-automation-token-form="1">' . csrf_field();
+            echo '<input type="hidden" name="ajax" value="1">';
+            echo '<input type="hidden" name="panel" value="1">';
             echo '<input type="hidden" name="gallery_id" value="' . $galleryId . '">';
             echo '<input type="hidden" name="return_tab" value="' . e($returnTab) . '">';
+            echo '<input type="hidden" name="return_url" value="' . e(admin_edit_gallery_tab_url($galleryId, $returnTab)) . '">';
             echo '<input type="hidden" name="action" value="revoke">';
             echo '<input type="hidden" name="token_id" value="' . (int) $token['id'] . '">';
             echo '<button type="submit" class="secondary danger inline-admin-action">' . e(t('upload_automation.revoke', 'Revoke')) . '</button>';
@@ -364,9 +567,10 @@ function cms_admin_api_manager(): void
             echo '<td>' . e((string) ($token['label'] ?? 'Folder watcher')) . '</td>';
             echo '<td>' . e((string) ($token['created_at'] ?? '')) . '</td>';
             echo '<td>' . e((string) ($token['last_used_at'] ?? t('upload_automation.never', 'Never'))) . '</td>';
-            echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form">' . csrf_field();
+            echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form" data-admin-upload-automation-token-form="1">' . csrf_field();
             echo '<input type="hidden" name="gallery_id" value="' . $galleryId . '">';
-            echo '<input type="hidden" name="return_tab" value="admin_api_manager">';
+            echo '<input type="hidden" name="return_context" value="api_manager">';
+            echo '<input type="hidden" name="return_url" value="' . e(url_for('admin_api_manager')) . '">';
             echo '<input type="hidden" name="action" value="revoke">';
             echo '<input type="hidden" name="token_id" value="' . (int) $token['id'] . '">';
             echo '<button type="submit" class="secondary danger inline-admin-action">' . e(t('upload_automation.revoke', 'Revoke')) . '</button>';

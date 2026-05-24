@@ -1373,3 +1373,65 @@ body.has-admin-side-panel {
     background: color-mix(in srgb, var(--field, #f8fafc) 78%, var(--accent, #2563eb) 10%);
     font-size: 0.88em;
 }
+
+.admin-image-move-target .gallery-search-picker {
+    width: 100%;
+    min-width: min(100%, 18rem);
+}
+
+.admin-image-move-target .gallery-search-picker-field input[type="text"] {
+    width: 100%;
+    min-height: 2.85rem;
+    border-color: #cad5e0;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.admin-simbrief-description {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 18%, var(--admin-border, #d4dde7));
+    border-radius: max(0.9rem, calc(var(--radius, 16px) * 0.65));
+    background: color-mix(in srgb, var(--panel, #ffffff) 90%, var(--accent, #2563eb) 10%);
+}
+
+.admin-simbrief-description-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-simbrief-description-heading h3 {
+    margin: 0 0 0.2rem;
+    font-size: 0.98rem;
+}
+
+.admin-simbrief-description-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-simbrief-description-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.admin-simbrief-description-actions [data-simbrief-status] {
+    font-size: 0.9rem;
+}
+
+.admin-simbrief-description-actions [data-simbrief-status].is-error {
+    color: #b42318;
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .admin-simbrief-description-grid {
+        grid-template-columns: 1fr;
+    }
+}

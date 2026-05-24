@@ -113,6 +113,20 @@ export function setupGalleryLightbox() {
     ) || (
         overlay instanceof HTMLElement && overlay.dataset.lightboxMapsEnabled === '1'
     );
+    // lightboxGalleryMapUrl stores the lazy gallery-level map payload endpoint.
+    const lightboxGalleryMapUrl = (
+        lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxGalleryMapUrl || '' : ''
+    ) || (
+        overlay instanceof HTMLElement ? overlay.dataset.lightboxGalleryMapUrl || '' : ''
+    );
+    // lightboxGalleryMapTitle stores the map title used for gallery route payloads.
+    const lightboxGalleryMapTitle = (
+        lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxGalleryMapTitle || '' : ''
+    ) || (
+        overlay instanceof HTMLElement ? overlay.dataset.lightboxGalleryMapTitle || '' : ''
+    );
+    // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
+    const lightboxGalleryMapPayloadPromises = new Map();
     // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
     const lightboxPendingWindows = new Map();
 
@@ -366,8 +380,12 @@ export function setupGalleryLightbox() {
     const initialLoaderCount = overlay.querySelector('[data-lightbox-initial-loader-count]');
     // lightboxMeta stores state or configuration for the gallery front-end flow.
     const lightboxMeta = overlay.querySelector('.lightbox-meta');
-    // lightboxImageTransitionDuration stores state or configuration for the gallery front-end flow.
-    const lightboxImageTransitionDuration = 80;
+    // lightboxDefaultTransitionDuration stores the quick manual viewer blend duration.
+    const lightboxDefaultTransitionDuration = 80;
+    // lightboxSlideshowVisibleDuration stores how long one slideshow image remains stable before the next blend starts.
+    const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
+    // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
+    const lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
     // lightboxPreviewPreloadRadius stores state or configuration for the gallery front-end flow.
     const lightboxPreviewPreloadRadius = 8;
     // lightboxFullPreloadRadius stores state or configuration for the gallery front-end flow.
@@ -386,12 +404,14 @@ export function setupGalleryLightbox() {
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
     const description = overlay.querySelector('[data-lightbox-description]');
-    // counter stores state or configuration for the gallery front-end flow.
-    const counter = overlay.querySelector('[data-lightbox-counter]');
+    // counters stores desktop and mobile counter hosts that mirror the same position text.
+    const counters = Array.from(overlay.querySelectorAll('[data-lightbox-counter]'));
     // Variable `lightboxVotePanel` stores the host for the shared gallery-card vote widget.
     const lightboxVotePanel = overlay.querySelector('[data-lightbox-vote-panel]');
     // Variable `lightboxMapButton` stores this steps working value.
     const lightboxMapButton = overlay.querySelector('[data-lightbox-map]');
+    // lightboxMapButtons stores every toolbar and fullscreen map control that mirrors current map availability.
+    const lightboxMapButtons = Array.from(overlay.querySelectorAll('[data-lightbox-map]'));
     // lightboxMapSplit stores state or configuration for the gallery front-end flow.
     const lightboxMapSplit = overlay.querySelector('[data-lightbox-map-split]');
     // lightboxMapSplitClose stores state or configuration for the gallery front-end flow.
@@ -414,8 +434,16 @@ export function setupGalleryLightbox() {
     const decodedLightboxImages = new Map();
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
-    // touchGesture stores state or configuration for the gallery front-end flow.
+    // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
+    let lightboxSlideshowTimer = null;
+    // lightboxSlideshowActive stores whether slideshow mode owns automatic fullscreen advancing.
+    let lightboxSlideshowActive = false;
+    // touchGesture stores the active mobile stage swipe, when one is in progress.
     let touchGesture = null;
+    // mobileSwipeVisualTimer clears temporary swipe animation classes after they settle.
+    let mobileSwipeVisualTimer = 0;
+    // suppressNextStageClick prevents a completed swipe from also toggling controls through a synthetic tap.
+    let suppressNextStageClick = false;
     // isMobileTouchDevice stores state or configuration for the gallery front-end flow.
     const isMobileTouchDevice = detectMobileTouchDevice();
     // galleryDevModeEnabled stores state or configuration for the gallery front-end flow.
@@ -448,9 +476,13 @@ export function setupGalleryLightbox() {
     setupGalleryDevModeOverlay();
     // supportsPointerGestures stores state or configuration for the gallery front-end flow.
     const supportsPointerGestures = Boolean(window.PointerEvent);
+    // Touch events are the most reliable mobile signal for swipes in iOS Safari and Chrome mobile.
+    const supportsTouchGestures = Boolean('ontouchstart' in window || navigator.maxTouchPoints > 0);
     // isLightboxDebugEnabled stores state or configuration for the gallery front-end flow.
     const isLightboxDebugEnabled = detectLightboxDebugFlag();
     overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
+    prepareMobileLightboxOverlay();
+    updateMobileLightboxViewport();
     window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
 
     galleryLightboxState.cleanup = () => {
@@ -458,9 +490,12 @@ export function setupGalleryLightbox() {
         cards = [];
         clearPendingFullImageSwap();
         clearLightboxHudTimer();
+        resetMobileSwipeVisuals(false);
+        stopLightboxSlideshow(false);
         removeTransitionImage();
         preloadedSources.clear();
         lightboxPendingWindows.clear();
+        lightboxGalleryMapPayloadPromises.clear();
         decodedLightboxImages.clear();
         if (galleryDevModeState.frameId) {
             window.cancelAnimationFrame(galleryDevModeState.frameId);
@@ -505,14 +540,45 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
-        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled');
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow');
         overlay.removeAttribute('data-current-image-id');
         overlay.removeAttribute('data-current-title');
         if (image) {
             image.removeAttribute('src');
         }
+        document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
     };
+
+    /**
+     * Move the mobile overlay to the body root so fixed positioning is not affected by page layout wrappers.
+     *
+     * @returns {void}
+     */
+    function prepareMobileLightboxOverlay() {
+        if (!isMobileTouchDevice || overlay.parentElement === document.body) {
+            return;
+        }
+        document.body.append(overlay);
+    }
+
+    /**
+     * Keep the CSS fullscreen shell aligned with the currently visible mobile viewport.
+     *
+     * @returns {void}
+     */
+    function updateMobileLightboxViewport() {
+        if (!isMobileTouchDevice) {
+            return;
+        }
+        const viewport = window.visualViewport;
+        const viewportTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
+        const viewportWidth = Math.max(1, Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 1));
+        const viewportHeight = Math.max(1, Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 1));
+        overlay.style.setProperty('--lightbox-mobile-viewport-top', `${viewportTop}px`);
+        overlay.style.setProperty('--lightbox-mobile-viewport-width', `${viewportWidth}px`);
+        overlay.style.setProperty('--lightbox-mobile-viewport-height', `${viewportHeight}px`);
+    }
 
     /**
      * Handles clear lightbox stage focus behavior for the gallery UI.
@@ -536,6 +602,39 @@ export function setupGalleryLightbox() {
             window.clearTimeout(pendingFullImageSwapTimer);
             pendingFullImageSwapTimer = null;
         }
+    }
+
+    /**
+     * Read one numeric lightbox timing setting from the server-rendered overlay.
+     *
+     * The current markup only exposes defaults. Keeping the values in data
+     * attributes makes future admin settings possible without changing the
+     * slideshow scheduler again.
+     *
+     * @param {string} datasetKey Overlay dataset key to read.
+     * @param {number} fallbackMs Fallback duration in milliseconds.
+     * @param {number} minimumMs Lowest accepted duration in milliseconds.
+     * @param {number} maximumMs Highest accepted duration in milliseconds.
+     * @returns {number} Safe duration in milliseconds.
+     */
+    function readLightboxTimingSetting(datasetKey, fallbackMs, minimumMs, maximumMs) {
+        const rawValue = Number.parseInt(overlay.dataset[datasetKey] || '', 10);
+        if (!Number.isFinite(rawValue)) {
+            return fallbackMs;
+        }
+        return Math.max(minimumMs, Math.min(maximumMs, rawValue));
+    }
+
+    /**
+     * Return the transition duration for the next image blend.
+     *
+     * Manual navigation keeps the existing snappy transition. Slideshow mode
+     * uses the slower configurable blend requested for automatic playback.
+     *
+     * @returns {number} Transition duration in milliseconds.
+     */
+    function currentLightboxTransitionDuration() {
+        return lightboxSlideshowActive ? lightboxSlideshowTransitionDuration : lightboxDefaultTransitionDuration;
     }
 
     /**
@@ -1258,21 +1357,19 @@ export function setupGalleryLightbox() {
             transitionNode.alt = '';
             transitionNode.setAttribute('aria-hidden', 'true');
             transitionNode.className = 'lightbox-transition-image';
+            // transitionDuration stores the exact duration used for this single blend.
+            // Capture it before scheduling frames so stopping slideshow mode mid-transition
+            // cannot shorten the active automatic picture blend.
+            const transitionDuration = currentLightboxTransitionDuration();
+            transitionNode.style.setProperty('--lightbox-transition-duration', `${transitionDuration}ms`);
             transitionImage = transitionNode;
             stageLink.append(transitionNode);
+            // Force the browser to commit the initial opacity before enabling the
+            // visible state. This makes slideshow blends reliable in fullscreen,
+            // especially when the decoded image is already hot in browser cache.
+            transitionNode.getBoundingClientRect();
             requestAnimationFrame(() => {
-                if (
-                    currentIndex !== index ||
-                    activeLightboxImageToken !== token ||
-                    activeLightboxTransitionToken !== transitionToken ||
-                    transitionImage !== transitionNode
-                ) {
-                    removeTransitionImage(transitionNode);
-                    resolve(false);
-                    return;
-                }
-                transitionNode.classList.add('is-visible');
-                window.setTimeout(() => {
+                requestAnimationFrame(() => {
                     if (
                         currentIndex !== index ||
                         activeLightboxImageToken !== token ||
@@ -1283,12 +1380,25 @@ export function setupGalleryLightbox() {
                         resolve(false);
                         return;
                     }
-                    applyLightboxImageSource(src, altText);
-                    requestAnimationFrame(() => {
-                        removeTransitionImage(transitionNode);
-                        resolve(true);
-                    });
-                }, lightboxImageTransitionDuration);
+                    transitionNode.classList.add('is-visible');
+                    window.setTimeout(() => {
+                        if (
+                            currentIndex !== index ||
+                            activeLightboxImageToken !== token ||
+                            activeLightboxTransitionToken !== transitionToken ||
+                            transitionImage !== transitionNode
+                        ) {
+                            removeTransitionImage(transitionNode);
+                            resolve(false);
+                            return;
+                        }
+                        applyLightboxImageSource(src, altText);
+                        requestAnimationFrame(() => {
+                            removeTransitionImage(transitionNode);
+                            resolve(true);
+                        });
+                    }, transitionDuration);
+                });
             });
         })).catch(() => false);
     }
@@ -1402,11 +1512,13 @@ export function setupGalleryLightbox() {
                 ? i18n('lightbox.initial_loader_count', 'Preparing photo {current} of {total}', {current: index + 1, total: safeTotal})
                 : '';
         }
-        if (counter) {
-            counter.textContent = cards.length > 0 ? `${index + 1} / ${cards.length}` : '';
-        }
+        updateLightboxCounters(cards.length > 0 ? `${index + 1} / ${cards.length}` : '');
         overlay.hidden = false;
+        document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
+        if (isMobileTouchDevice && !isLightboxFullscreen()) {
+            enterMobileLightboxFullscreen();
+        }
         updateLightboxViewportMode();
     }
 
@@ -1440,11 +1552,19 @@ export function setupGalleryLightbox() {
         return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
     }
 
-    // Function `openAt` executes this focused behavior.
-    function openAt(index) {
+    /**
+     * Open the lightbox at a specific index.
+     *
+     * @param {number} index Zero-based image index.
+     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
+     * @returns {void}
+     */
+    function openAt(index, options = {}) {
         if (cards.length === 0) {
             return;
         }
+        const revealHud = options.revealHud !== false;
+        clearLightboxSlideshowTimer();
         const normalizedIndex = ((index % cards.length) + cards.length) % cards.length;
         // Variable `card` stores this steps working value.
         const card = cards[normalizedIndex];
@@ -1500,19 +1620,12 @@ export function setupGalleryLightbox() {
         const descriptionText = (card.dataset.description || '').trim();
         description.textContent = descriptionText;
         description.hidden = descriptionText === '';
-        if (counter) {
-            counter.textContent = `${normalizedIndex + 1} / ${cards.length}`;
-        }
+        updateLightboxCounters(`${normalizedIndex + 1} / ${cards.length}`);
         overlay.dataset.currentImageId = card.dataset.imageId || '';
         overlay.dataset.currentTitle = card.dataset.title || '';
         syncLightboxVote(card, lightboxVotePanel);
         const mapPoint = lightboxMapPointForCard(card);
-        if (lightboxMapButton) {
-            // hasMapPoint stores whether the active photo can open a concrete marker map.
-            const hasMapPoint = mapPoint !== '';
-            lightboxMapButton.hidden = !hasMapPoint;
-            lightboxMapButton.dataset.mapPoint = hasMapPoint ? mapPoint : '';
-        }
+        syncLightboxMapControls(mapPoint);
         updateNormalLightboxStageSize(card);
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
@@ -1527,43 +1640,173 @@ export function setupGalleryLightbox() {
             }
             hideInitialLightboxLoader();
             swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
+            scheduleLightboxSlideshowNext();
         });
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
-            if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
+            if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
                 closeLightboxMapSplit();
             } else if (mapPoint) {
                 openLightboxMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
+            } else if (hasLightboxGalleryMapPayload()) {
+                openLightboxGalleryMapSplit(card.dataset.title || title.textContent || currentLightboxGalleryMapTitle('Map'));
             } else {
                 openLightboxMapUnavailable(card.dataset.title || title.textContent || 'Map');
             }
         }
         preloadAdjacentImages(normalizedIndex);
         overlay.hidden = false;
+        document.documentElement.classList.add('has-lightbox');
         document.body.classList.add('has-lightbox');
+        if (isMobileTouchDevice && !isLightboxFullscreen()) {
+            enterMobileLightboxFullscreen();
+        }
         updateLightboxViewportMode();
-        showLightboxHud();
+        if (revealHud) {
+            showLightboxHud();
+        }
         telemetryPhotoOpened(card);
     }
 
     /**
      * Handles step behavior for the gallery UI.
-     * @param {*} offset Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @param {number} offset Relative image offset.
+     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
+     * @returns {void}
      */
-    function step(offset) {
+    function step(offset, options = {}) {
         if (cards.length === 0) {
             return;
         }
         // nextIndex stores state or configuration for the gallery front-end flow.
         const nextIndex = (currentIndex + offset + cards.length) % cards.length;
-        openAt(nextIndex);
+        openAt(nextIndex, options);
+    }
+
+    /**
+     * Synchronize toolbar and fullscreen map controls with the current item.
+     *
+     * @param {string} mapPoint Serialized EXIF marker payload for the active photo.
+     * @returns {void}
+     */
+    function syncLightboxMapControls(mapPoint) {
+        const hasMapPoint = String(mapPoint || '').trim() !== '';
+        const hasMapFallback = hasLightboxGalleryMapPayload();
+        lightboxMapButtons.forEach((button) => {
+            if (!(button instanceof HTMLElement)) {
+                return;
+            }
+            button.hidden = !(hasMapPoint || hasMapFallback);
+            button.dataset.mapPoint = hasMapPoint ? mapPoint : '';
+        });
+    }
+
+    /**
+     * Clears any pending automatic slideshow advance.
+     *
+     * @returns {void}
+     */
+    function clearLightboxSlideshowTimer() {
+        if (lightboxSlideshowTimer) {
+            window.clearTimeout(lightboxSlideshowTimer);
+            lightboxSlideshowTimer = null;
+        }
+    }
+
+    /**
+     * Synchronize visible slideshow controls and overlay state.
+     *
+     * @returns {void}
+     */
+    function syncLightboxSlideshowControls() {
+        overlay.classList.toggle('is-slideshow', lightboxSlideshowActive);
+        overlay.querySelectorAll('[data-lightbox-action="slideshow"]').forEach((button) => {
+            if (!(button instanceof HTMLElement)) {
+                return;
+            }
+            button.classList.toggle('is-active', lightboxSlideshowActive);
+            button.setAttribute('aria-pressed', lightboxSlideshowActive ? 'true' : 'false');
+        });
+    }
+
+    /**
+     * Schedule the next automatic slideshow step after the stable image time.
+     *
+     * @returns {void}
+     */
+    function scheduleLightboxSlideshowNext() {
+        clearLightboxSlideshowTimer();
+        if (!lightboxSlideshowActive || overlay.hidden || cards.length <= 1) {
+            return;
+        }
+        lightboxSlideshowTimer = window.setTimeout(() => {
+            lightboxSlideshowTimer = null;
+            if (!lightboxSlideshowActive || overlay.hidden) {
+                return;
+            }
+            hideLightboxHud();
+            step(1, {revealHud: false});
+        }, lightboxSlideshowVisibleDuration);
+    }
+
+    /**
+     * Start fullscreen slideshow mode.
+     *
+     * @returns {Promise<void>} Resolves after fullscreen entry has been requested.
+     */
+    async function startLightboxSlideshow() {
+        if (lightboxSlideshowActive) {
+            scheduleLightboxSlideshowNext();
+            return;
+        }
+        lightboxSlideshowActive = true;
+        syncLightboxSlideshowControls();
+        if (!isLightboxFullscreen()) {
+            await enterLightboxFullscreen();
+        }
+        showLightboxHud();
+        scheduleLightboxSlideshowNext();
+    }
+
+    /**
+     * Stop slideshow mode while optionally keeping fullscreen active.
+     *
+     * @param {boolean} syncControls Whether button state should be refreshed immediately.
+     * @returns {void}
+     */
+    function stopLightboxSlideshow(syncControls = true) {
+        clearLightboxSlideshowTimer();
+        if (!lightboxSlideshowActive) {
+            return;
+        }
+        lightboxSlideshowActive = false;
+        if (syncControls) {
+            syncLightboxSlideshowControls();
+        } else {
+            overlay.classList.remove('is-slideshow');
+        }
+    }
+
+    /**
+     * Toggle slideshow mode from the toolbar, HUD, or S keyboard shortcut.
+     *
+     * @returns {Promise<void>} Resolves after any fullscreen state change request.
+     */
+    async function toggleLightboxSlideshow() {
+        if (lightboxSlideshowActive) {
+            stopLightboxSlideshow();
+            showLightboxHud();
+            return;
+        }
+        await startLightboxSlideshow();
     }
 
     // Function `close` executes this focused behavior.
     function close() {
         telemetryPhotoClosed();
+        stopLightboxSlideshow();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
+        resetMobileSwipeVisuals(false);
         overlay.classList.remove('is-ui-visible');
         clearTouchGesture();
         updateLightboxViewportMode();
@@ -1575,6 +1818,7 @@ export function setupGalleryLightbox() {
         galleryDevModeState.currentSource = '';
         galleryDevModeState.currentSourceKind = '';
         galleryDevModeState.currentIndex = -1;
+        document.documentElement.classList.remove('has-lightbox', 'has-mobile-lightbox');
         document.body.classList.remove('has-lightbox');
         if (lightboxHistoryActive && lightboxReturnUrl && window.history && window.history.replaceState) {
             window.history.replaceState({}, '', lightboxReturnUrl);
@@ -1693,17 +1937,31 @@ export function setupGalleryLightbox() {
         const actionTarget = target?.closest('[data-lightbox-action]');
         // Variable `action` stores this steps working value.
         const action = actionTarget?.dataset.lightboxAction;
+        if (action === 'close' || event.target === overlay) {
+            event.preventDefault();
+            close();
+            return;
+        }
         if (target?.closest('[data-lightbox-stage]')) {
             event.preventDefault();
+            if (suppressNextStageClick) {
+                suppressNextStageClick = false;
+                return;
+            }
             if (initialLightboxLoadActive) {
                 return;
             }
             clearLightboxStageFocus();
+            if (isMobileTouchDevice) {
+                if (overlay.classList.contains('is-mobile-fullscreen')) {
+                    toggleLightboxHud();
+                } else {
+                    toggleLightboxFullscreen().finally(clearLightboxStageFocus);
+                }
+                clearLightboxStageFocus();
+                return;
+            }
             toggleLightboxFullscreen().finally(clearLightboxStageFocus);
-            return;
-        }
-        if (action === 'close' || event.target === overlay) {
-            close();
             return;
         }
         if (action === 'previous') {
@@ -1717,6 +1975,11 @@ export function setupGalleryLightbox() {
         if (action === 'fullscreen') {
             event.preventDefault();
             toggleLightboxFullscreen();
+            return;
+        }
+        if (action === 'slideshow') {
+            event.preventDefault();
+            toggleLightboxSlideshow();
             return;
         }
         // mapButton stores state or configuration for the gallery front-end flow.
@@ -1740,28 +2003,36 @@ export function setupGalleryLightbox() {
     }
 
     overlay.addEventListener('mousemove', showLightboxHud, {signal: controller.signal});
-    overlay.addEventListener('pointermove', showLightboxHud, {signal: controller.signal});
+    overlay.addEventListener('pointermove', showLightboxHudFromPointerMove, {signal: controller.signal});
     overlay.addEventListener('mouseleave', scheduleHideLightboxHud, {signal: controller.signal});
-    if (supportsPointerGestures) {
-        overlay.addEventListener('pointerdown', startTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointermove', trackTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointerup', finishTouchGesture, {signal: controller.signal});
-        overlay.addEventListener('pointercancel', clearTouchGesture, {signal: controller.signal});
-    } else {
-        overlay.addEventListener('touchstart', startTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchmove', trackTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchend', finishTouchGesture, {passive: false, signal: controller.signal});
-        overlay.addEventListener('touchcancel', clearTouchGesture, {signal: controller.signal});
+    if (stageLink && isMobileTouchDevice && supportsTouchGestures) {
+        stageLink.addEventListener('touchstart', startTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchmove', trackTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        stageLink.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('touchend', finishTouchGesture, {passive: false, capture: true, signal: controller.signal});
+        window.addEventListener('touchcancel', clearTouchGesture, {capture: true, signal: controller.signal});
+    } else if (stageLink && supportsPointerGestures) {
+        stageLink.addEventListener('pointerdown', startTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointermove', trackTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
+        overlay.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('pointerup', finishTouchGesture, {capture: true, signal: controller.signal});
+        window.addEventListener('pointercancel', clearTouchGesture, {capture: true, signal: controller.signal});
     }
+    document.addEventListener('touchmove', preventMobileLightboxPageGesture, {passive: false, capture: true, signal: controller.signal});
     overlay.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     document.addEventListener('fullscreenchange', syncLightboxFullscreenState, {signal: controller.signal});
     window.addEventListener('resize', () => {
         if (controller.signal.aborted || overlay.hidden || currentIndex < 0) {
             return;
         }
+        updateMobileLightboxViewport();
         updateNormalLightboxStageSize(cards[currentIndex]);
         updateFullscreenMapImageFit(cards[currentIndex]);
     }, {signal: controller.signal});
+    window.visualViewport?.addEventListener('resize', updateMobileLightboxViewport, {signal: controller.signal});
+    window.visualViewport?.addEventListener('scroll', updateMobileLightboxViewport, {signal: controller.signal});
 
     document.addEventListener('keydown', (event) => {
         if (overlay.hidden) {
@@ -1776,9 +2047,11 @@ export function setupGalleryLightbox() {
             close();
         }
         if (event.key === 'ArrowLeft') {
+            event.preventDefault();
             step(-1);
         }
         if (event.key === 'ArrowRight') {
+            event.preventDefault();
             step(1);
         }
         if (event.key === 'ArrowUp') {
@@ -1788,6 +2061,10 @@ export function setupGalleryLightbox() {
         if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 'm') {
             event.preventDefault();
             toggleCurrentLightboxMap();
+        }
+        if (!event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            toggleLightboxSlideshow();
         }
         if (event.key === 'f' || (event.key === 'F' && event.shiftKey === false) || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f')) {
             event.preventDefault();
@@ -1814,11 +2091,25 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Update every rendered counter copy used by desktop and mobile layouts.
+     *
+     * @param {string} text Position text to render.
+     * @returns {void}
+     */
+    function updateLightboxCounters(text) {
+        counters.forEach((counterElement) => {
+            if (counterElement instanceof HTMLElement) {
+                counterElement.textContent = text;
+            }
+        });
+    }
+
+    /**
      * Handles is lightbox fullscreen behavior for the gallery UI.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function isLightboxFullscreen() {
-        return overlay.classList.contains('is-fullscreen');
+        return overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen');
     }
 
     /**
@@ -1832,12 +2123,27 @@ export function setupGalleryLightbox() {
             browserFullscreen: Boolean(document.fullscreenElement),
         });
         if (isLightboxFullscreen()) {
+            stopLightboxSlideshow();
             await exitLightboxFullscreen();
             debugLightbox('toggle:exit');
             return;
         }
         await enterLightboxFullscreen();
         debugLightbox('toggle:enter');
+    }
+
+    /**
+     * Enter the CSS-only mobile fullscreen viewer without requesting browser fullscreen.
+     * @returns {void}
+     */
+    function enterMobileLightboxFullscreen() {
+        prepareMobileLightboxOverlay();
+        updateMobileLightboxViewport();
+        overlay.classList.add('is-mobile-fullscreen');
+        overlay.classList.remove('is-fullscreen');
+        document.documentElement.classList.add('has-mobile-lightbox');
+        document.body.classList.add('has-mobile-lightbox');
+        debugLightbox('enter:mobile-auto');
     }
 
     /**
@@ -1848,9 +2154,7 @@ export function setupGalleryLightbox() {
         overlay.classList.add('is-fullscreen');
         overlay.classList.remove('is-ui-visible');
         if (isMobileTouchDevice) {
-            overlay.classList.add('is-mobile-fullscreen');
-            document.body.classList.add('has-mobile-lightbox');
-            debugLightbox('enter:mobile-css');
+            enterMobileLightboxFullscreen();
             showLightboxHud();
             return;
         }
@@ -1863,8 +2167,7 @@ export function setupGalleryLightbox() {
         } catch {
             // Browser fullscreen can fail; the CSS fullscreen fallback still applies.
         }
-        overlay.classList.add('is-mobile-fullscreen');
-        document.body.classList.add('has-mobile-lightbox');
+        enterMobileLightboxFullscreen();
         debugLightbox('enter:fallback-css');
         showLightboxHud();
     }
@@ -1874,9 +2177,11 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function exitLightboxFullscreen() {
+        stopLightboxSlideshow();
         overlay.classList.remove('is-fullscreen');
         overlay.classList.remove('is-mobile-fullscreen');
         closeLightboxMapSplit();
+        document.documentElement.classList.remove('has-mobile-lightbox');
         document.body.classList.remove('has-mobile-lightbox');
         if (!isMobileTouchDevice && document.fullscreenElement) {
             try {
@@ -1901,7 +2206,9 @@ export function setupGalleryLightbox() {
             overlay.classList.remove('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
             overlay.classList.remove('is-ui-visible');
+            document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
+            stopLightboxSlideshow();
             clearLightboxStageFocus();
             debugLightbox('sync:browser-exit');
             return;
@@ -1909,6 +2216,7 @@ export function setupGalleryLightbox() {
         if (document.fullscreenElement === overlay) {
             overlay.classList.add('is-fullscreen');
             overlay.classList.remove('is-mobile-fullscreen');
+            document.documentElement.classList.remove('has-mobile-lightbox');
             document.body.classList.remove('has-mobile-lightbox');
             overlay.classList.remove('is-ui-visible');
             debugLightbox('sync:browser-enter');
@@ -1926,6 +2234,17 @@ export function setupGalleryLightbox() {
         }
     }
 
+
+    /**
+     * Hide the fullscreen controls immediately without stopping slideshow playback.
+     *
+     * @returns {void}
+     */
+    function hideLightboxHud() {
+        clearLightboxHudTimer();
+        overlay.classList.remove('is-ui-visible');
+    }
+
     /**
      * Handles show lightbox hud behavior for the gallery UI.
      * @returns {*} Result of the UI operation, when a value is produced.
@@ -1936,10 +2255,36 @@ export function setupGalleryLightbox() {
         if (isLightboxFullscreen()) {
             fullscreenHideTimer = window.setTimeout(() => {
                 overlay.classList.remove('is-ui-visible');
-            }, 1800);
+            }, isMobileTouchDevice ? 2400 : 1800);
         } else {
             overlay.classList.remove('is-ui-visible');
         }
+    }
+
+    /**
+     * Keeps desktop pointer movement behavior without reopening the mobile HUD during a swipe.
+     *
+     * @param {PointerEvent|MouseEvent} event Browser pointer movement event.
+     * @returns {void}
+     */
+    function showLightboxHudFromPointerMove(event) {
+        if (isActiveMobileLightbox() && isMobileLightboxStageEvent(event)) {
+            return;
+        }
+        showLightboxHud();
+    }
+
+    /**
+     * Toggle mobile fullscreen controls from a deliberate stage tap.
+     * @returns {void}
+     */
+    function toggleLightboxHud() {
+        clearLightboxHudTimer();
+        if (overlay.classList.contains('is-ui-visible')) {
+            overlay.classList.remove('is-ui-visible');
+            return;
+        }
+        showLightboxHud();
     }
 
     /**
@@ -1963,7 +2308,49 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function updateLightboxViewportMode() {
-        document.body.classList.toggle('has-mobile-lightbox', overlay.classList.contains('is-mobile-fullscreen'));
+        const mobileLightboxActive = overlay.classList.contains('is-mobile-fullscreen');
+        document.documentElement.classList.toggle('has-mobile-lightbox', mobileLightboxActive);
+        document.body.classList.toggle('has-mobile-lightbox', mobileLightboxActive);
+        if (mobileLightboxActive) {
+            updateMobileLightboxViewport();
+        }
+    }
+
+    /**
+     * Reports whether the CSS-only mobile viewer is currently active.
+     *
+     * @returns {boolean} True when mobile Chrome style gestures should be trapped by the lightbox.
+     */
+    function isActiveMobileLightbox() {
+        return isMobileTouchDevice && !overlay.hidden;
+    }
+
+    /**
+     * Reports whether an event belongs to the photo stage instead of the surrounding document.
+     *
+     * @param {Event} event Browser event to inspect.
+     * @returns {boolean} True when the event started from the image swipe surface.
+     */
+    function isMobileLightboxStageEvent(event) {
+        const target = event.target instanceof Element ? event.target : null;
+        return Boolean(target?.closest('[data-lightbox-stage]'));
+    }
+
+    /**
+     * Prevents mobile Chrome from scrolling or swiping the page behind the lightbox.
+     *
+     * @param {TouchEvent} event Browser touch movement event.
+     * @returns {void}
+     */
+    function preventMobileLightboxPageGesture(event) {
+        if (!isActiveMobileLightbox()) {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest('.lightbox-meta, .lightbox-map-split, .lightbox-hud')) {
+            return;
+        }
+        event.preventDefault();
     }
 
     /**
@@ -1971,9 +2358,9 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearTouchGesture() {
-        if (touchGesture && touchGesture.pointerId !== null) {
+        if (touchGesture && touchGesture.pointerId !== null && touchGesture.captureElement) {
             try {
-                overlay.releasePointerCapture?.(touchGesture.pointerId);
+                touchGesture.captureElement.releasePointerCapture?.(touchGesture.pointerId);
             } catch {
                 // Ignore pointer capture release failures from older mobile engines.
             }
@@ -1982,42 +2369,109 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Reset the CSS variables/classes used to render mobile swipe drag feedback.
+     *
+     * @param {boolean} animate Whether the stage should glide back to center.
+     * @returns {void}
+     */
+    function resetMobileSwipeVisuals(animate = true) {
+        if (mobileSwipeVisualTimer) {
+            window.clearTimeout(mobileSwipeVisualTimer);
+            mobileSwipeVisualTimer = 0;
+        }
+        overlay.classList.remove('is-swipe-dragging', 'is-swipe-committing');
+        overlay.style.setProperty('--lightbox-swipe-x', '0px');
+        overlay.style.setProperty('--lightbox-swipe-progress', '0');
+        if (!animate) {
+            overlay.classList.remove('is-swipe-settling');
+            return;
+        }
+        overlay.classList.add('is-swipe-settling');
+        mobileSwipeVisualTimer = window.setTimeout(() => {
+            mobileSwipeVisualTimer = 0;
+            overlay.classList.remove('is-swipe-settling');
+        }, 190);
+    }
+
+    /**
+     * Move the active mobile image under the user's finger without letting it leave the stage too far.
+     *
+     * @param {number} offsetX Horizontal drag distance in pixels.
+     * @param {boolean} clamp Whether to cap the visual drag distance.
+     * @returns {void}
+     */
+    function setMobileSwipeOffset(offsetX, clamp = true) {
+        const stageWidth = Math.max(1, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 1);
+        const maxOffset = Math.max(72, Math.min(180, stageWidth * 0.36));
+        const visualOffset = clamp ? Math.max(-maxOffset, Math.min(maxOffset, offsetX)) : offsetX;
+        const progress = Math.min(1, Math.abs(visualOffset) / maxOffset);
+        overlay.style.setProperty('--lightbox-swipe-x', `${Math.round(visualOffset)}px`);
+        overlay.style.setProperty('--lightbox-swipe-progress', progress.toFixed(3));
+    }
+
+    /**
+     * Animate the current mobile image offscreen, then navigate to the adjacent photo.
+     *
+     * @param {number} dx Final horizontal movement in pixels.
+     * @returns {void}
+     */
+    function commitMobileSwipe(dx) {
+        const direction = dx < 0 ? 1 : -1;
+        const stageWidth = Math.max(320, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 320);
+        overlay.classList.remove('is-swipe-dragging', 'is-swipe-settling');
+        overlay.classList.add('is-swipe-committing');
+        setMobileSwipeOffset(direction > 0 ? -stageWidth : stageWidth, false);
+        mobileSwipeVisualTimer = window.setTimeout(() => {
+            mobileSwipeVisualTimer = 0;
+            if (!controller.signal.aborted && !overlay.hidden) {
+                step(direction, {revealHud: false});
+            }
+            resetMobileSwipeVisuals(false);
+        }, 150);
+    }
+
+    /**
      * Handles start touch gesture behavior for the gallery UI.
      * @param {*} event Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function startTouchGesture(event) {
-        if (overlay.hidden || !isLightboxFullscreen()) {
+        if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
+        if (event.touches && event.touches.length > 1) {
+            return;
+        }
+        if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0 || event.isPrimary === false)) {
+            return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('[data-lightbox-stage]') || isLightboxControlTarget(target)) {
+            return;
+        }
         const point = lightboxGesturePoint(event);
         if (!point) {
             return;
         }
-        if (event.type === 'pointerdown' && (event.pointerType === 'mouse' || event.button !== 0)) {
-            return;
-        }
-        if (isMobileTouchDevice) {
-            showLightboxHud();
-        }
-        // target stores state or configuration for the gallery front-end flow.
-        const target = event.target instanceof Element ? event.target : null;
-        if (isLightboxControlTarget(target)) {
-            return;
-        }
+        event.preventDefault();
+        resetMobileSwipeVisuals(false);
+        const captureElement = event.currentTarget instanceof Element ? event.currentTarget : stageLink;
         touchGesture = {
             pointerId: event.type === 'pointerdown' ? event.pointerId : null,
+            captureElement,
             startX: point.clientX,
             startY: point.clientY,
             lastX: point.clientX,
             lastY: point.clientY,
             startedAt: Date.now(),
             active: true,
+            horizontalIntent: false,
+            verticalIntent: false,
+            moved: false,
         };
-        if (touchGesture.pointerId !== null) {
+        if (touchGesture.pointerId !== null && captureElement) {
             try {
-                overlay.setPointerCapture?.(touchGesture.pointerId);
+                captureElement.setPointerCapture?.(touchGesture.pointerId);
             } catch {
                 // Pointer capture is best-effort on mobile browsers.
             }
@@ -2033,25 +2487,39 @@ export function setupGalleryLightbox() {
         if (!touchGesture || !touchGesture.active) {
             return;
         }
+        if (event.touches && event.touches.length > 1) {
+            resetMobileSwipeVisuals();
+            clearTouchGesture();
+            return;
+        }
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
         const point = lightboxGesturePoint(event);
         if (!point) {
             return;
         }
         touchGesture.lastX = point.clientX;
         touchGesture.lastY = point.clientY;
-        // dx stores state or configuration for the gallery front-end flow.
         const dx = touchGesture.lastX - touchGesture.startX;
-        // dy stores state or configuration for the gallery front-end flow.
         const dy = touchGesture.lastY - touchGesture.startY;
-        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
-            event.preventDefault();
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        event.preventDefault();
+        if (absDx > 6 || absDy > 6) {
+            touchGesture.moved = true;
         }
-        if (Math.abs(dx) > 18 || Math.abs(dy) > 18) {
-            overlay.classList.add('is-ui-visible');
+        if (!touchGesture.horizontalIntent && !touchGesture.verticalIntent) {
+            if (absDx > 8 && absDx > absDy * 0.8) {
+                touchGesture.horizontalIntent = true;
+                overlay.classList.add('is-swipe-dragging');
+                hideLightboxHud();
+            } else if (absDy > 24 && absDy > absDx * 1.6) {
+                touchGesture.verticalIntent = true;
+            }
+        }
+        if (touchGesture.horizontalIntent) {
+            setMobileSwipeOffset(dx);
         }
     }
 
@@ -2067,24 +2535,39 @@ export function setupGalleryLightbox() {
         if (touchGesture.pointerId !== null && event.pointerId !== touchGesture.pointerId) {
             return;
         }
-        // point stores state or configuration for the gallery front-end flow.
         const point = lightboxGesturePoint(event) || {clientX: touchGesture.lastX, clientY: touchGesture.lastY};
-        // dx stores state or configuration for the gallery front-end flow.
         const dx = point.clientX - touchGesture.startX;
-        // dy stores state or configuration for the gallery front-end flow.
         const dy = point.clientY - touchGesture.startY;
-        // elapsed stores state or configuration for the gallery front-end flow.
-        const elapsed = Date.now() - touchGesture.startedAt;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const elapsed = Math.max(1, Date.now() - touchGesture.startedAt);
+        const velocityX = absDx / elapsed;
+        const stageWidth = Math.max(1, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 1);
+        const distanceThreshold = Math.max(30, Math.min(72, stageWidth * 0.12));
+        const hadHorizontalIntent = touchGesture.horizontalIntent;
+        const hadMovement = touchGesture.moved;
         clearTouchGesture();
-        if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) || elapsed > 1200) {
+        const isSwipe = (hadHorizontalIntent || absDx > distanceThreshold)
+            && absDx >= distanceThreshold
+            && absDx > absDy * 0.62
+            && (absDx > distanceThreshold * 1.35 || velocityX >= 0.22);
+        if (!isSwipe) {
+            resetMobileSwipeVisuals(Boolean(hadMovement));
+            if (hadMovement) {
+                suppressNextStageClick = true;
+            } else if (isActiveMobileLightbox()) {
+                event.preventDefault();
+                event.stopPropagation();
+                suppressNextStageClick = true;
+                toggleLightboxHud();
+            }
             return;
         }
         event.preventDefault();
-        if (dx < 0) {
-            step(1);
-        } else {
-            step(-1);
-        }
+        event.stopPropagation();
+        suppressNextStageClick = true;
+        hideLightboxHud();
+        commitMobileSwipe(dx);
     }
 
     /**
@@ -2206,31 +2689,103 @@ export function setupGalleryLightbox() {
             return;
         }
         try {
-            // Variable `point` stores this steps working value.
-            const point = JSON.parse(json);
-            openMapOverlay(point.title || 'Photo location', [point]);
+            // payload stores the marker or map payload read from a data attribute.
+            const payload = JSON.parse(json);
+            const mapPayload = normalizeMapPayload(payload);
+            openMapOverlay(mapPayload.title || 'Photo location', mapPayload.points, mapPayload);
         } catch {
             // Invalid rendered JSON should not break the gallery UI.
         }
     }
 
+    /**
+     * Return the gallery-level map endpoint from the freshest rendered markup.
+     *
+     * Public gallery content can be replaced by admin-side AJAX tools. Reading the
+     * current DOM avoids stale setup-time values when a gallery route was added or
+     * changed without a full browser restart.
+     *
+     * @returns {string} Gallery map JSON endpoint, or an empty string.
+     */
+    function currentLightboxGalleryMapUrl() {
+        const configUrl = String(document.querySelector('[data-lightbox-config]')?.dataset.lightboxGalleryMapUrl || '').trim();
+        if (configUrl !== '') {
+            return configUrl;
+        }
+        const overlayUrl = String(overlay?.dataset.lightboxGalleryMapUrl || '').trim();
+        if (overlayUrl !== '') {
+            return overlayUrl;
+        }
+        return String(document.querySelector('[data-gallery-map-url]')?.dataset.galleryMapUrl || lightboxGalleryMapUrl || '').trim();
+    }
+
+    /**
+     * Return the gallery-level map title from the freshest rendered markup.
+     *
+     * @param {string} fallback Title used when no rendered title exists.
+     * @returns {string} Human-readable map title.
+     */
+    function currentLightboxGalleryMapTitle(fallback = 'Gallery map') {
+        const configTitle = String(document.querySelector('[data-lightbox-config]')?.dataset.lightboxGalleryMapTitle || '').trim();
+        if (configTitle !== '') {
+            return configTitle;
+        }
+        const overlayTitle = String(overlay?.dataset.lightboxGalleryMapTitle || '').trim();
+        if (overlayTitle !== '') {
+            return overlayTitle;
+        }
+        return String(document.querySelector('[data-gallery-map-url]')?.dataset.galleryMapTitle || lightboxGalleryMapTitle || fallback).trim();
+    }
+
+    /**
+     * Return whether a gallery-level route or marker map can be opened.
+     *
+     * @returns {boolean} True when a gallery map endpoint is present.
+     */
+    function hasLightboxGalleryMapPayload() {
+        return currentLightboxGalleryMapUrl() !== '';
+    }
+
+    /**
+     * Return whether the shared map UI can be opened from the current lightbox.
+     *
+     * @returns {boolean} True when EXIF maps are enabled or gallery route data exist.
+     */
+    function sharedLightboxMapUiAvailable() {
+        return lightboxMapsEnabled || hasLightboxGalleryMapPayload();
+    }
+
+    // Function `fetchGalleryMapPayload` executes this focused behavior.
+    async function fetchGalleryMapPayload(url = '', title = '') {
+        const endpointUrl = String(url || currentLightboxGalleryMapUrl()).trim();
+        if (!endpointUrl) {
+            return null;
+        }
+        if (lightboxGalleryMapPayloadPromises.has(endpointUrl)) {
+            return lightboxGalleryMapPayloadPromises.get(endpointUrl);
+        }
+        const fetchPromise = fetch(endpointUrl, {headers: {'Accept': 'application/json'}}).then(async (response) => {
+            if (!response.ok) {
+                return null;
+            }
+            const payload = await response.json();
+            const mapPayload = normalizeMapPayload(payload);
+            if (!mapPayload.title) {
+                mapPayload.title = title || currentLightboxGalleryMapTitle('Gallery map');
+            }
+            return mapPayload;
+        }).catch(() => null);
+        lightboxGalleryMapPayloadPromises.set(endpointUrl, fetchPromise);
+        return fetchPromise;
+    }
+
     // Function `openGalleryMap` executes this focused behavior.
-    async function openGalleryMap(url, title) {
-        if (!url) {
+    async function openGalleryMap(url = '', title = '') {
+        const payload = await fetchGalleryMapPayload(url, title || currentLightboxGalleryMapTitle('Gallery map'));
+        if (!payload || !payload.points.length) {
             return;
         }
-        try {
-            // Variable `response` stores this steps working value.
-            const response = await fetch(url, {headers: {'Accept': 'application/json'}});
-            if (!response.ok) {
-                return;
-            }
-            // Variable `payload` stores this steps working value.
-            const payload = await response.json();
-            openMapOverlay(payload.title || title, payload.points || []);
-        } catch {
-            // Network and JSON errors are ignored so the normal gallery remains usable.
-        }
+        openMapOverlay(payload.title || title || currentLightboxGalleryMapTitle('Gallery map'), payload.points, payload);
     }
 
     // Function `ensureLeaflet` executes this focused behavior.
@@ -2353,7 +2908,7 @@ export function setupGalleryLightbox() {
     }
 
     // Function `openMapOverlay` executes this focused behavior.
-    async function openMapOverlay(title, points) {
+    async function openMapOverlay(title, points, mapPayload = {}) {
         if (!Array.isArray(points) || points.length === 0) {
             return;
         }
@@ -2400,19 +2955,121 @@ export function setupGalleryLightbox() {
         }).addTo(map);
 
         // Variable `bounds` stores this steps working value.
-        const bounds = [];
-        points.forEach((point) => {
-            if (typeof point.lat !== 'number' || typeof point.lng !== 'number') {
-                return;
+        const bounds = renderLeafletMapPayload(map, points, mapPayload);
+
+        setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+    }
+
+    /**
+     * Normalize marker arrays and route payloads into one renderer contract.
+     *
+     * @param {*} payload Raw JSON payload from PHP or a data attribute.
+     * @returns {{title: string, points: Array, geometry: *, sourceType: string}}
+     */
+    function normalizeMapPayload(payload) {
+        if (Array.isArray(payload)) {
+            return {title: '', points: normalizeMapPoints(payload), geometry: null, sourceType: 'exif_point'};
+        }
+        if (!payload || typeof payload !== 'object') {
+            return {title: '', points: [], geometry: null, sourceType: ''};
+        }
+        if ((payload.lat ?? payload.latitude) !== undefined && (payload.lng ?? payload.longitude) !== undefined) {
+            return {
+                title: String(payload.title || payload.name || ''),
+                points: normalizeMapPoints([payload]),
+                geometry: null,
+                sourceType: String(payload.source_type || payload.map_source_type || 'exif_point'),
+            };
+        }
+        const points = normalizeMapPoints(payload.points || payload.geometry?.points || []);
+        const sourceType = String(payload.source_type || payload.map_source_type || payload.sourceType || '');
+        const renderPath = payload.render_path === true || payload.renderPath === true || payload.is_path === true || payload.isPath === true;
+        const geometry = payload.geometry && typeof payload.geometry === 'object' ? {
+            ...payload.geometry,
+            points: normalizeMapPoints(payload.geometry.points || points),
+        } : null;
+        return {
+            title: String(payload.title || ''),
+            points,
+            geometry,
+            sourceType,
+            renderPath,
+        };
+    }
+
+    /**
+     * Normalize point coordinates before passing them to Leaflet.
+     *
+     * @param {*} points Candidate point list.
+     * @returns {Array} Point list with numeric lat/lng values.
+     */
+    function normalizeMapPoints(points) {
+        if (!Array.isArray(points)) {
+            return [];
+        }
+        return points.map((point) => {
+            if (!point || typeof point !== 'object') {
+                return null;
             }
-            // Variable `marker` stores this steps working value.
+            const lat = Number(point.lat ?? point.latitude);
+            const lng = Number(point.lng ?? point.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                return null;
+            }
+            return {...point, lat, lng};
+        }).filter(Boolean);
+    }
+
+    /**
+     * Render markers and optional flight route geometry into an existing map.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {Array} points Already normalized marker points.
+     * @param {*} mapPayload Normalized map metadata.
+     * @returns {Array} Leaflet bounds input collected from valid route points.
+     */
+    function renderLeafletMapPayload(map, points, mapPayload = {}) {
+        const normalizedPoints = normalizeMapPoints(points);
+        const bounds = [];
+        const linePoints = normalizeMapPoints(mapPayload.geometry?.type === 'polyline' ? mapPayload.geometry.points : []);
+        const routePoints = linePoints.length > 1
+            ? linePoints
+            : (shouldRenderPathForPayload(mapPayload, normalizedPoints) ? normalizedPoints : []);
+        if (routePoints.length > 1) {
+            L.polyline(routePoints.map((point) => [point.lat, point.lng]), {
+                className: 'gallery-leaflet-route-line',
+                color: '#2563eb',
+                opacity: 0.92,
+                smoothFactor: 1,
+                weight: 4,
+            }).addTo(map);
+        }
+        normalizedPoints.forEach((point) => {
             const marker = L.marker([point.lat, point.lng], {icon: getGalleryMapMarkerIcon()}).addTo(map);
             marker.bindPopup(mapPopupHtml(point));
             bounds.push([point.lat, point.lng]);
         });
+        if (bounds.length === 0 && routePoints.length > 0) {
+            routePoints.forEach((point) => bounds.push([point.lat, point.lng]));
+        }
+        return bounds;
+    }
 
-        setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
-        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+    /**
+     * Return true when a normalized payload should be rendered as a connected path.
+     *
+     * @param {*} mapPayload Normalized map metadata.
+     * @param {Array} normalizedPoints Already normalized marker points.
+     * @returns {boolean} True when the point list represents route geometry.
+     */
+    function shouldRenderPathForPayload(mapPayload, normalizedPoints) {
+        if (!Array.isArray(normalizedPoints) || normalizedPoints.length <= 1) {
+            return false;
+        }
+
+        const sourceType = String(mapPayload?.sourceType || mapPayload?.source_type || mapPayload?.map_source_type || '');
+        return sourceType === 'flight_path' || mapPayload?.renderPath === true || mapPayload?.geometry?.type === 'polyline';
     }
 
     /**
@@ -2538,7 +3195,7 @@ export function setupGalleryLightbox() {
      * @returns {void}
      */
     function openLightboxMapUnavailable(title) {
-        if (!lightboxMapsEnabled || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
+        if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
             return;
         }
         clearLightboxSplitMapRuntime();
@@ -2559,7 +3216,7 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleCurrentLightboxMap(json = '') {
-        if (!lightboxMapsEnabled) {
+        if (!sharedLightboxMapUiAvailable()) {
             closeLightboxMapSplit();
             closeMapOverlay();
             return;
@@ -2569,11 +3226,14 @@ export function setupGalleryLightbox() {
         // mapPoint stores the active photo marker payload when one is available.
         const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
-            toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+            if (mapPoint) {
+                toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+            } else if (hasLightboxGalleryMapPayload()) {
+                toggleLightboxGalleryMapSplit(card?.dataset.title || overlay.dataset.currentTitle || currentLightboxGalleryMapTitle('Map'));
+            } else {
+                toggleLightboxMapSplit('', card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+            }
             showLightboxHud();
-            return;
-        }
-        if (!mapPoint) {
             return;
         }
         // mapOverlay stores state or configuration for the gallery front-end flow.
@@ -2582,7 +3242,13 @@ export function setupGalleryLightbox() {
             closeMapOverlay();
             return;
         }
-        openPhotoMapFromJson(mapPoint);
+        if (mapPoint) {
+            openPhotoMapFromJson(mapPoint);
+            return;
+        }
+        if (hasLightboxGalleryMapPayload()) {
+            openGalleryMap(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
+        }
     }
 
     /**
@@ -2592,7 +3258,7 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleLightboxMapSplit(json, title) {
-        if (!lightboxMapsEnabled || !isLightboxFullscreen()) {
+        if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
             return;
         }
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
@@ -2607,17 +3273,50 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Toggle the gallery-level route or map payload inside fullscreen split mode.
+     *
+     * @param {string} title Current viewer title fallback.
+     * @returns {void}
+     */
+    function toggleLightboxGalleryMapSplit(title) {
+        if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !hasLightboxGalleryMapPayload()) {
+            return;
+        }
+        if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+            closeLightboxMapSplit();
+            return;
+        }
+        openLightboxGalleryMapSplit(title);
+    }
+
+    /**
+     * Open the gallery-level route or map payload inside fullscreen split mode.
+     *
+     * @param {string} title Current viewer title fallback.
+     * @returns {void}
+     */
+    async function openLightboxGalleryMapSplit(title) {
+        const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || 'Gallery map'));
+        if (!payload || !payload.points.length) {
+            openLightboxMapUnavailable(title || 'Map');
+            return;
+        }
+        openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle('Gallery map'));
+    }
+
+    /**
      * Handles open lightbox map split behavior for the gallery UI.
      * @param {*} json Value supplied by the caller or event context.
      * @param {*} title Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function openLightboxMapSplit(json, title) {
-        if (!lightboxMapsEnabled) {
+        if (!sharedLightboxMapUiAvailable()) {
             return;
         }
-        // points stores state or configuration for the gallery front-end flow.
-        const points = parseMapPoints(json);
+        // mapPayload stores the normalized point or route data for the split pane.
+        const mapPayload = parseMapPayload(json);
+        const points = mapPayload.points;
         if (!points.length || !lightboxMapSplit || !lightboxMapSplitCanvas) {
             return;
         }
@@ -2648,16 +3347,7 @@ export function setupGalleryLightbox() {
             attribution: '&copy; OpenStreetMap contributors',
         }).addTo(map);
         // bounds stores state or configuration for the gallery front-end flow.
-        const bounds = [];
-        points.forEach((point) => {
-            if (typeof point.lat !== 'number' || typeof point.lng !== 'number') {
-                return;
-            }
-            // marker stores state or configuration for the gallery front-end flow.
-            const marker = L.marker([point.lat, point.lng], {icon: getGalleryMapMarkerIcon()}).addTo(map);
-            marker.bindPopup(mapPopupHtml(point));
-            bounds.push([point.lat, point.lng]);
-        });
+        const bounds = renderLeafletMapPayload(map, points, mapPayload);
         setInitialMapViewport(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
         stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
         overlay.galleryLeafletSplitResizeObserver = new ResizeObserver(() => {
@@ -2763,24 +3453,25 @@ export function setupGalleryLightbox() {
     }
 
     /**
-     * Handles parse map points behavior for the gallery UI.
+     * Parse a serialized map marker or route payload.
+     *
      * @param {*} json Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @returns {{title: string, points: Array, geometry: *, sourceType: string}}
      */
-    function parseMapPoints(json) {
+    function parseMapPayload(json) {
         try {
             // parsed stores state or configuration for the gallery front-end flow.
             const parsed = JSON.parse(json);
-            return Array.isArray(parsed) ? parsed : [parsed];
+            return normalizeMapPayload(parsed);
         } catch {
-            return [];
+            return normalizeMapPayload(null);
         }
     }
 
     // Function `mapPopupHtml` executes this focused behavior.
     function mapPopupHtml(point) {
         // Variable `title` stores this steps working value.
-        const title = escapeHtml(point.title || 'Photo');
+        const title = escapeHtml(point.title || point.name || 'Map point');
         // Variable `description` stores this steps working value.
         const description = point.description ? `<p>${escapeHtml(point.description)}</p>` : '';
         // Variable `thumb` stores this steps working value.

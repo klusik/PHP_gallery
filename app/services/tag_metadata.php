@@ -228,8 +228,11 @@ function tag_description_schema_ready(): bool
 
 /**
  * Return editable tag rows with gallery and image usage counts.
+ *
+ * @param string $sortField Sorting key, either name or usage.
+ * @param string $sortDirection Sort direction, asc or desc.
  */
-function admin_tag_rows(): array
+function admin_tag_rows(string $sortField = 'usage', string $sortDirection = 'desc'): array
 {
     // Variable $descriptionReady stores this steps working value.
     $descriptionReady = tag_description_schema_ready();
@@ -237,16 +240,78 @@ function admin_tag_rows(): array
     $descriptionColumn = $descriptionReady ? 't.description' : "'' AS description";
     // Variable $groupByDescription stores this steps working value.
     $groupByDescription = $descriptionReady ? ', t.description' : '';
+    // Variable $safeSortField stores this steps working value.
+    $safeSortField = in_array($sortField, ['name', 'usage'], true) ? $sortField : 'usage';
+    // Variable $safeSortDirection stores this steps working value.
+    $safeSortDirection = strtolower($sortDirection) === 'asc' ? 'ASC' : 'DESC';
+    // Variable $orderBy stores this steps working value.
+    $orderBy = $safeSortField === 'name'
+        ? 't.name ' . $safeSortDirection . ', t.slug ' . $safeSortDirection
+        : 'usage_count ' . $safeSortDirection . ', t.name ASC';
     // Variable $stmt stores this steps working value.
     $stmt = db()->query("SELECT t.id, t.name, t.slug, " . $descriptionColumn . ", t.created_at, t.updated_at,
         COUNT(DISTINCT gt.gallery_id) AS gallery_count,
-        COUNT(DISTINCT it.image_id) AS image_count
+        COUNT(DISTINCT it.image_id) AS image_count,
+        COUNT(DISTINCT gt.gallery_id) + COUNT(DISTINCT it.image_id) AS usage_count
         FROM tags t
         LEFT JOIN gallery_tags gt ON gt.tag_id = t.id
         LEFT JOIN image_tags it ON it.tag_id = t.id
         GROUP BY t.id, t.name, t.slug" . $groupByDescription . ", t.created_at, t.updated_at
-        ORDER BY t.name");
+        ORDER BY " . $orderBy);
     return $stmt->fetchAll();
+}
+
+/**
+ * Return the gallery and image records that use one tag.
+ */
+function admin_tag_usage_rows(int $tagId): array
+{
+    // Variable $galleries stores this steps working value.
+    $galleries = [];
+    // Variable $galleryStmt stores this steps working value.
+    $galleryStmt = db()->prepare("SELECT DISTINCT g.id, g.title, g.slug, g.folder_path
+        FROM gallery_tags gt
+        JOIN galleries g ON g.id = gt.gallery_id
+        WHERE gt.tag_id = ?
+        ORDER BY g.title, g.id");
+    $galleryStmt->execute([$tagId]);
+    foreach ($galleryStmt->fetchAll() as $row) {
+        $galleries[] = [
+            'id' => (int) $row['id'],
+            'title' => (string) ($row['title'] ?? ''),
+            'slug' => (string) ($row['slug'] ?? ''),
+            'folder_path' => (string) ($row['folder_path'] ?? ''),
+            'edit_url' => url_for('admin_edit_gallery', ['id' => (int) $row['id']]),
+            'public_url' => gallery_public_url($row),
+        ];
+    }
+
+    // Variable $images stores this steps working value.
+    $images = [];
+    // Variable $imageStmt stores this steps working value.
+    $imageStmt = db()->prepare("SELECT DISTINCT i.id, i.relative_path, i.filename, i.gallery_id, g.title AS gallery_title, g.slug AS gallery_slug
+        FROM image_tags it
+        JOIN images i ON i.id = it.image_id
+        JOIN galleries g ON g.id = i.gallery_id
+        WHERE it.tag_id = ?
+        ORDER BY g.title, i.sort_order, i.filename, i.id");
+    $imageStmt->execute([$tagId]);
+    foreach ($imageStmt->fetchAll() as $row) {
+        $images[] = [
+            'id' => (int) $row['id'],
+            'relative_path' => (string) ($row['relative_path'] ?? ''),
+            'filename' => (string) ($row['filename'] ?? ''),
+            'gallery_id' => (int) ($row['gallery_id'] ?? 0),
+            'gallery_title' => (string) ($row['gallery_title'] ?? ''),
+            'gallery_slug' => (string) ($row['gallery_slug'] ?? ''),
+            'edit_url' => url_for('admin_edit_image', ['id' => (int) $row['id']]),
+        ];
+    }
+
+    return [
+        'galleries' => $galleries,
+        'images' => $images,
+    ];
 }
 
 /**
