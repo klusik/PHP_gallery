@@ -34,6 +34,7 @@ import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gal
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260520-mobile-swipe-fix-v2';
+import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260519-picture-manager-v5';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTabsInRoot } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
@@ -1591,6 +1592,7 @@ function replacePublicGalleryFragmentsFromParsedDocument(parsed) {
  * @returns {void}
  */
 function teardownPublicGalleryLifecycleBeforeRefresh() {
+    teardownPictureManager();
     teardownResponsiveThumbnailSizes();
     teardownBackToTopButton();
     teardownGalleryLightbox();
@@ -1602,6 +1604,7 @@ function teardownPublicGalleryLifecycleBeforeRefresh() {
  * @returns {void}
  */
 function rebindPublicGalleryLifecycleAfterRefresh() {
+    setupPictureManager();
     setupResponsiveThumbnailSizes();
     setupBackToTopButton();
     setupGalleryLightbox();
