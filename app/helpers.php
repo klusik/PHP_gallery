@@ -647,6 +647,10 @@ function social_preview_cache_busted_url(string $url, string $filePath): string
  */
 function render_meta_tag(string $attributeName, string $attributeValue, string $content): void
 {
+    if (function_exists('view_render_meta_tag')) {
+        view_render_meta_tag($attributeName, $attributeValue, $content);
+        return;
+    }
     echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
 }
 
@@ -655,6 +659,10 @@ function render_meta_tag(string $attributeName, string $attributeValue, string $
  */
 function render_link_tag(string $rel, string $href): void
 {
+    if (function_exists('view_render_link_tag')) {
+        view_render_link_tag($rel, $href);
+        return;
+    }
     echo '<link rel="' . e($rel) . '" href="' . e($href) . '">' . "\n";
 }
 
@@ -663,6 +671,10 @@ function render_link_tag(string $rel, string $href): void
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
 {
+    if (function_exists('view_render_public_seo_tags')) {
+        view_render_public_seo_tags($gallery, $images);
+        return;
+    }
     // $title stores an intermediate value used by the surrounding gallery workflow.
     $title = gallery_seo_title($gallery);
     // $description stores an intermediate value used by the surrounding gallery workflow.
@@ -717,6 +729,10 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  */
 function render_gallery_json_ld(array $gallery, array $images = []): void
 {
+    if (function_exists('view_render_gallery_json_ld')) {
+        view_render_gallery_json_ld($gallery, $images);
+        return;
+    }
     // $items stores an intermediate value used by the surrounding gallery workflow.
     $items = [];
     // $position stores an intermediate value used by the surrounding gallery workflow.
@@ -899,6 +915,9 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
  */
 function admin_menu_structure(): array
 {
+    if (function_exists('view_admin_menu_structure')) {
+        return view_admin_menu_structure();
+    }
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
     $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
@@ -949,6 +968,9 @@ function admin_menu_structure(): array
  */
 function admin_menu_item_is_active(array $item, string $currentPage): bool
 {
+    if (function_exists('view_admin_menu_item_is_active')) {
+        return view_admin_menu_item_is_active($item, $currentPage);
+    }
     // $itemPage stores an intermediate value used by the surrounding gallery workflow.
     $itemPage = (string) ($item['page'] ?? '');
     if ($itemPage === '') {
@@ -980,6 +1002,10 @@ function admin_menu_item_is_active(array $item, string $currentPage): bool
  */
 function render_admin_tabs(array $tabs, string $activeId = ''): void
 {
+    if (function_exists('view_render_admin_tabs')) {
+        view_render_admin_tabs($tabs, $activeId);
+        return;
+    }
     // $resolvedActiveId stores the tab id that should be announced as selected.
     $resolvedActiveId = $activeId;
     if ($resolvedActiveId === '') {
@@ -1034,6 +1060,10 @@ function render_admin_tabs(array $tabs, string $activeId = ''): void
  */
 function render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
 {
+    if (function_exists('view_render_admin_tab_panel')) {
+        view_render_admin_tab_panel($id, $contentHtml, $active);
+        return;
+    }
     // $controlId stores the generated tab id used by aria-labelledby.
     $controlId = $id . '-control';
     echo '<section class="panel admin-tab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-tab-panel>';
@@ -1046,6 +1076,10 @@ function render_admin_tab_panel(string $id, string $contentHtml, bool $active = 
  */
 function render_admin_sidebar(string $currentPage): void
 {
+    if (function_exists('view_render_admin_sidebar')) {
+        view_render_admin_sidebar($currentPage);
+        return;
+    }
     echo '<aside class="admin-sidebar" aria-label="' . e(t('admin.menu.aria_navigation', 'Admin navigation')) . '">';
     echo '<div class="admin-sidebar-title">' . e(t('admin.menu.title', 'Admin')) . '</div>';
     foreach (admin_menu_structure() as $group) {
@@ -1070,6 +1104,10 @@ function render_admin_sidebar(string $currentPage): void
  */
 function render_missing_admin_email_notice(?array $user, string $currentPage): void
 {
+    if (function_exists('view_render_missing_admin_email_notice')) {
+        view_render_missing_admin_email_notice($user, $currentPage);
+        return;
+    }
     if (!$user || $currentPage === 'admin_login' || $currentPage === 'admin_logout' || $currentPage === 'setup') {
         return;
     }
@@ -1090,6 +1128,9 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
  */
 function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
 {
+    if (function_exists('view_public_header_branding_model')) {
+        return view_public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
+    }
     // $model stores URLs used by render_header without forcing callers to know the branding precedence.
     $model = [
         'banner_url' => '',
@@ -1119,6 +1160,10 @@ function public_header_branding_model(string $siteName, ?array $currentGallery =
  */
 function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
+    if (function_exists('view_render_header')) {
+        view_render_header($title, $currentGallery, $publicOnly);
+        return;
+    }
     // Variable $user stores this steps working value.
     $user = current_user();
     // Variable $anonymousPreview stores whether this public request should hide authenticated navigation.
@@ -1338,6 +1383,9 @@ function cms_current_version(): string
  */
 function cms_browser_i18n_strings(): array
 {
+    if (function_exists('view_cms_browser_i18n_strings')) {
+        return view_cms_browser_i18n_strings();
+    }
     return [
         'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
         'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
@@ -1406,6 +1454,10 @@ function cms_browser_i18n_strings(): array
  */
 function render_browser_i18n_script(): void
 {
+    if (function_exists('view_render_browser_i18n_script')) {
+        view_render_browser_i18n_script();
+        return;
+    }
     $payload = [
         'language' => translation_active_language(),
         'strings' => cms_browser_i18n_strings(),
@@ -1422,6 +1474,10 @@ function render_browser_i18n_script(): void
  */
 function render_footer(): void
 {
+    if (function_exists('view_render_footer')) {
+        view_render_footer();
+        return;
+    }
     // $page stores an intermediate value used by the surrounding gallery workflow.
     $page = (string) ($_GET['page'] ?? 'home');
     // $hasAdminShell stores an intermediate value used by the surrounding gallery workflow.

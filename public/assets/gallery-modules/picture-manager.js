@@ -35,6 +35,24 @@
 
 import { PUBLIC_PHOTO_MOVE_EVENT, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoDropTargets, publicPhotoImageIdsFromDataTransfer, setPublicPhotoDropTargetsActive, writePublicPhotoImageIdsToDataTransfer } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
 
+// activePictureManager stores the currently bound toolbar instance so fragment
+// refreshes can safely replace the toolbar and bind a fresh one.
+let activePictureManager = null;
+
+/**
+ * Release the currently bound Picture manager instance, if any.
+ *
+ * @returns {void}
+ */
+export function teardownPictureManager() {
+    if (!activePictureManager || typeof activePictureManager.teardown !== 'function') {
+        activePictureManager = null;
+        return;
+    }
+    activePictureManager.teardown();
+    activePictureManager = null;
+}
+
 /**
  * Enables the public gallery Picture manager.
  *
@@ -49,19 +67,30 @@ export function setupPictureManager() {
     // toolbar stores the public-page manager controls rendered by PHP.
     const toolbar = document.querySelector('[data-picture-manager]');
     if (!(toolbar instanceof HTMLElement)) {
+        teardownPictureManager();
         return;
     }
-    if (toolbar.dataset.pictureManagerBound === '1') {
+    if (activePictureManager && activePictureManager.toolbar === toolbar) {
         return;
     }
-    toolbar.dataset.pictureManagerBound = '1';
+    teardownPictureManager();
 
     // cards stores the currently visible photo cards on this pagination page.
     const cards = Array.from(document.querySelectorAll('[data-picture-manager-image]'))
         .filter((card) => card instanceof HTMLElement);
     if (cards.length === 0) {
+        activePictureManager = {
+            toolbar,
+            teardown() {
+                if (toolbar.dataset.pictureManagerExpanded) {
+                    delete toolbar.dataset.pictureManagerExpanded;
+                }
+            },
+        };
         return;
     }
+    const eventController = new AbortController();
+    const signalOptions = {signal: eventController.signal};
 
     // selectedIds stores image IDs currently selected by the user.
     const selectedIds = new Set();
@@ -848,59 +877,73 @@ export function setupPictureManager() {
     cards.forEach((card) => {
         const selectButton = card.querySelector('[data-picture-manager-select]');
         if (selectButton instanceof HTMLButtonElement) {
-            selectButton.addEventListener('click', handleSelectButtonClick);
+            selectButton.addEventListener('click', handleSelectButtonClick, signalOptions);
         }
-        card.addEventListener('click', handleCardClick);
-        card.addEventListener('dragstart', handleDragStart);
-        card.addEventListener('dragend', handleDragEnd);
+        card.addEventListener('click', handleCardClick, signalOptions);
+        card.addEventListener('dragstart', handleDragStart, signalOptions);
+        card.addEventListener('dragend', handleDragEnd, signalOptions);
     });
 
     dropTargets().forEach((target) => {
         target.classList.add('picture-manager-drop-target');
-        target.addEventListener('dragover', handleTargetDragOver);
-        target.addEventListener('dragleave', handleTargetDragLeave);
-        target.addEventListener('drop', handleTargetDrop);
+        target.addEventListener('dragover', handleTargetDragOver, signalOptions);
+        target.addEventListener('dragleave', handleTargetDragLeave, signalOptions);
+        target.addEventListener('drop', handleTargetDrop, signalOptions);
     });
 
     if (toggleButton instanceof HTMLButtonElement) {
         toggleButton.addEventListener('click', () => {
             setPanelExpanded(toolbar.classList.contains('is-picture-manager-collapsed'));
-        });
+        }, signalOptions);
     }
     if (selectAllButton instanceof HTMLButtonElement) {
-        selectAllButton.addEventListener('click', selectAllVisible);
+        selectAllButton.addEventListener('click', selectAllVisible, signalOptions);
     }
     if (clearButton instanceof HTMLButtonElement) {
-        clearButton.addEventListener('click', clearSelection);
+        clearButton.addEventListener('click', clearSelection, signalOptions);
     }
     if (destinationInput instanceof HTMLInputElement) {
-        destinationInput.addEventListener('change', updateActionButtons);
-        destinationInput.addEventListener('input', updateActionButtons);
+        destinationInput.addEventListener('change', updateActionButtons, signalOptions);
+        destinationInput.addEventListener('input', updateActionButtons, signalOptions);
     }
     if (moveButton instanceof HTMLButtonElement) {
         moveButton.addEventListener('click', () => {
             const destinationGalleryId = destinationInput instanceof HTMLInputElement ? destinationInput.value : '';
             moveSelectedToGallery(destinationGalleryId);
-        });
+        }, signalOptions);
     }
     if (copyButton instanceof HTMLButtonElement) {
         copyButton.addEventListener('click', () => {
             const destinationGalleryId = destinationInput instanceof HTMLInputElement ? destinationInput.value : '';
             copySelectedToGallery(destinationGalleryId);
-        });
+        }, signalOptions);
     }
     if (newTitleInput instanceof HTMLInputElement) {
-        newTitleInput.addEventListener('input', updateActionButtons);
+        newTitleInput.addEventListener('input', updateActionButtons, signalOptions);
     }
     if (createButton instanceof HTMLButtonElement) {
-        createButton.addEventListener('click', createGalleryFromSelection);
+        createButton.addEventListener('click', createGalleryFromSelection, signalOptions);
     }
-    document.addEventListener('keydown', handleDocumentKeyDown);
-    document.addEventListener('pointerdown', handleDocumentPointerDown);
-    document.addEventListener('dragover', handleDocumentDragOver, true);
-    document.addEventListener('drop', handleDocumentDrop, true);
-    document.addEventListener(PUBLIC_PHOTO_MOVE_EVENT, handleExternalDropMove);
+    document.addEventListener('keydown', handleDocumentKeyDown, signalOptions);
+    document.addEventListener('pointerdown', handleDocumentPointerDown, signalOptions);
+    document.addEventListener('dragover', handleDocumentDragOver, {capture: true, signal: eventController.signal});
+    document.addEventListener('drop', handleDocumentDrop, {capture: true, signal: eventController.signal});
+    document.addEventListener(PUBLIC_PHOTO_MOVE_EVENT, handleExternalDropMove, signalOptions);
 
     setPanelExpanded(false);
     syncSelectionState();
+
+    activePictureManager = {
+        toolbar,
+        teardown() {
+            eventController.abort();
+            dragSelection = [];
+            document.body.classList.remove('picture-manager-drag-active');
+            setDropTargetsActive(false);
+            highlightDropTarget(null);
+            if (toolbar.dataset.pictureManagerExpanded) {
+                delete toolbar.dataset.pictureManagerExpanded;
+            }
+        },
+    };
 }

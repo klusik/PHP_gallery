@@ -247,6 +247,10 @@ function admin_new_gallery_success_response(array $gallery): array
  */
 function render_gallery_description_formatting_hint(): void
 {
+    if (function_exists('view_render_gallery_description_formatting_hint')) {
+        view_render_gallery_description_formatting_hint();
+        return;
+    }
     echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">💡</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
     echo '<p>' . e(t('admin.gallery_editor.description_format_intro', 'Basic Markdown is supported in public gallery descriptions.')) . '</p>';
     echo '<ul>';
@@ -263,6 +267,10 @@ function render_gallery_description_formatting_hint(): void
  */
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
+    if (function_exists('view_render_admin_new_gallery_fields')) {
+        view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow);
+        return;
+    }
     // $isUploadWorkflow stores whether the shared create fields are embedded in the upload workflow.
     $isUploadWorkflow = $workflow === 'upload';
     if ($panelMode) {
@@ -323,6 +331,10 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
  */
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
+    if (function_exists('view_render_admin_new_gallery_side_panel')) {
+        view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
+        return;
+    }
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
     echo '<div class="admin-side-panel-copy"><p class="admin-kicker">' . e(t('admin.gallery_editor.gallery_workflow', 'Gallery workflow')) . '</p><h2>' . e(t('admin.gallery_editor.create_gallery', 'Create gallery')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.create_gallery_empty_help', 'Create a new empty gallery in the selected parent. Photo upload stays in the separate upload workflow.')) . '</p></div>';
     if ($prefillParentGallery) {

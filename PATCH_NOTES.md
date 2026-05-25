@@ -1,5 +1,13 @@
 # Patch notes
 
+## Version 0.70.1
+
+- Fixed a bug where the top Picture manager panel could reopen in a stuck state after editing gallery data from the
+    right admin side panel.
+  - The panel now rebinds correctly after admin-side fragment refreshes, so it can be collapsed again without reloading
+    the page.
+  - No database changes, no new features, and no behavior changes outside this admin UI fix.
+
 ## Version 0.70
 
 Version 0.70 expands gallery tooling around SimBrief route content, adds a dedicated picture manager workflow, and continues polishing mobile lightbox and admin usability. It also tightens uploader diagnostics, improves tag management, and cleans up backend boundaries around the newer admin features.
