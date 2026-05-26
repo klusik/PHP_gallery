@@ -10,12 +10,13 @@ rem version, including Microsoft Store app aliases.
 rem
 rem @param APP_NAME Human-readable Start Menu shortcut name.
 rem @param APP_SCRIPT Full path to gallery_watch_upload.pyw.
-rem @param REQUIREMENTS_FILE Optional pip requirements file used for Pillow.
+rem @param REQUIREMENTS_FILE Optional pip requirements file used for winapp dependencies.
 
 set "APP_NAME=PHP Gallery Uploader"
 set "SCRIPT_DIR=%~dp0"
 set "APP_SCRIPT=%SCRIPT_DIR%gallery_watch_upload.pyw"
 set "REQUIREMENTS_FILE=%SCRIPT_DIR%requirements.txt"
+set "ICON_FILE=%SCRIPT_DIR%assets\tray-icon.ico"
 set "START_MENU_DIR=%APPDATA%\Microsoft\Windows\Start Menu\Programs"
 set "SHORTCUT_PATH=%START_MENU_DIR%\%APP_NAME%.lnk"
 
@@ -75,13 +76,14 @@ if exist "%REQUIREMENTS_FILE%" (
     echo WARNING: requirements.txt was not found. Skipping dependency installation.
 )
 
-echo Verifying Pillow in this runtime:
+echo Verifying Python dependencies in this runtime:
 echo   "%PYTHON_EXE%"
-"%PYTHON_EXE%" -c "from PIL import Image; print('Pillow OK:', Image.__version__)"
+"%PYTHON_EXE%" -c "from PIL import Image; import pystray; print('Pillow OK:', Image.__version__); print('pystray OK:', pystray.__version__ if hasattr(pystray, '__version__') else 'installed')"
 if errorlevel 1 (
-    echo WARNING: Pillow is still unavailable in this runtime.
+    echo WARNING: Pillow or pystray is still unavailable in this runtime.
     echo Open the uploader and use the Manual upload tab button named:
-    echo   Install or repair Pillow
+    echo   Install or repair dependencies
+    echo That button installs requirements.txt for this runtime.
 )
 
 if not exist "%START_MENU_DIR%" (
@@ -104,19 +106,21 @@ set "INSTALL_PS1=%TEMP%\php_gallery_uploader_install_%RANDOM%_%RANDOM%.ps1"
 >> "%INSTALL_PS1%" echo $targetPath = $env:PHPGALLERY_SHORTCUT_TARGET
 >> "%INSTALL_PS1%" echo $scriptPath = $env:PHPGALLERY_APP_SCRIPT
 >> "%INSTALL_PS1%" echo $workingDirectory = $env:PHPGALLERY_WORKING_DIRECTORY
+>> "%INSTALL_PS1%" echo $iconPath = $env:PHPGALLERY_ICON_PATH
 >> "%INSTALL_PS1%" echo $shell = New-Object -ComObject WScript.Shell
 >> "%INSTALL_PS1%" echo $shortcut = $shell.CreateShortcut($shortcutPath)
 >> "%INSTALL_PS1%" echo $shortcut.TargetPath = $targetPath
 >> "%INSTALL_PS1%" echo $shortcut.Arguments = '"' + $scriptPath + '"'
 >> "%INSTALL_PS1%" echo $shortcut.WorkingDirectory = $workingDirectory
 >> "%INSTALL_PS1%" echo $shortcut.Description = 'Starts the PHP Gallery uploader.'
->> "%INSTALL_PS1%" echo if (Test-Path -LiteralPath $targetPath^) { $shortcut.IconLocation = $targetPath }
+>> "%INSTALL_PS1%" echo if (Test-Path -LiteralPath $iconPath^) { $shortcut.IconLocation = $iconPath } elseif (Test-Path -LiteralPath $targetPath^) { $shortcut.IconLocation = $targetPath }
 >> "%INSTALL_PS1%" echo $shortcut.Save(^)
 
 set "PHPGALLERY_SHORTCUT_PATH=%SHORTCUT_PATH%"
 set "PHPGALLERY_SHORTCUT_TARGET=%PYTHONW_EXE%"
 set "PHPGALLERY_APP_SCRIPT=%APP_SCRIPT%"
 set "PHPGALLERY_WORKING_DIRECTORY=%SCRIPT_DIR_DISPLAY%"
+set "PHPGALLERY_ICON_PATH=%ICON_FILE%"
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_PS1%"
 set "POWERSHELL_EXIT=%ERRORLEVEL%"

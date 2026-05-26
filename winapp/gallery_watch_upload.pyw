@@ -55,14 +55,23 @@ except ImportError:  # pragma: no cover
     Image = None
     ImageOps = None
 
+try:
+    import pystray
+except ImportError:  # pragma: no cover
+    pystray = None
+
 
 APP_NAME = "PHPGalleryUploader"
+APP_DISPLAY_NAME = "PHP Gallery uploader"
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
 APP_DIR = Path(__file__).resolve().parent
 REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
+ASSETS_DIR = APP_DIR / "assets"
+TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
+TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
 
 SUPPORTED_SUFFIXES = {
     ".jpg",
@@ -115,6 +124,7 @@ class WatcherConfig:
     scan_interval_seconds: float = DEFAULT_INTERVAL_SECONDS
     stable_seconds: float = DEFAULT_STABLE_SECONDS
     create_thumbnails: bool = True
+    delete_uploaded_files: bool = False
     manual_thumbnail_workers: int = 0
     manual_upload_workers: int = 0
 
@@ -140,6 +150,7 @@ class WatcherConfig:
             scan_interval_seconds=float(data.get("scan_interval_seconds", DEFAULT_INTERVAL_SECONDS) or DEFAULT_INTERVAL_SECONDS),
             stable_seconds=float(data.get("stable_seconds", DEFAULT_STABLE_SECONDS) or DEFAULT_STABLE_SECONDS),
             create_thumbnails=bool(data.get("create_thumbnails", True)),
+            delete_uploaded_files=bool(data.get("delete_uploaded_files", False)),
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
             manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
         )
@@ -157,6 +168,7 @@ class WatcherConfig:
             "scan_interval_seconds": self.scan_interval_seconds,
             "stable_seconds": self.stable_seconds,
             "create_thumbnails": self.create_thumbnails,
+            "delete_uploaded_files": self.delete_uploaded_files,
             "manual_thumbnail_workers": self.manual_thumbnail_workers,
             "manual_upload_workers": self.manual_upload_workers,
         }
@@ -764,16 +776,17 @@ def thumbnail_runtime_status() -> str:
 
     Windows can have multiple Python installations and Microsoft Store aliases.
     The app must report the exact executable currently running the GUI because
-    Pillow has to be installed into this same interpreter.
+    optional helper packages have to be installed into this same interpreter.
 
     @return: Human-readable runtime and Pillow availability status.
     """
     executable = sys.executable or "unknown Python executable"
     version = sys.version.split()[0]
+    tray_status = "tray available" if pystray is not None else "tray unavailable"
     if local_thumbnail_supported():
         pillow_version = getattr(Image, "__version__", "installed")
-        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}."
-    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}."
+        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
+    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
 
 
 def clamp_int(value: int, minimum: int, maximum: int) -> int:
@@ -880,9 +893,9 @@ def format_worker_choice(value: int) -> str:
     return str(int(value))
 
 
-def install_pillow_for_current_runtime() -> Tuple[bool, str]:
+def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
     """
-    Install or repair Pillow for the exact Python interpreter running the app.
+    Install or repair winapp dependencies for the exact Python interpreter.
 
     This avoids the common Windows issue where install.bat installs packages into
     one Python version while a .pyw file association launches another version.
@@ -893,7 +906,7 @@ def install_pillow_for_current_runtime() -> Tuple[bool, str]:
     if REQUIREMENTS_PATH.is_file():
         command.extend(["-r", str(REQUIREMENTS_PATH)])
     else:
-        command.append("Pillow>=10.0")
+        command.extend(["Pillow>=10.0", "pystray>=0.19.5"])
 
     try:
         completed = subprocess.run(
@@ -912,8 +925,9 @@ def install_pillow_for_current_runtime() -> Tuple[bool, str]:
         try:
             globals()["Image"] = importlib.import_module("PIL.Image")
             globals()["ImageOps"] = importlib.import_module("PIL.ImageOps")
+            globals()["pystray"] = importlib.import_module("pystray")
         except Exception as exc:  # noqa: BLE001
-            return False, f"pip finished, but Pillow still cannot be imported by this process: {exc}\n{output}"
+            return False, f"pip finished, but required packages still cannot be imported by this process: {exc}\n{output}"
     return completed.returncode == 0, output
 
 
@@ -1128,10 +1142,38 @@ class WatcherThread(threading.Thread):
                 uploaded = payload.get("uploaded", 0)
                 scanned = payload.get("scanned", 0)
                 self.emit("info", f"Uploaded {path.name}: uploaded={uploaded}, scanned={scanned}")
+                if self.config.delete_uploaded_files:
+                    self.delete_uploaded_file(path, payload)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
                 self.state.mark_failure(path, file_hash, message)
                 self.emit("error", f"Upload failed for {path.name}: {message}")
+
+    def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
+        """
+        Delete a watched-folder file after a confirmed successful upload.
+
+        The watcher deletes only originals that the gallery reports as uploaded.
+        Skipped, duplicate, or failed files remain in place.
+
+        @param path: Local image file that was just submitted.
+        @param payload: Successful JSON response returned by the gallery.
+        @return: None.
+        """
+        uploaded_count = int(payload.get("uploaded", 0) or 0)
+        if uploaded_count <= 0:
+            self.emit("warning", f"Kept {path.name}: gallery did not confirm a stored upload.")
+            return
+
+        try:
+            path.unlink()
+            self.initial_paths.discard(path)
+            self.emit("info", f"Deleted uploaded source file: {path.name}")
+        except FileNotFoundError:
+            self.initial_paths.discard(path)
+            self.emit("warning", f"Uploaded source file was already gone: {path.name}")
+        except OSError as exc:
+            self.emit("warning", f"Uploaded {path.name}, but could not delete the source file: {exc}")
 
 
 class ManualUploadThread(threading.Thread):
@@ -1509,7 +1551,7 @@ class WatcherApp:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
         self.root = tk.Tk()
-        self.root.title("PHP Gallery uploader")
+        self.root.title(APP_DISPLAY_NAME)
         self.root.geometry("980x760")
 
         self.config_store = ConfigStore()
@@ -1518,6 +1560,10 @@ class WatcherApp:
         self.worker: Optional[WatcherThread] = None
         self.manual_worker: Optional[ManualUploadThread] = None
         self.manual_paths: List[Path] = []
+        self.tray_icon: Optional[Any] = None
+        self.tray_thread: Optional[threading.Thread] = None
+        self.window_hidden_to_tray = False
+        self.exiting = False
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
@@ -1525,6 +1571,7 @@ class WatcherApp:
         self.interval_var = tk.StringVar(value=str(self.config.scan_interval_seconds))
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
+        self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
         self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
         self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
         self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
@@ -1539,7 +1586,10 @@ class WatcherApp:
         self.log_tags_ready = False
 
         self.build_ui()
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.configure_window_icon()
+        self.start_tray_icon()
+        self.root.protocol("WM_DELETE_WINDOW", self.request_window_close)
+        self.root.bind("<Unmap>", self.handle_window_unmap, add="+")
         self.root.after(200, self.drain_events)
 
     def build_ui(self) -> None:
@@ -1551,7 +1601,7 @@ class WatcherApp:
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
 
-        title = ttk.Label(outer, text="PHP Gallery uploader", font=("Segoe UI", 16, "bold"))
+        title = ttk.Label(outer, text=APP_DISPLAY_NAME, font=("Segoe UI", 16, "bold"))
         title.pack(anchor="w")
         subtitle = ttk.Label(
             outer,
@@ -1606,6 +1656,198 @@ class WatcherApp:
         self.refresh_revoke_button_state()
         self.update_monitor_state("disabled", "No watcher is active.")
 
+    def configure_window_icon(self) -> None:
+        """
+        Apply the bundled Windows icon to the Tkinter window when available.
+
+        @return: None.
+        """
+        if not TRAY_ICON_ICO_PATH.is_file():
+            return
+        try:
+            self.root.iconbitmap(default=str(TRAY_ICON_ICO_PATH))
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Window icon could not be loaded: %s", exc)
+
+    def start_tray_icon(self) -> None:
+        """
+        Start the Windows tray icon in a background thread.
+
+        @return: None.
+        """
+        if pystray is None or Image is None:
+            self.write_log("System tray unavailable. Run install.bat to install pystray and Pillow.", "warning")
+            return
+        if not TRAY_ICON_PNG_PATH.is_file():
+            self.write_log(f"System tray icon asset is missing: {TRAY_ICON_PNG_PATH}", "warning")
+            return
+
+        try:
+            with Image.open(TRAY_ICON_PNG_PATH) as opened:
+                icon_image = opened.convert("RGBA").copy()
+            menu = pystray.Menu(
+                pystray.MenuItem("Open", self.tray_restore_window, default=True),
+                pystray.MenuItem("Start watching", self.tray_start_watching),
+                pystray.MenuItem("Stop watching", self.tray_stop_watching),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Exit", self.tray_exit_application),
+            )
+            self.tray_icon = pystray.Icon(APP_NAME, icon_image, APP_DISPLAY_NAME, menu)
+            self.tray_thread = threading.Thread(target=self.tray_icon.run, name="PHPGalleryTray", daemon=True)
+            self.tray_thread.start()
+            self.write_log("System tray icon is active.", "system")
+        except Exception as exc:  # noqa: BLE001
+            self.tray_icon = None
+            self.tray_thread = None
+            self.write_log(f"System tray could not be started: {exc}", "warning")
+
+    def schedule_ui(self, callback: Any) -> None:
+        """
+        Run a tray callback on the Tkinter UI thread.
+
+        @param callback: Callable with no arguments.
+        @return: None.
+        """
+        if self.exiting:
+            return
+        try:
+            self.root.after(0, callback)
+        except Exception:  # noqa: BLE001
+            logging.debug("Ignored tray callback after Tk shutdown.", exc_info=True)
+
+    def tray_restore_window(self, *_args: Any) -> None:
+        """
+        Restore the hidden window from a tray icon action.
+
+        @return: None.
+        """
+        self.schedule_ui(self.restore_from_tray)
+
+    def tray_start_watching(self, *_args: Any) -> None:
+        """
+        Start the watcher from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.start)
+
+    def tray_stop_watching(self, *_args: Any) -> None:
+        """
+        Stop the watcher from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.stop)
+
+    def tray_exit_application(self, *_args: Any) -> None:
+        """
+        Exit the application from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.close)
+
+    def request_window_close(self) -> None:
+        """
+        Hide to tray when the window close button is used.
+
+        @return: None.
+        """
+        if not self.tray_icon:
+            self.close()
+            return
+
+        if self.background_work_active():
+            choice = messagebox.askyesnocancel(
+                APP_DISPLAY_NAME,
+                "The watcher or manual upload is still running. Choose Yes to hide to tray, No to stop work and exit, or Cancel to keep this window open.",
+            )
+            if choice is None:
+                return
+            if choice is False:
+                self.close()
+                return
+
+        self.hide_to_tray()
+
+    def background_work_active(self) -> bool:
+        """
+        Return whether a watcher or manual upload worker is running.
+
+        @return: True when any background worker is alive.
+        """
+        return bool((self.worker and self.worker.is_alive()) or (self.manual_worker and self.manual_worker.is_alive()))
+
+    def handle_window_unmap(self, event: Any) -> None:
+        """
+        Convert normal window minimization into tray hiding.
+
+        @param event: Tkinter unmap event.
+        @return: None.
+        """
+        if self.exiting or self.window_hidden_to_tray or event.widget is not self.root:
+            return
+        self.root.after(100, self.hide_if_minimized)
+
+    def hide_if_minimized(self) -> None:
+        """
+        Hide the window to tray after a user minimize action.
+
+        @return: None.
+        """
+        if self.exiting or self.window_hidden_to_tray or not self.tray_icon:
+            return
+        try:
+            if self.root.state() == "iconic":
+                self.hide_to_tray()
+        except Exception:  # noqa: BLE001
+            logging.debug("Ignored minimize-to-tray check after Tk shutdown.", exc_info=True)
+
+    def hide_to_tray(self) -> None:
+        """
+        Hide the window while keeping the app alive in the system tray.
+
+        @return: None.
+        """
+        if not self.tray_icon:
+            return
+        self.window_hidden_to_tray = True
+        self.root.withdraw()
+        self.write_log("Window hidden to tray. Use the tray icon to restore it.", "system")
+
+    def restore_from_tray(self) -> None:
+        """
+        Show the Tkinter window from the tray icon.
+
+        @return: None.
+        """
+        if self.exiting:
+            return
+        self.window_hidden_to_tray = False
+        self.root.deiconify()
+        try:
+            self.root.state("normal")
+        except Exception:  # noqa: BLE001
+            logging.debug("Could not force normal window state.", exc_info=True)
+        self.root.lift()
+        self.root.focus_force()
+
+    def stop_tray_icon(self) -> None:
+        """
+        Stop the tray icon loop during application shutdown.
+
+        @return: None.
+        """
+        icon = self.tray_icon
+        self.tray_icon = None
+        if icon is None:
+            return
+        try:
+            icon.visible = False
+            icon.stop()
+        except Exception:  # noqa: BLE001
+            logging.debug("Tray icon shutdown failed.", exc_info=True)
+
     def build_watch_tab(self, parent: Any) -> None:
         """
         Build controls dedicated to watch-folder uploading.
@@ -1631,8 +1873,14 @@ class WatcherApp:
             variable=self.create_thumbnails_var,
         ).grid(row=3, column=1, columnspan=2, sticky="w", padx=8, pady=5)
 
+        ttk.Checkbutton(
+            parent,
+            text="Delete watched-folder files after a confirmed successful upload",
+            variable=self.delete_uploaded_files_var,
+        ).grid(row=4, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+
         actions = ttk.Frame(parent)
-        actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         ttk.Button(actions, text="Start watching", command=self.start).pack(side="left")
         ttk.Button(actions, text="Stop", command=self.stop).pack(side="left", padx=8)
         ttk.Label(actions, textvariable=self.status_var).pack(side="right")
@@ -1690,7 +1938,7 @@ class WatcherApp:
         runtime_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         runtime_row.columnconfigure(0, weight=1)
         ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=0, sticky="w")
-        ttk.Button(runtime_row, text="Install or repair Pillow", command=self.repair_pillow).grid(row=0, column=1, sticky="e", padx=(8, 0))
+        ttk.Button(runtime_row, text="Install or repair dependencies", command=self.repair_dependencies).grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         self.refresh_thumbnail_controls()
 
@@ -1713,20 +1961,22 @@ class WatcherApp:
             self.thumbnail_check.state(["disabled"])
             self.manual_local_thumbnails_var.set(False)
 
-    def repair_pillow(self) -> None:
+    def repair_dependencies(self) -> None:
         """
-        Install Pillow into the Python interpreter currently running the GUI.
+        Install winapp dependencies into the current Python interpreter.
 
         @return: None.
         """
-        self.write_log("Installing or repairing Pillow for the current Python runtime...")
-        ok, output = install_pillow_for_current_runtime()
+        self.write_log("Installing or repairing Python dependencies for the current runtime...")
+        ok, output = install_dependencies_for_current_runtime()
         for line in output.splitlines()[-12:]:
             self.write_log(line)
         if ok:
-            messagebox.showinfo("Pillow repair", "Pillow is available for this Python runtime.")
+            if not self.tray_icon:
+                self.start_tray_icon()
+            messagebox.showinfo("Dependency repair", "Required dependencies are available for this Python runtime.")
         else:
-            messagebox.showerror("Pillow repair failed", output[-1200:] if output else "pip failed without output")
+            messagebox.showerror("Dependency repair failed", output[-1200:] if output else "pip failed without output")
         self.refresh_thumbnail_controls()
 
     def current_config(self) -> WatcherConfig:
@@ -1751,6 +2001,7 @@ class WatcherApp:
             scan_interval_seconds=interval,
             stable_seconds=stable,
             create_thumbnails=bool(self.create_thumbnails_var.get()),
+            delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
         )
@@ -1967,6 +2218,10 @@ class WatcherApp:
 
         @return: None.
         """
+        if self.exiting:
+            return
+        self.exiting = True
+        self.stop_tray_icon()
         self.stop()
         self.stop_manual_upload()
         self.root.after(150, self.root.destroy)
@@ -1990,6 +2245,8 @@ class WatcherApp:
 
         @return: None.
         """
+        if self.exiting:
+            return
         while True:
             try:
                 level, message = self.events.get_nowait()
