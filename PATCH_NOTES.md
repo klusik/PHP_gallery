@@ -1,5 +1,21 @@
 # Patch notes
 
+## Version 0.71
+
+- Added Flight Simulator camera-location uploads for watched screenshots.
+  - The Windows watcher can now read the current MSFS 2024 camera position through SimConnect and send latitude,
+    longitude, and altitude to PHP Gallery during upload.
+  - Added a checkbox to turn camera-location tagging on or off, with the feature enabled by default.
+  - Added automatic SimConnect DLL discovery plus a local SimConnect.dll fallback in the winapp folder.
+  - Added a system tray mode for the Windows uploader, including a tray icon and minimize-to-tray behavior.
+  - Fixed the top Picture manager panel refresh bug so it no longer gets stuck open after editing gallery data from the
+    right admin panel.
+  - Improved gallery maps so a route and a photo GPS point can appear together on the same map.
+  - The combined map now shows the gallery route line, route points, and the active photo marker at the same time, with
+    the photo marker visually emphasized.
+  - Updated the admin and lightbox map rendering so route-only and photo-only cases still behave as before.
+  - Added the supporting server-side upload handling, tests, and manifest updates for the new GPS metadata flow.
+
 ## Version 0.70.1
 
 - Fixed a bug where the top Picture manager panel could reopen in a stuck state after editing gallery data from the
