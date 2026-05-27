@@ -113,7 +113,7 @@ function view_render_admin_dashboard(array $model): void
     echo '<strong>' . e(t('admin.dashboard.media_tools', 'Media tools')) . '</strong><span>' . e(t('admin.dashboard.media_tools_hint', 'Generate thumbnails, delete generated thumbnail cache files, or download the complete gallery archive.')) . '</span>';
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></div></form>';
-    echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.maintenance', 'Maintenance')) . '</strong><span>' . e(t('admin.dashboard.maintenance_hint', 'Review logs, integrity, telemetry, and updates.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.logs', 'Logs')) . '</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.integrity', 'Integrity')) . '</a><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</a></div></div>';
+    echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.maintenance', 'Maintenance')) . '</strong><span>' . e(t('admin.dashboard.maintenance_hint', 'Review logs, integrity, telemetry, updates, and navigation data.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.logs', 'Logs')) . '</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.integrity', 'Integrity')) . '</a><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</a><a class="button secondary" href="' . e(url_for('admin_navdata')) . '">' . e(t('admin.menu.navdata', 'Navigation data')) . '</a></div></div>';
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-action-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
     if ($migrationPending) {
@@ -287,12 +287,14 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
 {
     $confirmMessage = t('admin.dashboard.confirm_update_navdata', 'Download current OurAirports airports and navaids, then replace the local OurAirports lookup rows?');
     $submittingText = t('admin.dashboard.updating_navdata', 'Updating navdata...');
-    echo '<form method="post" action="' . e(url_for('admin_update_navdata')) . '" class="admin-maintenance-card admin-navdata-update-card" data-navdata-update-form data-navdata-confirm="' . e($confirmMessage) . '" data-navdata-submitting-text="' . e($submittingText) . '">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.flight_navdata', 'Flight map navdata')) . '</strong>';
+    $hybridStatus = is_array($flightNavdataStatus['hybrid'] ?? null) ? $flightNavdataStatus['hybrid'] : [];
+
+    echo '<article class="admin-maintenance-card admin-navdata-update-card">';
+    echo '<div class="admin-maintenance-card-heading"><strong>' . e(t('admin.dashboard.flight_navdata', 'Flight map navdata')) . '</strong><a class="button secondary" href="' . e(url_for('admin_navdata')) . '">' . e(t('admin.dashboard.open_navdata_manager', 'Open manager')) . '</a></div>';
 
     if (!$flightNavdataReady) {
         echo '<span>' . e(t('admin.dashboard.flight_navdata_requires_migration', 'Run database migrations before importing flight-map navdata.')) . '</span>';
-        echo '<button type="submit" class="secondary" disabled>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></form>';
+        echo '<button type="button" class="secondary" disabled>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></article>';
         return;
     }
 
@@ -301,6 +303,7 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
     $airportCount = (int) ($flightNavdataStatus['last_airports'] ?? 0);
     $navaidCount = (int) ($flightNavdataStatus['last_navaids'] ?? 0);
     $skippedCount = (int) ($flightNavdataStatus['last_skipped'] ?? 0);
+    $bundledCount = (int) ($hybridStatus['bundled_count'] ?? 0);
 
     if ($lastUpdate !== '') {
         echo '<span>' . e(t('admin.dashboard.flight_navdata_status', 'Local lookup rows: {total}. Last update: {updated}. Last import: {airports} airport identifier(s), {navaids} navaid(s), {skipped} skipped row(s).', [
@@ -314,10 +317,19 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
         echo '<span>' . e(t('admin.dashboard.flight_navdata_empty', 'No local route lookup data has been imported yet. Route maps can still use manual NAME@latitude,longitude points.')) . '</span>';
     }
 
-    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_scope_hint', 'Imports airports and navaids from OurAirports. It does not include full IFR fixes or SID/STAR procedure geometry.')) . '</span>';
+    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_hybrid_status', 'Bundled fallback points: {bundled}. SimBrief OFPs are stored per gallery when imported.', [
+        'bundled' => $bundledCount,
+    ])) . '</span>';
+    echo '<span class="muted">' . e(t('admin.dashboard.flight_navdata_scope_hint', 'Imports airports and navaids from OurAirports for manual fallback lookup. SimBrief OFP coordinates are preferred for generated flight-route maps.')) . '</span>';
+
+    echo '<form method="post" action="' . e(url_for('admin_update_navdata')) . '" class="admin-navdata-update-card" data-navdata-update-form data-navdata-confirm="' . e($confirmMessage) . '" data-navdata-submitting-text="' . e($submittingText) . '">' . csrf_field();
     echo '<div class="admin-navdata-update-status" data-navdata-update-status role="status" aria-live="polite" hidden><span class="admin-navdata-update-spinner" aria-hidden="true"></span><span>' . e(t('admin.dashboard.navdata_update_in_progress', 'Downloading and importing navdata. Keep this page open until the update completes.')) . '</span></div>';
     echo '<button type="submit" class="secondary" data-navdata-update-submit>' . e(t('admin.dashboard.update_navdata', 'Update navdata')) . '</button></form>';
+
+
+    echo '</article>';
 }
+
 
 /**
  * Render the admin dev mode panel.

@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260527-route-photo-map-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260527-simbrief-ofp-route-v1';
 
 const deferredLightboxState = {
     controller: null,

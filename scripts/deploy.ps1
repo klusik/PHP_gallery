@@ -88,6 +88,8 @@ if ($Mode -eq 'local') {
 $root = Resolve-Path "$PSScriptRoot\.."
 # Variable $excludeDirs stores this scripts working value.
 $excludeDirs = @('.git', 'cache', 'logs', 'tmp', 'deploy')
+# Variable $excludeDirNamesAnywhere stores folder names skipped wherever they appear in the repository tree.
+$excludeDirNamesAnywhere = @('__pycache__')
 if (-not $includeMedia) { $excludeDirs += 'galleries' }
 # Variable $excludeFiles stores this scripts working value.
 $excludeFiles = @('.gitignore', 'config.php', '.env', '*.log', '*.tmp')
@@ -158,6 +160,11 @@ function Should-Skip($Path) {
     }
     foreach ($dir in $excludeDirs) {
         if ($relative -match "^[.\\/]?$([regex]::Escape($dir))([\\/]|$)") { return $true }
+    }
+    foreach ($dirName in $excludeDirNamesAnywhere) {
+        # Variable $escapedDirName stores this scripts working value.
+        $escapedDirName = [regex]::Escape($dirName)
+        if ($portableRelative -match "(^|/)$escapedDirName(/|$)") { return $true }
     }
     foreach ($pattern in $excludeFiles) {
         if ([System.Management.Automation.WildcardPattern]::new($pattern).IsMatch((Split-Path $Path -Leaf))) { return $true }

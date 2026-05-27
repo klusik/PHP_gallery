@@ -401,3 +401,163 @@ body.is-navdata-updating {
         transform: rotate(360deg);
     }
 }
+
+.admin-maintenance-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-maintenance-card-heading .button {
+    padding: 0.42rem 0.7rem;
+    font-size: 0.84rem;
+}
+
+.admin-navdata-hero {
+    align-items: center;
+}
+
+.admin-navdata-panel {
+    margin-top: 1rem;
+}
+
+.admin-navdata-status-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.admin-navdata-status-card strong {
+    font-size: clamp(1.05rem, 2vw, 1.6rem);
+    line-height: 1.2;
+}
+
+.admin-navdata-small-note {
+    margin-top: 0.85rem;
+}
+
+.admin-navdata-account-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+    gap: 1.2rem;
+    align-items: start;
+}
+
+.admin-navdata-account-state,
+.admin-navdata-account-actions,
+.admin-navdata-config-help,
+.admin-navdata-config-summary {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-navdata-account-state p,
+.admin-navdata-account-actions p,
+.admin-navdata-config-help p,
+.admin-navdata-config-summary p {
+    margin: 0;
+}
+
+.admin-navdata-badge {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    border-radius: var(--theme-radius-pill, 999px);
+    padding: 0.35rem 0.65rem;
+    background: color-mix(in srgb, var(--theme-surface-muted, #f3f4f6) 88%, transparent);
+    color: var(--theme-text-muted, #6b7280);
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.admin-navdata-badge.is-ok {
+    background: color-mix(in srgb, var(--theme-accent, #2563eb) 14%, var(--theme-surface, #ffffff));
+    color: var(--theme-text, #111827);
+}
+
+.admin-navdata-config-help label,
+.admin-navdata-lookup-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 700;
+}
+
+.admin-navdata-config-help input,
+.admin-navdata-config-help textarea,
+.admin-navdata-lookup-form input {
+    width: 100%;
+    font: inherit;
+}
+
+.admin-navdata-config-help textarea {
+    min-height: 15rem;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.admin-navdata-connect-form {
+    display: grid;
+    gap: 0.65rem;
+    justify-items: start;
+}
+
+.admin-navdata-copy-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.admin-navdata-copy-row code {
+    display: inline-flex;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    border-radius: var(--theme-radius-control, 0.55rem);
+    padding: 0.45rem 0.55rem;
+    background: color-mix(in srgb, var(--theme-surface-muted, #f3f4f6) 88%, transparent);
+}
+
+.admin-navdata-lookup-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.admin-navdata-lookup-result {
+    grid-column: 1 / -1;
+    min-height: 2.6rem;
+    border: 1px solid color-mix(in srgb, var(--theme-border, #d1d5db) 80%, transparent);
+    border-radius: var(--theme-radius-card, 0.85rem);
+    padding: 0.75rem;
+    background: color-mix(in srgb, var(--theme-surface-muted, #f3f4f6) 55%, transparent);
+}
+
+.admin-navdata-lookup-result.is-ok {
+    border-color: color-mix(in srgb, var(--theme-accent, #2563eb) 40%, var(--theme-border, #d1d5db));
+}
+
+.admin-navdata-lookup-result.is-error {
+    border-color: color-mix(in srgb, #dc2626 45%, var(--theme-border, #d1d5db));
+}
+
+.admin-navdata-rules {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+    padding-left: 1.35rem;
+}
+
+@media (max-width: 980px) {
+    .admin-navdata-status-grid,
+    .admin-navdata-account-card {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-navdata-lookup-form {
+        grid-template-columns: 1fr;
+    }
+}

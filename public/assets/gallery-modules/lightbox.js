@@ -2862,12 +2862,13 @@ export function setupGalleryLightbox() {
         window.galleryMapMarkerIcons = window.galleryMapMarkerIcons || {};
         if (!window.galleryMapMarkerIcons[markerRole]) {
             const isActivePhoto = markerRole === 'active-photo';
+            const isRouteVia = markerRole === 'route-via';
             window.galleryMapMarkerIcons[markerRole] = L.divIcon({
                 className: `gallery-leaflet-marker gallery-leaflet-marker--${markerRole}`,
                 html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
-                iconAnchor: isActivePhoto ? [16, 46] : [13, 40],
-                iconSize: isActivePhoto ? [32, 46] : [26, 40],
-                popupAnchor: [0, isActivePhoto ? -42 : -36],
+                iconAnchor: isActivePhoto ? [16, 46] : (isRouteVia ? [4, 4] : [13, 40]),
+                iconSize: isActivePhoto ? [32, 46] : (isRouteVia ? [8, 8] : [26, 40]),
+                popupAnchor: [0, isActivePhoto ? -42 : (isRouteVia ? -7 : -36)],
             });
         }
 
@@ -3052,7 +3053,7 @@ export function setupGalleryLightbox() {
             const markerRole = mapPointMarkerRole(point);
             const marker = L.marker([point.lat, point.lng], {
                 icon: getGalleryMapMarkerIcon(point),
-                zIndexOffset: markerRole === 'active-photo' ? 1200 : (markerRole === 'photo' ? 500 : 0),
+                zIndexOffset: markerRole === 'active-photo' ? 1200 : (markerRole === 'photo' ? 500 : (markerRole === 'route-via' ? 50 : 100)),
             }).addTo(map);
             marker.bindPopup(mapPopupHtml(point));
             bounds.push([point.lat, point.lng]);
@@ -3090,6 +3091,15 @@ export function setupGalleryLightbox() {
         const sourceType = String(point?.source_type || point?.map_source_type || '').trim();
         if (point?.active_photo === true || pointType === 'active_photo_point') {
             return 'active-photo';
+        }
+        if (pointType === 'route_start') {
+            return 'route-start';
+        }
+        if (pointType === 'route_end') {
+            return 'route-end';
+        }
+        if (pointType === 'route_via') {
+            return 'route-via';
         }
         if (pointType === 'route_point' || sourceType === 'flight_path') {
             return 'route';

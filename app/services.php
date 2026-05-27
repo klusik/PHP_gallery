@@ -100,7 +100,10 @@ require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
 // Load SimBrief description helpers after the shared HTTP client is available.
 require_once __DIR__ . '/services/simbrief_descriptions.php';
+// Load navigation data helpers before flight maps resolve route identifiers.
+require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
 require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
+require_once __DIR__ . '/services/gallery_migration.php';

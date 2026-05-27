@@ -60,6 +60,8 @@ deploy_target=""
 
 # Array exclude_dirs stores folders skipped by deployment.
 exclude_dirs=(".git" "cache" "logs" "tmp" "deploy")
+# Array exclude_dir_names_anywhere stores folder names skipped wherever they appear in the repository tree.
+exclude_dir_names_anywhere=("__pycache__")
 # Array exclude_files stores file name patterns skipped by deployment.
 exclude_files=(".gitignore" "config.php" ".env" "*.log" "*.tmp")
 # Array always_include_relatives stores deploy paths that must stay packaged even as filters evolve.
@@ -253,6 +255,14 @@ should_skip() {
     local dir=""
     for dir in "${exclude_dirs[@]}"; do
         if [[ "$portable_relative" == "$dir" || "$portable_relative" == "$dir/"* ]]; then
+            return 0
+        fi
+    done
+
+    # Variable dir_name stores this scripts working value.
+    local dir_name=""
+    for dir_name in "${exclude_dir_names_anywhere[@]}"; do
+        if [[ "$portable_relative" == "$dir_name" || "$portable_relative" == "$dir_name/"* || "$portable_relative" == *"/$dir_name" || "$portable_relative" == *"/$dir_name/"* ]]; then
             return 0
         fi
     done

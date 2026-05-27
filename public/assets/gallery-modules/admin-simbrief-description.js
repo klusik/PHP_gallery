@@ -12,7 +12,7 @@
  *   - Read SimBrief Pilot ID or pilot name from admin-side inputs
  *   - Call the admin JSON endpoint with the existing CSRF token
  *   - Insert the generated Markdown into the normal description textarea
- *   - Avoid saving anything until the user submits the gallery editor form
+ *   - Save the fetched OFP and route-map geometry with the edited gallery
  *
  * Author:
  *   Rudolf Klusal
@@ -127,8 +127,10 @@ async function generateSimbriefDescription(tool, button) {
         textarea.value = description;
         textarea.dispatchEvent(new Event('input', {bubbles: true}));
         textarea.dispatchEvent(new Event('change', {bubbles: true}));
+        updateSimbriefRouteTextarea(form, result);
+        updateSimbriefRouteStatus(tool, result);
         textarea.focus({preventScroll: true});
-        setSimbriefStatus(tool, String(result.message || i18n('admin.simbrief.js_generated', 'Draft generated. Review it, then save the gallery.')), false);
+        setSimbriefStatus(tool, String(result.message || i18n('admin.simbrief.js_generated', 'Draft generated. The latest OFP was saved with the gallery and the route map was updated.')), false);
     } catch (error) {
         setSimbriefStatus(tool, error instanceof Error ? error.message : i18n('admin.simbrief.js_failed', 'SimBrief generation failed.'), true);
     } finally {
@@ -142,6 +144,56 @@ async function generateSimbriefDescription(tool, button) {
  * @param {Response} response Fetch response.
  * @returns {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
  */
+
+/**
+ * Write the route text returned by SimBrief into the existing route-map editor.
+ *
+ * @param {HTMLFormElement} form Gallery editor form.
+ * @param {Record<string, *>} result Server response.
+ * @returns {void}
+ */
+function updateSimbriefRouteTextarea(form, result) {
+    const routeText = String(result?.route?.route_text || '').trim();
+    if (routeText === '') {
+        return;
+    }
+
+    const routeTextarea = form.querySelector('textarea[name="flight_route_text"]');
+    if (!(routeTextarea instanceof HTMLTextAreaElement)) {
+        return;
+    }
+
+    routeTextarea.value = routeText;
+    routeTextarea.dispatchEvent(new Event('input', {bubbles: true}));
+    routeTextarea.dispatchEvent(new Event('change', {bubbles: true}));
+}
+
+/**
+ * Show the saved OFP and route-map result next to the SimBrief controls.
+ *
+ * @param {HTMLElement} tool SimBrief tool root.
+ * @param {Record<string, *>} result Server response.
+ * @returns {void}
+ */
+function updateSimbriefRouteStatus(tool, result) {
+    const status = tool.querySelector('[data-simbrief-route-status]');
+    if (!(status instanceof HTMLElement)) {
+        return;
+    }
+
+    const pointCount = Number(result?.route?.point_count || 0);
+    const ofpSaved = result?.ofp?.saved === true;
+    const parts = [];
+    if (ofpSaved) {
+        parts.push(i18n('admin.simbrief.js_ofp_saved', 'OFP saved with this gallery.'));
+    }
+    if (pointCount > 0) {
+        parts.push(i18n('admin.simbrief.js_route_saved', 'Route map updated with {points} OFP point(s).').replace('{points}', String(pointCount)));
+    }
+    status.textContent = parts.join(' ');
+    status.hidden = parts.length === 0;
+}
+
 async function readSimbriefJson(response) {
     const text = await response.text();
     try {

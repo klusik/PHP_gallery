@@ -114,6 +114,10 @@ $payload = [
         'units' => 'KGS',
         'airac' => '2505',
     ],
+    'files' => [
+        'directory' => 'https://www.simbrief.com/ofp/flightplans',
+        'pdf' => 'LKPREDDM_PDF_1779895813.84b5b08c.pdf',
+    ],
 ];
 
 $details = simbrief_description_extract_details($payload);
@@ -129,6 +133,29 @@ assert_simbrief_description_contains('**LKPR to EDDM**', $description, 'route he
 assert_simbrief_description_contains('`CY1004`', $description, 'flight number');
 assert_simbrief_description_contains('`LKPR DCT OKL DCT EDDM`', $description, 'filed route');
 assert_simbrief_description_contains('184 passengers', $description, 'passenger count');
+
+
+$routePayload = $payload;
+$routePayload['origin']['pos_lat'] = '50.1008';
+$routePayload['origin']['pos_long'] = '14.2632';
+$routePayload['destination']['pos_lat'] = '48.3538';
+$routePayload['destination']['pos_long'] = '11.7861';
+$routePayload['navlog'] = [
+    'fix' => [
+        ['ident' => 'OKL', 'pos_lat' => '50.0967', 'pos_long' => '13.0256'],
+        ['ident' => 'BODAL', 'pos_lat' => '4916.8', 'pos_long' => '01217.4'],
+    ],
+];
+$routePoints = simbrief_description_extract_route_points($routePayload, $details);
+assert_simbrief_description_same(4, count($routePoints), 'SimBrief route point count');
+assert_simbrief_description_same('start', $routePoints[0]['role'], 'SimBrief route start role');
+assert_simbrief_description_same('via', $routePoints[1]['role'], 'SimBrief route via role');
+assert_simbrief_description_same('end', $routePoints[3]['role'], 'SimBrief route end role');
+assert_simbrief_description_same('LKPR OKL BODAL EDDM', simbrief_description_route_text_from_points($routePoints, $details), 'SimBrief route text from OFP points');
+assert_simbrief_description_same(49.28, round((float) $routePoints[2]['latitude'], 2), 'compact latitude parsing');
+assert_simbrief_description_same(12.29, round((float) $routePoints[2]['longitude'], 2), 'compact longitude parsing');
+assert_simbrief_description_same(-2.72, round((float) simbrief_description_coordinate_value('W00243.2', 'lon'), 2), 'west compact longitude parsing');
+assert_simbrief_description_same('https://www.simbrief.com/ofp/flightplans/LKPREDDM_PDF_1779895813.84b5b08c.pdf', simbrief_description_pdf_url($payload), 'SimBrief PDF URL normalization');
 
 $unsafeDetails = $details;
 $unsafeDetails['aircraft'] = 'A*321 <script>';

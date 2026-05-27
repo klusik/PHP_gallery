@@ -1,0 +1,35 @@
+ident,kind,region,latitude,longitude,name,source,cycle,icao,iata
+LKPR,airport,CZ,50.1008333,14.2631817,Prague Vaclav Havel Airport,bundled,offline,LKPR,PRG
+LKPS,airport,CZ,49.9208333,13.3769444,Plasy Airport,bundled,offline,LKPS,
+LKTB,airport,CZ,49.1512694,16.6944333,Brno Turany Airport,bundled,offline,LKTB,BRQ
+LKMT,airport,CZ,49.6962928,18.1110536,Ostrava Mosnov Airport,bundled,offline,LKMT,OSR
+LDSP,airport,HR,43.5389444,16.2979639,Split Airport,bundled,offline,LDSP,SPU
+LFML,airport,FR,43.4392719,5.2214241,Marseille Provence Airport,bundled,offline,LFML,MRS
+EGGD,airport,GB,51.3827020,-2.7190900,Bristol Airport,bundled,offline,EGGD,BRS
+EGLL,airport,GB,51.4700200,-0.4542950,London Heathrow Airport,bundled,offline,EGLL,LHR
+EDDF,airport,DE,50.0379326,8.5621518,Frankfurt Main Airport,bundled,offline,EDDF,FRA
+EDDM,airport,DE,48.3537830,11.7860860,Munich Airport,bundled,offline,EDDM,MUC
+OMDB,airport,AE,25.2531745,55.3656728,Dubai International Airport,bundled,offline,OMDB,DXB
+VHHH,airport,HK,22.3080470,113.9184800,Hong Kong International Airport,bundled,offline,VHHH,HKG
+WSSS,airport,SG,1.3644200,103.9915300,Singapore Changi Airport,bundled,offline,WSSS,SIN
+KJFK,airport,US,40.6413111,-73.7781391,John F Kennedy International Airport,bundled,offline,KJFK,JFK
+KSFO,airport,US,37.6213130,-122.3789550,San Francisco International Airport,bundled,offline,KSFO,SFO
+KLAX,airport,US,33.9415889,-118.4085300,Los Angeles International Airport,bundled,offline,KLAX,LAX
+PRG,vor,CZ,50.0875000,14.4200000,Prague VOR starter fallback,bundled,offline,,
+OKL,vor,CZ,49.9147000,14.2569000,Okrouhlo VOR starter fallback,bundled,offline,,
+VOZ,vor,CZ,49.6239000,17.2111000,Vozice VOR starter fallback,bundled,offline,,
+BNO,vor,CZ,49.1513000,16.6944000,Brno VOR starter fallback,bundled,offline,,
+DUB,vor,IE,53.4213000,-6.2701000,Dublin VOR starter fallback,bundled,offline,,
+LON,vor,GB,51.4872000,-0.4667000,London VOR starter fallback,bundled,offline,,
+FFM,vor,DE,50.0344000,8.5706000,Frankfurt VOR starter fallback,bundled,offline,,
+MAH,vor,FR,43.4356000,5.2136000,Marseille VOR starter fallback,bundled,offline,,
+PR,ndb,CZ,50.1008000,14.2632000,Prague NDB starter fallback,bundled,offline,,
+MIQ,ndb,DE,48.3538000,11.7861000,Munich NDB starter fallback,bundled,offline,,
+BALTU,fix,CZ,49.9447000,13.9042000,BALTU starter fallback,bundled,offline,,
+KUVIX,fix,CZ,50.3219000,14.5261000,KUVIX starter fallback,bundled,offline,,
+LUXAR,fix,DE,49.8047000,9.5947000,LUXAR starter fallback,bundled,offline,,
+NIK,fix,BE,51.1658000,4.1831000,NIK starter fallback,bundled,offline,,
+LAM,fix,GB,51.6461000,0.1517000,LAM starter fallback,bundled,offline,,
+CPT,fix,GB,51.4917000,-1.2194000,CPT starter fallback,bundled,offline,,
+LULUT,fix,FR,48.9803000,2.9400000,LULUT starter fallback,bundled,offline,,
+BIBAX,fix,FR,47.7725000,3.1883000,BIBAX starter fallback,bundled,offline,,

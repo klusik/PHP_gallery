@@ -578,3 +578,56 @@ PHP Gallery CMS v0.66+ is a focused, well-organized application with:
 - **Modern PHP:** Type hints, strict mode, PDO, security best practices
 
 The application is built for reliability, maintainability, and ease of deployment on ordinary shared hosting.
+
+## SimBrief OFP Route Visualization and Local Fallback Data
+
+PHP Gallery uses a SimBrief-first route visualization workflow for flight-route maps. The feature is intended for simulation gallery visualization, waypoint display, airport display, SimBrief route rendering, and future lightweight planning overlays. It is not a certified flight-planning, dispatch, or FMC replacement.
+
+### Data Strategy
+
+Generated route maps prefer saved SimBrief OFP data:
+
+1. The gallery editor asks SimBrief for the latest OFP by Pilot ID or pilot name.
+2. The decoded OFP JSON is saved as `simbrief-ofp.json` inside the gallery folder.
+3. A compact `simbrief-ofp-manifest.json` is saved beside it with origin, destination, aircraft, AIRAC, and route-point metadata.
+4. Route coordinates are extracted from the OFP origin, navlog, and destination data.
+5. The resolved point list is saved in `gallery_flight_maps.resolved_points_json`.
+6. Public maps render only stored coordinates.
+
+The local navdata layer remains available for manually entered route text. It uses the existing `flight_map_nav_points` table populated by the OurAirports importer and `data/navdata/local_nav_points.csv` as a compact bundled fallback dataset.
+
+### Public Display
+
+Public route-map rendering is cache-friendly and provider-free:
+
+1. The public map endpoint reads only `gallery_flight_maps` and gallery-owned files.
+2. Stored route geometry is returned to the Leaflet renderer.
+3. The renderer draws one polyline from departure to arrival.
+4. Departure and arrival receive normal pins.
+5. Intermediate OFP route points receive very small triangle markers so the route remains readable without clutter.
+
+No live SimBrief, Navigraph, AIRAC, or external route lookup request is made while a visitor views the public gallery.
+
+### Fallback Model
+
+The resolver degrades in this order:
+
+1. Saved SimBrief OFP route coordinates for generated maps
+2. Stored `gallery_flight_maps` coordinates for public display
+3. Admin-imported local DB navdata for manual route text
+4. Bundled offline CSV fallback points
+5. Manual `NAME@latitude,longitude` route entries
+
+If SimBrief is unavailable later, already-saved gallery OFP files and stored route coordinates remain usable.
+
+### Extension Points
+
+Future work can add:
+
+- Re-reading saved OFP files to regenerate route maps after renderer improvements
+- SimBrief flight-history selection instead of latest-OFP only
+- A route preview panel in the gallery editor
+- Larger offline datasets imported into `flight_map_nav_points`
+- Spatial lookup endpoints for nearby airports or navaids
+- Lightweight airway expansion for manual route text
+- Route editor autocomplete backed by `navdata_lookup`

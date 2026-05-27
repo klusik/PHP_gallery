@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.71';
+const CMS_VERSION = '0.72';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -168,6 +168,7 @@ function cms_run(): void
         'theme_css' => 'cms_theme_css',
         'gallery_map_data' => 'cms_gallery_map_data',
         'gallery_lightbox_data' => 'cms_gallery_lightbox_data',
+        'navdata_lookup' => 'cms_navdata_lookup',
         'picture_manager_move' => 'cms_picture_manager_move',
         'picture_manager_copy' => 'cms_picture_manager_copy',
         'picture_manager_create_gallery' => 'cms_picture_manager_create_gallery',
@@ -191,10 +192,18 @@ function cms_run(): void
         'admin_upload_automation_token' => 'cms_admin_upload_automation_token',
         'upload_automation_upload' => 'cms_upload_automation_upload',
         'admin_api_manager' => 'cms_admin_api_manager',
+        'gallery_migration_manifest' => 'cms_gallery_migration_manifest',
+        'gallery_migration_asset' => 'cms_gallery_migration_asset',
+        'gallery_migration_receive_manifest' => 'cms_gallery_migration_receive_manifest',
+        'gallery_migration_receive_asset' => 'cms_gallery_migration_receive_asset',
+        'gallery_migration_receive_complete' => 'cms_gallery_migration_receive_complete',
+        'gallery_migration_receive_status' => 'cms_gallery_migration_receive_status',
+        'admin_gallery_migration' => 'cms_admin_gallery_migration',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
         'admin_update_navdata' => 'cms_admin_update_navdata',
+        'admin_navdata' => 'cms_admin_navdata',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
         'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',
         'admin_dismiss_thumbnail_notice' => 'cms_admin_dismiss_thumbnail_notice',
