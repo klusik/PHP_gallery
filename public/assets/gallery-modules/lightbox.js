@@ -2770,6 +2770,7 @@ export function setupGalleryLightbox() {
             }
             const payload = await response.json();
             const mapPayload = normalizeMapPayload(payload);
+            mapPayload.endpointUrl = endpointUrl;
             if (!mapPayload.title) {
                 mapPayload.title = title || currentLightboxGalleryMapTitle('Gallery map');
             }
@@ -2875,6 +2876,283 @@ export function setupGalleryLightbox() {
         return window.galleryMapMarkerIcons[markerRole];
     }
 
+    // Runtime-only Leaflet viewport memory. It intentionally dies on page reload.
+    const galleryLeafletViewportState = new Map();
+
+    // Runtime-only follow-current-location preference. It starts disabled on every page load.
+    const galleryLeafletFollowCurrentLocationState = {enabled: false};
+
+    /**
+     * Build a stable runtime key for one map view.
+     *
+     * @param {string} scope Caller scope, such as overlay or fullscreen-split.
+     * @param {*} mapPayload Normalized map payload.
+     * @param {Array} points Normalized fallback point list.
+     * @returns {string} Runtime-only viewport key.
+     */
+    function mapViewportKey(scope, mapPayload = {}, points = []) {
+        const endpoint = String(mapPayload.endpointUrl || mapPayload.endpoint_url || '').trim();
+        if (endpoint !== '') {
+            return `${scope}:endpoint:${endpoint}`;
+        }
+
+        const normalizedPoints = normalizeMapPoints(points.length ? points : (mapPayload.points || []));
+        const geometryPoints = normalizeMapPoints(mapPayload.geometry?.points || []);
+        const keyPoints = geometryPoints.length > 0 ? geometryPoints : normalizedPoints;
+        const coordinates = keyPoints.map((point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join('|');
+        const sourceType = String(mapPayload.sourceType || mapPayload.source_type || 'map');
+        const renderPath = mapPayload.renderPath === true || mapPayload.render_path === true ? 'path' : 'points';
+        return `${scope}:${sourceType}:${renderPath}:${coordinates}`;
+    }
+
+    /**
+     * Return the saved center and zoom for a runtime map view.
+     *
+     * @param {string} viewKey Runtime viewport key.
+     * @returns {{center: Array, zoom: number}|null} Saved viewport, or null.
+     */
+    function savedMapViewport(viewKey) {
+        const saved = galleryLeafletViewportState.get(viewKey);
+        if (!saved || !Array.isArray(saved.center) || !Number.isFinite(saved.zoom)) {
+            return null;
+        }
+        return saved;
+    }
+
+    /**
+     * Persist the current user-chosen Leaflet viewport in runtime memory.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {string} viewKey Runtime viewport key.
+     * @returns {void}
+     */
+    function saveMapViewport(map, viewKey) {
+        if (!isUsableLeafletMap(map) || map.galleryViewportSuppressSave) {
+            return;
+        }
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng) || !Number.isFinite(zoom)) {
+            return;
+        }
+        map.galleryViewportUserAdjusted = true;
+        galleryLeafletViewportState.set(viewKey, {center: [center.lat, center.lng], zoom});
+    }
+
+    /**
+     * Run a map viewport change without recording it as a user preference.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {Function} callback Leaflet viewport operation.
+     * @returns {void}
+     */
+    function setMapViewportSilently(map, callback) {
+        map.galleryViewportSuppressSave = true;
+        try {
+            callback();
+        } finally {
+            window.setTimeout(() => {
+                if (map) {
+                    map.galleryViewportSuppressSave = false;
+                }
+            }, 0);
+        }
+    }
+
+    /**
+     * Fit one map to its available coordinates.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {Array} bounds Leaflet bounds input.
+     * @param {*} options fitBounds options.
+     * @returns {void}
+     */
+    function fitMapToBounds(map, bounds, options = {}) {
+        if (bounds.length === 1) {
+            map.setView(bounds[0], 15, {animate: false});
+        } else if (bounds.length > 1) {
+            map.fitBounds(bounds, {...options, animate: false});
+        }
+    }
+
+    /**
+     * Return the active photo GPS point that can be kept centered on the map.
+     *
+     * @param {*} mapPayload Normalized map metadata.
+     * @param {Array} points Normalized fallback point list.
+     * @returns {*|null} Normalized active point, or null.
+     */
+    function mapCurrentLocationPoint(mapPayload = {}, points = []) {
+        const payloadActivePoints = normalizeMapPoints(mapPayload.activePoint ? [mapPayload.activePoint] : []);
+        if (payloadActivePoints.length > 0) {
+            return payloadActivePoints[0];
+        }
+
+        const normalizedPoints = normalizeMapPoints(points.length ? points : (mapPayload.points || []));
+        const activePoint = normalizedPoints.find((point) => mapPointMarkerRole(point) === 'active-photo');
+        if (activePoint) {
+            return activePoint;
+        }
+
+        return normalizedPoints.length === 1 ? normalizedPoints[0] : null;
+    }
+
+    /**
+     * Center the map on one point while preserving the current zoom level.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {*} point Normalized point with lat/lng values.
+     * @returns {void}
+     */
+    function centerMapOnCurrentLocation(map, point) {
+        if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
+            return;
+        }
+        const zoom = Number.isFinite(map.getZoom()) ? map.getZoom() : 15;
+        map.setView([point.lat, point.lng], zoom, {animate: false});
+    }
+
+    /**
+     * Save the current viewport with a forced center point and the map's current zoom.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {string} viewKey Runtime viewport key.
+     * @param {*} point Normalized point with lat/lng values.
+     * @returns {void}
+     */
+    function saveMapViewportWithCurrentLocation(map, viewKey, point) {
+        if (!viewKey || !point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng) || !Number.isFinite(map.getZoom())) {
+            return;
+        }
+        map.galleryViewportUserAdjusted = true;
+        galleryLeafletViewportState.set(viewKey, {center: [point.lat, point.lng], zoom: map.getZoom()});
+    }
+
+    /**
+     * Apply the stored viewport, or the automatic map fit, with optional current-location centering.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {Array} bounds Leaflet bounds input.
+     * @param {*} options fitBounds options.
+     * @param {string} viewKey Runtime viewport key.
+     * @param {*|null} currentLocationPoint Active photo GPS point.
+     * @returns {void}
+     */
+    function applyMapViewport(map, bounds, options, viewKey = '', currentLocationPoint = null) {
+        const saved = viewKey ? savedMapViewport(viewKey) : null;
+        const followCurrentLocation = galleryLeafletFollowCurrentLocationState.enabled && currentLocationPoint;
+
+        if (saved && followCurrentLocation) {
+            map.setView([currentLocationPoint.lat, currentLocationPoint.lng], saved.zoom, {animate: false});
+            return;
+        }
+        if (saved) {
+            map.setView(saved.center, saved.zoom, {animate: false});
+            return;
+        }
+
+        fitMapToBounds(map, bounds, options);
+        if (followCurrentLocation) {
+            centerMapOnCurrentLocation(map, currentLocationPoint);
+        }
+    }
+
+    /**
+     * Add explicit reset, zoom in, zoom out, and current-location controls to one Leaflet map.
+     *
+     * @param {*} map Leaflet map instance.
+     * @param {Array} bounds Leaflet bounds input.
+     * @param {*} options fitBounds options.
+     * @param {Function} isCurrent Guard checking whether this map is still current.
+     * @param {string} viewKey Runtime viewport key.
+     * @param {*|null} currentLocationPoint Active photo GPS point.
+     * @returns {void}
+     */
+    function addMapViewportControls(map, bounds, options, isCurrent, viewKey, currentLocationPoint = null) {
+        const ViewportControl = L.Control.extend({
+            options: {position: 'topleft'},
+            onAdd() {
+                const container = L.DomUtil.create('div', 'leaflet-bar gallery-map-viewport-control');
+                const resetButton = createMapControlButton('Reset', 'Reset map zoom', () => {
+                    if (!isUsableLeafletMap(map, isCurrent) || bounds.length === 0) {
+                        return;
+                    }
+                    galleryLeafletViewportState.delete(viewKey);
+                    map.galleryViewportUserAdjusted = false;
+                    map.invalidateSize(false);
+                    setMapViewportSilently(map, () => applyMapViewport(map, bounds, options, viewKey, currentLocationPoint));
+                });
+                const zoomInButton = createMapControlButton('+', 'Zoom in', () => map.zoomIn());
+                const zoomOutButton = createMapControlButton('-', 'Zoom out', () => map.zoomOut());
+                const followControl = createMapCheckboxControl(
+                    'Keep current centered',
+                    galleryLeafletFollowCurrentLocationState.enabled,
+                    (checked) => {
+                        galleryLeafletFollowCurrentLocationState.enabled = checked;
+                        if (!checked || !isUsableLeafletMap(map, isCurrent) || !currentLocationPoint) {
+                            return;
+                        }
+                        setMapViewportSilently(map, () => centerMapOnCurrentLocation(map, currentLocationPoint));
+                        saveMapViewportWithCurrentLocation(map, viewKey, currentLocationPoint);
+                    }
+                );
+                container.append(resetButton, zoomInButton, zoomOutButton, followControl);
+                L.DomEvent.disableClickPropagation(container);
+                L.DomEvent.disableScrollPropagation(container);
+                return container;
+            },
+        });
+        map.addControl(new ViewportControl());
+    }
+
+    /**
+     * Create one Leaflet viewport control button.
+     *
+     * @param {string} label Visible button label.
+     * @param {string} title Accessible button title.
+     * @param {Function} onClick Click handler.
+     * @returns {HTMLButtonElement} Prepared control button.
+     */
+    function createMapControlButton(label, title, onClick) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+        });
+        return button;
+    }
+
+    /**
+     * Create one Leaflet checkbox control.
+     *
+     * @param {string} labelText Visible label text.
+     * @param {boolean} checked Whether the checkbox starts enabled.
+     * @param {Function} onChange Change handler receiving the checked state.
+     * @returns {HTMLLabelElement} Prepared checkbox label.
+     */
+    function createMapCheckboxControl(labelText, checked, onChange) {
+        const label = document.createElement('label');
+        label.className = 'gallery-map-viewport-checkbox';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = checked;
+        input.setAttribute('aria-label', labelText);
+        const text = document.createElement('span');
+        text.textContent = labelText;
+        input.addEventListener('change', (event) => {
+            event.stopPropagation();
+            onChange(input.checked);
+        });
+        label.addEventListener('click', (event) => event.stopPropagation());
+        label.append(input, text);
+        return label;
+    }
+
     // Function `ensureLeafletScript` executes this focused behavior.
     function ensureLeafletScript() {
         if (window.L) {
@@ -2950,6 +3228,7 @@ export function setupGalleryLightbox() {
             fadeAnimation: false,
             markerZoomAnimation: false,
             zoomAnimation: false,
+            zoomControl: false,
         });
         overlay.galleryLeafletMap = map;
 
@@ -2961,8 +3240,12 @@ export function setupGalleryLightbox() {
         // Variable `bounds` stores this steps working value.
         const bounds = renderLeafletMapPayload(map, points, mapPayload);
 
-        setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
-        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map);
+        const viewKey = mapViewportKey('overlay', mapPayload, points);
+        const currentLocationPoint = mapCurrentLocationPoint(mapPayload, points);
+        addMapViewportControls(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map, viewKey, currentLocationPoint);
+        map.on('zoomend moveend', () => saveMapViewport(map, viewKey));
+        setInitialMapViewport(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map, viewKey, currentLocationPoint);
+        stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map, viewKey, currentLocationPoint);
     }
 
     /**
@@ -3477,6 +3760,7 @@ export function setupGalleryLightbox() {
             fadeAnimation: false,
             markerZoomAnimation: false,
             zoomAnimation: false,
+            zoomControl: false,
         });
         overlay.galleryLeafletSplitMap = map;
         if (overlay.galleryLeafletSplitResizeObserver) {
@@ -3489,8 +3773,12 @@ export function setupGalleryLightbox() {
         }).addTo(map);
         // bounds stores state or configuration for the gallery front-end flow.
         const bounds = renderLeafletMapPayload(map, points, mapPayload);
-        setInitialMapViewport(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
-        stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map);
+        const viewKey = mapViewportKey('fullscreen-split', mapPayload, points);
+        const currentLocationPoint = mapCurrentLocationPoint(mapPayload, points);
+        addMapViewportControls(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map, viewKey, currentLocationPoint);
+        map.on('zoomend moveend', () => saveMapViewport(map, viewKey));
+        setInitialMapViewport(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map, viewKey, currentLocationPoint);
+        stabilizeMapAfterLayout(map, bounds, {padding: [24, 24]}, () => overlay.galleryLeafletSplitMap === map, viewKey, currentLocationPoint);
         overlay.galleryLeafletSplitResizeObserver = new ResizeObserver(() => {
             if (isUsableLeafletMap(overlay.galleryLeafletSplitMap)) {
                 overlay.galleryLeafletSplitMap.invalidateSize(false);
@@ -3524,18 +3812,14 @@ export function setupGalleryLightbox() {
     }
 
     // Function `setInitialMapViewport` executes this focused behavior.
-    function setInitialMapViewport(map, bounds, options, isCurrent = () => true) {
+    function setInitialMapViewport(map, bounds, options, isCurrent = () => true, viewKey = '', currentLocationPoint = null) {
         requestAnimationFrame(() => {
             if (!isUsableLeafletMap(map, isCurrent) || bounds.length === 0) {
                 return;
             }
             try {
                 map.invalidateSize(false);
-                if (bounds.length === 1) {
-                    map.setView(bounds[0], 15, {animate: false});
-                } else if (bounds.length > 1) {
-                    map.fitBounds(bounds, {...options, animate: false});
-                }
+                setMapViewportSilently(map, () => applyMapViewport(map, bounds, options, viewKey, currentLocationPoint));
             } catch {
                 // Leaflet can briefly expose a stale map pane while overlays are
                 // being recreated. Later stabilization passes will retry.
@@ -3544,7 +3828,7 @@ export function setupGalleryLightbox() {
     }
 
     // Function `stabilizeMapAfterLayout` executes this focused behavior.
-    function stabilizeMapAfterLayout(map, bounds, options, isCurrent = () => true) {
+    function stabilizeMapAfterLayout(map, bounds, options, isCurrent = () => true, viewKey = '', currentLocationPoint = null) {
         // refreshDelays stores state or configuration for the gallery front-end flow.
         const refreshDelays = [0, 60, 150, 350];
         refreshDelays.forEach((delay) => {
@@ -3552,7 +3836,11 @@ export function setupGalleryLightbox() {
                 if (!isUsableLeafletMap(map, isCurrent)) {
                     return;
                 }
-                setInitialMapViewport(map, bounds, options, isCurrent);
+                if (map.galleryViewportUserAdjusted) {
+                    map.invalidateSize(false);
+                    return;
+                }
+                setInitialMapViewport(map, bounds, options, isCurrent, viewKey, currentLocationPoint);
             }, delay);
         });
     }
