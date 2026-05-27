@@ -14,10 +14,12 @@ second, divergent implementation of upload behavior.
 
 import argparse
 import concurrent.futures
+import ctypes
 import hashlib
 import importlib
 import json
 import logging
+import math
 import mimetypes
 import multiprocessing
 import os
@@ -55,14 +57,23 @@ except ImportError:  # pragma: no cover
     Image = None
     ImageOps = None
 
+try:
+    import pystray
+except ImportError:  # pragma: no cover
+    pystray = None
+
 
 APP_NAME = "PHPGalleryUploader"
+APP_DISPLAY_NAME = "PHP Gallery uploader"
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
 LOG_PATH = CONFIG_DIR / "watcher.log"
 APP_DIR = Path(__file__).resolve().parent
 REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
+ASSETS_DIR = APP_DIR / "assets"
+TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
+TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
 
 SUPPORTED_SUFFIXES = {
     ".jpg",
@@ -83,6 +94,25 @@ DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
 DEFAULT_UPLOAD_WORKERS = 4
 MAX_THUMBNAIL_WORKERS = 32
 MAX_UPLOAD_WORKERS = 12
+SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS = 1.0
+SIMCONNECT_POSITION_REFERENTIAL_WORLD = 2
+SIMCONNECT_DLL_ENV_VAR = "SIMCONNECT_DLL"
+SIMCONNECT_CLIENT_ID = b"PHPGalleryUploader"
+SIMCONNECT_RECV_ID_EXCEPTION = 1
+SIMCONNECT_RECV_ID_CAMERA_DATA = 40
+SIMCONNECT_RECV_ID_CAMERA_STATUS = 41
+SIMCONNECT_CAMERA_AVAILABILITY_LABELS = {
+    0: "not acquired",
+    1: "acquired",
+    2: "acquired by another client",
+    3: "user disabled",
+}
+SIMCONNECT_COMMON_DLL_PATHS = [
+    Path.home() / "MSFS 2024 SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
+    Path.home() / "MSFS SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
+    Path.home() / "AppData" / "Local" / "Programs" / "MSFS 2024 SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
+    Path.home() / "AppData" / "Local" / "Programs" / "MSFS SDK" / "SimConnect SDK" / "lib" / "SimConnect.dll",
+]
 
 
 
@@ -103,6 +133,9 @@ class WatcherConfig:
     @param stable_seconds: Minimum unchanged duration before a file is uploaded.
     @param create_thumbnails: Whether the server should create thumbnails after
         accepting the upload.
+    @param attach_sim_camera_metadata: Whether watched-folder uploads should try
+        to attach the current Flight Simulator camera location.
+    @param simconnect_dll_path: Optional user-selected SimConnect.dll override.
     @param manual_thumbnail_workers: Manual upload process count for local
         thumbnail generation. Zero means automatic.
     @param manual_upload_workers: Manual upload thread count for multipart HTTP
@@ -115,6 +148,9 @@ class WatcherConfig:
     scan_interval_seconds: float = DEFAULT_INTERVAL_SECONDS
     stable_seconds: float = DEFAULT_STABLE_SECONDS
     create_thumbnails: bool = True
+    attach_sim_camera_metadata: bool = True
+    simconnect_dll_path: str = ""
+    delete_uploaded_files: bool = False
     manual_thumbnail_workers: int = 0
     manual_upload_workers: int = 0
 
@@ -140,6 +176,9 @@ class WatcherConfig:
             scan_interval_seconds=float(data.get("scan_interval_seconds", DEFAULT_INTERVAL_SECONDS) or DEFAULT_INTERVAL_SECONDS),
             stable_seconds=float(data.get("stable_seconds", DEFAULT_STABLE_SECONDS) or DEFAULT_STABLE_SECONDS),
             create_thumbnails=bool(data.get("create_thumbnails", True)),
+            attach_sim_camera_metadata=bool(data.get("attach_sim_camera_metadata", True)),
+            simconnect_dll_path=str(data.get("simconnect_dll_path", "")),
+            delete_uploaded_files=bool(data.get("delete_uploaded_files", False)),
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
             manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
         )
@@ -157,6 +196,9 @@ class WatcherConfig:
             "scan_interval_seconds": self.scan_interval_seconds,
             "stable_seconds": self.stable_seconds,
             "create_thumbnails": self.create_thumbnails,
+            "attach_sim_camera_metadata": self.attach_sim_camera_metadata,
+            "simconnect_dll_path": self.simconnect_dll_path,
+            "delete_uploaded_files": self.delete_uploaded_files,
             "manual_thumbnail_workers": self.manual_thumbnail_workers,
             "manual_upload_workers": self.manual_upload_workers,
         }
@@ -175,6 +217,393 @@ class LocalThumbnail:
     path: Path
     size: int
     format: str
+
+
+@dataclass
+class SimCameraLocation:
+    """
+    Flight Simulator camera world position captured through SimConnect.
+
+    @param latitude: Camera latitude in degrees.
+    @param longitude: Camera longitude in degrees.
+    @param altitude: Camera altitude in feet.
+    """
+
+    latitude: float
+    longitude: float
+    altitude: float
+
+    def upload_fields(self) -> Dict[str, str]:
+        """
+        Convert the camera position into upload automation metadata fields.
+
+        @return: Multipart form fields accepted by PHP Gallery.
+        """
+        return {
+            "sim_location_source": "simconnect_camera",
+            "sim_camera_latitude": f"{self.latitude:.7f}",
+            "sim_camera_longitude": f"{self.longitude:.7f}",
+            "sim_camera_altitude": f"{self.altitude:.2f}",
+        }
+
+
+class _SimConnectRecv(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", ctypes.c_uint32),
+        ("dwVersion", ctypes.c_uint32),
+        ("dwID", ctypes.c_uint32),
+    ]
+
+
+class _SimConnectDataXYZ(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_double),
+        ("y", ctypes.c_double),
+        ("z", ctypes.c_double),
+    ]
+
+
+class _SimConnectDataPBH(ctypes.Structure):
+    _fields_ = [
+        ("Pitch", ctypes.c_float),
+        ("Bank", ctypes.c_float),
+        ("Heading", ctypes.c_float),
+    ]
+
+
+class _SimConnectDataCamera(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("Position", _SimConnectDataXYZ),
+        ("PositionReferential", ctypes.c_uint32),
+        ("PositionReferentialObjectId", ctypes.c_uint32),
+        ("TargetedPos", _SimConnectDataXYZ),
+        ("Pbh", _SimConnectDataPBH),
+        ("RotationReferential", ctypes.c_uint32),
+        ("RotationReferentialObjectId", ctypes.c_uint32),
+        ("Fov", ctypes.c_double),
+    ]
+
+
+class _SimConnectRecvCameraData(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("dwSize", ctypes.c_uint32),
+        ("dwVersion", ctypes.c_uint32),
+        ("dwID", ctypes.c_uint32),
+        ("CameraData", _SimConnectDataCamera),
+    ]
+
+
+class _SimConnectRecvException(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("dwSize", ctypes.c_uint32),
+        ("dwVersion", ctypes.c_uint32),
+        ("dwID", ctypes.c_uint32),
+        ("dwException", ctypes.c_uint32),
+        ("dwSendID", ctypes.c_uint32),
+        ("dwIndex", ctypes.c_uint32),
+    ]
+
+
+class _SimConnectRecvCameraStatus(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("dwSize", ctypes.c_uint32),
+        ("dwVersion", ctypes.c_uint32),
+        ("dwID", ctypes.c_uint32),
+        ("acquiredState", ctypes.c_uint32),
+        ("bGameControlled", ctypes.c_int32),
+    ]
+
+
+def simconnect_hresult_failed(value: int) -> bool:
+    """
+    Return whether a signed HRESULT indicates failure.
+
+    @param value: HRESULT returned by SimConnect.
+    @return: True when the HRESULT is a failure code.
+    """
+    return int(value) < 0
+
+
+def simconnect_camera_position_valid(location: SimCameraLocation) -> bool:
+    """
+    Validate a world camera position before sending it to PHP Gallery.
+
+    @param location: Candidate camera position.
+    @return: True when latitude, longitude, and altitude are usable.
+    """
+    return (
+        math.isfinite(location.latitude)
+        and math.isfinite(location.longitude)
+        and math.isfinite(location.altitude)
+        and -90.0 <= location.latitude <= 90.0
+        and -180.0 <= location.longitude <= 180.0
+    )
+
+
+class SimConnectCameraClient:
+    """
+    Minimal SimConnect camera reader used by watched-folder uploads.
+
+    The client opens a short-lived SimConnect connection, requests the current
+    camera in world referential coordinates, then closes the connection. Missing
+    simulator, missing DLL, or camera API failures are reported as soft failures
+    so uploads can continue without location metadata.
+    """
+
+    def __init__(self, dll_path: str = "", timeout_seconds: float = SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS) -> None:
+        """
+        Create a camera client.
+
+        @param dll_path: Optional explicit SimConnect.dll path selected by the user.
+        @param timeout_seconds: Maximum time to wait for one camera response.
+        """
+        self.timeout_seconds = max(0.2, float(timeout_seconds))
+        self.configured_dll_path = trim_path(dll_path)
+        self.handle = ctypes.c_void_p()
+        self.error_message = ""
+        self.dll_message = ""
+        self.status_message = ""
+        self.diagnostics: List[str] = []
+        self.dispatch_count = 0
+        self.last_recv_id: Optional[int] = None
+        self.camera_data_packets = 0
+        self.location: Optional[SimCameraLocation] = None
+
+    def current_camera_location(self) -> Tuple[Optional[SimCameraLocation], str]:
+        """
+        Query the current Flight Simulator camera location.
+
+        @return: Tuple containing the location or None, plus a diagnostic string.
+        """
+        if os.name != "nt":
+            return None, "SimConnect camera metadata is available only on Windows."
+
+        try:
+            dll_path, tried_paths = self.resolve_dll_path()
+            if dll_path is None:
+                return None, "SimConnect.dll is unavailable: no usable candidate found. Tried: " + ", ".join(str(path) for path in tried_paths)
+            resolved_dll_path = dll_path.resolve()
+            self.dll_message = f"Using SimConnect.dll: {resolved_dll_path}"
+            self.diagnostics.append(self.dll_message)
+            dll = ctypes.WinDLL(str(dll_path))
+        except Exception as exc:  # noqa: BLE001
+            return None, f"SimConnect.dll is unavailable: {exc}"
+
+        try:
+            dispatch_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(None, ctypes.POINTER(_SimConnectRecv), ctypes.c_uint32, ctypes.c_void_p)
+            self.configure_functions(dll, dispatch_type)
+        except Exception as exc:  # noqa: BLE001
+            return None, f"SimConnect camera API is unavailable: {exc}"
+
+        try:
+            open_result = dll.SimConnect_Open(ctypes.byref(self.handle), b"PHP Gallery uploader", None, 0, None, 0)
+            self.diagnostics.append(f"SimConnect_Open HRESULT {int(open_result)}")
+            if simconnect_hresult_failed(open_result) or not self.handle.value:
+                return None, self.diagnostic_message(f"SimConnect connection failed: HRESULT {int(open_result)}")
+
+            pre_dispatch_failure = ""
+            acquire_result = dll.SimConnect_CameraAcquire(self.handle, SIMCONNECT_CLIENT_ID)
+            self.diagnostics.append(f"SimConnect_CameraAcquire HRESULT {int(acquire_result)}")
+            if simconnect_hresult_failed(acquire_result):
+                pre_dispatch_failure = f"SimConnect_CameraAcquire failed: HRESULT {int(acquire_result)}"
+            status_result = dll.SimConnect_CameraGetStatus(self.handle)
+            self.diagnostics.append(f"SimConnect_CameraGetStatus HRESULT {int(status_result)}")
+            camera_result = dll.SimConnect_CameraGet(self.handle, SIMCONNECT_POSITION_REFERENTIAL_WORLD)
+            self.diagnostics.append(f"SimConnect_CameraGet WORLD HRESULT {int(camera_result)}")
+            if simconnect_hresult_failed(camera_result):
+                return None, self.diagnostic_message(f"SimConnect_CameraGet failed: HRESULT {int(camera_result)}")
+
+            callback = dispatch_type(self.dispatch)
+            deadline = time.time() + self.timeout_seconds
+            while time.time() < deadline and self.location is None and self.error_message == "":
+                dispatch_result = dll.SimConnect_CallDispatch(self.handle, callback, None)
+                if simconnect_hresult_failed(dispatch_result):
+                    self.error_message = f"SimConnect_CallDispatch failed: HRESULT {int(dispatch_result)}"
+                    break
+                time.sleep(0.01)
+
+            if self.location is not None:
+                return self.location, self.dll_message or f"Using SimConnect.dll: {resolved_dll_path}"
+            if self.error_message:
+                return None, self.diagnostic_message(self.error_message)
+            if pre_dispatch_failure:
+                return None, self.diagnostic_message(pre_dispatch_failure)
+            return None, self.diagnostic_message("SimConnect camera data was not returned before the timeout.")
+        except Exception as exc:  # noqa: BLE001
+            return None, self.diagnostic_message(str(exc))
+        finally:
+            if self.handle.value:
+                try:
+                    dll.SimConnect_CameraRelease(self.handle, SIMCONNECT_CLIENT_ID)
+                    dll.SimConnect_Close(self.handle)
+                except Exception:  # noqa: BLE001
+                    logging.debug("SimConnect close failed.", exc_info=True)
+                self.handle = ctypes.c_void_p()
+
+    def configure_functions(self, dll: Any, dispatch_type: Any) -> None:
+        """
+        Configure ctypes signatures for the SimConnect functions used here.
+
+        @param dll: Loaded SimConnect.dll handle.
+        @param dispatch_type: Callback type used by SimConnect_CallDispatch.
+        @return: None.
+        """
+        dll.SimConnect_Open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
+        dll.SimConnect_Open.restype = ctypes.c_long
+        dll.SimConnect_CameraAcquire.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        dll.SimConnect_CameraAcquire.restype = ctypes.c_long
+        dll.SimConnect_CameraRelease.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        dll.SimConnect_CameraRelease.restype = ctypes.c_long
+        dll.SimConnect_CameraGetStatus.argtypes = [ctypes.c_void_p]
+        dll.SimConnect_CameraGetStatus.restype = ctypes.c_long
+        dll.SimConnect_CameraGet.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        dll.SimConnect_CameraGet.restype = ctypes.c_long
+        dll.SimConnect_CallDispatch.argtypes = [ctypes.c_void_p, dispatch_type, ctypes.c_void_p]
+        dll.SimConnect_CallDispatch.restype = ctypes.c_long
+        dll.SimConnect_Close.argtypes = [ctypes.c_void_p]
+        dll.SimConnect_Close.restype = ctypes.c_long
+
+    def resolve_dll_path(self) -> Tuple[Optional[Path], List[Path]]:
+        """
+        Find a usable SimConnect client DLL on the local machine.
+
+        @return: Tuple of the selected DLL path and every absolute candidate checked.
+        """
+        tried_paths: List[Path] = []
+
+        def record(candidate: Optional[Path]) -> Optional[Path]:
+            if candidate is None:
+                return None
+            resolved = candidate.resolve(strict=False)
+            tried_paths.append(resolved)
+            return resolved if resolved.is_file() else None
+
+        if self.configured_dll_path is not None and self.configured_dll_path.is_file():
+            return self.configured_dll_path.resolve(), [self.configured_dll_path.resolve()]
+
+        env_path = trim_path(os.environ.get(SIMCONNECT_DLL_ENV_VAR, ""))
+        env_selected = record(env_path)
+        if env_selected is not None:
+            return env_selected, tried_paths
+
+        local_candidates = [
+            APP_DIR / "SimConnect.dll",
+            APP_DIR.parent / "SimConnect.dll",
+            Path.cwd() / "SimConnect.dll",
+        ]
+        for candidate in local_candidates:
+            selected = record(candidate)
+            if selected is not None:
+                return selected, tried_paths
+
+        for candidate in SIMCONNECT_COMMON_DLL_PATHS:
+            selected = record(candidate)
+            if selected is not None:
+                return selected, tried_paths
+
+        return None, tried_paths
+
+    def dll_resolution_message(self) -> str:
+        """
+        Describe which SimConnect DLL path would be used without opening the sim.
+
+        @return: Human-readable DLL resolution summary.
+        """
+        dll_path, tried_paths = self.resolve_dll_path()
+        if dll_path is not None:
+            return f"Using SimConnect.dll: {dll_path.resolve()}"
+        if tried_paths:
+            return "No SimConnect.dll found. Tried: " + ", ".join(str(path) for path in tried_paths)
+        return "No SimConnect.dll path candidates were available."
+
+    def diagnostic_message(self, reason: str) -> str:
+        """
+        Build one compact diagnostic message for the watcher console.
+
+        @param reason: Primary reason camera coordinates were not returned.
+        @return: Human-readable diagnostic summary.
+        """
+        details = list(self.diagnostics)
+        if self.status_message:
+            details.append(self.status_message)
+        if self.dispatch_count > 0:
+            details.append(f"dispatch packets={self.dispatch_count}, last recv id={self.last_recv_id}, camera data packets={self.camera_data_packets}")
+        else:
+            details.append("dispatch packets=0")
+        return reason + " Details: " + "; ".join(details)
+
+    def dispatch(self, data: ctypes.POINTER(_SimConnectRecv), size: int, _context: ctypes.c_void_p) -> None:
+        """
+        Receive one SimConnect dispatch packet.
+
+        @param data: Pointer to the base SimConnect receive structure.
+        @param size: Packet byte length.
+        @param _context: Unused callback context.
+        @return: None.
+        """
+        if not data:
+            return
+        header = data.contents
+        self.dispatch_count += 1
+        self.last_recv_id = int(header.dwID)
+        if header.dwID == SIMCONNECT_RECV_ID_EXCEPTION and size >= ctypes.sizeof(_SimConnectRecvException):
+            exception = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvException)).contents
+            self.error_message = (
+                f"SimConnect camera request failed with exception {int(exception.dwException)} "
+                f"(send={int(exception.dwSendID)}, index={int(exception.dwIndex)})."
+            )
+            return
+        if header.dwID == SIMCONNECT_RECV_ID_CAMERA_STATUS and size >= ctypes.sizeof(_SimConnectRecvCameraStatus):
+            status = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvCameraStatus)).contents
+            status_id = int(status.acquiredState)
+            status_label = SIMCONNECT_CAMERA_AVAILABILITY_LABELS.get(status_id, f"unknown {status_id}")
+            self.status_message = (
+                f"SimConnect camera status: {status_label}, game_controlled={int(bool(status.bGameControlled))}"
+            )
+            return
+        if header.dwID != SIMCONNECT_RECV_ID_CAMERA_DATA:
+            return
+        self.camera_data_packets += 1
+        if size < ctypes.sizeof(_SimConnectRecvCameraData):
+            self.error_message = f"SimConnect camera data packet was too small: {size} bytes."
+            return
+
+        camera_packet = ctypes.cast(data, ctypes.POINTER(_SimConnectRecvCameraData)).contents
+        camera = camera_packet.CameraData
+        if int(camera.PositionReferential) != SIMCONNECT_POSITION_REFERENTIAL_WORLD:
+            self.error_message = f"SimConnect returned camera referential {int(camera.PositionReferential)} instead of WORLD."
+            return
+
+        location = SimCameraLocation(
+            latitude=float(camera.Position.x),
+            longitude=float(camera.Position.y),
+            altitude=float(camera.Position.z),
+        )
+        if simconnect_camera_position_valid(location):
+            self.location = location
+        else:
+            self.error_message = (
+                f"SimConnect returned invalid camera position: "
+                f"lat={location.latitude}, lng={location.longitude}, alt={location.altitude}."
+            )
+
+
+def trim_path(value: str) -> Optional[Path]:
+    """
+    Convert one optional path string into a usable Path object.
+
+    @param value: Raw environment variable or config value.
+    @return: Path when the string is non-empty, otherwise None.
+    """
+    text = str(value).strip()
+    if not text:
+        return None
+    return Path(text)
+
 
 class ConfigStore:
     """
@@ -635,6 +1064,7 @@ def multipart_upload(
     create_thumbnails: bool,
     thumbnails: Optional[List[LocalThumbnail]] = None,
     client_upload_id: Optional[str] = None,
+    metadata_fields: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Upload one image file using standard-library HTTP multipart/form-data.
@@ -652,6 +1082,7 @@ def multipart_upload(
     @param thumbnails: Optional local thumbnail variants to send with the image.
     @param client_upload_id: Optional stable request-local ID used to map supplied
         thumbnails to the stored image after server-side filename normalization.
+    @param metadata_fields: Optional text fields to submit beside the image.
     @return: Parsed JSON response from the server.
     @raises RuntimeError: Raised for HTTP errors, network errors, non-JSON
         responses, malformed JSON payloads, or server-declared upload failure.
@@ -663,6 +1094,8 @@ def multipart_upload(
     ]
     if client_upload_id:
         field_entries.append(("image_client_ids[]", client_upload_id))
+    for name, value in (metadata_fields or {}).items():
+        field_entries.append((str(name), str(value)))
 
     body_parts: List[bytes] = []
     for name, value in field_entries:
@@ -764,16 +1197,17 @@ def thumbnail_runtime_status() -> str:
 
     Windows can have multiple Python installations and Microsoft Store aliases.
     The app must report the exact executable currently running the GUI because
-    Pillow has to be installed into this same interpreter.
+    optional helper packages have to be installed into this same interpreter.
 
     @return: Human-readable runtime and Pillow availability status.
     """
     executable = sys.executable or "unknown Python executable"
     version = sys.version.split()[0]
+    tray_status = "tray available" if pystray is not None else "tray unavailable"
     if local_thumbnail_supported():
         pillow_version = getattr(Image, "__version__", "installed")
-        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}."
-    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}."
+        return f"Client-side thumbnails available. Python {version}: {executable}. Pillow: {pillow_version}; {tray_status}."
+    return f"Client-side thumbnails unavailable for this Python runtime: {executable}. Python {version}; {tray_status}."
 
 
 def clamp_int(value: int, minimum: int, maximum: int) -> int:
@@ -880,9 +1314,9 @@ def format_worker_choice(value: int) -> str:
     return str(int(value))
 
 
-def install_pillow_for_current_runtime() -> Tuple[bool, str]:
+def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
     """
-    Install or repair Pillow for the exact Python interpreter running the app.
+    Install or repair winapp dependencies for the exact Python interpreter.
 
     This avoids the common Windows issue where install.bat installs packages into
     one Python version while a .pyw file association launches another version.
@@ -893,7 +1327,7 @@ def install_pillow_for_current_runtime() -> Tuple[bool, str]:
     if REQUIREMENTS_PATH.is_file():
         command.extend(["-r", str(REQUIREMENTS_PATH)])
     else:
-        command.append("Pillow>=10.0")
+        command.extend(["Pillow>=10.0", "pystray>=0.19.5"])
 
     try:
         completed = subprocess.run(
@@ -912,8 +1346,9 @@ def install_pillow_for_current_runtime() -> Tuple[bool, str]:
         try:
             globals()["Image"] = importlib.import_module("PIL.Image")
             globals()["ImageOps"] = importlib.import_module("PIL.ImageOps")
+            globals()["pystray"] = importlib.import_module("pystray")
         except Exception as exc:  # noqa: BLE001
-            return False, f"pip finished, but Pillow still cannot be imported by this process: {exc}\n{output}"
+            return False, f"pip finished, but required packages still cannot be imported by this process: {exc}\n{output}"
     return completed.returncode == 0, output
 
 
@@ -1075,6 +1510,10 @@ class WatcherThread(threading.Thread):
         self.initial_paths = set(iter_candidate_files(folder))
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
+        if self.config.attach_sim_camera_metadata:
+            self.emit("info", "Flight Simulator camera metadata enabled. " + SimConnectCameraClient(self.config.simconnect_dll_path).dll_resolution_message())
+        else:
+            self.emit("info", "Flight Simulator camera metadata disabled.")
         if self.initial_paths:
             self.emit("info", f"Ignoring {len(self.initial_paths)} existing image file(s); only files added after watcher start will upload.")
 
@@ -1123,15 +1562,77 @@ class WatcherThread(threading.Thread):
 
             try:
                 self.emit("info", f"Uploading {path.name}")
-                payload = multipart_upload(upload_url, self.config.api_key.strip(), path, self.config.create_thumbnails)
+                metadata_fields = self.sim_camera_metadata_fields(path)
+                payload = multipart_upload(upload_url, self.config.api_key.strip(), path, self.config.create_thumbnails, metadata_fields=metadata_fields)
                 self.state.mark_uploaded(path, file_hash, size, payload)
                 uploaded = payload.get("uploaded", 0)
                 scanned = payload.get("scanned", 0)
                 self.emit("info", f"Uploaded {path.name}: uploaded={uploaded}, scanned={scanned}")
+                sim_result = payload.get("sim_camera_metadata")
+                if isinstance(sim_result, dict):
+                    attached_count = int(sim_result.get("attached", 0) or 0)
+                    sim_error = str(sim_result.get("error", "") or "")
+                    if attached_count > 0:
+                        self.emit("info", f"Stored Flight Simulator camera location for {path.name}.")
+                    elif sim_error:
+                        self.emit("warning", f"Uploaded {path.name}, but camera location metadata was not stored: {sim_error}")
+                if self.config.delete_uploaded_files:
+                    self.delete_uploaded_file(path, payload)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
                 self.state.mark_failure(path, file_hash, message)
                 self.emit("error", f"Upload failed for {path.name}: {message}")
+
+    def sim_camera_metadata_fields(self, path: Path) -> Dict[str, str]:
+        """
+        Return Flight Simulator camera metadata fields for one watched upload.
+
+        @param path: Local image path about to be uploaded.
+        @return: Multipart form fields, or an empty dictionary when unavailable.
+        """
+        if not self.config.attach_sim_camera_metadata:
+            return {}
+
+        location, message = SimConnectCameraClient(self.config.simconnect_dll_path).current_camera_location()
+        if location is None:
+            self.emit("info", f"Flight Simulator camera location unavailable for {path.name}: {message}")
+            return {}
+
+        self.emit(
+            "info",
+            (
+                f"Attached Flight Simulator camera location for {path.name}: "
+                f"lat={location.latitude:.7f}, lng={location.longitude:.7f}, alt={location.altitude:.2f} ft. "
+                f"{message}"
+            ),
+        )
+        return location.upload_fields()
+
+    def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
+        """
+        Delete a watched-folder file after a confirmed successful upload.
+
+        The watcher deletes only originals that the gallery reports as uploaded.
+        Skipped, duplicate, or failed files remain in place.
+
+        @param path: Local image file that was just submitted.
+        @param payload: Successful JSON response returned by the gallery.
+        @return: None.
+        """
+        uploaded_count = int(payload.get("uploaded", 0) or 0)
+        if uploaded_count <= 0:
+            self.emit("warning", f"Kept {path.name}: gallery did not confirm a stored upload.")
+            return
+
+        try:
+            path.unlink()
+            self.initial_paths.discard(path)
+            self.emit("info", f"Deleted uploaded source file: {path.name}")
+        except FileNotFoundError:
+            self.initial_paths.discard(path)
+            self.emit("warning", f"Uploaded source file was already gone: {path.name}")
+        except OSError as exc:
+            self.emit("warning", f"Uploaded {path.name}, but could not delete the source file: {exc}")
 
 
 class ManualUploadThread(threading.Thread):
@@ -1509,7 +2010,7 @@ class WatcherApp:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
         self.root = tk.Tk()
-        self.root.title("PHP Gallery uploader")
+        self.root.title(APP_DISPLAY_NAME)
         self.root.geometry("980x760")
 
         self.config_store = ConfigStore()
@@ -1518,6 +2019,10 @@ class WatcherApp:
         self.worker: Optional[WatcherThread] = None
         self.manual_worker: Optional[ManualUploadThread] = None
         self.manual_paths: List[Path] = []
+        self.tray_icon: Optional[Any] = None
+        self.tray_thread: Optional[threading.Thread] = None
+        self.window_hidden_to_tray = False
+        self.exiting = False
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
@@ -1525,6 +2030,9 @@ class WatcherApp:
         self.interval_var = tk.StringVar(value=str(self.config.scan_interval_seconds))
         self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
+        self.attach_sim_camera_metadata_var = tk.BooleanVar(value=self.config.attach_sim_camera_metadata)
+        self.simconnect_dll_path_var = tk.StringVar(value=self.config.simconnect_dll_path)
+        self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
         self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
         self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
         self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
@@ -1539,7 +2047,10 @@ class WatcherApp:
         self.log_tags_ready = False
 
         self.build_ui()
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.configure_window_icon()
+        self.start_tray_icon()
+        self.root.protocol("WM_DELETE_WINDOW", self.request_window_close)
+        self.root.bind("<Unmap>", self.handle_window_unmap, add="+")
         self.root.after(200, self.drain_events)
 
     def build_ui(self) -> None:
@@ -1551,7 +2062,7 @@ class WatcherApp:
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
 
-        title = ttk.Label(outer, text="PHP Gallery uploader", font=("Segoe UI", 16, "bold"))
+        title = ttk.Label(outer, text=APP_DISPLAY_NAME, font=("Segoe UI", 16, "bold"))
         title.pack(anchor="w")
         subtitle = ttk.Label(
             outer,
@@ -1606,6 +2117,198 @@ class WatcherApp:
         self.refresh_revoke_button_state()
         self.update_monitor_state("disabled", "No watcher is active.")
 
+    def configure_window_icon(self) -> None:
+        """
+        Apply the bundled Windows icon to the Tkinter window when available.
+
+        @return: None.
+        """
+        if not TRAY_ICON_ICO_PATH.is_file():
+            return
+        try:
+            self.root.iconbitmap(default=str(TRAY_ICON_ICO_PATH))
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Window icon could not be loaded: %s", exc)
+
+    def start_tray_icon(self) -> None:
+        """
+        Start the Windows tray icon in a background thread.
+
+        @return: None.
+        """
+        if pystray is None or Image is None:
+            self.write_log("System tray unavailable. Run install.bat to install pystray and Pillow.", "warning")
+            return
+        if not TRAY_ICON_PNG_PATH.is_file():
+            self.write_log(f"System tray icon asset is missing: {TRAY_ICON_PNG_PATH}", "warning")
+            return
+
+        try:
+            with Image.open(TRAY_ICON_PNG_PATH) as opened:
+                icon_image = opened.convert("RGBA").copy()
+            menu = pystray.Menu(
+                pystray.MenuItem("Open", self.tray_restore_window, default=True),
+                pystray.MenuItem("Start watching", self.tray_start_watching),
+                pystray.MenuItem("Stop watching", self.tray_stop_watching),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Exit", self.tray_exit_application),
+            )
+            self.tray_icon = pystray.Icon(APP_NAME, icon_image, APP_DISPLAY_NAME, menu)
+            self.tray_thread = threading.Thread(target=self.tray_icon.run, name="PHPGalleryTray", daemon=True)
+            self.tray_thread.start()
+            self.write_log("System tray icon is active.", "system")
+        except Exception as exc:  # noqa: BLE001
+            self.tray_icon = None
+            self.tray_thread = None
+            self.write_log(f"System tray could not be started: {exc}", "warning")
+
+    def schedule_ui(self, callback: Any) -> None:
+        """
+        Run a tray callback on the Tkinter UI thread.
+
+        @param callback: Callable with no arguments.
+        @return: None.
+        """
+        if self.exiting:
+            return
+        try:
+            self.root.after(0, callback)
+        except Exception:  # noqa: BLE001
+            logging.debug("Ignored tray callback after Tk shutdown.", exc_info=True)
+
+    def tray_restore_window(self, *_args: Any) -> None:
+        """
+        Restore the hidden window from a tray icon action.
+
+        @return: None.
+        """
+        self.schedule_ui(self.restore_from_tray)
+
+    def tray_start_watching(self, *_args: Any) -> None:
+        """
+        Start the watcher from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.start)
+
+    def tray_stop_watching(self, *_args: Any) -> None:
+        """
+        Stop the watcher from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.stop)
+
+    def tray_exit_application(self, *_args: Any) -> None:
+        """
+        Exit the application from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.close)
+
+    def request_window_close(self) -> None:
+        """
+        Hide to tray when the window close button is used.
+
+        @return: None.
+        """
+        if not self.tray_icon:
+            self.close()
+            return
+
+        if self.background_work_active():
+            choice = messagebox.askyesnocancel(
+                APP_DISPLAY_NAME,
+                "The watcher or manual upload is still running. Choose Yes to hide to tray, No to stop work and exit, or Cancel to keep this window open.",
+            )
+            if choice is None:
+                return
+            if choice is False:
+                self.close()
+                return
+
+        self.hide_to_tray()
+
+    def background_work_active(self) -> bool:
+        """
+        Return whether a watcher or manual upload worker is running.
+
+        @return: True when any background worker is alive.
+        """
+        return bool((self.worker and self.worker.is_alive()) or (self.manual_worker and self.manual_worker.is_alive()))
+
+    def handle_window_unmap(self, event: Any) -> None:
+        """
+        Convert normal window minimization into tray hiding.
+
+        @param event: Tkinter unmap event.
+        @return: None.
+        """
+        if self.exiting or self.window_hidden_to_tray or event.widget is not self.root:
+            return
+        self.root.after(100, self.hide_if_minimized)
+
+    def hide_if_minimized(self) -> None:
+        """
+        Hide the window to tray after a user minimize action.
+
+        @return: None.
+        """
+        if self.exiting or self.window_hidden_to_tray or not self.tray_icon:
+            return
+        try:
+            if self.root.state() == "iconic":
+                self.hide_to_tray()
+        except Exception:  # noqa: BLE001
+            logging.debug("Ignored minimize-to-tray check after Tk shutdown.", exc_info=True)
+
+    def hide_to_tray(self) -> None:
+        """
+        Hide the window while keeping the app alive in the system tray.
+
+        @return: None.
+        """
+        if not self.tray_icon:
+            return
+        self.window_hidden_to_tray = True
+        self.root.withdraw()
+        self.write_log("Window hidden to tray. Use the tray icon to restore it.", "system")
+
+    def restore_from_tray(self) -> None:
+        """
+        Show the Tkinter window from the tray icon.
+
+        @return: None.
+        """
+        if self.exiting:
+            return
+        self.window_hidden_to_tray = False
+        self.root.deiconify()
+        try:
+            self.root.state("normal")
+        except Exception:  # noqa: BLE001
+            logging.debug("Could not force normal window state.", exc_info=True)
+        self.root.lift()
+        self.root.focus_force()
+
+    def stop_tray_icon(self) -> None:
+        """
+        Stop the tray icon loop during application shutdown.
+
+        @return: None.
+        """
+        icon = self.tray_icon
+        self.tray_icon = None
+        if icon is None:
+            return
+        try:
+            icon.visible = False
+            icon.stop()
+        except Exception:  # noqa: BLE001
+            logging.debug("Tray icon shutdown failed.", exc_info=True)
+
     def build_watch_tab(self, parent: Any) -> None:
         """
         Build controls dedicated to watch-folder uploading.
@@ -1631,8 +2334,24 @@ class WatcherApp:
             variable=self.create_thumbnails_var,
         ).grid(row=3, column=1, columnspan=2, sticky="w", padx=8, pady=5)
 
+        ttk.Checkbutton(
+            parent,
+            text="Attach current Flight Simulator camera location to watched-folder uploads",
+            variable=self.attach_sim_camera_metadata_var,
+        ).grid(row=4, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(parent, text="SimConnect.dll override (optional)").grid(row=5, column=0, sticky="w", pady=5)
+        ttk.Entry(parent, textvariable=self.simconnect_dll_path_var).grid(row=5, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Button(parent, text="Browse", command=self.browse_simconnect_dll).grid(row=5, column=2, sticky="ew", pady=5)
+
+        ttk.Checkbutton(
+            parent,
+            text="Delete watched-folder files after a confirmed successful upload",
+            variable=self.delete_uploaded_files_var,
+        ).grid(row=6, column=1, columnspan=2, sticky="w", padx=8, pady=5)
+
         actions = ttk.Frame(parent)
-        actions.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        actions.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
         ttk.Button(actions, text="Start watching", command=self.start).pack(side="left")
         ttk.Button(actions, text="Stop", command=self.stop).pack(side="left", padx=8)
         ttk.Label(actions, textvariable=self.status_var).pack(side="right")
@@ -1690,7 +2409,7 @@ class WatcherApp:
         runtime_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         runtime_row.columnconfigure(0, weight=1)
         ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=760).grid(row=0, column=0, sticky="w")
-        ttk.Button(runtime_row, text="Install or repair Pillow", command=self.repair_pillow).grid(row=0, column=1, sticky="e", padx=(8, 0))
+        ttk.Button(runtime_row, text="Install or repair dependencies", command=self.repair_dependencies).grid(row=0, column=1, sticky="e", padx=(8, 0))
 
         self.refresh_thumbnail_controls()
 
@@ -1713,20 +2432,22 @@ class WatcherApp:
             self.thumbnail_check.state(["disabled"])
             self.manual_local_thumbnails_var.set(False)
 
-    def repair_pillow(self) -> None:
+    def repair_dependencies(self) -> None:
         """
-        Install Pillow into the Python interpreter currently running the GUI.
+        Install winapp dependencies into the current Python interpreter.
 
         @return: None.
         """
-        self.write_log("Installing or repairing Pillow for the current Python runtime...")
-        ok, output = install_pillow_for_current_runtime()
+        self.write_log("Installing or repairing Python dependencies for the current runtime...")
+        ok, output = install_dependencies_for_current_runtime()
         for line in output.splitlines()[-12:]:
             self.write_log(line)
         if ok:
-            messagebox.showinfo("Pillow repair", "Pillow is available for this Python runtime.")
+            if not self.tray_icon:
+                self.start_tray_icon()
+            messagebox.showinfo("Dependency repair", "Required dependencies are available for this Python runtime.")
         else:
-            messagebox.showerror("Pillow repair failed", output[-1200:] if output else "pip failed without output")
+            messagebox.showerror("Dependency repair failed", output[-1200:] if output else "pip failed without output")
         self.refresh_thumbnail_controls()
 
     def current_config(self) -> WatcherConfig:
@@ -1751,6 +2472,9 @@ class WatcherApp:
             scan_interval_seconds=interval,
             stable_seconds=stable,
             create_thumbnails=bool(self.create_thumbnails_var.get()),
+            attach_sim_camera_metadata=bool(self.attach_sim_camera_metadata_var.get()),
+            simconnect_dll_path=self.simconnect_dll_path_var.get().strip(),
+            delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
         )
@@ -1764,6 +2488,20 @@ class WatcherApp:
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
             self.watched_folder_var.set(selected)
+
+    def browse_simconnect_dll(self) -> None:
+        """
+        Open a file picker for the optional SimConnect client DLL.
+
+        @return: None.
+        """
+        selected = filedialog.askopenfilename(
+            title="Select SimConnect.dll",
+            initialdir=str(Path(self.simconnect_dll_path_var.get()).parent) if self.simconnect_dll_path_var.get().strip() else str(Path.home()),
+            filetypes=[("SimConnect DLL", "SimConnect.dll"), ("DLL files", "*.dll"), ("All files", "*.*")],
+        )
+        if selected:
+            self.simconnect_dll_path_var.set(selected)
 
     def select_manual_files(self) -> None:
         """
@@ -1967,6 +2705,10 @@ class WatcherApp:
 
         @return: None.
         """
+        if self.exiting:
+            return
+        self.exiting = True
+        self.stop_tray_icon()
         self.stop()
         self.stop_manual_upload()
         self.root.after(150, self.root.destroy)
@@ -1990,6 +2732,8 @@ class WatcherApp:
 
         @return: None.
         """
+        if self.exiting:
+            return
         while True:
             try:
                 level, message = self.events.get_nowait()

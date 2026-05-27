@@ -330,6 +330,108 @@ function upload_automation_image_client_ids(): array
 }
 
 /**
+ * Parse optional Flight Simulator camera metadata from the upload request.
+ *
+ * @return array{lat:float,lng:float,altitude:float|null,source:string}|null
+ */
+function upload_automation_sim_camera_metadata(): ?array
+{
+    $rawSource = $_POST['sim_location_source'] ?? '';
+    if (is_array($rawSource)) {
+        return null;
+    }
+
+    $source = trim((string) $rawSource);
+    if ($source !== 'simconnect_camera') {
+        return null;
+    }
+
+    $latitude = upload_automation_float_field('sim_camera_latitude');
+    $longitude = upload_automation_float_field('sim_camera_longitude');
+    $altitude = upload_automation_float_field('sim_camera_altitude');
+    if ($latitude === null || $longitude === null) {
+        return null;
+    }
+    if ($latitude < -90.0 || $latitude > 90.0 || $longitude < -180.0 || $longitude > 180.0) {
+        return null;
+    }
+
+    return [
+        'lat' => round($latitude, 7),
+        'lng' => round($longitude, 7),
+        'altitude' => $altitude === null ? null : round($altitude, 2),
+        'source' => $source,
+    ];
+}
+
+/**
+ * Parse one finite floating-point POST field.
+ */
+function upload_automation_float_field(string $name): ?float
+{
+    $raw = $_POST[$name] ?? null;
+    if (is_array($raw)) {
+        return null;
+    }
+
+    $text = trim((string) $raw);
+    if ($text === '') {
+        return null;
+    }
+
+    $value = filter_var($text, FILTER_VALIDATE_FLOAT);
+    return $value === false ? null : (float) $value;
+}
+
+/**
+ * Attach parsed Flight Simulator camera metadata to stored image rows.
+ *
+ * @param int $galleryId Target gallery authorized by the API key.
+ * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
+ * @param array{lat:float,lng:float,altitude:float|null,source:string}|null $metadata Parsed metadata.
+ * @return array{attached:int,skipped:int,error:string}
+ */
+function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stored, ?array $metadata): array
+{
+    $result = ['attached' => 0, 'skipped' => 0, 'error' => ''];
+    if ($metadata === null) {
+        return $result;
+    }
+    if (!exif_gps_schema_ready()) {
+        $result['skipped'] = count((array) ($stored['image_ids'] ?? []));
+        $result['error'] = 'GPS metadata columns are unavailable.';
+        return $result;
+    }
+
+    $imageIds = array_values(array_filter(array_map('intval', (array) ($stored['image_ids'] ?? []))));
+    if (!$imageIds) {
+        $result['error'] = 'No stored image rows were available for camera metadata.';
+        return $result;
+    }
+
+    $stmt = db()->prepare('UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+    $now = now_sql();
+    foreach ($imageIds as $imageId) {
+        $stmt->execute([
+            $metadata['lat'],
+            $metadata['lng'],
+            $metadata['altitude'],
+            $now,
+            $now,
+            $imageId,
+            $galleryId,
+        ]);
+        if ($stmt->rowCount() > 0) {
+            $result['attached']++;
+        } else {
+            $result['skipped']++;
+        }
+    }
+
+    return $result;
+}
+
+/**
  * Return validated client-generated thumbnail upload entries.
  *
  * The accepted format mirrors PHP Gallery's own responsive thumbnail cache:

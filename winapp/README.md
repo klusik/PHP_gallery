@@ -44,6 +44,12 @@ That means:
 - Only files added after pressing Start watching are uploaded.
 - Duplicate watched-folder uploads are avoided through the local upload state file.
 - Failed watched-folder uploads are retried with backoff.
+- Optional checkbox, enabled by default: attach the current Microsoft Flight Simulator camera location to watched-folder uploads when SimConnect is available.
+- Optional checkbox: delete watched-folder source files after the gallery confirms that the image was uploaded successfully.
+
+The Flight Simulator camera-location option queries SimConnect immediately before each watched-folder upload. It sends latitude, longitude, and altitude to PHP Gallery as upload metadata and does not modify the image file. If Flight Simulator or SimConnect is unavailable, the upload continues without location metadata.
+
+The app first tries a local `SimConnect.dll` beside the winapp, then the `SIMCONNECT_DLL` environment variable, then a few common MSFS SDK install locations, and finally the normal Windows DLL loader. If you want to override that automatic search, use the optional `SimConnect.dll override` field.
 
 ## Manual upload mode
 
@@ -61,7 +67,7 @@ The Manual upload tab has two performance controls:
 
 The app pipelines the work. It does not generate thumbnails for the whole selection first. It keeps a bounded number of thumbnail jobs and upload jobs in flight, uploads images as soon as their thumbnails are ready, and removes temporary thumbnail files after each upload finishes.
 
-Client-side thumbnails require Pillow. `install.bat` installs it from `requirements.txt` into the same Python runtime used by the Start Menu shortcut. This avoids the Windows file-association issue where `.pyw` files can start through a different Python version than the one used from Command Prompt.
+Client-side thumbnails require Pillow. Tray support requires `pystray`. `install.bat` installs both from `requirements.txt` into the same Python runtime used by the Start Menu shortcut. This avoids the Windows file-association issue where `.pyw` files can start through a different Python version than the one used from Command Prompt.
 
 You can also install it manually into the Python shown inside the app:
 
@@ -69,9 +75,21 @@ You can also install it manually into the Python shown inside the app:
 python -m pip install --user -r requirements.txt
 ```
 
-If the checkbox is disabled, open the Manual upload tab and check the runtime line. It shows the exact `pythonw.exe` or `python.exe` that is running the app. Use the `Install or repair Pillow` button to install Pillow into that exact runtime without guessing.
+If the checkbox is disabled, open the Manual upload tab and check the runtime line. It shows the exact `pythonw.exe` or `python.exe` that is running the app. Use the `Install or repair dependencies` button to install the winapp packages into that exact runtime without guessing.
 
-If Pillow is missing, watch-folder uploads still work and manual uploads can still use server-side thumbnail generation.
+If Pillow is missing, watch-folder uploads still work and manual uploads can still use server-side thumbnail generation. If `pystray` is missing, the app still opens but tray hiding is disabled until dependencies are installed.
+
+## System tray
+
+The Windows app includes a tray icon so uploads can continue while the main window is hidden.
+
+- Minimizing the window hides it to the system tray when tray support is available.
+- Closing the window hides it to the system tray instead of stopping the app.
+- If the watcher or a manual upload is running, closing asks whether to hide to tray, exit, or keep the window open.
+- The tray menu includes Open, Start watching, Stop watching, and Exit.
+- Use Exit from the tray menu when you want to stop background work and fully close the app.
+
+Tray support requires `pystray`, installed by `install.bat` from `requirements.txt`.
 
 ## Runtime files
 
@@ -81,7 +99,11 @@ Configuration and upload state are stored under the current Windows user profile
 %APPDATA%\PHPGalleryUploader\
 ```
 
-The app never deletes local source photos. Watch-folder mode marks a file as uploaded only after the gallery returns a successful JSON response.
+By default, the app does not delete local source photos.
+
+If `Delete watched-folder files after a confirmed successful upload` is enabled, watch-folder mode removes only files that the gallery confirms as uploaded successfully. Failed, skipped, and duplicate files are kept locally.
+
+Watch-folder mode marks a file as uploaded only after the gallery returns a successful JSON response.
 
 ## Notes
 
