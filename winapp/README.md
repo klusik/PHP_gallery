@@ -44,7 +44,12 @@ That means:
 - Only files added after pressing Start watching are uploaded.
 - Duplicate watched-folder uploads are avoided through the local upload state file.
 - Failed watched-folder uploads are retried with backoff.
+- Optional checkbox, enabled by default: attach the current Microsoft Flight Simulator camera location to watched-folder uploads when SimConnect is available.
 - Optional checkbox: delete watched-folder source files after the gallery confirms that the image was uploaded successfully.
+
+The Flight Simulator camera-location option queries SimConnect immediately before each watched-folder upload. It sends latitude, longitude, and altitude to PHP Gallery as upload metadata and does not modify the image file. If Flight Simulator or SimConnect is unavailable, the upload continues without location metadata.
+
+The app first tries a local `SimConnect.dll` beside the winapp, then the `SIMCONNECT_DLL` environment variable, then a few common MSFS SDK install locations, and finally the normal Windows DLL loader. If you want to override that automatic search, use the optional `SimConnect.dll override` field.
 
 ## Manual upload mode
 
