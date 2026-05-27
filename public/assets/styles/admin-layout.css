@@ -794,6 +794,66 @@
     width: 26px;
 }
 
+.gallery-map-viewport-control {
+    overflow: hidden;
+}
+.gallery-map-viewport-control button {
+    appearance: none;
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid #ccc;
+    color: #000;
+    cursor: pointer;
+    display: block;
+    font: 700 14px/28px Arial, Helvetica, sans-serif;
+    height: 28px;
+    min-width: 28px;
+    padding: 0 8px;
+    text-align: center;
+}
+.gallery-map-viewport-control button:first-child {
+    font-size: 12px;
+    min-width: 56px;
+}
+.gallery-map-viewport-control button:hover,
+.gallery-map-viewport-control button:focus-visible {
+    background: #f4f4f4;
+    outline: none;
+}
+.gallery-map-viewport-control button:focus-visible {
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
+}
+.gallery-map-viewport-checkbox {
+    align-items: center;
+    background: #fff;
+    color: #000;
+    cursor: pointer;
+    display: flex;
+    font: 600 12px/1.2 Arial, Helvetica, sans-serif;
+    gap: 6px;
+    max-width: 148px;
+    padding: 8px 10px;
+    user-select: none;
+}
+.gallery-map-viewport-checkbox input {
+    accent-color: #2563eb;
+    cursor: pointer;
+    flex: 0 0 auto;
+    height: 14px;
+    margin: 0;
+    width: 14px;
+}
+.gallery-map-viewport-checkbox span {
+    display: inline-block;
+}
+.gallery-map-viewport-checkbox:hover,
+.gallery-map-viewport-checkbox:focus-within {
+    background: #f4f4f4;
+}
+.gallery-map-viewport-checkbox:focus-within {
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
+}
+
 .leaflet-control-zoom a:hover,
 .leaflet-control-zoom a:focus {
     background: #f4f4f4;
