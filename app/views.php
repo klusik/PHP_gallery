@@ -39,6 +39,7 @@ require_once __DIR__ . '/views/seo.php';
 require_once __DIR__ . '/views/admin_chrome.php';
 require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/admin_gallery_forms.php';
+require_once __DIR__ . '/views/admin_gallery_migration.php';
 require_once __DIR__ . '/views/gallery_descriptions.php';
 require_once __DIR__ . '/views/simbrief_descriptions.php';
 require_once __DIR__ . '/views/layout.php';

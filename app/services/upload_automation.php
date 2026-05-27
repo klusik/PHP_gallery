@@ -245,6 +245,257 @@ function mark_upload_automation_token_used(int $tokenId): void
     $stmt->execute([now_sql(), $tokenId]);
 }
 
+
+/**
+ * Normalize one client inventory row submitted by the companion app.
+ *
+ * Inventory rows are intentionally small. The client sends the original local
+ * filename, byte size, and SHA-256 hash it already calculated before upload.
+ * The gallery answers whether the scoped target gallery already contains the
+ * same content, so interrupted transfer batches can continue without sending
+ * confirmed files again.
+ *
+ * @param array<string,mixed> $row Client-submitted file descriptor.
+ * @return array{client_id:string,filename:string,size:int,sha256:string}|null Normalized row or null when the row is unusable.
+ */
+function upload_automation_normalize_inventory_row(array $row): ?array
+{
+    // $sha256 stores the content hash supplied by the active gallery or companion app.
+    $sha256 = strtolower(trim((string) ($row['sha256'] ?? '')));
+    if ($sha256 === '' || preg_match('/^[a-f0-9]{64}$/', $sha256) !== 1) {
+        return null;
+    }
+
+    // $filename stores only a basename. Remote inventory never trusts client paths.
+    $filename = basename(str_replace('\\', '/', trim((string) ($row['filename'] ?? ''))));
+    if ($filename === '') {
+        $filename = $sha256;
+    }
+
+    // $size stores the byte length as a defensive secondary match check.
+    $size = max(0, (int) ($row['size'] ?? 0));
+    // $clientId is echoed back so a caller can map responses without trusting filenames.
+    $clientId = trim((string) ($row['client_id'] ?? ''));
+    if ($clientId === '') {
+        $clientId = $sha256;
+    }
+
+    return [
+        'client_id' => $clientId,
+        'filename' => $filename,
+        'size' => $size,
+        'sha256' => $sha256,
+    ];
+}
+
+/**
+ * Normalize a client-submitted inventory request.
+ *
+ * @param array<string,mixed> $payload Decoded JSON payload from the API request.
+ * @return array<int,array{client_id:string,filename:string,size:int,sha256:string}> Clean candidate rows capped to a safe maximum.
+ */
+function upload_automation_inventory_candidates(array $payload): array
+{
+    // $rawRows stores the user-provided list from the JSON body.
+    $rawRows = $payload['files'] ?? [];
+    if (!is_array($rawRows)) {
+        return [];
+    }
+
+    // $candidates stores de-duplicated rows keyed by content hash.
+    $candidates = [];
+    foreach ($rawRows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $candidate = upload_automation_normalize_inventory_row($row);
+        if ($candidate === null) {
+            continue;
+        }
+        $candidates[$candidate['sha256']] = $candidate;
+        if (count($candidates) >= 5000) {
+            break;
+        }
+    }
+
+    return array_values($candidates);
+}
+
+/**
+ * Return a compact direct-image fingerprint for one gallery inventory response.
+ *
+ * @param int $galleryId Gallery being inspected.
+ * @return string Stable fingerprint based on the current indexed direct images.
+ */
+function upload_automation_gallery_inventory_fingerprint(int $galleryId): string
+{
+    // $stmt stores a small aggregate used by clients for diagnostic logging.
+    $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'");
+    $stmt->execute([$galleryId]);
+    $row = $stmt->fetch() ?: [];
+    return hash('sha256', json_encode([
+        'image_count' => (int) ($row['image_count'] ?? 0),
+        'newest_update' => (string) ($row['newest_update'] ?? ''),
+        'total_size' => (string) ($row['total_size'] ?? '0'),
+    ], JSON_UNESCAPED_SLASHES));
+}
+
+/**
+ * Return database matches for inventory candidates by SHA-256 checksum.
+ *
+ * @param int $galleryId Gallery whose direct images are searched.
+ * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
+ * @return array<string,array<string,mixed>> Remote rows keyed by checksum.
+ */
+function upload_automation_inventory_db_matches(int $galleryId, array $candidates): array
+{
+    // $hashes stores the submitted content hashes that are cheap to compare with indexed image rows.
+    $hashes = array_values(array_unique(array_map(static fn (array $row): string => (string) $row['sha256'], $candidates)));
+    if (!$hashes) {
+        return [];
+    }
+
+    // $matches stores rows keyed by remote checksum_sha256.
+    $matches = [];
+    foreach (array_chunk($hashes, 250) as $hashChunk) {
+        // $placeholders stores the prepared IN-list for this bounded chunk.
+        $placeholders = implode(',', array_fill(0, count($hashChunk), '?'));
+        $stmt = db()->prepare("SELECT id, filename, relative_path, file_size, checksum_sha256 FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders)");
+        $stmt->execute(array_merge([$galleryId], $hashChunk));
+        foreach ($stmt->fetchAll() ?: [] as $row) {
+            $hash = strtolower((string) ($row['checksum_sha256'] ?? ''));
+            if ($hash === '') {
+                continue;
+            }
+            $matches[$hash] = [
+                'image_id' => (int) ($row['id'] ?? 0),
+                'filename' => (string) ($row['filename'] ?? ''),
+                'relative_path' => (string) ($row['relative_path'] ?? ''),
+                'file_size' => (int) ($row['file_size'] ?? 0),
+                'sha256' => $hash,
+                'matched_by' => 'checksum_sha256',
+            ];
+        }
+    }
+
+    return $matches;
+}
+
+/**
+ * Return direct filesystem matches for inventory candidates that are not indexed yet.
+ *
+ * This catches the narrow failure case where an upload request stored the file on
+ * disk but the HTTP response was lost before the client saw success. Only files
+ * whose size appears in the submitted candidate set are hashed, which keeps the
+ * reconnect probe bounded even in larger galleries.
+ *
+ * @param array<string,mixed> $gallery Gallery row that owns the scoped API key.
+ * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
+ * @param array<string,array<string,mixed>> $knownMatches Existing checksum matches from the database.
+ * @return array<string,array<string,mixed>> Additional remote rows keyed by checksum.
+ */
+function upload_automation_inventory_disk_matches(array $gallery, array $candidates, array $knownMatches): array
+{
+    // $missingBySize stores only hashes that still need a disk-level check.
+    $missingBySize = [];
+    foreach ($candidates as $candidate) {
+        $hash = (string) $candidate['sha256'];
+        if (isset($knownMatches[$hash])) {
+            continue;
+        }
+        $size = (int) $candidate['size'];
+        if ($size <= 0) {
+            continue;
+        }
+        $missingBySize[$size][$hash] = true;
+    }
+    if (!$missingBySize) {
+        return [];
+    }
+
+    // $root stores the gallery folder assigned to the authenticated API key.
+    $root = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+    if (!is_dir($root)) {
+        return [];
+    }
+
+    // $matches stores newly found disk matches keyed by content hash.
+    $matches = [];
+    foreach (new DirectoryIterator($root) as $file) {
+        if (!$file->isFile() || !is_supported_image_path($file->getFilename())) {
+            continue;
+        }
+        $size = $file->getSize();
+        if (!isset($missingBySize[$size])) {
+            continue;
+        }
+        $hash = strtolower((string) (hash_file('sha256', $file->getPathname()) ?: ''));
+        if ($hash === '' || !isset($missingBySize[$size][$hash])) {
+            continue;
+        }
+        $matches[$hash] = [
+            'image_id' => 0,
+            'filename' => $file->getFilename(),
+            'relative_path' => normalize_relative_path($file->getFilename()),
+            'file_size' => $size,
+            'sha256' => $hash,
+            'matched_by' => 'disk_sha256',
+        ];
+    }
+
+    return $matches;
+}
+
+/**
+ * Build the API response that tells the active side which files already exist.
+ *
+ * @param int $galleryId Gallery id authorized by the API key.
+ * @param array<string,mixed> $gallery Gallery row authorized by the API key.
+ * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
+ * @return array<string,mixed> JSON-safe inventory response.
+ */
+function upload_automation_gallery_inventory_response(int $galleryId, array $gallery, array $candidates): array
+{
+    // $dbMatches stores the normal indexed-image matches.
+    $dbMatches = upload_automation_inventory_db_matches($galleryId, $candidates);
+    // $diskMatches stores fallback direct-file matches for interrupted requests.
+    $diskMatches = upload_automation_inventory_disk_matches($gallery, $candidates, $dbMatches);
+    // $matches stores the combined remote truth keyed by content hash.
+    $matches = array_replace($diskMatches, $dbMatches);
+
+    // $existing stores rows the client can use to skip already transferred files.
+    $existing = [];
+    foreach ($candidates as $candidate) {
+        $hash = (string) $candidate['sha256'];
+        if (!isset($matches[$hash])) {
+            continue;
+        }
+        $remote = $matches[$hash];
+        $existing[] = [
+            'client_id' => (string) $candidate['client_id'],
+            'filename' => (string) $candidate['filename'],
+            'size' => (int) $candidate['size'],
+            'sha256' => $hash,
+            'remote_filename' => (string) ($remote['filename'] ?? ''),
+            'remote_relative_path' => (string) ($remote['relative_path'] ?? ''),
+            'remote_image_id' => (int) ($remote['image_id'] ?? 0),
+            'matched_by' => (string) ($remote['matched_by'] ?? 'checksum_sha256'),
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'action' => 'inventory',
+        'gallery_id' => $galleryId,
+        'gallery_folder' => (string) ($gallery['folder_path'] ?? ''),
+        'checked' => count($candidates),
+        'matched' => count($existing),
+        'existing' => $existing,
+        'fingerprint' => upload_automation_gallery_inventory_fingerprint($galleryId),
+        'server_time' => now_sql(),
+    ];
+}
+
 /**
  * Extract an upload automation API key from common HTTP locations.
  */

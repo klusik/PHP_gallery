@@ -52,6 +52,60 @@ function upload_automation_json(array $payload, int $status = 200): void
     echo json_encode($payload);
 }
 
+
+/**
+ * Decode the current upload automation JSON request body when present.
+ *
+ * Multipart uploads and form-encoded revoke requests keep using $_POST and
+ * $_FILES. The inventory handshake uses application/json because it sends file
+ * descriptors, not image bytes. Invalid JSON returns an empty payload so the
+ * normal action validation can return a controlled JSON error instead of a PHP
+ * warning.
+ *
+ * @return array<string,mixed> Decoded JSON object, or an empty array for non-JSON requests.
+ */
+function upload_automation_json_request_payload(): array
+{
+    // $contentType stores the request media type reported by the web server.
+    $contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? ''));
+    if (!str_contains($contentType, 'application/json')) {
+        return [];
+    }
+
+    // $rawBody stores the JSON request body for inventory handshakes.
+    $rawBody = file_get_contents('php://input');
+    if (!is_string($rawBody) || trim($rawBody) === '') {
+        return [];
+    }
+
+    try {
+        $payload = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException) {
+        return [];
+    }
+
+    return is_array($payload) ? $payload : [];
+}
+
+/**
+ * Resolve the upload automation action from form data or JSON payload.
+ *
+ * @param array<string,mixed> $jsonPayload Decoded JSON object for inventory calls.
+ * @return string Normalized action name.
+ */
+function upload_automation_request_action(array $jsonPayload): string
+{
+    // $postAction stores the legacy multipart or form-encoded action value.
+    $postAction = trim((string) ($_POST['action'] ?? ''));
+    if ($postAction !== '') {
+        return $postAction;
+    }
+
+    // $jsonAction stores the action value used by JSON inventory probes.
+    $jsonAction = trim((string) ($jsonPayload['action'] ?? ''));
+    return $jsonAction !== '' ? $jsonAction : 'upload';
+}
+
 /**
  * Handle POST uploads from the Windows folder watcher app.
  */
@@ -89,8 +143,19 @@ function cms_upload_automation_upload(): void
         return;
     }
 
+    // $jsonPayload stores optional metadata-only API commands such as inventory checks.
+    $jsonPayload = upload_automation_json_request_payload();
     // $action stores the requested automation command. Revoke is allowed when the request is authenticated by the current API key.
-    $action = (string) ($_POST['action'] ?? 'upload');
+    $action = upload_automation_request_action($jsonPayload);
+
+    if ($action === 'inventory') {
+        // $candidates stores local files the active side wants to compare with this gallery.
+        $candidates = upload_automation_inventory_candidates($jsonPayload);
+        mark_upload_automation_token_used((int) $tokenRow['id']);
+        upload_automation_json(upload_automation_gallery_inventory_response($galleryId, $gallery, $candidates));
+        return;
+    }
+
     if ($action === 'revoke') {
         $tokenId = (int) ($tokenRow['id'] ?? 0);
         if ($tokenId <= 0 || !revoke_gallery_upload_automation_token($galleryId, $tokenId)) {

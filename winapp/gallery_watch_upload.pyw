@@ -89,6 +89,7 @@ SUPPORTED_SUFFIXES = {
 DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
+DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
 THUMBNAIL_SIZES = [300, 600, 800, 960, 1280, 1600]
 DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
 DEFAULT_UPLOAD_WORKERS = 4
@@ -140,6 +141,8 @@ class WatcherConfig:
         thumbnail generation. Zero means automatic.
     @param manual_upload_workers: Manual upload thread count for multipart HTTP
         upload requests. Zero means automatic.
+    @param inventory_refresh_seconds: Seconds between remote inventory handshakes.
+        The default keeps long batches using fresh short-lived API requests.
     """
 
     watched_folder: str = ""
@@ -153,6 +156,7 @@ class WatcherConfig:
     delete_uploaded_files: bool = False
     manual_thumbnail_workers: int = 0
     manual_upload_workers: int = 0
+    inventory_refresh_seconds: float = DEFAULT_INVENTORY_REFRESH_SECONDS
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
@@ -181,6 +185,7 @@ class WatcherConfig:
             delete_uploaded_files=bool(data.get("delete_uploaded_files", False)),
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
             manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
+            inventory_refresh_seconds=float(data.get("inventory_refresh_seconds", DEFAULT_INVENTORY_REFRESH_SECONDS) or DEFAULT_INVENTORY_REFRESH_SECONDS),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -201,6 +206,7 @@ class WatcherConfig:
             "delete_uploaded_files": self.delete_uploaded_files,
             "manual_thumbnail_workers": self.manual_thumbnail_workers,
             "manual_upload_workers": self.manual_upload_workers,
+            "inventory_refresh_seconds": self.inventory_refresh_seconds,
         }
 
 
@@ -978,6 +984,195 @@ def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
     return payload
 
 
+
+def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
+    """
+    Submit one JSON API request and parse the JSON response.
+
+    The companion app uses JSON only for metadata handshakes. Image bytes still
+    use multipart/form-data because PHP Gallery routes them through the normal
+    upload pipeline. Keeping this helper separate from multipart_upload makes the
+    reconnect inventory request cheap and safe to call repeatedly during long
+    batches.
+
+    @param upload_url: Normalized PHP Gallery upload endpoint.
+    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param payload: JSON-serializable request object.
+    @param timeout_seconds: Network timeout for this metadata request.
+    @return: Parsed JSON response from the server.
+    @raises RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
+    """
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    http_request = request.Request(
+        upload_url,
+        data=body,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Content-Length": str(len(body)),
+            "X-Gallery-API-Key": api_key,
+            "Accept": "application/json",
+            "User-Agent": "PHPGalleryUploader/1.2",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+            response_body = response.read().decode("utf-8", errors="replace")
+    except error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(response_body)
+            message = error_payload.get("error") if isinstance(error_payload, dict) else None
+        except json.JSONDecodeError:
+            message = None
+        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+    except error.URLError as exc:
+        raise RuntimeError(str(exc.reason)) from exc
+
+    try:
+        response_payload = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Server returned non-JSON response: {response_body[:300]}") from exc
+    if not isinstance(response_payload, dict):
+        raise RuntimeError("Server returned an invalid JSON response.")
+    if not response_payload.get("ok"):
+        raise RuntimeError(str(response_payload.get("error") or "API request failed."))
+    return response_payload
+
+
+def inventory_candidate(path: Path, file_hash: Optional[str] = None, size: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Build one file descriptor for a remote gallery inventory request.
+
+    @param path: Local image path being compared with the target gallery.
+    @param file_hash: Optional precomputed SHA-256 hash. When omitted, the file is hashed now.
+    @param size: Optional precomputed file size. When omitted, stat() is used now.
+    @return: JSON-safe file descriptor accepted by PHP Gallery.
+    @raises OSError: Propagated when the file cannot be read or statted.
+    """
+    resolved_hash = file_hash or sha256_file(path)
+    resolved_size = int(size if size is not None else path.stat().st_size)
+    return {
+        "client_id": resolved_hash,
+        "filename": path.name,
+        "size": resolved_size,
+        "sha256": resolved_hash,
+    }
+
+
+class RemoteInventorySession:
+    """
+    Maintains a short-lived view of the passive gallery inventory.
+
+    The session does not persist transfer state. It asks the remote gallery what
+    already exists, remembers only the current process answer, and refreshes that
+    answer after the configured reconnect interval or immediately after an upload
+    failure. This is deliberately API-driven so a restarted client still treats
+    the gallery as the authority.
+    """
+
+    def __init__(self, refresh_seconds: float, emit: Any) -> None:
+        """
+        Create a remote inventory session.
+
+        @param refresh_seconds: Minimum seconds between planned inventory probes.
+        @param emit: Callback receiving status level and message.
+        @return: None.
+        """
+        self.refresh_seconds = max(1.0, float(refresh_seconds or DEFAULT_INVENTORY_REFRESH_SECONDS))
+        self.emit = emit
+        self.last_refresh_at = 0.0
+        self.last_fingerprint = ""
+        self.existing_hashes: Set[str] = set()
+        self.lock = threading.Lock()
+
+    def due(self) -> bool:
+        """
+        Return whether the planned reconnect interval has elapsed.
+
+        @return: True when another inventory handshake should be made.
+        """
+        return (time.time() - self.last_refresh_at) >= self.refresh_seconds
+
+    def remember_existing(self, payload: Dict[str, Any]) -> int:
+        """
+        Store hashes confirmed by a gallery inventory response.
+
+        @param payload: Parsed inventory response returned by PHP Gallery.
+        @return: Number of confirmed remote files in this response.
+        """
+        existing = payload.get("existing", [])
+        if not isinstance(existing, list):
+            return 0
+        matched = 0
+        for row in existing:
+            if not isinstance(row, dict):
+                continue
+            remote_hash = str(row.get("sha256", "")).lower()
+            if len(remote_hash) != 64:
+                continue
+            self.existing_hashes.add(remote_hash)
+            matched += 1
+        self.last_fingerprint = str(payload.get("fingerprint", "") or self.last_fingerprint)
+        return matched
+
+    def refresh(self, upload_url: str, api_key: str, candidates: List[Dict[str, Any]], force: bool = False) -> bool:
+        """
+        Ask the passive gallery which submitted files already exist.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @param api_key: Gallery-scoped API key.
+        @param candidates: Local file descriptors to compare with the gallery.
+        @param force: When True, refresh even before the planned interval elapses.
+        @return: True when the API call completed successfully.
+        """
+        if not candidates:
+            return False
+        if not force and not self.due():
+            return False
+        with self.lock:
+            if not force and not self.due():
+                return False
+            try:
+                payload = post_json(
+                    upload_url,
+                    api_key,
+                    {"action": "inventory", "files": candidates},
+                    timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(10.0, self.refresh_seconds)),
+                )
+                matched = self.remember_existing(payload)
+                self.last_refresh_at = time.time()
+                checked = int(payload.get("checked", len(candidates)) or 0)
+                self.emit("info", f"Remote inventory refreshed: checked={checked}, already_present={matched}.")
+                return True
+            except Exception as exc:  # noqa: BLE001
+                self.last_refresh_at = time.time()
+                self.emit("warning", f"Remote inventory refresh failed: {exc}")
+                return False
+
+    def has_hash(self, file_hash: str) -> bool:
+        """
+        Return whether the remote gallery has confirmed this content hash.
+
+        @param file_hash: SHA-256 hash of a local file.
+        @return: True when a previous inventory response matched it.
+        """
+        return file_hash.lower() in self.existing_hashes
+
+    def confirm_after_failure(self, upload_url: str, api_key: str, candidate: Dict[str, Any]) -> bool:
+        """
+        Force a reconnect probe after an upload request failed or timed out.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @param api_key: Gallery-scoped API key.
+        @param candidate: File descriptor for the request that just failed.
+        @return: True when the gallery now reports the file as already present.
+        """
+        self.refresh(upload_url, api_key, [candidate], force=True)
+        return self.has_hash(str(candidate.get("sha256", "")))
+
+
 def sha256_file(path: Path) -> str:
     """
     Calculate a file SHA-256 hash without loading the whole file at once.
@@ -1465,6 +1660,8 @@ class WatcherThread(threading.Thread):
         self.stop_event = threading.Event()
         self.state = UploadState()
         self.stability = FileStabilityTracker(config.stable_seconds)
+        self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
+        self.remote_skipped_paths: Set[Tuple[Path, str]] = set()
         self.initial_paths: Set[Path] = set()
 
     def stop(self) -> None:
@@ -1510,6 +1707,7 @@ class WatcherThread(threading.Thread):
         self.initial_paths = set(iter_candidate_files(folder))
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
+        self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
         if self.config.attach_sim_camera_metadata:
             self.emit("info", "Flight Simulator camera metadata enabled. " + SimConnectCameraClient(self.config.simconnect_dll_path).dll_resolution_message())
         else:
@@ -1551,12 +1749,25 @@ class WatcherThread(threading.Thread):
                 self.emit("warning", f"Cannot read {path.name}: {exc}")
                 continue
 
+            if (path, file_hash) in self.remote_skipped_paths:
+                continue
             if self.state.already_uploaded_path(path, file_hash):
                 continue
             if self.state.already_uploaded_hash(file_hash):
                 self.state.mark_duplicate(path, file_hash, size)
                 self.emit("info", f"Skipped duplicate content: {path.name}")
                 continue
+
+            # The remote gallery remains authoritative after restarts or lost
+            # responses. Refreshing here creates a new short API connection before
+            # the next upload when the planned reconnect interval has elapsed.
+            candidate = inventory_candidate(path, file_hash, size)
+            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
+            if self.remote_inventory.has_hash(file_hash):
+                self.remote_skipped_paths.add((path, file_hash))
+                self.emit("info", f"Skipped already present on gallery: {path.name}")
+                continue
+
             if not self.state.retry_allowed(path, file_hash):
                 continue
 
@@ -1580,6 +1791,10 @@ class WatcherThread(threading.Thread):
                     self.delete_uploaded_file(path, payload)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
+                if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
+                    self.remote_skipped_paths.add((path, file_hash))
+                    self.emit("info", f"Upload response failed, but gallery inventory confirms {path.name} is already present; skipping retry.")
+                    continue
                 self.state.mark_failure(path, file_hash, message)
                 self.emit("error", f"Upload failed for {path.name}: {message}")
 
@@ -1675,8 +1890,10 @@ class ManualUploadThread(threading.Thread):
         self.stop_event = threading.Event()
         self.uploaded = 0
         self.failed = 0
+        self.skipped_existing = 0
         self.completed_uploads = 0
         self.progress_lock = threading.Lock()
+        self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
 
     def stop(self) -> None:
         """
@@ -1714,13 +1931,54 @@ class ManualUploadThread(threading.Thread):
 
         self.emit("info", f"Manual upload started: {len(self.paths)} file(s).")
         self.emit("info", f"Upload endpoint: {upload_url}")
+        self.emit("info", f"Remote inventory reconnect interval: {self.config.inventory_refresh_seconds:g} seconds.")
+
+        self.preload_remote_inventory(upload_url)
 
         if self.client_thumbnails:
             self.run_with_client_thumbnails(upload_url)
         else:
             self.run_with_server_thumbnails(upload_url)
 
-        self.emit("info", f"Manual upload finished: uploaded={self.uploaded}, failed={self.failed}.")
+        self.emit("info", f"Manual upload finished: uploaded={self.uploaded}, skipped_existing={self.skipped_existing}, failed={self.failed}.")
+
+    def preload_remote_inventory(self, upload_url: str) -> None:
+        """
+        Ask the gallery which selected files are already present before a batch.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @return: None.
+        """
+        candidates: List[Dict[str, Any]] = []
+        for path in self.paths:
+            if self.stop_event.is_set():
+                return
+            try:
+                candidates.append(inventory_candidate(path))
+            except OSError as exc:
+                self.emit("warning", f"Cannot include {path.name} in remote inventory preload: {exc}")
+        if candidates:
+            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), candidates, force=True)
+
+    def remote_skip_before_work(self, upload_url: str, path: Path, file_hash: str, size: int) -> bool:
+        """
+        Return whether an upload should be skipped because the gallery has it.
+
+        @param upload_url: Normalized PHP Gallery upload endpoint.
+        @param path: Local image path being considered.
+        @param file_hash: SHA-256 hash of the local image.
+        @param size: Local file size in bytes.
+        @return: True when the remote gallery confirms the file already exists.
+        """
+        candidate = inventory_candidate(path, file_hash, size)
+        self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
+        if not self.remote_inventory.has_hash(file_hash):
+            return False
+        with self.progress_lock:
+            self.skipped_existing += 1
+            self.completed_uploads += 1
+        self.emit("info", f"Skipped already present on gallery: {path.name}")
+        return True
 
     def run_with_server_thumbnails(self, upload_url: str) -> None:
         """
@@ -1804,16 +2062,33 @@ class ManualUploadThread(threading.Thread):
             """
             Submit one thumbnail job to the process pool when input remains.
 
+            Files already confirmed by the remote gallery are consumed here
+            without starting local thumbnail generation. The loop continues until
+            it either queues real work or exhausts the selected file list.
+
             @return: True when a thumbnail task was submitted.
             """
-            try:
-                index, path = next(path_iterator)
-            except StopIteration:
-                return False
-            client_upload_id = uuid.uuid4().hex
-            future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
-            pending_thumbnails[future] = (index, path, client_upload_id)
-            return True
+            while not self.stop_event.is_set():
+                try:
+                    index, path = next(path_iterator)
+                except StopIteration:
+                    return False
+                try:
+                    file_hash = sha256_file(path)
+                    size = path.stat().st_size
+                except OSError as exc:
+                    with self.progress_lock:
+                        self.failed += 1
+                        self.completed_uploads += 1
+                    self.emit("error", f"Cannot read {path.name}: {exc}")
+                    continue
+                if self.remote_skip_before_work(upload_url, path, file_hash, size):
+                    continue
+                client_upload_id = uuid.uuid4().hex
+                future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
+                pending_thumbnails[future] = (index, path, client_upload_id)
+                return True
+            return False
 
         def submit_upload(
             path: Path,
@@ -1956,6 +2231,17 @@ class ManualUploadThread(threading.Thread):
         @return: None.
         """
         try:
+            file_hash = sha256_file(path)
+            size = path.stat().st_size
+            candidate = inventory_candidate(path, file_hash, size)
+            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
+            if self.remote_inventory.has_hash(file_hash):
+                with self.progress_lock:
+                    self.skipped_existing += 1
+                    self.completed_uploads += 1
+                self.emit("info", f"Skipped already present on gallery: {path.name}")
+                return
+
             self.emit("info", f"Uploading {index}/{len(self.paths)}: {path.name}")
             payload = multipart_upload(
                 upload_url,
@@ -1983,6 +2269,15 @@ class ManualUploadThread(threading.Thread):
                 details = "; ".join(thumbnail_errors) if thumbnail_errors else "no detailed server message"
                 self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}")
         except Exception as exc:  # noqa: BLE001
+            try:
+                if "candidate" in locals() and self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
+                    with self.progress_lock:
+                        self.skipped_existing += 1
+                        self.completed_uploads += 1
+                    self.emit("info", f"Upload response failed, but gallery inventory confirms {path.name} is already present; skipping retry.")
+                    return
+            except Exception as confirm_exc:  # noqa: BLE001
+                self.emit("warning", f"Could not confirm remote inventory after failure for {path.name}: {confirm_exc}")
             with self.progress_lock:
                 self.failed += 1
                 self.completed_uploads += 1
@@ -2036,6 +2331,7 @@ class WatcherApp:
         self.manual_local_thumbnails_var = tk.BooleanVar(value=True)
         self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
         self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
+        self.inventory_refresh_var = tk.StringVar(value=f"{self.config.inventory_refresh_seconds:g}")
         self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
         self.manual_selection_var = tk.StringVar(value="No files selected")
         self.status_var = tk.StringVar(value="Watcher stopped")
@@ -2080,6 +2376,7 @@ class WatcherApp:
         connection = ttk.LabelFrame(outer, text="Shared connection settings")
         connection.pack(fill="x", pady=(0, 12))
         connection.columnconfigure(1, weight=1)
+        connection.columnconfigure(3, weight=0)
 
         ttk.Label(connection, text="Gallery URL or upload endpoint").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         ttk.Entry(connection, textvariable=self.gallery_url_var).grid(row=0, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
@@ -2087,10 +2384,14 @@ class WatcherApp:
         ttk.Label(connection, text="API key").grid(row=1, column=0, sticky="w", padx=8, pady=6)
         ttk.Entry(connection, textvariable=self.api_key_var, show="*").grid(row=1, column=1, columnspan=2, sticky="ew", padx=8, pady=6)
 
-        ttk.Button(connection, text="Save configuration", command=self.save_config).grid(row=2, column=1, sticky="w", padx=8, pady=(4, 8))
+        ttk.Label(connection, text="Inventory reconnect seconds").grid(row=2, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(connection, textvariable=self.inventory_refresh_var, width=12).grid(row=2, column=1, sticky="w", padx=8, pady=6)
+        ttk.Label(connection, text="Default 30. The app asks the gallery what already exists before continuing long batches.", foreground="#666666").grid(row=2, column=2, columnspan=2, sticky="w", padx=8, pady=6)
+
+        ttk.Button(connection, text="Save configuration", command=self.save_config).grid(row=3, column=1, sticky="w", padx=8, pady=(4, 8))
         self.revoke_button = ttk.Button(connection, text="Revoke API key", command=self.revoke_api_key)
-        self.revoke_button.grid(row=2, column=2, sticky="e", padx=8, pady=(4, 8))
-        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=2, column=3, sticky="e", padx=8, pady=(4, 8))
+        self.revoke_button.grid(row=3, column=2, sticky="e", padx=8, pady=(4, 8))
+        ttk.Button(connection, text="Open config folder", command=self.open_config_folder).grid(row=3, column=3, sticky="e", padx=8, pady=(4, 8))
 
         notebook = ttk.Notebook(outer)
         notebook.pack(fill="x", pady=(0, 12))
@@ -2462,8 +2763,9 @@ class WatcherApp:
             stable = max(0.5, float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS))
             thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
             upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
+            inventory_refresh = max(1.0, float(self.inventory_refresh_var.get().strip() or DEFAULT_INVENTORY_REFRESH_SECONDS))
         except ValueError as exc:
-            raise ValueError("Scan interval, stable file seconds, and worker counts must be numeric.") from exc
+            raise ValueError("Scan interval, stable file seconds, inventory reconnect seconds, and worker counts must be numeric.") from exc
 
         return WatcherConfig(
             watched_folder=self.watched_folder_var.get().strip(),
@@ -2477,6 +2779,7 @@ class WatcherApp:
             delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
+            inventory_refresh_seconds=inventory_refresh,
         )
 
     def browse_folder(self) -> None:

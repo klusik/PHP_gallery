@@ -60,6 +60,7 @@ import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-
 import { setupPictureManager } from './gallery-modules/picture-manager.js?v=20260519-picture-manager-v5';
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260524-simbrief-description-v1';
+import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260527-route-photo-map-v1';
@@ -117,6 +118,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminTabs();
     setupAdminDatePickers();
     setupSimbriefDescriptionGenerator();
+    setupAdminGalleryMigration();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

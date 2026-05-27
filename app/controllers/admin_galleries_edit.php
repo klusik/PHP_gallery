@@ -931,6 +931,7 @@ function cms_admin_edit_gallery(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
     render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+    render_admin_gallery_migration_panel($gallery);
     echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
     render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
     render_admin_image_reorder_script();
