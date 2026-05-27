@@ -929,7 +929,10 @@ function gallery_flight_map_payload(array $gallery): ?array
             'title' => $name,
             'kind' => $kind,
             'description' => $kind === '' ? '' : ucfirst($kind),
+            'type' => 'route_point',
+            'point_type' => 'route_point',
             'source_type' => GALLERY_MAP_SOURCE_FLIGHT_PATH,
+            'map_source_type' => GALLERY_MAP_SOURCE_FLIGHT_PATH,
         ];
     }
 

@@ -271,6 +271,10 @@ function image_map_point(array $image, array $gallery, bool $includeThumb = true
         'description' => (string) ($image['description'] ?? ''),
         'image' => url_for('media', ['id' => $image['id']]),
         'gallery' => (string) $gallery['title'],
+        'type' => 'photo_point',
+        'point_type' => 'photo_point',
+        'source_type' => GALLERY_MAP_SOURCE_EXIF_POINT,
+        'map_source_type' => GALLERY_MAP_SOURCE_EXIF_POINT,
     ];
     if ($includeThumb) {
         $thumbnailBundle = $thumbnailBundle ?: public_render_profile_with_thumbnail_purpose('map point bundle discovery', static fn (): array => thumbnail_bundle($image));
@@ -339,6 +343,7 @@ function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $r
     });
     return hash('sha256', json_encode([
         'gallery_id' => (int) $gallery['id'],
+        'payload_version' => 2,
         'public_only' => $publicOnly,
         'recursive' => $recursive,
         'point_count' => (int) ($row['point_count'] ?? 0),
@@ -427,14 +432,21 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  * Return the unified map payload consumed by the browser Leaflet renderer.
  *
  * A saved flight path takes priority for the gallery-level map because it
- * represents the whole simflying gallery. Without a route map, the legacy EXIF
- * gallery markers are returned unchanged apart from the explicit source type.
+ * represents the whole simflying gallery. When GPS photo points are available,
+ * they are layered onto the route without changing the stored route geometry.
  */
 function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
     if (function_exists('gallery_flight_map_payload')) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
+            $photoPoints = gallery_map_points($gallery, $publicOnly, $recursive);
+            if ($photoPoints) {
+                $flightPayload['route_points'] = $flightPayload['geometry']['points'] ?? $flightPayload['points'];
+                $flightPayload['photo_points'] = $photoPoints;
+                $flightPayload['points'] = array_merge($flightPayload['points'], $photoPoints);
+                $flightPayload['map_source_type'] = 'mixed';
+            }
             return $flightPayload;
         }
     }

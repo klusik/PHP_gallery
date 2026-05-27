@@ -1646,7 +1646,7 @@ export function setupGalleryLightbox() {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
                 closeLightboxMapSplit();
             } else if (mapPoint) {
-                openLightboxMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
+                openLightboxPhotoMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
             } else if (hasLightboxGalleryMapPayload()) {
                 openLightboxGalleryMapSplit(card.dataset.title || title.textContent || currentLightboxGalleryMapTitle('Map'));
             } else {
@@ -2670,7 +2670,7 @@ export function setupGalleryLightbox() {
                 event.stopPropagation();
                 // Variable `card` stores this steps working value.
                 const card = photoButton.closest('[data-lightbox-image]');
-                openPhotoMapFromJson(photoButton.dataset.mapPoint || card?.dataset.mapPoint || '');
+                await openPhotoMapFromJson(photoButton.dataset.mapPoint || card?.dataset.mapPoint || '');
                 return;
             }
             // Variable `galleryButton` stores this steps working value.
@@ -2684,14 +2684,14 @@ export function setupGalleryLightbox() {
     }
 
     // Function `openPhotoMapFromJson` executes this focused behavior.
-    function openPhotoMapFromJson(json) {
+    async function openPhotoMapFromJson(json) {
         if (!json) {
             return;
         }
         try {
             // payload stores the marker or map payload read from a data attribute.
             const payload = JSON.parse(json);
-            const mapPayload = normalizeMapPayload(payload);
+            const mapPayload = await photoMapPayloadWithGalleryRoute(normalizeMapPayload(payload));
             openMapOverlay(mapPayload.title || 'Photo location', mapPayload.points, mapPayload);
         } catch {
             // Invalid rendered JSON should not break the gallery UI.
@@ -2853,22 +2853,25 @@ export function setupGalleryLightbox() {
     }
 
     // Function `getGalleryMapMarkerIcon` executes this focused behavior.
-    function getGalleryMapMarkerIcon() {
+    function getGalleryMapMarkerIcon(point = {}) {
         if (!window.L || !L.divIcon) {
             return undefined;
         }
 
-        if (!window.galleryMapMarkerIcon) {
-            window.galleryMapMarkerIcon = L.divIcon({
-                className: 'gallery-leaflet-marker',
+        const markerRole = mapPointMarkerRole(point);
+        window.galleryMapMarkerIcons = window.galleryMapMarkerIcons || {};
+        if (!window.galleryMapMarkerIcons[markerRole]) {
+            const isActivePhoto = markerRole === 'active-photo';
+            window.galleryMapMarkerIcons[markerRole] = L.divIcon({
+                className: `gallery-leaflet-marker gallery-leaflet-marker--${markerRole}`,
                 html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
-                iconAnchor: [13, 40],
-                iconSize: [26, 40],
-                popupAnchor: [0, -36],
+                iconAnchor: isActivePhoto ? [16, 46] : [13, 40],
+                iconSize: isActivePhoto ? [32, 46] : [26, 40],
+                popupAnchor: [0, isActivePhoto ? -42 : -36],
             });
         }
 
-        return window.galleryMapMarkerIcon;
+        return window.galleryMapMarkerIcons[markerRole];
     }
 
     // Function `ensureLeafletScript` executes this focused behavior.
@@ -3046,7 +3049,11 @@ export function setupGalleryLightbox() {
             }).addTo(map);
         }
         normalizedPoints.forEach((point) => {
-            const marker = L.marker([point.lat, point.lng], {icon: getGalleryMapMarkerIcon()}).addTo(map);
+            const markerRole = mapPointMarkerRole(point);
+            const marker = L.marker([point.lat, point.lng], {
+                icon: getGalleryMapMarkerIcon(point),
+                zIndexOffset: markerRole === 'active-photo' ? 1200 : (markerRole === 'photo' ? 500 : 0),
+            }).addTo(map);
             marker.bindPopup(mapPopupHtml(point));
             bounds.push([point.lat, point.lng]);
         });
@@ -3070,6 +3077,96 @@ export function setupGalleryLightbox() {
 
         const sourceType = String(mapPayload?.sourceType || mapPayload?.source_type || mapPayload?.map_source_type || '');
         return sourceType === 'flight_path' || mapPayload?.renderPath === true || mapPayload?.geometry?.type === 'polyline';
+    }
+
+    /**
+     * Return the visual marker role for one map point.
+     *
+     * @param {*} point Normalized marker payload.
+     * @returns {string} Marker role used by CSS and icon caching.
+     */
+    function mapPointMarkerRole(point) {
+        const pointType = String(point?.point_type || point?.type || '').trim();
+        const sourceType = String(point?.source_type || point?.map_source_type || '').trim();
+        if (point?.active_photo === true || pointType === 'active_photo_point') {
+            return 'active-photo';
+        }
+        if (pointType === 'route_point' || sourceType === 'flight_path') {
+            return 'route';
+        }
+        return 'photo';
+    }
+
+    /**
+     * Return whether two marker payloads represent the same photo.
+     *
+     * @param {*} point Candidate gallery marker.
+     * @param {*} activePoint Active lightbox photo marker.
+     * @returns {boolean} True when the marker IDs match.
+     */
+    function mapPointsReferToSamePhoto(point, activePoint) {
+        const pointId = String(point?.id ?? '').trim();
+        const activeId = String(activePoint?.id ?? '').trim();
+        return pointId !== '' && activeId !== '' && pointId === activeId;
+    }
+
+    /**
+     * Layer the active photo marker onto a gallery route payload.
+     *
+     * @param {*} galleryPayload Normalized gallery route payload.
+     * @param {*} photoPayload Normalized active photo payload.
+     * @returns {*} Combined payload used by the Leaflet renderer.
+     */
+    function mergeActivePhotoIntoGalleryRoute(galleryPayload, photoPayload) {
+        if (!galleryPayload || !photoPayload?.points?.length || !shouldRenderPathForPayload(galleryPayload, galleryPayload.points || [])) {
+            return photoPayload;
+        }
+        const activePoint = {
+            ...photoPayload.points[0],
+            active_photo: true,
+            type: 'active_photo_point',
+            point_type: 'active_photo_point',
+        };
+        let activePointMerged = false;
+        const points = normalizeMapPoints(galleryPayload.points || []).map((point) => {
+            if (!mapPointsReferToSamePhoto(point, activePoint)) {
+                return point;
+            }
+            activePointMerged = true;
+            return {
+                ...point,
+                ...activePoint,
+                thumb: activePoint.thumb || point.thumb,
+                image: activePoint.image || point.image,
+                gallery: activePoint.gallery || point.gallery,
+            };
+        });
+        if (!activePointMerged) {
+            points.push(activePoint);
+        }
+        return {
+            ...galleryPayload,
+            title: photoPayload.title || galleryPayload.title,
+            points,
+            activePoint,
+        };
+    }
+
+    /**
+     * Combine the active photo GPS marker with a gallery route when one exists.
+     *
+     * @param {*} photoPayload Normalized active photo payload.
+     * @returns {Promise<*>} Photo-only payload or combined route/photo payload.
+     */
+    async function photoMapPayloadWithGalleryRoute(photoPayload) {
+        if (!photoPayload?.points?.length || !hasLightboxGalleryMapPayload()) {
+            return photoPayload;
+        }
+        const galleryPayload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
+        if (!galleryPayload || !shouldRenderPathForPayload(galleryPayload, galleryPayload.points || [])) {
+            return photoPayload;
+        }
+        return mergeActivePhotoIntoGalleryRoute(galleryPayload, photoPayload);
     }
 
     /**
@@ -3215,7 +3312,7 @@ export function setupGalleryLightbox() {
      * @param {*} json Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
-    function toggleCurrentLightboxMap(json = '') {
+    async function toggleCurrentLightboxMap(json = '') {
         if (!sharedLightboxMapUiAvailable()) {
             closeLightboxMapSplit();
             closeMapOverlay();
@@ -3227,9 +3324,9 @@ export function setupGalleryLightbox() {
         const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
             if (mapPoint) {
-                toggleLightboxMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+                await toggleLightboxPhotoMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
             } else if (hasLightboxGalleryMapPayload()) {
-                toggleLightboxGalleryMapSplit(card?.dataset.title || overlay.dataset.currentTitle || currentLightboxGalleryMapTitle('Map'));
+                await toggleLightboxGalleryMapSplit(card?.dataset.title || overlay.dataset.currentTitle || currentLightboxGalleryMapTitle('Map'));
             } else {
                 toggleLightboxMapSplit('', card?.dataset.title || overlay.dataset.currentTitle || 'Map');
             }
@@ -3243,11 +3340,11 @@ export function setupGalleryLightbox() {
             return;
         }
         if (mapPoint) {
-            openPhotoMapFromJson(mapPoint);
+            await openPhotoMapFromJson(mapPoint);
             return;
         }
         if (hasLightboxGalleryMapPayload()) {
-            openGalleryMap(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
+            await openGalleryMap(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
         }
     }
 
@@ -3273,12 +3370,46 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Toggle the active photo map, merged with the gallery route when available.
+     *
+     * @param {string} json Serialized active photo map point.
+     * @param {string} title Current photo title.
+     * @returns {Promise<void>}
+     */
+    async function toggleLightboxPhotoMapSplit(json, title) {
+        if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
+            return;
+        }
+        if (lightboxMapSplit && !lightboxMapSplit.hidden) {
+            closeLightboxMapSplit();
+            return;
+        }
+        await openLightboxPhotoMapSplit(json, title);
+    }
+
+    /**
+     * Open the active photo map, merged with the gallery route when available.
+     *
+     * @param {string} json Serialized active photo map point.
+     * @param {string} title Current photo title.
+     * @returns {Promise<void>}
+     */
+    async function openLightboxPhotoMapSplit(json, title) {
+        if (!json || !json.trim()) {
+            openLightboxMapUnavailable(title);
+            return;
+        }
+        const mapPayload = await photoMapPayloadWithGalleryRoute(parseMapPayload(json));
+        await openLightboxMapSplit(JSON.stringify(mapPayload), title);
+    }
+
+    /**
      * Toggle the gallery-level route or map payload inside fullscreen split mode.
      *
      * @param {string} title Current viewer title fallback.
-     * @returns {void}
+     * @returns {Promise<void>}
      */
-    function toggleLightboxGalleryMapSplit(title) {
+    async function toggleLightboxGalleryMapSplit(title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !hasLightboxGalleryMapPayload()) {
             return;
         }
@@ -3286,14 +3417,14 @@ export function setupGalleryLightbox() {
             closeLightboxMapSplit();
             return;
         }
-        openLightboxGalleryMapSplit(title);
+        await openLightboxGalleryMapSplit(title);
     }
 
     /**
      * Open the gallery-level route or map payload inside fullscreen split mode.
      *
      * @param {string} title Current viewer title fallback.
-     * @returns {void}
+     * @returns {Promise<void>}
      */
     async function openLightboxGalleryMapSplit(title) {
         const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || 'Gallery map'));
@@ -3301,7 +3432,7 @@ export function setupGalleryLightbox() {
             openLightboxMapUnavailable(title || 'Map');
             return;
         }
-        openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle('Gallery map'));
+        await openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle('Gallery map'));
     }
 
     /**
