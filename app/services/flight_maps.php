@@ -151,6 +151,11 @@ function save_gallery_flight_path_route(int $galleryId, string $routeText): arra
         return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => []];
     }
 
+    $preserved = flight_map_preserve_existing_ofp_route($galleryId, $routeText);
+    if ($preserved !== null) {
+        return $preserved;
+    }
+
     $resolved = resolve_flight_route_text($routeText);
     $points = $resolved['points'];
     $unresolved = $resolved['unresolved'];
@@ -193,6 +198,148 @@ function save_gallery_flight_path_route(int $galleryId, string $routeText): arra
         'point_count' => count($points),
         'unresolved_count' => count($unresolved),
         'points' => $points,
+        'unresolved' => $unresolved,
+    ];
+}
+
+/**
+ * Keep SimBrief OFP geometry when the visible route text was not changed.
+ *
+ * The SimBrief generator writes a human-readable point list to the editor so the
+ * user can see normal route identifiers. A later gallery save must not resolve
+ * that text through the fallback nav database and overwrite OFP coordinates.
+ *
+ * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}|null
+ */
+function flight_map_preserve_existing_ofp_route(int $galleryId, string $routeText): ?array
+{
+    $row = gallery_flight_map_row($galleryId);
+    if ($row === null) {
+        return null;
+    }
+
+    $storedRouteText = trim((string) ($row['route_text'] ?? ''));
+    if ($storedRouteText === '' || $storedRouteText !== trim($routeText)) {
+        return null;
+    }
+
+    $points = gallery_flight_map_points_from_row($row);
+    if ($points === [] || !flight_map_points_are_simbrief_ofp($points)) {
+        return null;
+    }
+
+    $unresolved = gallery_flight_map_unresolved_from_row($row);
+    return [
+        'point_count' => count($points),
+        'unresolved_count' => count($unresolved),
+        'points' => $points,
+        'unresolved' => $unresolved,
+    ];
+}
+
+/**
+ * Return true when all stored points came from a SimBrief OFP import.
+ *
+ * @param array<int, array<string, mixed>> $points Stored route points.
+ */
+function flight_map_points_are_simbrief_ofp(array $points): bool
+{
+    if ($points === []) {
+        return false;
+    }
+
+    foreach ($points as $point) {
+        if (!is_array($point) || (string) ($point['source'] ?? '') !== 'simbrief_ofp') {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+/**
+ * Persist a gallery route from already-resolved OFP or external coordinates.
+ *
+ * This path is used by SimBrief imports where the OFP already provides the
+ * waypoint geometry. It avoids resolving AIRAC identifiers again and stores only
+ * the safe public map payload in the database.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $routeText Human-readable route point list.
+ * @param array<int, array<string, mixed>> $points Already-resolved route points.
+ * @param array<int, array<string, mixed>> $unresolved Optional diagnostics.
+ * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}
+ */
+function save_gallery_flight_path_resolved_points(int $galleryId, string $routeText, array $points, array $unresolved = []): array
+{
+    if ($galleryId <= 0 || !flight_map_schema_ready()) {
+        return ['point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => $unresolved];
+    }
+
+    $normalizedPoints = [];
+    foreach ($points as $point) {
+        if (!is_array($point)) {
+            continue;
+        }
+        $normalizedPoint = flight_map_normalize_point($point);
+        if ($normalizedPoint !== null && !flight_route_is_duplicate_last_point($normalizedPoints, $normalizedPoint)) {
+            $normalizedPoints[] = $normalizedPoint;
+        }
+    }
+
+    if ($normalizedPoints === []) {
+        delete_gallery_flight_path_map($galleryId);
+        return ['point_count' => 0, 'unresolved_count' => count($unresolved), 'points' => [], 'unresolved' => $unresolved];
+    }
+
+    if (count($normalizedPoints) > 1) {
+        $normalizedPoints[0]['role'] = 'start';
+        $normalizedPoints[count($normalizedPoints) - 1]['role'] = 'end';
+        foreach ($normalizedPoints as $index => $point) {
+            if ($index > 0 && $index < count($normalizedPoints) - 1) {
+                $normalizedPoints[$index]['role'] = 'via';
+            }
+        }
+    }
+
+    $now = now_sql();
+    $stmt = db()->prepare("INSERT INTO gallery_flight_maps (
+        gallery_id,
+        map_source_type,
+        route_text,
+        resolved_points_json,
+        unresolved_points_json,
+        point_count,
+        resolved_at,
+        created_at,
+        updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+        map_source_type = VALUES(map_source_type),
+        route_text = VALUES(route_text),
+        resolved_points_json = VALUES(resolved_points_json),
+        unresolved_points_json = VALUES(unresolved_points_json),
+        point_count = VALUES(point_count),
+        resolved_at = VALUES(resolved_at),
+        updated_at = VALUES(updated_at)");
+    $stmt->execute([
+        $galleryId,
+        GALLERY_MAP_SOURCE_FLIGHT_PATH,
+        trim($routeText),
+        json_encode($normalizedPoints, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        json_encode(array_values($unresolved), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        count($normalizedPoints),
+        $now,
+        $now,
+        $now,
+    ]);
+
+    flight_map_clear_runtime_cache();
+
+    return [
+        'point_count' => count($normalizedPoints),
+        'unresolved_count' => count($unresolved),
+        'points' => $normalizedPoints,
         'unresolved' => $unresolved,
     ];
 }
@@ -400,7 +547,11 @@ function flight_route_parse_aviation_coordinate(string $token): ?array
 }
 
 /**
- * Resolve one route token from optional locally imported navdata.
+ * Resolve one route token through the composite navigation-data resolver.
+ *
+ * Local DB rows and bundled offline data are tried first. A logged-in admin with
+ * a linked Navigraph account may receive cached or remote-enhanced data, while
+ * public rendering continues to use already persisted coordinates.
  */
 function flight_route_lookup_nav_point(string $token): ?array
 {
@@ -409,24 +560,16 @@ function flight_route_lookup_nav_point(string $token): ?array
         return null;
     }
 
-    if (flight_map_navdata_schema_ready()) {
-        $stmt = db()->prepare("SELECT ident, kind, latitude, longitude FROM flight_map_nav_points
-            WHERE ident = ?
-            ORDER BY CASE kind
-                WHEN 'airport' THEN 0
-                WHEN 'navaid' THEN 1
-                WHEN 'waypoint' THEN 2
-                ELSE 3
-            END, id
-            LIMIT 1");
-        $stmt->execute([$ident]);
-        $row = $stmt->fetch();
-        if (is_array($row)) {
+    if (function_exists('navigation_data_resolve_ident')) {
+        $point = navigation_data_resolve_ident($ident, [
+            'allow_remote' => false,
+        ]);
+        if ($point !== null) {
             return flight_map_point_from_values(
-                (string) $row['ident'],
-                (float) $row['latitude'],
-                (float) $row['longitude'],
-                (string) ($row['kind'] ?? 'navdata')
+                (string) ($point['ident'] ?? $ident),
+                (float) ($point['latitude'] ?? 0.0),
+                (float) ($point['longitude'] ?? 0.0),
+                (string) ($point['kind'] ?? $point['source'] ?? 'navdata')
             );
         }
     }
@@ -464,13 +607,22 @@ function flight_map_normalize_point(array $point): ?array
 
     $name = substr(trim((string) ($point['name'] ?? $point['title'] ?? 'Point')), 0, 64);
     $kind = substr(trim((string) ($point['kind'] ?? 'route')), 0, 32);
+    $role = substr(trim((string) ($point['role'] ?? '')), 0, 16);
+    $source = substr(trim((string) ($point['source'] ?? '')), 0, 32);
 
-    return [
+    $normalized = [
         'name' => $name !== '' ? $name : 'Point',
         'latitude' => round($latitude, 7),
         'longitude' => round($longitude, 7),
         'kind' => $kind !== '' ? $kind : 'route',
     ];
+    if (in_array($role, ['start', 'end', 'via'], true)) {
+        $normalized['role'] = $role;
+    }
+    if ($source !== '') {
+        $normalized['source'] = $source;
+    }
+    return $normalized;
 }
 
 /**
@@ -505,6 +657,7 @@ function flight_map_navdata_status(): array
         'last_navaids' => (int) app_setting('flight_map_navdata_last_navaids', '0'),
         'last_skipped' => (int) app_setting('flight_map_navdata_last_skipped', '0'),
         'last_deleted' => (int) app_setting('flight_map_navdata_last_deleted', '0'),
+        'hybrid' => function_exists('navigation_data_status') ? navigation_data_status() : [],
     ];
 
     if (!$status['ready']) {
@@ -731,19 +884,20 @@ function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $st
         $latitude = flight_map_csv_float($row, ['latitude_deg', 'latitude', 'lat']);
         $longitude = flight_map_csv_float($row, ['longitude_deg', 'longitude', 'lon', 'lng']);
         $region = flight_map_csv_text($row, ['iso_country', 'associated_airport']);
+        $kind = flight_map_navaid_kind_from_row($row);
 
         if ($ident === '' || $latitude === null || $longitude === null) {
             $skipped++;
             return;
         }
 
-        $dedupeKey = 'navaid|' . $region . '|' . $ident;
+        $dedupeKey = $kind . '|' . $region . '|' . $ident;
         if (isset($seen[$dedupeKey])) {
             return;
         }
         $seen[$dedupeKey] = true;
 
-        if (flight_map_insert_nav_point($stmt, $ident, 'navaid', $region, $latitude, $longitude, $cycle, $now)) {
+        if (flight_map_insert_nav_point($stmt, $ident, $kind, $region, $latitude, $longitude, $cycle, $now)) {
             $imported++;
         } else {
             $skipped++;
@@ -751,6 +905,21 @@ function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $st
     });
 
     return ['imported' => $imported, 'skipped' => $skipped];
+}
+
+/**
+ * Return a stable navaid kind from one OurAirports navaids.csv row.
+ */
+function flight_map_navaid_kind_from_row(array $row): string
+{
+    $type = strtoupper(trim(flight_map_csv_text($row, ['type', 'nav_type'])));
+    if (str_contains($type, 'NDB')) {
+        return 'ndb';
+    }
+    if (str_contains($type, 'VOR')) {
+        return 'vor';
+    }
+    return 'navaid';
 }
 
 /**
@@ -921,6 +1090,12 @@ function gallery_flight_map_payload(array $gallery): ?array
     foreach ($storedPoints as $index => $point) {
         $kind = (string) ($point['kind'] ?? 'route');
         $name = (string) ($point['name'] ?? ('Point ' . ($index + 1)));
+        $role = (string) ($point['role'] ?? '');
+        if ($role === '') {
+            $role = $index === 0 ? 'start' : ($index === count($storedPoints) - 1 ? 'end' : 'via');
+        }
+        $pointType = $role === 'start' ? 'route_start' : ($role === 'end' ? 'route_end' : 'route_via');
+        $description = $role === 'start' ? 'Departure' : ($role === 'end' ? 'Arrival' : 'Route point');
         $displayPoints[] = [
             'id' => 'flight-' . (int) ($gallery['id'] ?? 0) . '-' . $index,
             'lat' => (float) $point['latitude'],
@@ -928,9 +1103,10 @@ function gallery_flight_map_payload(array $gallery): ?array
             'name' => $name,
             'title' => $name,
             'kind' => $kind,
-            'description' => $kind === '' ? '' : ucfirst($kind),
-            'type' => 'route_point',
-            'point_type' => 'route_point',
+            'role' => $role,
+            'description' => $description,
+            'type' => $pointType,
+            'point_type' => $pointType,
             'source_type' => GALLERY_MAP_SOURCE_FLIGHT_PATH,
             'map_source_type' => GALLERY_MAP_SOURCE_FLIGHT_PATH,
         ];

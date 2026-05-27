@@ -38,7 +38,9 @@
 declare(strict_types=1);
 
 const SIMBRIEF_DESCRIPTION_ENDPOINT = 'https://www.simbrief.com/api/xml.fetcher.php';
+const SIMBRIEF_DESCRIPTION_BASE_URL = 'https://www.simbrief.com';
 const SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS = 18;
+const SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS = 30;
 
 /**
  * Return a translated service message while allowing standalone tests to run.
@@ -296,6 +298,757 @@ function simbrief_description_extract_details(array $payload): array
         'passengers' => simbrief_description_passenger_count($payload),
         'airac' => simbrief_description_first_text($payload, ['params.airac', 'general.airac']),
     ];
+}
+
+
+/**
+ * Save the raw latest SimBrief OFP JSON and original PDF inside the gallery folder.
+ *
+ * The saved JSON intentionally keeps the SimBrief payload intact so future
+ * features can re-read the same dispatch data without another network request.
+ * When the OFP payload exposes a PDF document URL, the original PDF is saved
+ * beside it for direct long-term reference.
+ *
+ * @param array<string, mixed> $gallery Gallery row that owns the OFP.
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param array{kind: string, value: string, label: string} $identifier Import identifier metadata.
+ * @param array<string, string> $details Extracted flight details used for the manifest.
+ * @param array<string, mixed> $routeResult Route extraction summary.
+ * @return array{saved: bool, path: string, manifest_path: string, filename: string, pdf_saved: bool, pdf_path: string, pdf_filename: string, pdf_url: string, pdf_error: string, error: string}
+ */
+function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
+{
+    $folderPath = function_exists('normalize_relative_path')
+        ? normalize_relative_path((string) ($gallery['folder_path'] ?? ''))
+        : trim(str_replace('\\', '/', (string) ($gallery['folder_path'] ?? '')), '/');
+    if ($folderPath === '' || !function_exists('gallery_abs_path') || !function_exists('path_inside')) {
+        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery path helpers are unavailable.'];
+    }
+
+    $galleryRoot = gallery_abs_path($folderPath);
+    $galleriesRoot = function_exists('galleries_root') ? galleries_root() : dirname($galleryRoot);
+    if (!is_dir($galleryRoot) || !path_inside($galleriesRoot, $galleryRoot)) {
+        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery folder is unavailable.'];
+    }
+
+    $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
+    $manifestPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
+    $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+    $pdfUrl = simbrief_description_pdf_url($payload);
+    $pdfResult = $pdfUrl !== ''
+        ? simbrief_description_save_pdf_for_gallery($pdfUrl, $pdfPath)
+        : ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => '', 'error' => ''];
+    $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
+    $ofpJson = json_encode($payload, $jsonFlags);
+    if (!is_string($ofpJson)) {
+        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'SimBrief payload could not be encoded.'];
+    }
+
+    $now = function_exists('now_sql') ? now_sql() : gmdate('Y-m-d H:i:s');
+    $manifest = [
+        'format' => 'php_gallery_simbrief_ofp_manifest_v1',
+        'saved_at' => $now,
+        'identifier_type' => (string) ($identifier['label'] ?? ''),
+        'identifier_kind' => (string) ($identifier['kind'] ?? ''),
+        'origin' => (string) ($details['origin_code'] ?? ''),
+        'destination' => (string) ($details['destination_code'] ?? ''),
+        'flight' => (string) ($details['flight_label'] ?? ''),
+        'aircraft' => (string) ($details['aircraft'] ?? ''),
+        'airac' => (string) ($details['airac'] ?? ''),
+        'route_text' => (string) ($routeResult['route_text'] ?? ''),
+        'route_point_count' => (int) ($routeResult['point_count'] ?? 0),
+        'route_unresolved_count' => (int) ($routeResult['unresolved_count'] ?? 0),
+        'ofp_file' => 'simbrief-ofp.json',
+        'ofp_pdf_file' => !empty($pdfResult['saved']) ? 'simbrief-ofp.pdf' : '',
+        'ofp_pdf_url' => (string) ($pdfResult['url'] ?? ''),
+    ];
+    $manifestJson = json_encode($manifest, $jsonFlags);
+    if (!is_string($manifestJson)) {
+        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'SimBrief manifest could not be encoded.'];
+    }
+
+    if (file_put_contents($ofpPath, $ofpJson . "\n", LOCK_EX) === false) {
+        return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Could not write simbrief-ofp.json.'];
+    }
+    if (file_put_contents($manifestPath, $manifestJson . "\n", LOCK_EX) === false) {
+        return [
+            'saved' => true,
+            'path' => $ofpPath,
+            'manifest_path' => '',
+            'filename' => 'simbrief-ofp.json',
+            'pdf_saved' => !empty($pdfResult['saved']),
+            'pdf_path' => (string) ($pdfResult['path'] ?? ''),
+            'pdf_filename' => 'simbrief-ofp.pdf',
+            'pdf_url' => (string) ($pdfResult['url'] ?? ''),
+            'pdf_error' => (string) ($pdfResult['error'] ?? ''),
+            'error' => 'Could not write simbrief-ofp-manifest.json.',
+        ];
+    }
+
+    return [
+        'saved' => true,
+        'path' => $ofpPath,
+        'manifest_path' => $manifestPath,
+        'filename' => 'simbrief-ofp.json',
+        'pdf_saved' => !empty($pdfResult['saved']),
+        'pdf_path' => (string) ($pdfResult['path'] ?? ''),
+        'pdf_filename' => 'simbrief-ofp.pdf',
+        'pdf_url' => (string) ($pdfResult['url'] ?? ''),
+        'pdf_error' => (string) ($pdfResult['error'] ?? ''),
+        'error' => '',
+    ];
+}
+
+
+/**
+ * Locate the original SimBrief PDF URL from the fetched OFP payload.
+ *
+ * SimBrief exposes document links in slightly different shapes depending on the
+ * JSON version and OFP layout. This helper first checks likely file nodes, then
+ * performs a conservative recursive scan for PDF-looking values.
+ *
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @return string Absolute HTTPS PDF URL, or an empty string when none is exposed.
+ */
+function simbrief_description_pdf_url(array $payload): string
+{
+    $candidates = [];
+    foreach ([
+        'files.pdf.link',
+        'files.pdf.url',
+        'files.pdf.href',
+        'files.pdf.path',
+        'files.pdf.filename',
+        'files.pdf.file',
+        'files.pdf',
+        'files.ofp_pdf',
+        'files.ofp_pdf.link',
+        'files.ofp_pdf.url',
+        'ofp.pdf',
+        'ofp_pdf',
+        'pdf',
+        'pdf_url',
+    ] as $path) {
+        $value = simbrief_description_node($payload, $path);
+        if (is_scalar($value)) {
+            $candidates[] = (string) $value;
+        }
+    }
+
+    $fileRoot = simbrief_description_first_text($payload, [
+        'files.directory',
+        'files.dir',
+        'files.base_url',
+        'files.baseurl',
+        'files.root',
+        'files.folder',
+    ]);
+
+    foreach (simbrief_description_collect_pdf_strings($payload) as $candidate) {
+        $candidates[] = $candidate;
+    }
+
+    foreach ($candidates as $candidate) {
+        $url = simbrief_description_normalize_pdf_url($candidate, $fileRoot);
+        if ($url !== '') {
+            return $url;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Collect possible PDF strings from nested SimBrief payload data.
+ *
+ * @param mixed $node Current JSON node.
+ * @return array<int, string> PDF-looking strings.
+ */
+function simbrief_description_collect_pdf_strings(mixed $node): array
+{
+    if (is_scalar($node)) {
+        $value = trim((string) $node);
+        return preg_match('/\.pdf(?:$|[?#])/i', $value) === 1 ? [$value] : [];
+    }
+    if (!is_array($node)) {
+        return [];
+    }
+
+    $matches = [];
+    foreach ($node as $value) {
+        foreach (simbrief_description_collect_pdf_strings($value) as $match) {
+            $matches[] = $match;
+        }
+    }
+    return $matches;
+}
+
+/**
+ * Convert one possible SimBrief PDF reference into a safe absolute URL.
+ */
+function simbrief_description_normalize_pdf_url(string $candidate, string $fileRoot = ''): string
+{
+    $candidate = trim(html_entity_decode($candidate, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    if ($candidate === '' || preg_match('/\.pdf(?:$|[?#])/i', $candidate) !== 1) {
+        return '';
+    }
+
+    if (preg_match('#^https://(?:www\.)?simbrief\.com/#i', $candidate) === 1) {
+        return $candidate;
+    }
+
+    if (str_starts_with($candidate, '//')) {
+        $candidate = 'https:' . $candidate;
+        return preg_match('#^https://(?:www\.)?simbrief\.com/#i', $candidate) === 1 ? $candidate : '';
+    }
+
+    if (str_starts_with($candidate, '/')) {
+        return SIMBRIEF_DESCRIPTION_BASE_URL . $candidate;
+    }
+
+    $root = trim($fileRoot);
+    if ($root !== '') {
+        if (preg_match('#^https://(?:www\.)?simbrief\.com/#i', $root) === 1) {
+            return rtrim($root, '/') . '/' . ltrim($candidate, '/');
+        }
+        if (str_starts_with($root, '/')) {
+            return SIMBRIEF_DESCRIPTION_BASE_URL . '/' . trim($root, '/') . '/' . ltrim($candidate, '/');
+        }
+    }
+
+    if (preg_match('/^[A-Z0-9_-]+_PDF_\d+\.[A-Za-z0-9]+\.pdf$/i', $candidate) === 1) {
+        return SIMBRIEF_DESCRIPTION_BASE_URL . '/ofp/flightplans/' . rawurlencode($candidate);
+    }
+
+    if (str_starts_with($candidate, 'ofp/flightplans/')) {
+        return SIMBRIEF_DESCRIPTION_BASE_URL . '/' . $candidate;
+    }
+
+    return '';
+}
+
+/**
+ * Download and save the original SimBrief PDF when a safe URL is available.
+ *
+ * @return array{saved: bool, path: string, filename: string, url: string, error: string}
+ */
+function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targetPath): array
+{
+    $safeUrl = simbrief_description_normalize_pdf_url($pdfUrl);
+    if ($safeUrl === '') {
+        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => '', 'error' => 'SimBrief PDF URL was not trusted.'];
+    }
+
+    try {
+        $body = function_exists('http_fetch_with_headers')
+            ? http_fetch_with_headers($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS, ['Accept: application/pdf'])
+            : simbrief_description_basic_pdf_fetch($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS);
+    } catch (Throwable $exception) {
+        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => $exception->getMessage()];
+    }
+
+    if (!str_starts_with(ltrim($body), '%PDF-')) {
+        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'SimBrief PDF response was not a PDF document.'];
+    }
+
+    if (file_put_contents($targetPath, $body, LOCK_EX) === false) {
+        return ['saved' => false, 'path' => '', 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => 'Could not write simbrief-ofp.pdf.'];
+    }
+
+    return ['saved' => true, 'path' => $targetPath, 'filename' => 'simbrief-ofp.pdf', 'url' => $safeUrl, 'error' => ''];
+}
+
+/**
+ * Fetch a trusted SimBrief PDF URL when the shared HTTP helper is unavailable.
+ */
+function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds): string
+{
+    if (preg_match('#^https://(?:www\.)?simbrief\.com/#i', $url) !== 1) {
+        throw new RuntimeException('Unsupported SimBrief PDF URL.');
+    }
+
+    if (function_exists('curl_init')) {
+        $handle = curl_init($url);
+        if ($handle === false) {
+            throw new RuntimeException('Could not initialize SimBrief PDF client.');
+        }
+        curl_setopt_array($handle, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 10),
+            CURLOPT_TIMEOUT => $timeoutSeconds,
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => ['Accept: application/pdf'],
+        ]);
+        $body = curl_exec($handle);
+        $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($handle);
+        curl_close($handle);
+        if ($body === false || $status >= 400) {
+            throw new RuntimeException($error !== '' ? $error : 'SimBrief PDF request failed with status ' . $status . '.');
+        }
+        return (string) $body;
+    }
+
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => $timeoutSeconds,
+            'header' => "User-Agent: PHP-Gallery-CMS\r\nAccept: application/pdf\r\n",
+            'ignore_errors' => true,
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ]);
+    $body = @file_get_contents($url, false, $context);
+    if ($body === false) {
+        throw new RuntimeException('SimBrief PDF request failed. Enable curl or allow_url_fopen.');
+    }
+    return (string) $body;
+}
+
+/**
+ * Extract a display-ready route from the SimBrief OFP and persist it for maps.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param array<string, string> $details Extracted flight details.
+ * @return array<string, mixed> Route extraction and save summary.
+ */
+function simbrief_description_save_route_map_from_ofp(int $galleryId, array $payload, array $details): array
+{
+    $points = simbrief_description_extract_route_points($payload, $details);
+    $routeText = simbrief_description_route_text_from_points($points, $details);
+    $unresolved = [];
+
+    if (count($points) < 2) {
+        $unresolved[] = [
+            'name' => 'SimBrief OFP',
+            'reason' => 'not_enough_route_coordinates',
+        ];
+    }
+
+    $saved = false;
+    if (count($points) >= 2 && function_exists('save_gallery_flight_path_resolved_points')) {
+        save_gallery_flight_path_resolved_points($galleryId, $routeText, $points, $unresolved);
+        $saved = true;
+    }
+
+    return [
+        'saved' => $saved,
+        'route_text' => $routeText,
+        'points' => $points,
+        'point_count' => count($points),
+        'unresolved' => $unresolved,
+        'unresolved_count' => count($unresolved),
+    ];
+}
+
+/**
+ * Extract route geometry from SimBrief airport and navlog coordinates.
+ *
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param array<string, string> $details Extracted flight details.
+ * @return array<int, array<string, mixed>> Ordered route points.
+ */
+function simbrief_description_extract_route_points(array $payload, array $details): array
+{
+    $points = [];
+    $origin = simbrief_description_airport_route_point($payload, 'origin', (string) ($details['origin_code'] ?? ''), 'start');
+    if ($origin !== null) {
+        $points[] = $origin;
+    }
+
+    foreach (simbrief_description_navlog_rows($payload) as $row) {
+        $point = simbrief_description_navlog_route_point($row);
+        if ($point === null) {
+            continue;
+        }
+        if (!simbrief_description_route_point_duplicate($points, $point)) {
+            $points[] = $point;
+        }
+    }
+
+    $destination = simbrief_description_airport_route_point($payload, 'destination', (string) ($details['destination_code'] ?? ''), 'end');
+    if ($destination !== null) {
+        if (simbrief_description_route_point_duplicate($points, $destination)) {
+            $lastIndex = count($points) - 1;
+            if ($lastIndex >= 0) {
+                $points[$lastIndex]['role'] = 'end';
+                $points[$lastIndex]['kind'] = 'airport';
+                $points[$lastIndex]['name'] = $destination['name'];
+            }
+        } else {
+            $points[] = $destination;
+        }
+    }
+
+    if (count($points) > 1) {
+        $points[0]['role'] = 'start';
+        $points[count($points) - 1]['role'] = 'end';
+        foreach ($points as $index => $point) {
+            if ($index > 0 && $index < count($points) - 1) {
+                $points[$index]['role'] = 'via';
+            }
+        }
+    }
+
+    return array_values($points);
+}
+
+/**
+ * Build one airport route point from an OFP airport section.
+ *
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param string $section Airport section name.
+ * @param string $fallbackCode ICAO or IATA fallback.
+ * @param string $role Route role.
+ * @return array<string, mixed>|null
+ */
+function simbrief_description_airport_route_point(array $payload, string $section, string $fallbackCode, string $role): ?array
+{
+    $node = simbrief_description_node($payload, $section);
+    if (!is_array($node)) {
+        $node = [];
+    }
+
+    $name = simbrief_description_airport_code($payload, $section);
+    if ($name === '') {
+        $name = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $fallbackCode) ?? '');
+    }
+    if ($name === '') {
+        $name = strtoupper($section);
+    }
+
+    $latitude = simbrief_description_row_coordinate($node, ['lat', 'latitude', 'pos_lat', 'poslat', 'apt_lat', 'airport_lat'], 'lat');
+    $longitude = simbrief_description_row_coordinate($node, ['lon', 'lng', 'long', 'longitude', 'pos_long', 'pos_lon', 'poslong', 'apt_lon', 'airport_lon'], 'lon');
+
+    if (($latitude === null || $longitude === null) && function_exists('flight_route_lookup_nav_point') && $name !== '') {
+        $fallback = flight_route_lookup_nav_point($name);
+        if (is_array($fallback)) {
+            $latitude = isset($fallback['latitude']) ? (float) $fallback['latitude'] : $latitude;
+            $longitude = isset($fallback['longitude']) ? (float) $fallback['longitude'] : $longitude;
+        }
+    }
+
+    return simbrief_description_route_point_from_values($name, $latitude, $longitude, 'airport', $role);
+}
+
+/**
+ * Build one route point from a SimBrief navlog row.
+ *
+ * @param array<string, mixed> $row Navlog row.
+ * @return array<string, mixed>|null
+ */
+function simbrief_description_navlog_route_point(array $row): ?array
+{
+    $name = simbrief_description_row_first_text($row, [
+        'ident',
+        'fix_ident',
+        'fix_id',
+        'waypoint',
+        'wp_ident',
+        'icao_code',
+        'icao',
+        'name',
+        'fix_name',
+    ]);
+    $name = strtoupper(preg_replace('/[^A-Za-z0-9_.-]/', '', $name) ?? '');
+    if ($name === '') {
+        $name = 'POINT';
+    }
+
+    $latitude = simbrief_description_row_coordinate($row, ['lat', 'latitude', 'pos_lat', 'poslat', 'fix_lat', 'wp_lat'], 'lat');
+    $longitude = simbrief_description_row_coordinate($row, ['lon', 'lng', 'long', 'longitude', 'pos_long', 'pos_lon', 'poslong', 'fix_lon', 'fix_long', 'wp_lon'], 'lon');
+
+    if ($latitude === null || $longitude === null) {
+        $combined = simbrief_description_row_first_text($row, ['pos', 'position', 'coord', 'coords', 'coordinates', 'latlon', 'lat_lon']);
+        $combinedPoint = $combined !== '' && function_exists('flight_route_parse_aviation_coordinate')
+            ? flight_route_parse_aviation_coordinate($combined)
+            : null;
+        if (is_array($combinedPoint)) {
+            $latitude = isset($combinedPoint['latitude']) ? (float) $combinedPoint['latitude'] : $latitude;
+            $longitude = isset($combinedPoint['longitude']) ? (float) $combinedPoint['longitude'] : $longitude;
+        }
+    }
+
+    return simbrief_description_route_point_from_values($name, $latitude, $longitude, 'waypoint', 'via');
+}
+
+/**
+ * Return likely navlog rows from known SimBrief JSON shapes.
+ *
+ * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @return array<int, array<string, mixed>> Row list.
+ */
+function simbrief_description_navlog_rows(array $payload): array
+{
+    $paths = [
+        'navlog.fix',
+        'navlog.fixes',
+        'navlog.waypoint',
+        'navlog.waypoints',
+        'navlog',
+        'ofp.navlog.fix',
+        'route.navlog.fix',
+        'route.fixes',
+    ];
+
+    foreach ($paths as $path) {
+        $node = simbrief_description_node($payload, $path);
+        $rows = simbrief_description_rows_from_node($node);
+        if ($rows !== []) {
+            return $rows;
+        }
+    }
+
+    return [];
+}
+
+/**
+ * Normalize a possible SimBrief row collection.
+ *
+ * @param mixed $node Candidate row collection.
+ * @return array<int, array<string, mixed>> Row list.
+ */
+function simbrief_description_rows_from_node(mixed $node): array
+{
+    if (!is_array($node)) {
+        return [];
+    }
+
+    if (simbrief_description_array_has_coordinate_shape($node)) {
+        return [$node];
+    }
+
+    $rows = [];
+    foreach ($node as $value) {
+        if (is_array($value) && simbrief_description_array_has_coordinate_shape($value)) {
+            $rows[] = $value;
+        }
+    }
+    return $rows;
+}
+
+/**
+ * Return true when an array looks like one coordinate-bearing navlog row.
+ *
+ * @param array<string|int, mixed> $row Candidate row.
+ */
+function simbrief_description_array_has_coordinate_shape(array $row): bool
+{
+    $latKeys = ['lat', 'latitude', 'pos_lat', 'poslat', 'fix_lat', 'wp_lat'];
+    $lonKeys = ['lon', 'lng', 'long', 'longitude', 'pos_long', 'pos_lon', 'poslong', 'fix_lon', 'fix_long', 'wp_lon'];
+    $lat = simbrief_description_row_coordinate($row, $latKeys, 'lat');
+    $lon = simbrief_description_row_coordinate($row, $lonKeys, 'lon');
+    if ($lat !== null && $lon !== null) {
+        return true;
+    }
+
+    if (simbrief_description_row_has_any_key($row, $latKeys) && simbrief_description_row_has_any_key($row, $lonKeys)) {
+        return true;
+    }
+
+    return simbrief_description_row_first_text($row, ['pos', 'position', 'coord', 'coords', 'coordinates', 'latlon', 'lat_lon']) !== '';
+}
+
+/**
+ * Return true when a SimBrief row contains at least one named key.
+ *
+ * @param array<string|int, mixed> $row Row data.
+ * @param array<int, string> $keys Candidate keys.
+ */
+function simbrief_description_row_has_any_key(array $row, array $keys): bool
+{
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Read the first text value from a SimBrief navlog row.
+ *
+ * @param array<string|int, mixed> $row Row data.
+ * @param array<int, string> $keys Candidate keys.
+ */
+function simbrief_description_row_first_text(array $row, array $keys): string
+{
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row) && is_scalar($row[$key])) {
+            $value = simbrief_description_plain_text((string) $row[$key]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+    return '';
+}
+
+/**
+ * Read one latitude or longitude value from a SimBrief row.
+ *
+ * @param array<string|int, mixed> $row Row data.
+ * @param array<int, string> $keys Candidate keys.
+ * @param string $axis Coordinate axis, lat or lon.
+ */
+function simbrief_description_row_coordinate(array $row, array $keys, string $axis): ?float
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $row) || !is_scalar($row[$key])) {
+            continue;
+        }
+        $coordinate = simbrief_description_coordinate_value((string) $row[$key], $axis);
+        if ($coordinate !== null) {
+            return $coordinate;
+        }
+    }
+    return null;
+}
+
+/**
+ * Normalize decimal, signed, and compact SimBrief coordinate strings.
+ */
+function simbrief_description_coordinate_value(string $value, string $axis): ?float
+{
+    $value = strtoupper(trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    if ($value === '') {
+        return null;
+    }
+
+    $value = str_replace(['°', "'", '"'], ['', '', ''], $value);
+    $value = preg_replace('/\s+/', '', $value) ?? $value;
+
+    if (is_numeric($value)) {
+        $number = (float) $value;
+        if (simbrief_description_coordinate_in_range($number, $axis)) {
+            return $number;
+        }
+        // Out-of-range numeric strings can still be compact degrees/minutes,
+        // for example 4326.2 for N43 26.2 or 00512.9 for E005 12.9.
+    }
+
+    $pattern = $axis === 'lat'
+        ? '/^([NS])?(\d{2})(\d{2}(?:\.\d+)?)([NS])?$/'
+        : '/^([EW])?(\d{3})(\d{2}(?:\.\d+)?)([EW])?$/';
+    if (preg_match($pattern, $value, $match) === 1) {
+        $hemisphere = (string) ($match[1] !== '' ? $match[1] : ($match[4] ?? ''));
+        $number = (float) $match[2] + ((float) $match[3] / 60.0);
+        if (in_array($hemisphere, ['S', 'W'], true)) {
+            $number *= -1;
+        }
+        return simbrief_description_coordinate_in_range($number, $axis) ? $number : null;
+    }
+
+    if (preg_match('/^([NSWE])?(-?\d+(?:\.\d+)?)([NSWE])?$/', $value, $match) === 1) {
+        $prefix = (string) ($match[1] ?? '');
+        $number = (float) $match[2];
+        $suffix = (string) ($match[3] ?? '');
+        $hemisphere = $prefix !== '' ? $prefix : $suffix;
+        if ($hemisphere !== '') {
+            if (in_array($hemisphere, ['S', 'W'], true)) {
+                $number = -abs($number);
+            } elseif (in_array($hemisphere, ['N', 'E'], true)) {
+                $number = abs($number);
+            }
+            return simbrief_description_coordinate_in_range($number, $axis) ? $number : null;
+        }
+        if (simbrief_description_coordinate_in_range($number, $axis)) {
+            return $number;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Return whether a coordinate is valid for the requested axis.
+ */
+function simbrief_description_coordinate_in_range(float $value, string $axis): bool
+{
+    if ($axis === 'lat') {
+        return $value >= -90.0 && $value <= 90.0;
+    }
+    return $value >= -180.0 && $value <= 180.0;
+}
+
+/**
+ * Build a normalized SimBrief route point.
+ *
+ * @return array<string, mixed>|null
+ */
+function simbrief_description_route_point_from_values(string $name, ?float $latitude, ?float $longitude, string $kind, string $role): ?array
+{
+    if ($latitude === null || $longitude === null || !simbrief_description_coordinate_in_range($latitude, 'lat') || !simbrief_description_coordinate_in_range($longitude, 'lon')) {
+        return null;
+    }
+
+    $name = strtoupper(trim($name));
+    if ($name === '') {
+        $name = 'POINT';
+    }
+
+    return [
+        'name' => substr($name, 0, 64),
+        'latitude' => round($latitude, 7),
+        'longitude' => round($longitude, 7),
+        'kind' => $kind !== '' ? $kind : 'waypoint',
+        'role' => in_array($role, ['start', 'end', 'via'], true) ? $role : 'via',
+        'source' => 'simbrief_ofp',
+    ];
+}
+
+/**
+ * Return true when a candidate route point repeats the last stored point.
+ *
+ * @param array<int, array<string, mixed>> $points Existing route points.
+ * @param array<string, mixed> $candidate Candidate point.
+ */
+function simbrief_description_route_point_duplicate(array $points, array $candidate): bool
+{
+    if ($points === []) {
+        return false;
+    }
+
+    $last = $points[count($points) - 1];
+    $latDiff = abs((float) ($last['latitude'] ?? 0.0) - (float) ($candidate['latitude'] ?? 0.0));
+    $lonDiff = abs((float) ($last['longitude'] ?? 0.0) - (float) ($candidate['longitude'] ?? 0.0));
+    if ($latDiff <= 0.00001 && $lonDiff <= 0.00001) {
+        return true;
+    }
+
+    return strtoupper((string) ($last['name'] ?? '')) === strtoupper((string) ($candidate['name'] ?? ''));
+}
+
+/**
+ * Build the human-readable route text shown in the gallery editor.
+ *
+ * @param array<int, array<string, mixed>> $points Route point list.
+ * @param array<string, string> $details Extracted flight details.
+ */
+function simbrief_description_route_text_from_points(array $points, array $details): string
+{
+    $names = [];
+    foreach ($points as $point) {
+        $name = strtoupper(trim((string) ($point['name'] ?? '')));
+        if ($name !== '') {
+            $names[] = $name;
+        }
+    }
+
+    $names = array_values(array_unique($names));
+    if (count($names) >= 2) {
+        return implode(' ', $names);
+    }
+
+    return simbrief_description_first_text($details, ['route']);
 }
 
 /**

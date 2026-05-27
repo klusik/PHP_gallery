@@ -215,12 +215,13 @@ function render_admin_simbrief_description_tool(int $galleryId): void
         return;
     }
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
-    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP and create an editable gallery-description draft. Nothing is saved until you save the gallery.')) . '</p></div></div>';
+    echo '<div class="admin-simbrief-description-heading"><div><h3>' . e(t('admin.simbrief.title', 'Generate from SimBrief')) . '</h3><p class="muted">' . e(t('admin.simbrief.help', 'Fetch the latest SimBrief OFP, save it with this gallery, generate an editable description draft, and update the flight route map from OFP coordinates.')) . '</p></div></div>';
     echo '<div class="admin-simbrief-description-grid">';
     echo '<label>' . e(t('admin.simbrief.pilot_id', 'SimBrief Pilot ID')) . '<input name="simbrief_pilot_id" autocomplete="off" inputmode="text" data-simbrief-pilot-id><span class="muted">' . e(t('admin.simbrief.pilot_id_help', 'Pilot ID = the numeric or account identifier used by SimBrief. If both fields are filled, Pilot ID is used first.')) . '</span></label>';
     echo '<label>' . e(t('admin.simbrief.pilot_name', 'SimBrief pilot name')) . '<input name="simbrief_pilot_name" autocomplete="off" data-simbrief-pilot-name><span class="muted">' . e(t('admin.simbrief.pilot_name_help', 'Pilot name = the SimBrief pilot name exactly as it appears in the SimBrief profile.')) . '</span></label>';
     echo '</div>';
-    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+    echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description and route map')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
+    echo '<p class="muted" data-simbrief-route-status role="status" aria-live="polite" hidden></p>';
     echo '</div>';
 }
 
@@ -824,7 +825,7 @@ function cms_admin_edit_gallery(): void
         $flightUnresolved = $flightMapRow ? gallery_flight_map_unresolved_from_row($flightMapRow) : [];
         echo '<div class="admin-edit-card is-wide"><h3>' . e(t('admin.gallery_editor.flight_route_map', 'Flight route map')) . '</h3>';
         echo '<label>' . e(t('admin.gallery_editor.flight_route_label', 'Route text')) . '<textarea name="flight_route_text" rows="5" placeholder="LKPR DCT OKL DCT EDDF or LKPR@50.1008,14.2632 DCT EDDF@50.0379,8.5622">' . e($flightRouteText) . '</textarea></label>';
-        echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery can store one resolved route map. Route points are resolved when you save the gallery. The public map only receives stored coordinates. Unresolved points are skipped and valid points stay connected. Use Admin > Maintenance > Update navdata to import OurAirports airports and navaids into the local DB, or use manual NAME@latitude,longitude points.')) . '</p>';
+        echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery stores one resolved route map. The SimBrief generator saves the latest OFP with the gallery and writes OFP coordinates here automatically. Manual routes still support local lookup and NAME@latitude,longitude entries.')) . '</p>';
         echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_status', 'Resolved points: {points}. Unresolved skipped: {unresolved}.', ['points' => (string) $flightPointCount, 'unresolved' => (string) count($flightUnresolved)])) . '</p>';
         echo '</div>';
     } else {

@@ -48,6 +48,14 @@ return [
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
     'setup_key' => 'replace-with-a-temporary-setup-key',
 
+    // Navigation data is offline-first. SimBrief-generated route maps use the
+    // OFP coordinates saved with each gallery. The bundled CSV stays available
+    // as a small fallback lookup table for manually entered route text.
+    'navigation_data' => [
+        'bundled_navdata_path' => __DIR__ . '/data/navdata/local_nav_points.csv',
+        'cache_ttl_seconds' => 2592000,
+    ],
+
     // Language configuration is intentionally small for the first localization
     // foundation. Add app/lang/<code>.json files and list their codes here.
     // Legacy app/lang/<code>.php files are still accepted as fallback dictionaries.
