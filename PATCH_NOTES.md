@@ -1,5 +1,65 @@
 # Patch notes
 
+## Version 0.72
+
+Version 0.72 adds navigation-data integration, API-based gallery migration, and a deeper SimBrief-driven route
+  workflow. It also extends the Windows uploader with Flight Simulator camera metadata support and improves gallery map
+  rendering so route data and photo GPS data can coexist cleanly.
+
+  ### Highlights
+
+  #### Added Navigraph OAuth and AIRAC navigation data support
+
+  - Added Navigraph OAuth support so users can connect navigation-data accounts directly in the app.
+  - Added AIRAC/navigation-data caching and local navpoint support for route and map generation.
+  - Added a new admin navigation-data panel for managing synced navdata and account state.
+  - Added supporting database migrations and configuration updates for the new navigation-data workflow.
+
+  #### Improved SimBrief route generation and gallery descriptions
+
+  - Improved SimBrief-based path generation so route data can be built from imported flight plans more reliably.
+  - Refined SimBrief description rendering so gallery descriptions can be generated from flight-plan data with richer
+  presentation.
+  - Kept route generation and description generation integrated with the existing gallery admin model.
+
+  #### Added gallery migration over API
+
+  - Added gallery migration over API with both source-push and target-pull workflows.
+  - Transfer gallery settings, images, metadata, thumbnails, route/map data, and other gallery-defining assets in staged
+  batches.
+  - Added version compatibility checks so migration is only allowed between matching app versions for now.
+  - Added new admin-side UI and scripting for migration workflows.
+  - Added migration tests and manifest updates for the new transfer flow.
+
+  #### Added Flight Simulator camera metadata for watched screenshots
+
+  - Added WinApp support for Flight Simulator camera metadata on watched screenshots.
+  - The uploader can query SimConnect and attach camera-location data to uploads when enabled.
+  - Added a checkbox to turn camera-location tagging on or off, with the feature enabled by default.
+  - Added supporting server-side upload handling and tests for the new GPS metadata flow.
+
+  #### Improved gallery maps and combined route/photo display
+
+  - Improved gallery maps so a route and a photo GPS point can appear together on the same map.
+  - The combined map now shows the gallery route line, route points, and the active photo marker at the same time.
+  - The photo marker is visually emphasized so it stands out from route markers.
+  - Updated admin and lightbox map rendering so route-only and photo-only cases still behave as before.
+
+  #### Updated supporting admin and frontend assets
+
+  - Updated gallery JavaScript modules for admin operations, navigation data, migration, and image presentation.
+  - Updated public gallery and lightbox assets to support the newer map and workflow behavior.
+  - Updated admin CSS to match the newer dashboard, migration, and navigation-data layouts.
+
+  ### Technical Details
+
+  - Added new controllers, services, and views for navigation data and gallery migration.
+  - Added database migrations for navigation-data caching and linked accounts.
+  - Added `data/navdata/local_nav_points.csv` for local navpoint support.
+  - Added dedicated browser modules for navigation-data and migration administration.
+  - Added supporting tests for SimBrief description handling and gallery migration behavior.
+  - Regenerated `app/core-manifest.json` for the new file set.
+
 ## Version 0.71
 
 - Added Flight Simulator camera-location uploads for watched screenshots.
