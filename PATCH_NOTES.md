@@ -1,5 +1,32 @@
 # Patch notes
 
+## Version 0.72.1
+
+Version 0.72.1 focuses on map widget polish and lightbox map behavior stability.
+
+  ### Highlights
+
+  #### Map widget improvements
+
+  - Centered the map widget more cleanly inside the lightbox layout.
+  - Adjusted the split-view presentation so the map area feels more balanced.
+
+  #### Lightbox map zoom persistence
+
+  - Preserved lightbox map zoom state while navigating between photos.
+  - Kept the current zoom level stable so users do not need to re-zoom after each navigation step.
+
+  #### Styling updates
+
+  - Updated related gallery and admin styling so the map widget matches the improved interaction flow.
+  - Refined the surrounding layout behavior without changing gallery data or map content.
+
+  ### Notes
+
+  - No database changes were required.
+  - No new gallery features were added in this patch.
+  - This release is limited to map widget presentation and lightbox zoom behavior fixes.
+
 ## Version 0.72
 
 Version 0.72 adds navigation-data integration, API-based gallery migration, and a deeper SimBrief-driven route
