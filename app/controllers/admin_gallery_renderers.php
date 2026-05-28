@@ -80,6 +80,21 @@ function render_tag_datalist(): void
 }
 
 /**
+ * Return an escaped JSON attribute containing context-aware tag advice.
+ */
+function admin_weighted_tag_suggestions_attribute(int $galleryId): string
+{
+    // Variable $payload stores this steps working value.
+    $payload = weighted_tag_suggestions_for_gallery($galleryId);
+    if (!$payload) {
+        return '';
+    }
+    // Variable $json stores this steps working value.
+    $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    return $json === false ? '' : ' data-tag-weighted-suggestions="' . e($json) . '"';
+}
+
+/**
  * Handles gallery parent options logic for the gallery application.
  * @param mixed $currentGallery Input used by this operation.
  * @return mixed Result produced by this operation.

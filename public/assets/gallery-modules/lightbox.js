@@ -65,7 +65,7 @@ function i18n(key, fallback, parameters = {}) {
     });
     return text;
 }
-export { setupTagSuggestions } from './tag-suggestions.js?v=20260512-modular-lightbox-v1';
+export { setupTagSuggestions } from './tag-suggestions.js?v=20260528-tag-pills-v1';
 import { currentLightboxVoteForm, syncLightboxVote, updateLightboxVoteButtons } from './lightbox-votes.js?v=20260512-modular-lightbox-v1';
 
 const galleryLightboxState = {

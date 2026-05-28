@@ -209,6 +209,173 @@ function all_tag_names(): array
     }
 }
 
+
+/**
+ * Return weighted tag suggestions for a gallery editor context.
+ *
+ * The score intentionally favors nearby galleries over global popularity:
+ * current gallery images, siblings, descendants, ancestors, and finally all-site
+ * usage. This keeps tag advice local to the folder where the admin is working.
+ */
+function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): array
+{
+    // Variable $gallery stores this steps working value.
+    $gallery = null;
+    if ($galleryId > 0) {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->prepare('SELECT id, parent_id, folder_path FROM galleries WHERE id = ?');
+        $stmt->execute([$galleryId]);
+        $gallery = $stmt->fetch() ?: null;
+    }
+    if (!$gallery) {
+        return weighted_global_tag_suggestions($limit);
+    }
+
+    // Variable $scores stores this steps working value.
+    $scores = [];
+    // Variable $details stores this steps working value.
+    $details = [];
+
+    /**
+     * Add weighted rows from one SQL query to the accumulated score table.
+     *
+     * @param string $sql SQL returning tag id, name, slug, and usage_count.
+     * @param array<int, mixed> $params Bound query parameters.
+     * @param float $weight Source multiplier.
+     * @param string $source Human-readable internal source label.
+     * @return void
+     */
+    $addRows = static function (string $sql, array $params, float $weight, string $source) use (&$scores, &$details): void {
+        try {
+            // Variable $stmt stores this steps working value.
+            $stmt = db()->prepare($sql);
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll() as $row) {
+                // Variable $tagId stores this steps working value.
+                $tagId = (int) ($row['id'] ?? 0);
+                if ($tagId <= 0) {
+                    continue;
+                }
+                // Variable $usageCount stores this steps working value.
+                $usageCount = max(1, (int) ($row['usage_count'] ?? 1));
+                // Logarithmic usage keeps common tags important without letting them drown out local context.
+                $score = $weight * (1.0 + log($usageCount + 1, 2));
+                if (!isset($scores[$tagId])) {
+                    $scores[$tagId] = [
+                        'id' => $tagId,
+                        'name' => (string) ($row['name'] ?? ''),
+                        'slug' => (string) ($row['slug'] ?? ''),
+                        'score' => 0.0,
+                        'sources' => [],
+                    ];
+                }
+                $scores[$tagId]['score'] += $score;
+                $scores[$tagId]['sources'][$source] = true;
+                $details[$tagId][$source] = ($details[$tagId][$source] ?? 0) + $usageCount;
+            }
+        } catch (PDOException) {
+            return;
+        }
+    };
+
+    // Variable $folderPath stores this steps working value.
+    $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+    // Variable $parentId stores this steps working value.
+    $parentId = (int) ($gallery['parent_id'] ?? 0);
+    // Variable $pathParts stores this steps working value.
+    $pathParts = array_values(array_filter(explode('/', $folderPath), static fn (string $part): bool => $part !== ''));
+    // Variable $ancestorPatterns stores this steps working value.
+    $ancestorPatterns = [];
+    for ($index = 1; $index < count($pathParts); $index++) {
+        $ancestorPatterns[] = implode('/', array_slice($pathParts, 0, $index));
+    }
+
+    $galleryTagSql = 'SELECT t.id, t.name, t.slug, COUNT(*) AS usage_count
+        FROM tags t
+        JOIN gallery_tags gt ON gt.tag_id = t.id
+        JOIN galleries g ON g.id = gt.gallery_id
+        WHERE %s
+        GROUP BY t.id, t.name, t.slug';
+
+    $imageTagSql = 'SELECT t.id, t.name, t.slug, COUNT(*) AS usage_count
+        FROM tags t
+        JOIN image_tags it ON it.tag_id = t.id
+        JOIN images i ON i.id = it.image_id
+        JOIN galleries g ON g.id = i.gallery_id
+        WHERE %s
+        GROUP BY t.id, t.name, t.slug';
+
+    $addRows(sprintf($imageTagSql, 'g.id = ?'), [$galleryId], 18.0, 'current_images');
+    $addRows(sprintf($galleryTagSql, 'g.parent_id = ? AND g.id <> ?'), [$parentId, $galleryId], 12.0, 'siblings');
+    $addRows(sprintf($imageTagSql, 'g.parent_id = ? AND g.id <> ?'), [$parentId, $galleryId], 8.0, 'sibling_images');
+
+    if ($folderPath !== '') {
+        $addRows(sprintf($galleryTagSql, 'g.folder_path LIKE ? AND g.id <> ?'), [$folderPath . '/%', $galleryId], 10.0, 'descendants');
+        $addRows(sprintf($imageTagSql, 'g.folder_path LIKE ? AND g.id <> ?'), [$folderPath . '/%', $galleryId], 6.0, 'descendant_images');
+    }
+
+    if ($ancestorPatterns) {
+        // Variable $ancestorPlaceholders stores this steps working value.
+        $ancestorPlaceholders = implode(',', array_fill(0, count($ancestorPatterns), '?'));
+        $addRows(sprintf($galleryTagSql, 'g.folder_path IN (' . $ancestorPlaceholders . ')'), $ancestorPatterns, 5.0, 'ancestors');
+        $addRows(sprintf($imageTagSql, 'g.folder_path IN (' . $ancestorPlaceholders . ')'), $ancestorPatterns, 3.0, 'ancestor_images');
+    }
+
+    $addRows('SELECT t.id, t.name, t.slug, COUNT(*) AS usage_count
+        FROM tags t
+        JOIN gallery_tags gt ON gt.tag_id = t.id
+        GROUP BY t.id, t.name, t.slug', [], 1.2, 'global_galleries');
+    $addRows('SELECT t.id, t.name, t.slug, COUNT(*) AS usage_count
+        FROM tags t
+        JOIN image_tags it ON it.tag_id = t.id
+        GROUP BY t.id, t.name, t.slug', [], 0.8, 'global_images');
+
+    // Variable $rows stores this steps working value.
+    $rows = array_values($scores);
+    usort($rows, static function (array $left, array $right): int {
+        // Variable $scoreCompare stores this steps working value.
+        $scoreCompare = ($right['score'] <=> $left['score']);
+        return $scoreCompare !== 0 ? $scoreCompare : strcmp((string) $left['name'], (string) $right['name']);
+    });
+
+    return array_slice(array_map(static function (array $row): array {
+        $row['score'] = round((float) $row['score'], 4);
+        $row['sources'] = array_keys((array) ($row['sources'] ?? []));
+        return $row;
+    }, $rows), 0, max(1, $limit));
+}
+
+/**
+ * Return weighted tag suggestions when no specific gallery context is available.
+ */
+function weighted_global_tag_suggestions(int $limit = 80): array
+{
+    try {
+        // Variable $stmt stores this steps working value.
+        $stmt = db()->query('SELECT t.id, t.name, t.slug,
+                COALESCE(gallery_usage.gallery_count, 0) AS gallery_count,
+                COALESCE(image_usage.image_count, 0) AS image_count
+            FROM tags t
+            LEFT JOIN (SELECT tag_id, COUNT(*) AS gallery_count FROM gallery_tags GROUP BY tag_id) gallery_usage ON gallery_usage.tag_id = t.id
+            LEFT JOIN (SELECT tag_id, COUNT(*) AS image_count FROM image_tags GROUP BY tag_id) image_usage ON image_usage.tag_id = t.id
+            ORDER BY (COALESCE(gallery_usage.gallery_count, 0) + COALESCE(image_usage.image_count, 0)) DESC, t.name
+            LIMIT ' . max(1, $limit));
+        return array_map(static function (array $row): array {
+            // Variable $usage stores this steps working value.
+            $usage = (int) ($row['gallery_count'] ?? 0) + (int) ($row['image_count'] ?? 0);
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'name' => (string) ($row['name'] ?? ''),
+                'slug' => (string) ($row['slug'] ?? ''),
+                'score' => (float) $usage,
+                'sources' => ['global'],
+            ];
+        }, $stmt->fetchAll());
+    } catch (PDOException) {
+        return [];
+    }
+}
+
 /**
  * Return true when the optional tag description column is available.
  */
