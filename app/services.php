@@ -104,6 +104,7 @@ require_once __DIR__ . '/services/simbrief_descriptions.php';
 require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
+require_once __DIR__ . '/services/public_search.php';
 require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
 require_once __DIR__ . '/services/gallery_migration.php';

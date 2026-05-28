@@ -78,6 +78,26 @@ function cms_admin_url_rewrite(): void
     redirect_to(url_for('admin', ['url_rewrite_saved' => 1]));
 }
 
+
+/**
+ * Persist the optional public search setting.
+ */
+function cms_admin_public_search_settings(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    set_public_home_search_enabled(isset($_POST['public_home_search_enabled']));
+    admin_log_event('info', 'settings.public_search_updated', 'Admin updated the public home search setting.', [
+        'enabled' => public_home_search_enabled(),
+    ]);
+    flash_message('admin_notice', t('admin.dashboard.notice_public_search_saved', 'Public search setting saved.'));
+    redirect_to(url_for('admin'));
+}
+
 /**
  * Backward-compatible wrapper for older controller/view code.
  */
