@@ -641,6 +641,21 @@ function cms_admin_edit_gallery(): void
             admin_save_gallery_title_picture($gallery, array_map('intval', $_POST['image_ids'] ?? []), $returnTab);
             return;
         }
+        if ((string) ($_POST['action'] ?? '') === 'force_ai_reprocess') {
+            if (!function_exists('ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
+                flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.'));
+                redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+            }
+            $resetResult = ai_image_analysis_force_gallery_reprocess((int) $gallery['id']);
+            flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_queued', 'AI metadata reset for {images} photo(s) across {galleries} gallery node(s). Removed {metadata} metadata row(s), removed {jobs} old queue row(s), and queued {queued} fresh job(s). The next AI worker poll will claim them.', [
+                'images' => (int) ($resetResult['images'] ?? 0),
+                'galleries' => (int) ($resetResult['galleries'] ?? 0),
+                'metadata' => (int) ($resetResult['metadata_deleted'] ?? 0),
+                'jobs' => (int) ($resetResult['jobs_deleted'] ?? 0),
+                'queued' => (int) ($resetResult['jobs_queued'] ?? 0),
+            ]));
+            redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+        }
         try {
             // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
             $saveResult = admin_save_gallery_from_input($gallery, $_POST, $_FILES, $returnTab, true);
@@ -932,12 +947,47 @@ function cms_admin_edit_gallery(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
     render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+    render_admin_gallery_ai_reprocess_panel($gallery);
     render_admin_gallery_migration_panel($gallery);
     echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
     render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
     render_footer();
+}
+
+
+/**
+ * Render the gallery-level AI metadata reset control.
+ *
+ * This panel does not run analysis on the shared host. It only clears existing
+ * internal result rows and queue rows for direct images in the gallery. Fresh
+ * jobs are created lazily when a Windows worker with the desired model/version
+ * polls the gallery API again.
+ *
+ * @param array<string,mixed> $gallery Gallery currently being edited.
+ * @return void
+ */
+function render_admin_gallery_ai_reprocess_panel(array $gallery): void
+{
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    echo '<div class="admin-edit-card is-wide admin-ai-reprocess-panel">';
+    echo '<h3>' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '</h3>';
+    echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_help', 'Use this when photos were already processed with an older local analyzer and you want the Windows worker to generate fresh internal search metadata for this gallery. This resets queue/result rows on the server and immediately creates fresh queue jobs for the same model generation where possible. The heavy analysis still runs on the Windows app.')) . '</p>';
+
+    if (!function_exists('ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
+        echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_migration_hidden', 'AI metadata regeneration will be available after the AI image-analysis migration is applied.')) . '</p>';
+        echo '</div>';
+        return;
+    }
+
+    echo '<form method="post" class="admin-inline-form" onsubmit="return confirm(' . e(json_encode(t('admin.gallery_editor.ai_reprocess_confirm', 'Forget generated AI metadata for this gallery branch and let the Windows worker process these photos again?'), JSON_UNESCAPED_UNICODE)) . ');">' . csrf_field();
+    echo '<input type="hidden" name="id" value="' . $galleryId . '">';
+    echo '<input type="hidden" name="return_tab" value="admin-edit-api">';
+    echo '<button type="submit" name="action" value="force_ai_reprocess" class="secondary danger">' . e(t('admin.gallery_editor.ai_reprocess_button', 'Force AI metadata regeneration')) . '</button>';
+    echo '<span class="muted">' . e(t('admin.gallery_editor.ai_reprocess_note', 'After pressing this, keep or start the AI metadata worker with the backend and model version you want to use.')) . '</span>';
+    echo '</form>';
+    echo '</div>';
 }
 
 /**

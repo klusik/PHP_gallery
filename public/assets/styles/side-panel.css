@@ -1435,3 +1435,51 @@ body.has-admin-side-panel {
         grid-template-columns: 1fr;
     }
 }
+
+.admin-ai-metadata-panel {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 16%, var(--admin-border, #d4dde7));
+    border-radius: max(0.9rem, calc(var(--radius, 16px) * 0.65));
+    background: color-mix(in srgb, var(--panel, #ffffff) 92%, var(--accent, #2563eb) 8%);
+}
+
+.admin-ai-metadata-panel h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.admin-ai-metadata-panel label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 700;
+}
+
+.admin-ai-metadata-panel textarea[readonly] {
+    min-height: 7rem;
+    resize: vertical;
+    font-family: Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: #1f2937;
+    background: color-mix(in srgb, var(--field, #f8fafc) 92%, #ffffff 8%);
+}
+
+.admin-ai-metadata-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.3rem 0.85rem;
+    margin: 0;
+}
+
+.admin-ai-metadata-facts dt {
+    color: #4b5563;
+    font-weight: 700;
+}
+
+.admin-ai-metadata-facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}

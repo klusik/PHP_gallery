@@ -113,3 +113,92 @@ Watch-folder mode marks a file as uploaded only after the gallery returns a succ
 - Client-generated thumbnails are accepted only after the corresponding original image is accepted by the gallery.
 - Partially copied watched-folder files are ignored until their size and modification time remain stable.
 - `gallery_watch_upload.pyw` starts without a console window.
+
+## Optional AI metadata worker
+
+The Windows companion app can also run as a low-priority client-side worker for internal image metadata. This mode is disabled by default and does not change the watched-folder or manual upload workflow.
+
+Architecture:
+
+- PHP Gallery remains the source of truth for work allocation.
+- The companion app never scans the gallery and never decides global ownership by itself.
+- The app asks the existing upload automation endpoint for one `ai_next_job` claim.
+- The server atomically leases one queued job to that worker and returns a claim token.
+- The worker downloads only the claimed asset through the authenticated API endpoint.
+- The worker analyzes the image locally and reports `ai_complete` with either success metadata or a retryable failure.
+- Heartbeats extend the lease while long processing continues.
+- If the worker disappears, the lease expires and the server can assign the job again later.
+
+Server requirements:
+
+1. Deploy the updated PHP Gallery files.
+2. Run pending database migrations from the admin maintenance flow or `php scripts/migrate.php`.
+3. Generate or reuse a gallery-scoped upload automation API key.
+4. Use that same Gallery URL and API key in the Windows app.
+
+Client configuration:
+
+1. Open the app and keep the normal shared connection settings filled in.
+2. Open the `AI metadata` tab.
+3. Enable `AI metadata worker on this PC`.
+4. Keep the default model name and version for the built-in Pillow analyzer, or set your own values when using an external local model.
+5. Optionally set an external analyzer command.
+6. Start the worker from the tab or from the tray menu.
+
+External analyzer command:
+
+The command receives placeholders expanded by the app:
+
+- `{image_path}` for the downloaded local image path
+- `{filename}` for the gallery filename
+- `{job_id}` for the server job id
+
+The command must write a JSON object to stdout. Recommended shape:
+
+```json
+{
+  "metadata": {
+    "internal_description": "night airport ramp with parked aircraft",
+    "labels": ["airport", "night", "aircraft", "ramp"]
+  },
+  "searchable_text": "night airport ramp parked aircraft apron lights"
+}
+```
+
+The metadata is stored as internal data in `image_ai_metadata`. It is searchable, but it is not shown as a public photo description and it does not overwrite user-written titles or descriptions.
+
+### Semantic object labels
+
+The built-in Pillow analyzer can describe geometry, brightness, contrast, colors, and other technical image properties. It cannot identify semantic objects such as people, bridges, guitars, houses, cars, animals, aircraft, or food because Pillow is not an object-recognition model.
+
+For semantic search metadata, use the `Vision backend` field on the AI metadata tab:
+
+- `auto`: tries the external command if configured, then the in-process Transformers backend, then local Ollama, then Pillow as the safe fallback.
+- `transformers`: runs Hugging Face Transformers and PyTorch directly inside this Python app process. It does not require a separate local server.
+- `ollama`: optional fallback for users who intentionally run a locally installed Ollama service with a vision-capable model.
+- `external`: uses the existing external analyzer command field.
+- `pillow`: uses only dependency-light visual and technical metadata.
+
+Recommended non-server setup on the Windows worker machine:
+
+1. Open the `AI metadata` tab.
+2. Press `Install local AI module`.
+3. Restart the app after the installation finishes.
+4. Set `Vision backend` to `transformers` or leave it on `auto`.
+5. Keep the default caption model `Salesforce/blip-image-captioning-base` and detector model `google/owlvit-base-patch32`, or replace them with local Hugging Face model paths.
+6. Keep the default object label list, or add gallery-specific labels that matter for your photos.
+
+The optional local AI module installs large packages, mainly `torch`, `torchvision`, and `transformers`. They are not part of `requirements.txt` because normal uploading and the Pillow fallback should stay lightweight. First semantic run may download model files into the normal local Hugging Face cache for the current Windows user.
+
+The Transformers backend stores internal fields such as `caption`, `objects`, `detections`, `labels`, and `internal_description`. These fields are added to the searchable text. They still do not replace the user-written photo title or description.
+
+Ollama remains available if you prefer it, but it does need a locally running Ollama service. For a no-server workflow, use `transformers`.
+
+### Reprocessing already analyzed gallery photos
+
+If existing images were already processed with the previous Pillow-only metadata, you now have two options:
+
+- Change the AI metadata tab's model version, for example from `1` to `semantic-1`, before starting the worker. The server treats a model/version change as a new generation target.
+- Open the gallery admin editor, go to the `API` tab, and press `Force AI metadata regeneration`. This removes stored internal AI metadata and old queue rows for images in that gallery branch, then immediately queues fresh jobs for the same known model generation. The next AI worker poll will claim them.
+
+The force-regeneration action only resets server rows and prepares queue jobs. Heavy analysis still runs on the Windows app. The AI tab now keeps normal controls visible and places tuning fields under `Show advanced AI settings`.

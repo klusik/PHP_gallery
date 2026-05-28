@@ -160,6 +160,10 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
     $listingCondition = public_search_context_listing_condition('g', $contextGallery);
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
+    $aiSearchReady = function_exists('ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata public_image_ai ON public_image_ai.image_id = public_image.id' : '';
+    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN public_image_ai.searchable_text LIKE ? THEN 10 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
+    $aiWhereSql = $aiSearchReady ? ' OR public_image_ai.searchable_text LIKE ?' : '';
     $sql = "SELECT g.*, COUNT(DISTINCT public_image.id) AS image_count,
             GROUP_CONCAT(DISTINCT gallery_tag.name ORDER BY gallery_tag.name SEPARATOR ', ') AS gallery_tag_names,
             GROUP_CONCAT(DISTINCT image_tag.name ORDER BY image_tag.name SEPARATOR ', ') AS image_tag_names,
@@ -167,8 +171,10 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
             MAX(CASE WHEN g.title LIKE ? THEN 40 ELSE 0 END) AS title_score,
             MAX(CASE WHEN gallery_tag.name LIKE ? THEN 24 ELSE 0 END) AS gallery_tag_score,
             MAX(CASE WHEN public_image.filename LIKE ? OR public_image.title LIKE ? THEN 16 ELSE 0 END) AS image_name_score
+            $aiScoreSql
         FROM galleries g
         LEFT JOIN images public_image ON public_image.gallery_id = g.id AND public_image.visibility = 'public'
+        $aiJoin
         LEFT JOIN gallery_tags gt ON gt.gallery_id = g.id
         LEFT JOIN tags gallery_tag ON gallery_tag.id = gt.tag_id
         LEFT JOIN image_tags it ON it.image_id = public_image.id
@@ -179,11 +185,20 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
               OR gallery_tag.name LIKE ? OR gallery_tag.description LIKE ?
               OR public_image.filename LIKE ? OR public_image.title LIKE ? OR public_image.description LIKE ?
               OR image_tag.name LIKE ? OR image_tag.description LIKE ?
+              $aiWhereSql
           )
         GROUP BY g.id
-        ORDER BY exact_title_score DESC, title_score DESC, gallery_tag_score DESC, image_name_score DESC, g.title ASC
+        ORDER BY exact_title_score DESC, title_score DESC, gallery_tag_score DESC, image_name_score DESC, ai_score DESC, g.title ASC
         LIMIT " . (int) $limit;
-    $params = array_merge([$query, $like, $like, $like, $like], $contextParams, [$like, $like, $like, $like, $like, $like, $like, $like, $like]);
+    $scoreParams = [$query, $like, $like, $like, $like];
+    if ($aiSearchReady) {
+        $scoreParams[] = $like;
+    }
+    $whereParams = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
+    if ($aiSearchReady) {
+        $whereParams[] = $like;
+    }
+    $params = array_merge($scoreParams, $contextParams, $whereParams);
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
 
@@ -202,7 +217,7 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
         if ($description !== '') {
             $details[] = $description;
         }
-        $score = (int) ($gallery['exact_title_score'] ?? 0) + (int) ($gallery['title_score'] ?? 0) + (int) ($gallery['gallery_tag_score'] ?? 0) + (int) ($gallery['image_name_score'] ?? 0);
+        $score = (int) ($gallery['exact_title_score'] ?? 0) + (int) ($gallery['title_score'] ?? 0) + (int) ($gallery['gallery_tag_score'] ?? 0) + (int) ($gallery['image_name_score'] ?? 0) + (int) ($gallery['ai_score'] ?? 0);
         $results[] = [
             'type' => 'gallery',
             'label' => t('search.type_gallery', 'Gallery'),
@@ -224,6 +239,10 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
     $listingCondition = public_search_context_listing_condition('g', $contextGallery);
     $contextParams = public_search_context_params($contextGallery);
     $like = public_search_like_pattern($query);
+    $aiSearchReady = function_exists('ai_image_analysis_schema_ready') && ai_image_analysis_schema_ready();
+    $aiJoin = $aiSearchReady ? 'LEFT JOIN image_ai_metadata image_ai ON image_ai.image_id = i.id' : '';
+    $aiScoreSql = $aiSearchReady ? ', MAX(CASE WHEN image_ai.searchable_text LIKE ? THEN 14 ELSE 0 END) AS ai_score' : ', 0 AS ai_score';
+    $aiWhereSql = $aiSearchReady ? ' OR image_ai.searchable_text LIKE ?' : '';
     $sql = "SELECT i.*, g.id AS matched_gallery_id, g.parent_id AS matched_gallery_parent_id,
             g.folder_path AS matched_gallery_folder_path, g.folder_path_hash AS matched_gallery_folder_path_hash,
             g.slug AS matched_gallery_slug, g.title AS matched_gallery_title, g.description AS matched_gallery_description,
@@ -241,8 +260,10 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
             MAX(CASE WHEN i.filename LIKE ? OR i.title LIKE ? THEN 36 ELSE 0 END) AS name_score,
             MAX(CASE WHEN image_tag.name LIKE ? THEN 24 ELSE 0 END) AS tag_score,
             MAX(CASE WHEN g.title LIKE ? THEN 12 ELSE 0 END) AS gallery_score
+            $aiScoreSql
         FROM images i
         INNER JOIN galleries g ON g.id = i.gallery_id
+        $aiJoin
         LEFT JOIN image_tags it ON it.image_id = i.id
         LEFT JOIN tags image_tag ON image_tag.id = it.tag_id
         LEFT JOIN gallery_tags gt ON gt.gallery_id = g.id
@@ -254,11 +275,20 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
               OR image_tag.name LIKE ? OR image_tag.description LIKE ?
               OR g.title LIKE ? OR g.description LIKE ?
               OR gallery_tag.name LIKE ? OR gallery_tag.description LIKE ?
+              $aiWhereSql
           )
         GROUP BY i.id
-        ORDER BY exact_name_score DESC, name_score DESC, tag_score DESC, gallery_score DESC, i.filename ASC
+        ORDER BY exact_name_score DESC, name_score DESC, tag_score DESC, gallery_score DESC, ai_score DESC, i.filename ASC
         LIMIT " . (int) $limit;
-    $params = array_merge([$query, $query, $like, $like, $like, $like], $contextParams, [$like, $like, $like, $like, $like, $like, $like, $like, $like]);
+    $scoreParams = [$query, $query, $like, $like, $like, $like];
+    if ($aiSearchReady) {
+        $scoreParams[] = $like;
+    }
+    $whereParams = [$like, $like, $like, $like, $like, $like, $like, $like, $like];
+    if ($aiSearchReady) {
+        $whereParams[] = $like;
+    }
+    $params = array_merge($scoreParams, $contextParams, $whereParams);
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
 
@@ -279,7 +309,7 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
         if ($description !== '') {
             $details[] = $description;
         }
-        $score = (int) ($row['exact_name_score'] ?? 0) + (int) ($row['name_score'] ?? 0) + (int) ($row['tag_score'] ?? 0) + (int) ($row['gallery_score'] ?? 0);
+        $score = (int) ($row['exact_name_score'] ?? 0) + (int) ($row['name_score'] ?? 0) + (int) ($row['tag_score'] ?? 0) + (int) ($row['gallery_score'] ?? 0) + (int) ($row['ai_score'] ?? 0);
         $results[] = [
             'type' => 'photo',
             'label' => t('search.type_photo', 'Photo'),
