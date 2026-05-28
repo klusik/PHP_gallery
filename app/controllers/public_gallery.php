@@ -257,8 +257,12 @@ function cms_gallery(): void
 
     render_header((string) $seo['title'], $gallery, $publicOnly);
     echo '<section class="hero">';
+    // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
+    echo '<div class="hero-primary">';
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    render_breadcrumbs($gallery);
+    echo '</div>';
     echo '<div class="hero-meta">';
     echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
     render_public_gallery_admin_delete_form($gallery, 'hero');
@@ -280,7 +284,6 @@ function cms_gallery(): void
     echo '</div>';
     echo '</div>';
     echo '</div>';
-    render_breadcrumbs($gallery);
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_preview_toolbar($gallery);
