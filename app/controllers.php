@@ -52,6 +52,7 @@ require_once __DIR__ . '/controllers/admin_galleries.php';
 require_once __DIR__ . '/controllers/admin_tags.php';
 require_once __DIR__ . '/controllers/admin_uploads.php';
 require_once __DIR__ . '/controllers/admin_simbrief.php';
+require_once __DIR__ . '/controllers/admin_openai_text_assist.php';
 require_once __DIR__ . '/controllers/navigation_data.php';
 require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';

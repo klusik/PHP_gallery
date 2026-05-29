@@ -4898,3 +4898,56 @@ button.gallery-row-action.secondary {
         grid-template-columns: 1fr;
     }
 }
+
+/* Presents the curated OpenAI model choices without requiring users to know model ids. */
+.account-openai-model-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin: 0.15rem 0 0;
+}
+
+.account-openai-model-card {
+    display: grid;
+    gap: 0.45rem;
+    align-content: start;
+    padding: 0.75rem;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #fbfbfc;
+}
+
+.account-openai-model-card.is-selected {
+    border-color: #2271b1;
+    background: #f0f6fc;
+}
+
+.account-openai-model-card div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.account-openai-model-card code {
+    padding: 0.08rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    font-size: 0.78rem;
+}
+
+.account-openai-model-card span {
+    justify-self: start;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(34, 113, 177, 0.12);
+    color: #135e96;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.account-openai-model-card p {
+    margin: 0;
+    color: #50575e;
+    line-height: 1.45;
+}

@@ -215,6 +215,7 @@ function cms_run(): void
         'admin_reorder_public_galleries' => 'cms_admin_reorder_public_galleries',
         'admin_scan_images' => 'cms_admin_scan_images',
         'admin_simbrief_description' => 'cms_admin_simbrief_description',
+        'admin_openai_text_assist' => 'cms_admin_openai_text_assist',
         'admin_integrity' => 'cms_admin_integrity',
         'admin_logs' => 'cms_admin_logs',
         'admin_log_update' => 'cms_admin_log_update',

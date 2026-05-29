@@ -1483,3 +1483,46 @@ body.has-admin-side-panel {
     min-width: 0;
     overflow-wrap: anywhere;
 }
+
+.admin-openai-text-assist {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--accent, #2563eb) 18%, var(--admin-border, #d4dde7));
+    border-radius: max(0.9rem, calc(var(--radius, 16px) * 0.65));
+    background: color-mix(in srgb, var(--panel, #ffffff) 92%, var(--accent, #2563eb) 8%);
+}
+
+.admin-openai-text-assist-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-openai-text-assist-heading h3 {
+    margin: 0 0 0.2rem;
+    font-size: 0.98rem;
+}
+
+.admin-openai-text-assist-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.65rem;
+}
+
+.admin-openai-text-assist-actions label {
+    display: grid;
+    gap: 0.25rem;
+    min-width: min(100%, 16rem);
+}
+
+.admin-openai-text-assist-actions [data-openai-status] {
+    font-size: 0.9rem;
+}
+
+.admin-openai-text-assist-actions [data-openai-status].is-error {
+    color: #b42318;
+    font-weight: 700;
+}

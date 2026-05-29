@@ -102,6 +102,8 @@ require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
 // Load SimBrief description helpers after the shared HTTP client is available.
 require_once __DIR__ . '/services/simbrief_descriptions.php';
+// Load optional OpenAI text assistance after database helpers and gallery lookup helpers are available.
+require_once __DIR__ . '/services/openai_text_assist.php';
 // Load navigation data helpers before flight maps resolve route identifiers.
 require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';

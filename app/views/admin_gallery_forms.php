@@ -131,3 +131,74 @@ function view_render_admin_simbrief_description_tool(int $galleryId): void
     echo '<div class="admin-simbrief-description-actions"><button type="button" class="button secondary" data-simbrief-generate>' . e(t('admin.simbrief.generate_button', 'Generate description draft')) . '</button><span class="muted" data-simbrief-status role="status" aria-live="polite"></span></div>';
     echo '</div>';
 }
+
+/**
+ * Render optional OpenAI text-assistance controls for a description textarea.
+ *
+ * @param int $galleryId Gallery id used for gallery-level prompt context, or zero for photo-only editors.
+ * @param int $imageId Image id used for photo-level prompt context, or zero for gallery editors.
+ * @param string $mode UI mode, either gallery or image.
+ * @return void
+ */
+function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery'): void
+{
+    $user = function_exists('current_user') ? current_user() : null;
+    $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
+    if ($userId <= 0 || !function_exists('openai_text_assist_available') || !openai_text_assist_available($userId)) {
+        return;
+    }
+
+    $mode = $mode === 'image' ? 'image' : 'gallery';
+    $taskDefault = $mode === 'image' ? 'image_description' : 'gallery_description';
+    $title = $mode === 'image'
+        ? t('admin.openai.image_title', 'AI photo text')
+        : t('admin.openai.gallery_title', 'AI gallery text');
+    $help = $mode === 'image'
+        ? t('admin.openai.image_help', 'Generate or clean up this public photo description. Nothing is saved until you save the photo.')
+        : t('admin.openai.gallery_help', 'Generate or clean up this gallery description. Nothing is saved until you save the gallery.');
+    $button = $mode === 'image'
+        ? t('admin.openai.generate_image_button', 'Generate photo description')
+        : t('admin.openai.generate_gallery_button', 'Generate gallery description');
+    $allowImageInput = function_exists('openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
+    $languageCatalog = function_exists('openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
+    $defaultLanguage = function_exists('openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
+
+    echo '<div class="admin-openai-text-assist" data-openai-text-assist data-openai-endpoint="' . e(url_for('admin_openai_text_assist')) . '" data-gallery-id="' . (int) $galleryId . '" data-image-id="' . (int) $imageId . '" data-openai-target-selector="[data-openai-description-textarea]">';
+    echo '<div class="admin-openai-text-assist-heading"><div><h3>' . e($title) . '</h3><p class="muted">' . e($help) . '</p></div></div>';
+    echo '<div class="admin-openai-text-assist-actions"><label><span>' . e(t('admin.openai.action_label', 'Action')) . '</span><select data-openai-task>';
+    if ($mode === 'image') {
+        echo '<option value="image_description" selected>' . e(t('admin.openai.task_image_description', 'Generate photo description')) . '</option>';
+        if ($allowImageInput) {
+            echo '<option value="image_visual_description">' . e(t('admin.openai.task_image_visual_description', 'Describe visible content from thumbnail')) . '</option>';
+        }
+    } else {
+        echo '<option value="gallery_description" selected>' . e(t('admin.openai.task_gallery_description', 'Generate leaf-gallery description')) . '</option>';
+        echo '<option value="gallery_summary">' . e(t('admin.openai.task_gallery_summary', 'Summarize parent gallery')) . '</option>';
+        if ($allowImageInput) {
+            echo '<option value="gallery_visual_description">' . e(t('admin.openai.task_gallery_visual_description', 'Generate from gallery thumbnails')) . '</option>';
+        }
+    }
+    echo '<option value="cleanup_text">' . e(t('admin.openai.task_cleanup_text', 'Fix spelling and grammar')) . '</option>';
+    echo '<option value="expand_text">' . e(t('admin.openai.task_expand_text', 'Expand existing text')) . '</option>';
+    echo '</select></label>';
+    if ($languageCatalog !== []) {
+        echo '<label class="admin-openai-language-select"><span>' . e(t('admin.openai.language_label', 'Language')) . '</span><select data-openai-language>';
+        foreach ($languageCatalog as $languageCode => $languageInfo) {
+            $optionLabel = trim((string) ($languageInfo['flag'] ?? '') . ' ' . (string) ($languageInfo['label'] ?? $languageCode));
+            echo '<option value="' . e((string) $languageCode) . '"' . ($defaultLanguage === $languageCode ? ' selected' : '') . '>' . e($optionLabel) . '</option>';
+        }
+        echo '</select></label>';
+    }
+    echo '<button type="button" class="button secondary" data-openai-generate>' . e($button) . '</button>';
+    echo '<span class="muted" data-openai-status role="status" aria-live="polite"></span></div>';
+    if ($allowImageInput) {
+        echo '<p class="muted admin-openai-text-assist-note">' . e(t('admin.openai.visual_note', 'Image-based actions send only small generated thumbnails, never the original files.')) . '</p>';
+        if ($mode === 'gallery') {
+            echo '<div class="admin-openai-text-assist-bulk">';
+            echo '<button type="button" class="button secondary" data-openai-bulk-generate>' . e(t('admin.openai.bulk_generate_images_button', 'Bulk describe gallery photos')) . '</button>';
+            echo '<p class="muted">' . e(t('admin.openai.bulk_generate_images_help', 'Generates and saves photo descriptions one photo at a time. You will confirm the exact number before it starts.')) . '</p>';
+            echo '</div>';
+        }
+    }
+    echo '</div>';
+}
