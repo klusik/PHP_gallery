@@ -233,7 +233,11 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
         // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
         $cachedData = application_patch_notes_read_cache($branch, $ttlSeconds);
         if ($cachedData !== null) {
-            return $cachedData;
+            $currentVersion = cms_current_version();
+            if (isset($cachedData['versions'][$currentVersion]) || empty($cachedData['versions'])) {
+                return $cachedData;
+            }
+            application_patch_notes_clear_cache($branch);
         }
     }
 
@@ -334,6 +338,24 @@ function application_patch_notes_write_cache(string $branch, array $data): void
     }
 
     @file_put_contents($path, $json, LOCK_EX);
+}
+
+/**
+ * Remove cached patch notes so the next view refreshes from the source.
+ */
+function application_patch_notes_clear_cache(?string $branch = null): void
+{
+    if ($branch !== null && $branch !== '') {
+        $paths = [application_patch_notes_cache_path($branch)];
+    } else {
+        $paths = glob(application_patch_notes_cache_dir() . DIRECTORY_SEPARATOR . '*.json') ?: [];
+    }
+
+    foreach ($paths as $path) {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
 }
 
 /**
@@ -923,6 +945,7 @@ function install_application_beta(string $commitId): array
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
     cache_application_update_check(check_application_update());
+    application_patch_notes_clear_cache();
     set_app_setting('application_update_channel', 'beta');
     set_app_setting('application_update_beta_commit', $commitId);
     set_app_setting('application_update_beta_backup_path', str_replace('\\', '/', substr($backupPath, strlen($root) + 1)));
@@ -996,6 +1019,7 @@ function restore_application_stable_release(): array
         'application_update_beta_backup_path',
         'application_update_check_cache',
     ]);
+    application_patch_notes_clear_cache();
 
     // $restoredVersion stores an intermediate value used by the surrounding gallery workflow.
     $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
@@ -1178,6 +1202,7 @@ function install_application_update(): array
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
+    application_patch_notes_clear_cache();
 
     return [
         'version' => (string) $status['latest_version'],
