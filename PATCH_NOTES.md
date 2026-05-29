@@ -1,5 +1,226 @@
 # Patch notes
 
+## Version 0.73
+
+Version 0.73 expands PHP Gallery with context-aware tagging, live public search, internal AI image analysis, and optional OpenAI-assisted description generation. It also polishes gallery hero presentation and improves the admin editing flow around gallery and photo metadata.
+
+  ### Highlights
+
+  #### Added context-aware tag suggestions and pill-based tag editing
+
+  - Added weighted tag suggestions in gallery editors.
+  - Ranked suggestions by local gallery context before falling back to site-wide tag usage.
+  - Preferred tags from current gallery photos, sibling galleries, descendants, ancestors, and nearby folder context.
+  - Reworked tag editing into removable selected-tag pills.
+  - Added comma, semicolon, newline, Enter, blur, and separator handling for committing tags.
+  - Added duplicate prevention and normalized submission through the existing comma-separated backend format.
+  - Improved tag suggestion display so already selected tags are hidden from the suggestion list.
+  - Updated tag editor styling for compact, accessible tag pills and suggestion chips.
+
+  #### Improved gallery hero and tag presentation
+
+  - Refined public gallery hero layout so long descriptions no longer collapse into a narrow central column.
+  - Kept the title, breadcrumbs, description, and metadata better aligned in the primary hero column.
+  - Improved visual spacing around tags and gallery metadata.
+  - Updated admin and public styling so large tag sets are less intrusive.
+  - Preserved existing gallery data, URLs, and public rendering behavior.
+
+  #### Added optional live public search
+
+  - Added an optional public search feature controlled from the admin dashboard.
+  - Added a thin live search bar on the front page when enabled.
+  - Added the same search bar to gallery pages.
+  - Added gallery-context search mode so gallery pages can search only the current gallery and its subgalleries.
+  - Searched across gallery titles, descriptions, tags, filenames, photo titles, photo descriptions, and available AI metadata.
+  - Added debounced browser-side searching with stale-request cancellation.
+  - Added loading, empty, error, and clear states.
+  - Added compact result cards for gallery and photo matches.
+  - Kept the search feature disabled by default until an admin enables it.
+
+  #### Added server-backed AI image analysis metadata
+
+  - Added database-backed internal AI image-analysis metadata.
+  - Added a leased queue system for analysis jobs claimed by the Windows companion app.
+  - Added worker actions for claiming jobs, extending leases, downloading assets, completing jobs, and recording failures.
+  - Stored AI metadata separately from public descriptions.
+  - Exposed generated AI metadata as read-only information in the admin photo editor.
+  - Added a gallery-level action to force AI metadata regeneration.
+  - Added search integration so generated internal metadata can improve search results.
+  - Kept heavy image analysis off the shared PHP host and delegated processing to the Windows worker.
+
+  #### Extended the Windows companion app with AI metadata worker support
+
+  - Added optional AI metadata worker behavior to the Windows uploader app.
+  - Added local analysis, queue polling, lease heartbeat handling, and completion reporting.
+  - Added dependency installation and backend selection support for local AI tooling.
+  - Added documentation for the AI worker setup and reprocessing workflow.
+  - Preserved normal watch-folder and upload behavior.
+
+  #### Added optional OpenAI text assistance
+
+  - Added profile-level OpenAI settings with encrypted API key storage.
+  - Added model selection and password-confirmed settings updates.
+  - Kept OpenAI assistance fully optional and hidden unless enabled for the current account.
+  - Added reusable OpenAI text assistance for gallery descriptions, photo descriptions, parent-gallery summaries, spelling cleanup, grammar cleanup, expansion, and rewrites.
+  - Added editor controls for both gallery and photo description fields.
+  - Added browser-side insertion, replacement confirmation, status reporting, and error handling.
+  - Added admin logging for successful and failed OpenAI generation requests without logging API keys.
+
+  #### Added thumbnail opt-in for OpenAI visual prompts
+
+  - Added a separate account setting for sending generated thumbnails to OpenAI.
+  - Kept image input disabled by default.
+  - Sent small generated thumbnails only when the user explicitly enables image input.
+  - Never sent original image files through the OpenAI text-assistance workflow.
+  - Added clear UI copy explaining the thumbnail-based behavior.
+  - Added server-side gating so visual prompt actions fail safely when consent is disabled.
+
+  #### Added language selection for generated AI text
+
+  - Added output-language selection for AI-generated text.
+  - Supported automatic language handling, Czech, and English.
+  - Threaded the selected language through browser requests, controller validation, prompt construction, and generation.
+  - Added localized labels and JavaScript strings for the language selector.
+
+  #### Added bulk OpenAI photo-description generation
+
+  - Added a gallery-level bulk action for generating descriptions for all eligible photos in a gallery.
+  - Counted photos before starting the operation.
+  - Required explicit confirmation by entering the exact number of photos to process.
+  - Processed photos one at a time, with one OpenAI request per photo.
+  - Saved each generated photo description immediately.
+  - Reported saved, completed, and failed counts during the run.
+  - Validated gallery ownership and image ownership before saving generated descriptions.
+  - Reused the same image-input consent gates as individual visual description actions.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added the `public_search` route.
+  - Added the `admin_public_search_settings` route.
+  - Added the `admin_openai_text_assist` route.
+  - Added public search service logic in `app/services/public_search.php`.
+  - Added OpenAI text-assistance service logic in `app/services/openai_text_assist.php`.
+  - Added AI image-analysis queue and metadata logic in `app/services/ai_image_analysis.php`.
+  - Added weighted tag suggestion helpers in `app/services/tag_metadata.php`.
+  - Added OpenAI settings handling to the account controller.
+  - Added AI metadata inspection to the admin photo editor.
+  - Added AI metadata regeneration controls to the gallery API tab.
+  - Added upload automation API actions for AI worker polling, heartbeat, asset streaming, and completion.
+  - Updated service and controller loaders for the new modules.
+  - Regenerated the core manifest for the expanded file set.
+
+  #### Database
+
+  - Added migration `202605280001_ai_image_analysis_queue.php`.
+  - Added migration `202605290001_user_openai_text_settings.php`.
+  - Added migration `202605290002_user_openai_image_input_flag.php`.
+  - Added storage for internal AI metadata and leased analysis jobs.
+  - Added profile-level OpenAI text-assistance settings.
+  - Added a separate profile-level thumbnail-consent flag for image-input prompts.
+
+  #### Frontend
+
+  - Added `public/assets/gallery-modules/public-home-search.js`.
+  - Added `public/assets/gallery-modules/admin-openai-text-assist.js`.
+  - Updated `public/assets/gallery-modules/tag-suggestions.js` for pill editing and weighted suggestions.
+  - Updated public gallery initialization to load the new search module.
+  - Updated admin-side browser strings for OpenAI actions, confirmation prompts, bulk progress, and error handling.
+  - Updated gallery, admin, side-panel, dashboard, and media-tool styles for the new controls.
+
+  #### Windows companion app
+
+  - Updated `winapp/gallery_watch_upload.pyw` with optional AI metadata worker support.
+  - Updated `winapp/README.md` with setup and operation notes for the new worker mode.
+  - Kept upload automation compatible with existing gallery API keys.
+
+  #### Tests
+
+  - Added `tests/openai_text_assist_model_test.php`.
+  - Covered model normalization.
+  - Covered language normalization.
+  - Covered prompt and task selection.
+  - Covered image-input gating.
+  - Covered bulk-generation helper behavior.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public search can make galleries, photos, tags, and descriptions easier to discover when enabled.
+  - Gallery pages with long descriptions should read better and waste less horizontal space.
+  - Search results can become more useful when internal AI metadata exists.
+  - The search interface remains compact and does not alter normal gallery browsing when unused.
+
+  #### For administrators
+
+  - Tagging is faster and more context-aware.
+  - Gallery and photo descriptions can be drafted or cleaned up through optional OpenAI assistance.
+  - Bulk photo-description generation can process a whole gallery after explicit confirmation.
+  - Generated OpenAI text remains reviewable and controlled by normal save workflows, except confirmed bulk photo descriptions, which are saved one photo at a time.
+  - OpenAI API keys are stored at profile level and protected by password confirmation when changed.
+  - Thumbnail-based OpenAI actions require separate consent.
+  - Internal AI metadata can be inspected without confusing it with public descriptions.
+  - The Windows companion app can now perform heavier local analysis work instead of pushing that burden onto shared hosting.
+
+  ### Notes
+
+  - Public search is optional and admin-controlled.
+  - OpenAI text assistance is optional and profile-controlled.
+  - Thumbnail-based OpenAI prompts are disabled by default and require separate opt-in consent.
+  - Internal AI metadata is not the same as public photo descriptions.
+  - The AI image-analysis worker stores metadata for indexing and inspection, while public description text remains controlled separately.
+  - Bulk OpenAI photo-description generation can be expensive because it sends one request per photo.
+  - AI image analysis requires the new queue migration before worker actions are available.
+  - Existing galleries and photos remain valid without AI settings, without OpenAI keys, and without the Windows AI worker.
+  - The core manifest was refreshed for the new controllers, services, migrations, scripts, styles, translations, tests, and Windows companion app changes.
+
+  ### Files changed
+
+  - `app/bootstrap.php`
+  - `app/controllers.php`
+  - `app/controllers/admin_auth.php`
+  - `app/controllers/admin_dashboard.php`
+  - `app/controllers/admin_galleries_edit.php`
+  - `app/controllers/admin_gallery_renderers.php`
+  - `app/controllers/admin_openai_text_assist.php`
+  - `app/controllers/admin_public_inline.php`
+  - `app/controllers/public_gallery.php`
+  - `app/controllers/upload_automation.php`
+  - `app/core-manifest.json`
+  - `app/helpers.php`
+  - `app/lang/cs.json`
+  - `app/lang/en.json`
+  - `app/services.php`
+  - `app/services/ai_image_analysis.php`
+  - `app/services/openai_text_assist.php`
+  - `app/services/public_search.php`
+  - `app/services/tag_metadata.php`
+  - `app/views/admin_dashboard.php`
+  - `app/views/admin_gallery_forms.php`
+  - `database/migrations/202605280001_ai_image_analysis_queue.php`
+  - `database/migrations/202605290001_user_openai_text_settings.php`
+  - `database/migrations/202605290002_user_openai_image_input_flag.php`
+  - `public/assets/gallery-modules/admin-openai-text-assist.js`
+  - `public/assets/gallery-modules/admin-operations.js`
+  - `public/assets/gallery-modules/admin-side-panel.js`
+  - `public/assets/gallery-modules/lightbox-deferred.js`
+  - `public/assets/gallery-modules/lightbox.js`
+  - `public/assets/gallery-modules/public-home-search.js`
+  - `public/assets/gallery-modules/tag-suggestions.js`
+  - `public/assets/gallery.js`
+  - `public/assets/styles/admin-dashboard.css`
+  - `public/assets/styles/admin-layout.css`
+  - `public/assets/styles/admin-media-tools.css`
+  - `public/assets/styles/admin.css`
+  - `public/assets/styles/public.css`
+  - `public/assets/styles/side-panel.css`
+  - `public/assets/styles/utilities.css`
+  - `tests/openai_text_assist_model_test.php`
+  - `winapp/README.md`
+  - `winapp/gallery_watch_upload.pyw`
+
 ## Version 0.72.1
 
 Version 0.72.1 focuses on map widget polish and lightbox map behavior stability.
