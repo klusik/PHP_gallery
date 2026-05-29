@@ -74,6 +74,8 @@ require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
 require_once __DIR__ . '/services/thumbnails.php';
+// Load AI-analysis queue helpers after media path helpers are available.
+require_once __DIR__ . '/services/ai_image_analysis.php';
 require_once __DIR__ . '/services/thumbnail_bounds.php';
 require_once __DIR__ . '/services/gallery_covers.php';
 // Load gallery branding helpers before sidecar persistence reads branding metadata.
@@ -100,10 +102,13 @@ require_once __DIR__ . '/services/github.php';
 require_once __DIR__ . '/services/updates.php';
 // Load SimBrief description helpers after the shared HTTP client is available.
 require_once __DIR__ . '/services/simbrief_descriptions.php';
+// Load optional OpenAI text assistance after database helpers and gallery lookup helpers are available.
+require_once __DIR__ . '/services/openai_text_assist.php';
 // Load navigation data helpers before flight maps resolve route identifiers.
 require_once __DIR__ . '/services/navigation_data.php';
 require_once __DIR__ . '/services/picture_game.php';
 require_once __DIR__ . '/services/tags.php';
+require_once __DIR__ . '/services/public_search.php';
 require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
 require_once __DIR__ . '/services/gallery_migration.php';

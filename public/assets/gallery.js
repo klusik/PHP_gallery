@@ -61,10 +61,12 @@ import { setupPictureManager } from './gallery-modules/picture-manager.js?v=2026
 import { setupAdminDatePickers } from './gallery-modules/admin-date-picker.js?v=20260512-admin-date-picker-v1';
 import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbrief-description.js?v=20260527-simbrief-ofp-route-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20260527-navdata-panel-v1';
+import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260529-openai-text-assist-v2';
+import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260527-simbrief-ofp-route-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260528-tag-pills-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -119,6 +121,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminTabs();
     setupAdminDatePickers();
     setupSimbriefDescriptionGenerator();
+    setupOpenAITextAssist();
     setupAdminGalleryMigration();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
@@ -137,6 +140,7 @@ function bootGalleryBrowserFeatures() {
     setupTagSuggestions();
     setupGalleryLightbox();
     setupPictureManager();
+    setupPublicHomeSearch();
 
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupAdminNavigationDataPanel);

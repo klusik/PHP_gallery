@@ -82,6 +82,7 @@ function cms_home(): void
         $galleries = $allHomeGalleries;
     }
     render_header(site_name());
+    render_public_search_bar();
     if ($homeGalleryCount > 0) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -105,6 +106,87 @@ function cms_home(): void
         'page_kind' => 'home',
     ]);
     render_footer();
+}
+
+
+/**
+ * Return JSON results for the optional public live search.
+ */
+function cms_public_search(): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    if (!public_home_search_enabled()) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'disabled']);
+        return;
+    }
+
+    $query = public_search_normalize_query((string) ($_GET['q'] ?? ''));
+    if (public_search_query_length($query) < 2) {
+        echo json_encode(['ok' => true, 'query' => $query, 'results' => []]);
+        return;
+    }
+
+    try {
+        echo json_encode([
+            'ok' => true,
+            'query' => $query,
+            'results' => public_search_results($query, 14, public_search_context_from_request()),
+        ]);
+    } catch (Throwable $exception) {
+        admin_log_event('warning', 'public_search.failed', 'Public search request failed.', [
+            'exception' => $exception->getMessage(),
+        ]);
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'search_failed']);
+    }
+}
+
+/**
+ * Return a public search context model from the current request.
+ */
+function public_search_context_from_request(): ?array
+{
+    $contextOnly = (string) ($_GET['context_only'] ?? '') === '1';
+    $galleryId = (int) ($_GET['gallery_id'] ?? 0);
+    if (!$contextOnly || $galleryId <= 0) {
+        return null;
+    }
+
+    $gallery = find_gallery($galleryId, true);
+    if (!$gallery || !gallery_allows_direct_public_request($gallery)) {
+        return null;
+    }
+
+    return $gallery;
+}
+
+/**
+ * Render the optional thin public search bar above public gallery content.
+ */
+function render_public_search_bar(?array $gallery = null): void
+{
+    if (!public_home_search_enabled()) {
+        return;
+    }
+
+    $searchId = $gallery ? 'public-gallery-search-input-' . (int) $gallery['id'] : 'public-home-search-input';
+    $contextId = $gallery ? 'public-gallery-search-context-' . (int) $gallery['id'] : '';
+    $ariaLabel = $gallery ? t('search.gallery_label', 'Search this gallery and all galleries') : t('search.home_label', 'Search galleries and photos');
+    $placeholder = $gallery ? t('search.gallery_placeholder', 'Search this gallery, subgalleries, tags, photos...') : t('search.placeholder', 'Search galleries, tags, photos...');
+
+    echo '<section class="public-home-search" data-public-home-search data-search-url="' . e(url_for('public_search')) . '" data-min-length="2" data-delay-ms="200" data-loading-label="' . e(t('search.loading', 'Searching...')) . '" data-empty-label="' . e(t('search.empty', 'No matches found.')) . '" data-error-label="' . e(t('search.error', 'Search is temporarily unavailable.')) . '"' . ($gallery ? ' data-gallery-id="' . (int) $gallery['id'] . '"' : '') . ' aria-label="' . e($ariaLabel) . '">';
+    echo '<label class="visually-hidden" for="' . e($searchId) . '">' . e($ariaLabel) . '</label>';
+    echo '<div class="public-home-search-shell">';
+    echo '<span class="public-home-search-icon" aria-hidden="true">&#128269;</span>';
+    echo '<input id="' . e($searchId) . '" class="public-home-search-input" type="search" autocomplete="off" spellcheck="false" placeholder="' . e($placeholder) . '" data-public-home-search-input>';
+    if ($gallery) {
+        echo '<label class="public-home-search-context" for="' . e($contextId) . '"><input id="' . e($contextId) . '" type="checkbox" checked data-public-home-search-context> <span>' . e(t('search.context_current_gallery', 'Search only this gallery and its subgalleries')) . '</span></label>';
+    }
+    echo '<button type="button" class="public-home-search-clear" data-public-home-search-clear aria-label="' . e(t('search.clear', 'Clear search')) . '" hidden>&times;</button>';
+    echo '</div>';
+    echo '<div class="public-home-search-results" data-public-home-search-results hidden></div>';
+    echo '</section>';
 }
 
 /**
@@ -257,8 +339,12 @@ function cms_gallery(): void
 
     render_header((string) $seo['title'], $gallery, $publicOnly);
     echo '<section class="hero">';
+    // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
+    echo '<div class="hero-primary">';
     render_public_gallery_branding_header($gallery, $seo, $publicOnly);
+    render_breadcrumbs($gallery);
+    echo '</div>';
     echo '<div class="hero-meta">';
     echo '<div class="hero-actions" aria-label="' . e(t('gallery.actions', 'Gallery actions')) . '">';
     render_public_gallery_admin_delete_form($gallery, 'hero');
@@ -280,10 +366,10 @@ function cms_gallery(): void
     echo '</div>';
     echo '</div>';
     echo '</div>';
-    render_breadcrumbs($gallery);
     echo '</section>';
     render_public_gallery_branding_separator($gallery, $publicOnly);
     render_public_gallery_preview_toolbar($gallery);
+    render_public_search_bar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.

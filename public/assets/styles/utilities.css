@@ -494,8 +494,8 @@ body.public-reorder-active {
 }
 
 .public-page .hero-description {
-    max-width: 78ch;
-    margin-top: 0.55rem;
+    max-width: min(84ch, 100%);
+    margin-top: 0.15rem;
     line-height: 1.58;
 }
 

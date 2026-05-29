@@ -833,6 +833,32 @@ function cms_admin_account(): void
                 ]);
                 redirect_to(url_for('admin_account', ['test_email' => !empty($testDelivery['sent']) ? 'sent' : 'failed']));
             }
+        } elseif ($accountAction === 'openai_text_settings') {
+            // $currentPassword stores the profile password used to authorize credential changes.
+            $currentPassword = (string) ($_POST['current_password'] ?? '');
+            // $stmt stores the password hash for the authenticated profile owner.
+            $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+            $stmt->execute([(int) $user['id']]);
+            // $account stores the account row needed for the password challenge.
+            $account = $stmt->fetch();
+            if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+                $error = t('admin.account.error_current_password_required');
+            } else {
+                // $result stores the validated and saved OpenAI profile settings.
+                $result = openai_text_assist_save_user_settings((int) $user['id'], $_POST);
+                if (!empty($result['ok'])) {
+                    if (function_exists('admin_log_event')) {
+                        admin_log_event('info', 'openai_text_assist.settings_updated', t('admin.openai.log_settings_updated', 'Admin updated OpenAI text-assistance profile settings.'), [
+                            'user_id' => (int) $user['id'],
+                            'enabled' => (bool) ($result['enabled'] ?? false),
+                            'api_key_set' => (string) ($result['api_key_hint'] ?? '') !== '',
+                            'model' => (string) ($result['model'] ?? ''),
+                        ]);
+                    }
+                    redirect_to(url_for('admin_account', ['openai_saved' => 1]));
+                }
+                $error = implode(' ', (array) ($result['errors'] ?? []));
+            }
         } else {
             // Variable $currentPassword stores this steps working value.
             $currentPassword = (string) ($_POST['current_password'] ?? '');
@@ -914,6 +940,14 @@ function cms_admin_account(): void
     $accountEmail = trim((string) ($user['email'] ?? ''));
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
     $resetReady = cms_password_reset_schema_ready() && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
+    // $openaiSettings stores the current user's optional OpenAI profile integration settings.
+    $openaiSettings = function_exists('openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
+    // $openaiSchemaReady stores whether the required optional OpenAI settings table exists.
+    $openaiSchemaReady = function_exists('openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
+    // $openaiReady stores whether the current account can use OpenAI text assistance right now.
+    $openaiReady = function_exists('openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
+    // $openaiImageInputColumnReady stores whether the optional thumbnail-consent setting can be saved yet.
+    $openaiImageInputColumnReady = function_exists('openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
 
     render_header(t('admin.account.title'));
     if (isset($_GET['saved'])) {
@@ -924,6 +958,9 @@ function cms_admin_account(): void
     }
     if (isset($_GET['test_email'])) {
         echo '<div class="notice">' . e($_GET['test_email'] === 'sent' ? t('admin.account.notice_test_email_sent') : t('admin.account.notice_test_email_failed')) . '</div>';
+    }
+    if (isset($_GET['openai_saved'])) {
+        echo '<div class="notice">' . e(t('admin.openai.notice_saved', 'OpenAI text-assistance settings were saved.')) . '</div>';
     }
     if (isset($error)) {
         echo '<div class="notice">' . e($error) . '</div>';
@@ -990,6 +1027,60 @@ function cms_admin_account(): void
     echo '<input type="hidden" name="account_action" value="password_reset_test_email">';
     echo '<div><strong>' . e(t('admin.account.delivery_test')) . '</strong><p class="muted">' . e(t('admin.account.delivery_test_help')) . '</p></div>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.account.send_test_email')) . '</button></form></article>';
+
+    echo '<article class="account-settings-card account-openai-settings-card">';
+    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.openai.profile_title', 'OpenAI text assistance')) . '</h2><p class="muted">' . e(t('admin.openai.profile_description', 'Optional profile-level API access for gallery description drafts and text cleanup.')) . '</p></div></div>';
+    echo '<div class="account-settings-readiness ' . ($openaiReady ? 'is-ready' : 'is-incomplete') . '">';
+    echo '<strong>' . e(t('admin.openai.status', 'Status')) . '</strong> ';
+    if (!$openaiSchemaReady) {
+        echo e(t('admin.openai.status_migration_required', 'Database migration required before this optional feature can be configured.'));
+    } elseif ($openaiReady) {
+        echo e(t('admin.openai.status_ready', 'Enabled and ready for this account.'));
+    } else {
+        echo e(t('admin.openai.status_disabled', 'Disabled. Gallery editors will not show AI controls.'));
+    }
+    echo '</div>';
+    if ($openaiSchemaReady) {
+        $openaiEnabled = (int) ($openaiSettings['enabled'] ?? 0) === 1;
+        $openaiAllowImageInput = (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
+        $openaiKeyHint = (string) ($openaiSettings['api_key_hint'] ?? '');
+        $openaiModel = openai_text_assist_normalize_model((string) ($openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
+        $openaiModels = function_exists('openai_text_assist_model_catalog') ? openai_text_assist_model_catalog() : [];
+        echo '<form method="post" class="form-grid account-settings-form account-settings-openai-form">' . csrf_field();
+        echo '<input type="hidden" name="account_action" value="openai_text_settings">';
+        echo '<label class="account-settings-toggle"><input type="checkbox" name="openai_text_enabled" value="1"' . ($openaiEnabled ? ' checked' : '') . '> <span><strong>' . e(t('admin.openai.enable', 'Enable OpenAI text assistance')) . '</strong><small>' . e(t('admin.openai.enable_help', 'When enabled and a key is saved, selected editors can request reviewable AI text suggestions.')) . '</small></span></label>';
+        if ($openaiKeyHint !== '') {
+            echo '<p class="account-settings-key-status"><strong>' . e(t('admin.openai.saved_key', 'Saved key')) . ':</strong> ' . e($openaiKeyHint) . '</p>';
+        }
+        echo '<div class="account-settings-two-column">';
+        echo '<label>' . e(t('admin.openai.api_key', 'OpenAI API key')) . '<input name="openai_text_api_key" type="password" autocomplete="new-password" placeholder="' . e($openaiKeyHint !== '' ? t('admin.openai.api_key_placeholder_keep', 'Leave blank to keep the saved key') : t('admin.openai.api_key_placeholder_new', 'sk-...')) . '"></label>';
+        echo '<label>' . e(t('admin.openai.model', 'Model')) . '<select name="openai_text_model">';
+        foreach ($openaiModels as $modelId => $modelInfo) {
+            echo '<option value="' . e($modelId) . '"' . ($openaiModel === $modelId ? ' selected' : '') . '>' . e((string) ($modelInfo['label'] ?? $modelId)) . '</option>';
+        }
+        echo '</select></label>';
+        echo '</div>';
+        echo '<p class="account-settings-help">' . e(t('admin.openai.api_key_help', 'The key is encrypted before database storage. It is never shown again and is never written to admin logs.')) . '</p>';
+        echo '<div class="account-openai-model-list" aria-label="' . e(t('admin.openai.model_choices', 'Available OpenAI models')) . '">';
+        foreach ($openaiModels as $modelId => $modelInfo) {
+            $isSelected = $openaiModel === $modelId;
+            echo '<div class="account-openai-model-card' . ($isSelected ? ' is-selected' : '') . '">';
+            echo '<div><strong>' . e((string) ($modelInfo['label'] ?? $modelId)) . '</strong><code>' . e($modelId) . '</code></div>';
+            echo '<span>' . e((string) ($modelInfo['badge'] ?? '')) . '</span>';
+            echo '<p>' . e((string) ($modelInfo['description'] ?? '')) . '</p>';
+            echo '</div>';
+        }
+        echo '</div>';
+        echo '<p class="account-settings-help">' . e(t('admin.openai.model_help', 'Default: GPT-5.4 mini. You can change this later without changing gallery data.')) . '</p>';
+        echo '<label class="account-settings-toggle"><input type="checkbox" name="openai_text_allow_image_input" value="1"' . ($openaiAllowImageInput ? ' checked' : '') . ($openaiImageInputColumnReady ? '' : ' disabled') . '> <span><strong>' . e(t('admin.openai.enable_image_input', 'Allow AI tools to send small image thumbnails to OpenAI')) . '</strong><small>' . e($openaiImageInputColumnReady ? t('admin.openai.enable_image_input_help', 'Default off. When enabled, photo and gallery AI actions may send small generated thumbnails, not originals, to describe visible content.') : t('admin.openai.enable_image_input_help_migration', 'Apply the latest database migration to save this optional thumbnail-consent setting.')) . '</small></span></label>';
+        if ($openaiKeyHint !== '') {
+            echo '<label class="account-settings-toggle account-settings-compact-toggle"><input type="checkbox" name="openai_text_clear_key" value="1"> <span><strong>' . e(t('admin.openai.clear_key', 'Clear saved API key')) . '</strong><small>' . e(t('admin.openai.clear_key_help', 'This disables OpenAI text assistance unless a new key is saved.')) . '</small></span></label>';
+        }
+        echo '<div class="account-settings-callout"><strong>' . e(t('admin.account.before_save')) . '</strong> ' . e(t('admin.account.before_save_help')) . '</div>';
+        echo '<label>' . e(t('admin.openai.current_password', 'Current password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
+        echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.openai.save_settings', 'Save OpenAI settings')) . '</button></div></form>';
+    }
+    echo '</article>';
 
     echo '</div></section>';
     render_footer();

@@ -27,13 +27,13 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-05-28
  */
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupGallerySearchPickers } from './searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
 import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?v=20260510-lifecycle-v3';
-import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260527-route-photo-map-v1';
+import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260528-context-tags-v1';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260519-picture-manager-v5';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTabsInRoot } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
@@ -1179,9 +1179,28 @@ async function reflectSavedImageInCurrentView(result) {
     const imageId = String(result.image_id || '');
     if (imageId) {
         updateAdminImageRowsFromResult(imageId, result);
+        updatePublicImageCardsFromResult(imageId, result);
     }
-    await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
+
+    // Photo edits are often launched from a paginated public gallery page.
+    // Refreshing from the bare gallery URL would silently redraw page one.
+    // Using the current browser URL preserves pagination, filters, and hash state.
+    await refreshCurrentGalleryContextFromServer(currentVisiblePageRefreshUrl());
     showAdminGallerySidePanelResultNotice(String(result.message || 'Photo saved.'), String(result.image_url || ''));
+}
+
+/**
+ * Return the URL that represents the currently visible page behind the side panel.
+ *
+ * The side-panel save endpoint returns canonical gallery URLs, but those URLs do
+ * not include the active pagination state. This helper deliberately prefers the
+ * browser URL so a photo edited from page 3 refreshes page 3 instead of fetching
+ * the gallery root again.
+ *
+ * @returns {string} Absolute current page URL suitable for a fragment refresh.
+ */
+function currentVisiblePageRefreshUrl() {
+    return String(window.location.href || '');
 }
 
 /**

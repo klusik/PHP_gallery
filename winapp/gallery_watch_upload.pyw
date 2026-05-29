@@ -13,6 +13,7 @@ second, divergent implementation of upload behavior.
 """
 
 import argparse
+import base64
 import concurrent.futures
 import ctypes
 import hashlib
@@ -50,12 +51,13 @@ except ImportError:  # pragma: no cover
     ttk = None
 
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageOps, ImageStat
 except ImportError:  # pragma: no cover
     # Pillow is optional for the watcher. Manual client-side thumbnail generation
     # requires it, while normal watch-folder uploads keep working without it.
     Image = None
     ImageOps = None
+    ImageStat = None
 
 try:
     import pystray
@@ -75,6 +77,9 @@ ASSETS_DIR = APP_DIR / "assets"
 TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
 TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
 
+_AI_TRANSFORMERS_PIPELINES: Dict[Tuple[str, str], Any] = {}
+_AI_TRANSFORMERS_LOCK = threading.Lock()
+
 SUPPORTED_SUFFIXES = {
     ".jpg",
     ".jpeg",
@@ -90,6 +95,35 @@ DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
+DEFAULT_AI_WORKER_POLL_SECONDS = 60.0
+DEFAULT_AI_WORKER_LEASE_SECONDS = 600
+AI_WORKER_MIN_POLL_SECONDS = 5.0
+AI_WORKER_MAX_LEASE_SECONDS = 3600
+AI_ANALYZER_TIMEOUT_SECONDS = 1800
+AI_HEARTBEAT_MIN_SECONDS = 15.0
+AI_MODEL_NAME_DEFAULT = "local-image-metadata"
+AI_MODEL_VERSION_DEFAULT = "1"
+AI_VISION_BACKEND_DEFAULT = "auto"
+AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT = "Salesforce/blip-image-captioning-base"
+AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT = "google/owlvit-base-patch32"
+AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT = 0.18
+AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT = (
+    "person, people, man, woman, child, face, dog, cat, horse, bird, animal, car, truck, bus, "
+    "train, aircraft, airplane, helicopter, boat, bicycle, motorcycle, house, building, bridge, "
+    "road, street, city, village, church, castle, tower, window, door, guitar, piano, violin, "
+    "musical instrument, food, drink, table, chair, bed, computer, laptop, phone, camera, flower, "
+    "tree, forest, mountain, beach, sea, river, lake, sky, cloud, sunset, snow, rain, airport, "
+    "runway, cockpit, airplane wing"
+)
+AI_OLLAMA_URL_DEFAULT = "http://127.0.0.1:11434"
+AI_OLLAMA_MODEL_DEFAULT = "llava:latest"
+AI_SEMANTIC_PROMPT_DEFAULT = (
+    "Describe this image for private gallery search metadata. "
+    "Return JSON only with keys internal_description, labels, objects, scene, activities, text, and confidence_notes. "
+    "Use concise lower-case labels for visible objects such as person, bridge, guitar, house, car, animal, aircraft, food, landscape, building. "
+    "Do not invent objects that are not visually apparent. The metadata is internal search data, not public prose."
+)
+AI_VISION_BACKEND_CHOICES = ("auto", "pillow", "transformers", "ollama", "external")
 THUMBNAIL_SIZES = [300, 600, 800, 960, 1280, 1600]
 DEFAULT_THUMBNAIL_WORKERS = max(2, min(12, (os.cpu_count() or 4) // 2 or 2))
 DEFAULT_UPLOAD_WORKERS = 4
@@ -143,6 +177,33 @@ class WatcherConfig:
         upload requests. Zero means automatic.
     @param inventory_refresh_seconds: Seconds between remote inventory handshakes.
         The default keeps long batches using fresh short-lived API requests.
+    @param ai_worker_enabled: Whether this app should run the optional AI
+        metadata worker. Disabled by default so existing upload behavior is
+        unchanged after upgrade.
+    @param ai_worker_poll_seconds: Delay between queue polls when the server has
+        no AI work for this API key.
+    @param ai_worker_lease_seconds: Requested server lease length for one
+        claimed AI job. Heartbeats extend the lease while work continues.
+    @param ai_model_name: Worker-reported model or analyzer family name.
+    @param ai_model_version: Worker-reported model or analyzer version.
+    @param ai_external_command: Optional local command that receives an image
+        path placeholder and returns JSON metadata on stdout.
+    @param ai_vision_backend: Analyzer selection. Auto prefers the external
+        command when configured, then the in-process Transformers backend, then
+        local Ollama vision, then Pillow.
+    @param ai_transformers_caption_model: Optional Hugging Face image-to-text
+        model used inside this Python process for semantic captions.
+    @param ai_transformers_detector_model: Optional Hugging Face zero-shot
+        object detector used inside this Python process for semantic labels.
+    @param ai_transformers_object_labels: Candidate object labels passed to the
+        local zero-shot detector.
+    @param ai_transformers_detection_threshold: Minimum detector score saved as
+        an internal object label.
+    @param ai_ollama_url: Local Ollama base URL used for semantic vision
+        captions. The default points to localhost.
+    @param ai_ollama_model: Ollama vision model name, for example llava:latest
+        or llama3.2-vision:latest.
+    @param ai_semantic_prompt: Prompt sent only to a local vision backend.
     """
 
     watched_folder: str = ""
@@ -157,6 +218,20 @@ class WatcherConfig:
     manual_thumbnail_workers: int = 0
     manual_upload_workers: int = 0
     inventory_refresh_seconds: float = DEFAULT_INVENTORY_REFRESH_SECONDS
+    ai_worker_enabled: bool = False
+    ai_worker_poll_seconds: float = DEFAULT_AI_WORKER_POLL_SECONDS
+    ai_worker_lease_seconds: int = DEFAULT_AI_WORKER_LEASE_SECONDS
+    ai_model_name: str = AI_MODEL_NAME_DEFAULT
+    ai_model_version: str = AI_MODEL_VERSION_DEFAULT
+    ai_external_command: str = ""
+    ai_vision_backend: str = AI_VISION_BACKEND_DEFAULT
+    ai_transformers_caption_model: str = AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT
+    ai_transformers_detector_model: str = AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT
+    ai_transformers_object_labels: str = AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT
+    ai_transformers_detection_threshold: float = AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT
+    ai_ollama_url: str = AI_OLLAMA_URL_DEFAULT
+    ai_ollama_model: str = AI_OLLAMA_MODEL_DEFAULT
+    ai_semantic_prompt: str = AI_SEMANTIC_PROMPT_DEFAULT
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
@@ -186,6 +261,20 @@ class WatcherConfig:
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
             manual_upload_workers=int(data.get("manual_upload_workers", 0) or 0),
             inventory_refresh_seconds=float(data.get("inventory_refresh_seconds", DEFAULT_INVENTORY_REFRESH_SECONDS) or DEFAULT_INVENTORY_REFRESH_SECONDS),
+            ai_worker_enabled=bool(data.get("ai_worker_enabled", False)),
+            ai_worker_poll_seconds=float(data.get("ai_worker_poll_seconds", DEFAULT_AI_WORKER_POLL_SECONDS) or DEFAULT_AI_WORKER_POLL_SECONDS),
+            ai_worker_lease_seconds=int(data.get("ai_worker_lease_seconds", DEFAULT_AI_WORKER_LEASE_SECONDS) or DEFAULT_AI_WORKER_LEASE_SECONDS),
+            ai_model_name=str(data.get("ai_model_name", AI_MODEL_NAME_DEFAULT) or AI_MODEL_NAME_DEFAULT),
+            ai_model_version=str(data.get("ai_model_version", AI_MODEL_VERSION_DEFAULT) or AI_MODEL_VERSION_DEFAULT),
+            ai_external_command=str(data.get("ai_external_command", "")),
+            ai_vision_backend=normalize_ai_vision_backend(str(data.get("ai_vision_backend", AI_VISION_BACKEND_DEFAULT) or AI_VISION_BACKEND_DEFAULT)),
+            ai_transformers_caption_model=str(data.get("ai_transformers_caption_model", AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT) or AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT),
+            ai_transformers_detector_model=str(data.get("ai_transformers_detector_model", AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT) or AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT),
+            ai_transformers_object_labels=str(data.get("ai_transformers_object_labels", AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT) or AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT),
+            ai_transformers_detection_threshold=float(data.get("ai_transformers_detection_threshold", AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT) or AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT),
+            ai_ollama_url=str(data.get("ai_ollama_url", AI_OLLAMA_URL_DEFAULT) or AI_OLLAMA_URL_DEFAULT),
+            ai_ollama_model=str(data.get("ai_ollama_model", AI_OLLAMA_MODEL_DEFAULT) or AI_OLLAMA_MODEL_DEFAULT),
+            ai_semantic_prompt=str(data.get("ai_semantic_prompt", AI_SEMANTIC_PROMPT_DEFAULT) or AI_SEMANTIC_PROMPT_DEFAULT),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -207,6 +296,20 @@ class WatcherConfig:
             "manual_thumbnail_workers": self.manual_thumbnail_workers,
             "manual_upload_workers": self.manual_upload_workers,
             "inventory_refresh_seconds": self.inventory_refresh_seconds,
+            "ai_worker_enabled": self.ai_worker_enabled,
+            "ai_worker_poll_seconds": self.ai_worker_poll_seconds,
+            "ai_worker_lease_seconds": self.ai_worker_lease_seconds,
+            "ai_model_name": self.ai_model_name,
+            "ai_model_version": self.ai_model_version,
+            "ai_external_command": self.ai_external_command,
+            "ai_vision_backend": self.ai_vision_backend,
+            "ai_transformers_caption_model": self.ai_transformers_caption_model,
+            "ai_transformers_detector_model": self.ai_transformers_detector_model,
+            "ai_transformers_object_labels": self.ai_transformers_object_labels,
+            "ai_transformers_detection_threshold": self.ai_transformers_detection_threshold,
+            "ai_ollama_url": self.ai_ollama_url,
+            "ai_ollama_model": self.ai_ollama_model,
+            "ai_semantic_prompt": self.ai_semantic_prompt,
         }
 
 
@@ -1041,6 +1144,132 @@ def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_se
     return response_payload
 
 
+def post_binary_to_file(
+    upload_url: str,
+    api_key: str,
+    fields: Dict[str, str],
+    target_path: Path,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> Tuple[str, int]:
+    """
+    Submit one form-encoded request and stream the binary response to a file.
+
+    AI-analysis workers use this helper to download only the server-assigned
+    image asset for a claimed job. The API key and claim token remain required;
+    the public gallery URL is not used, so private or unpublished images do not
+    need to be exposed to anonymous visitors for processing.
+
+    @param upload_url: Normalized PHP Gallery upload endpoint.
+    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param fields: Form fields accepted by the upload automation endpoint.
+    @param target_path: Local path where the downloaded asset should be stored.
+    @param timeout_seconds: Network timeout for the download request.
+    @return: Tuple of response content type and downloaded byte count.
+    @raises RuntimeError: Raised for network or HTTP failures.
+    """
+    body = parse.urlencode(fields).encode("utf-8")
+    http_request = request.Request(
+        upload_url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": str(len(body)),
+            "X-Gallery-API-Key": api_key,
+            "Accept": "application/octet-stream, application/json;q=0.8",
+            "User-Agent": "PHPGalleryUploader/1.3",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+            content_type = str(response.headers.get("Content-Type") or "application/octet-stream")
+            downloaded = 0
+            with target_path.open("wb") as handle:
+                while True:
+                    chunk = response.read(1024 * 256)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    downloaded += len(chunk)
+            return content_type, downloaded
+    except error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error_payload = json.loads(response_body)
+            message = error_payload.get("error") if isinstance(error_payload, dict) else None
+        except json.JSONDecodeError:
+            message = None
+        raise RuntimeError(str(message or f"HTTP {exc.code}: {response_body[:300]}")) from exc
+    except error.URLError as exc:
+        raise RuntimeError(str(exc.reason)) from exc
+
+
+def extension_for_content_type(content_type: str, fallback_name: str) -> str:
+    """
+    Return a safe filename suffix for a downloaded AI job asset.
+
+    @param content_type: Response Content-Type header.
+    @param fallback_name: Original filename from the claimed job payload.
+    @return: File extension including the leading dot.
+    """
+    fallback_suffix = Path(fallback_name).suffix.lower()
+    if fallback_suffix in SUPPORTED_SUFFIXES:
+        return fallback_suffix
+    mime = content_type.split(";", 1)[0].strip().lower()
+    guessed = mimetypes.guess_extension(mime) or ""
+    if guessed.lower() in {".jpe"}:
+        return ".jpg"
+    return guessed if guessed else ".img"
+
+
+def ai_worker_id() -> str:
+    """
+    Return a stable local worker id for server-side lease diagnostics.
+
+    The value is not a secret and is not used for authorization. It lets the
+    server show which companion app instance currently owns a claim.
+
+    @return: Stable worker identifier for this Windows profile and machine.
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    worker_path = CONFIG_DIR / "worker_id.txt"
+    try:
+        if worker_path.is_file():
+            existing = worker_path.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+        generated = f"{os.environ.get('COMPUTERNAME', 'windows').strip() or 'windows'}:{uuid.uuid4().hex}"
+        worker_path.write_text(generated, encoding="utf-8")
+        return generated
+    except OSError:
+        return f"temporary:{uuid.uuid4().hex}"
+
+
+def enter_background_thread_mode() -> None:
+    """
+    Ask Windows to schedule the current thread as background work.
+
+    This keeps optional image analysis from competing aggressively with the tray
+    UI and ordinary uploads. Unsupported platforms silently continue because the
+    worker can still run correctly without this scheduling hint.
+
+    @return: None.
+    """
+    if os.name != "nt":
+        return
+    try:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        thread_handle = kernel32.GetCurrentThread()
+        thread_mode_background_begin = 0x00010000
+        if kernel32.SetThreadPriority(thread_handle, thread_mode_background_begin):
+            return
+        thread_priority_below_normal = -1
+        kernel32.SetThreadPriority(thread_handle, thread_priority_below_normal)
+    except Exception:  # noqa: BLE001
+        logging.debug("Could not set background thread priority.", exc_info=True)
+
+
 def inventory_candidate(path: Path, file_hash: Optional[str] = None, size: Optional[int] = None) -> Dict[str, Any]:
     """
     Build one file descriptor for a remote gallery inventory request.
@@ -1497,6 +1726,19 @@ def parse_worker_choice(value: str) -> int:
     return int(text)
 
 
+def normalize_ai_vision_backend(value: str) -> str:
+    """
+    Return a supported AI vision backend identifier.
+
+    @param value: Raw backend value from config or UI.
+    @return: One of the supported backend identifiers.
+    """
+    normalized = value.strip().lower()
+    if normalized in AI_VISION_BACKEND_CHOICES:
+        return normalized
+    return AI_VISION_BACKEND_DEFAULT
+
+
 def format_worker_choice(value: int) -> str:
     """
     Convert a persisted worker value into combobox text.
@@ -1541,9 +1783,53 @@ def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
         try:
             globals()["Image"] = importlib.import_module("PIL.Image")
             globals()["ImageOps"] = importlib.import_module("PIL.ImageOps")
+            globals()["ImageStat"] = importlib.import_module("PIL.ImageStat")
             globals()["pystray"] = importlib.import_module("pystray")
         except Exception as exc:  # noqa: BLE001
             return False, f"pip finished, but required packages still cannot be imported by this process: {exc}\n{output}"
+    return completed.returncode == 0, output
+
+
+def install_semantic_ai_dependencies_for_current_runtime() -> Tuple[bool, str]:
+    """
+    Install optional in-process semantic AI packages for this Python runtime.
+
+    These packages are intentionally not listed in requirements.txt because they
+    are large and are needed only when the operator selects the Transformers
+    backend. The normal uploader, tray icon, manual upload, and Pillow fallback
+    continue to use the lightweight required dependency set.
+
+    @return: Tuple containing success flag and command output text.
+    """
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--user",
+        "transformers>=4.40",
+        "torch>=2.2",
+        "torchvision>=0.17",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+    output = completed.stdout.strip() if completed.stdout else "pip produced no output"
+    if completed.returncode == 0:
+        try:
+            importlib.import_module("torch")
+            importlib.import_module("transformers")
+        except Exception as exc:  # noqa: BLE001
+            return False, f"pip finished, but semantic AI packages still cannot be imported by this process: {exc}\n{output}"
     return completed.returncode == 0, output
 
 
@@ -1634,6 +1920,972 @@ def generate_local_thumbnails(source_path: Path, output_root: Path, client_uploa
             thumbnails.append(LocalThumbnail(path=webp_path, size=size, format="webp"))
 
     return thumbnails
+
+
+class PeriodicAIHeartbeat(threading.Thread):
+    """
+    Sends periodic lease heartbeats while one AI job is being processed.
+
+    The worker thread owns the actual image analysis. This helper only extends
+    the server lease, which protects long external model runs from being claimed
+    by another companion app after the original lease expires.
+    """
+
+    def __init__(
+        self,
+        upload_url: str,
+        api_key: str,
+        job_id: int,
+        claim_token: str,
+        lease_seconds: int,
+        progress_callback: Any,
+        emit: Any,
+    ) -> None:
+        """
+        Create a heartbeat thread for one claimed job.
+
+        @param upload_url: Normalized upload automation endpoint.
+        @param api_key: Gallery-scoped API key.
+        @param job_id: Server job id from the claim response.
+        @param claim_token: Server claim token returned with the job.
+        @param lease_seconds: Requested lease extension length.
+        @param progress_callback: Callable returning progress percent and text.
+        @param emit: Status callback receiving level and message.
+        @return: None.
+        """
+        super().__init__(name="PHPGalleryAIHeartbeat", daemon=True)
+        self.upload_url = upload_url
+        self.api_key = api_key
+        self.job_id = job_id
+        self.claim_token = claim_token
+        self.lease_seconds = lease_seconds
+        self.progress_callback = progress_callback
+        self.emit = emit
+        self.stop_event = threading.Event()
+        self.interval = max(AI_HEARTBEAT_MIN_SECONDS, min(120.0, lease_seconds / 3.0))
+
+    def stop(self) -> None:
+        """
+        Request heartbeat shutdown.
+
+        @return: None.
+        """
+        self.stop_event.set()
+
+    def run(self) -> None:
+        """
+        Send heartbeats until stopped.
+
+        @return: None.
+        """
+        while not self.stop_event.wait(self.interval):
+            try:
+                progress_percent, message = self.progress_callback()
+                post_json(
+                    self.upload_url,
+                    self.api_key,
+                    {
+                        "action": "ai_heartbeat",
+                        "job_id": self.job_id,
+                        "claim_token": self.claim_token,
+                        "lease_seconds": self.lease_seconds,
+                        "progress_percent": int(progress_percent),
+                        "message": str(message),
+                    },
+                    timeout_seconds=30,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.emit("warning", f"AI worker heartbeat failed for job {self.job_id}: {exc}")
+
+
+class AIImageAnalyzer:
+    """
+    Local image-analysis adapter used by the optional AI metadata worker.
+
+    The default implementation is deliberately dependency-light and relies on
+    Pillow because the companion app already supports it. Operators who run a
+    real local vision model can provide an external command that receives the
+    downloaded image path and writes JSON to stdout.
+    """
+
+    def __init__(self, config: WatcherConfig) -> None:
+        """
+        Create an analyzer adapter from the current worker configuration.
+
+        @param config: Worker configuration captured at start time.
+        @return: None.
+        """
+        self.config = config
+        self.external_command = config.ai_external_command.strip()
+        self.vision_backend = normalize_ai_vision_backend(config.ai_vision_backend)
+        self.transformers_caption_model = config.ai_transformers_caption_model.strip() or AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT
+        self.transformers_detector_model = config.ai_transformers_detector_model.strip() or AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT
+        self.transformers_object_labels = config.ai_transformers_object_labels.strip() or AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT
+        self.transformers_detection_threshold = max(0.01, min(0.95, float(config.ai_transformers_detection_threshold or AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT)))
+        self.ollama_url = config.ai_ollama_url.strip().rstrip("/") or AI_OLLAMA_URL_DEFAULT
+        self.ollama_model = config.ai_ollama_model.strip() or AI_OLLAMA_MODEL_DEFAULT
+        self.semantic_prompt = config.ai_semantic_prompt.strip() or AI_SEMANTIC_PROMPT_DEFAULT
+
+    def analyze(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+        """
+        Analyze one downloaded image asset and return internal metadata.
+
+        @param image_path: Local path to the claimed image asset.
+        @param job: Job payload returned by the PHP Gallery server.
+        @return: Tuple of metadata dictionary and explicit searchable text.
+        @raises RuntimeError: Raised when neither the external command nor the
+            built-in Pillow analysis can produce metadata.
+        """
+        if self.vision_backend == "external":
+            if not self.external_command:
+                raise RuntimeError("The external AI backend is selected, but no external analyzer command is configured.")
+            return self.analyze_with_external_command(image_path, job)
+        if self.vision_backend == "transformers":
+            return self.analyze_with_transformers(image_path, job)
+        if self.vision_backend == "ollama":
+            return self.analyze_with_ollama(image_path, job)
+        if self.vision_backend == "pillow":
+            return self.analyze_with_pillow(image_path, job)
+        if self.external_command:
+            return self.analyze_with_external_command(image_path, job)
+        try:
+            return self.analyze_with_transformers(image_path, job)
+        except Exception as exc:  # noqa: BLE001
+            logging.info("Local Transformers backend unavailable, using next AI fallback: %s", exc)
+        try:
+            return self.analyze_with_ollama(image_path, job)
+        except Exception as exc:  # noqa: BLE001
+            logging.info("Local Ollama backend unavailable, using Pillow fallback: %s", exc)
+        return self.analyze_with_pillow(image_path, job)
+
+    def analyze_with_external_command(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+        """
+        Run an operator-provided local analyzer command.
+
+        The command must print a JSON object to stdout. Accepted shapes are:
+        {"metadata": {...}, "searchable_text": "..."} or any JSON object, which
+        will be stored directly as metadata.
+
+        @param image_path: Local path to the downloaded image.
+        @param job: Server job payload.
+        @return: Tuple of metadata dictionary and explicit searchable text.
+        @raises RuntimeError: Raised when the command fails or returns bad JSON.
+        """
+        image = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
+        command = self.external_command
+        # Placeholder replacement is intentionally simple so JSON braces in shell
+        # commands are not accidentally parsed as Python format fields.
+        command = command.replace("{image_path}", str(image_path))
+        command = command.replace("{filename}", str(image.get("filename") or image_path.name))
+        command = command.replace("{job_id}", str(job.get("job_id") or ""))
+        completed = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=AI_ANALYZER_TIMEOUT_SECONDS,
+            check=False,
+        )
+        if completed.returncode != 0:
+            stderr = (completed.stderr or completed.stdout or "").strip()
+            raise RuntimeError(f"External AI analyzer failed with exit code {completed.returncode}: {stderr[:800]}")
+
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"External AI analyzer returned non-JSON output: {completed.stdout[:800]}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError("External AI analyzer must return a JSON object.")
+
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else payload
+        searchable_text = str(payload.get("searchable_text") or "")
+        metadata.setdefault("analyzer", "external-command")
+        metadata.setdefault("external_command_used", True)
+        return metadata, searchable_text
+
+    def analyze_with_transformers(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+        """
+        Produce semantic metadata inside this Python process with Transformers.
+
+        This backend does not require a separate local server. It imports the
+        optional Hugging Face Transformers and PyTorch packages directly, loads
+        the configured models in-process, and analyzes the assigned image on the
+        worker PC. First use may download model files into the normal local
+        Hugging Face cache for the current Windows user.
+
+        @param image_path: Local path to the downloaded image.
+        @param job: Server job payload.
+        @return: Tuple of metadata dictionary and searchable text.
+        @raises RuntimeError: Raised when optional packages or models are absent.
+        """
+        if Image is None or ImageOps is None:
+            raise RuntimeError("Pillow is required before the local Transformers backend can open images.")
+
+        image_info = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
+        with Image.open(image_path) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+            caption = self.transformers_caption(image)
+            detections = self.transformers_object_detections(image)
+
+        objects = self.normalize_label_list([item["label"] for item in detections])
+        caption_labels = self.labels_from_caption(caption, self.transformers_candidate_labels())
+        labels = sorted(set(objects + caption_labels))
+        internal_description = caption.strip().rstrip(".")
+        if objects:
+            internal_description += "; objects: " + ", ".join(objects[:16])
+        if not internal_description:
+            internal_description = "semantic image metadata generated locally"
+
+        metadata = {
+            "analyzer": "local-transformers-vision-metadata",
+            "analyzer_version": "1",
+            "backend": "transformers",
+            "caption_model": self.transformers_caption_model,
+            "detector_model": self.transformers_detector_model,
+            "detection_threshold": self.transformers_detection_threshold,
+            "internal_description": internal_description,
+            "caption": caption,
+            "labels": labels,
+            "objects": objects,
+            "detections": detections[:40],
+            "source": {
+                "filename": str(image_info.get("filename") or image_path.name),
+                "image_id": int(image_info.get("id") or 0),
+                "checksum_sha256": str(image_info.get("checksum_sha256") or ""),
+            },
+        }
+        searchable_parts = [
+            internal_description,
+            caption,
+            " ".join(labels),
+            " ".join(objects),
+            str(image_info.get("filename") or ""),
+        ]
+        searchable_text = " ".join(part for part in searchable_parts if part).strip()
+        return metadata, searchable_text
+
+    def transformers_caption(self, image: Any) -> str:
+        """
+        Return one concise caption from the configured in-process caption model.
+
+        @param image: RGB Pillow image.
+        @return: Caption text, lower-case and whitespace-normalized.
+        @raises RuntimeError: Raised when the model cannot run.
+        """
+        last_error: Optional[Exception] = None
+        for task in ("image-to-text", "image-text-to-text"):
+            try:
+                pipeline = self.transformers_pipeline(task, self.transformers_caption_model)
+                try:
+                    result = pipeline(image, max_new_tokens=60)
+                except TypeError:
+                    result = pipeline(image)
+                return self.transformers_caption_text_from_result(result)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logging.info("Local Transformers caption task %s unavailable: %s", task, exc)
+        raise RuntimeError(f"Local Transformers caption model failed: {last_error}")
+
+    def transformers_caption_text_from_result(self, result: Any) -> str:
+        """
+        Extract normalized caption text from multiple Transformers result shapes.
+
+        Transformers versions differ in their preferred image captioning task and
+        output field names. This helper keeps the analyzer tolerant while keeping
+        diagnostic details out of metadata sent to the gallery server.
+
+        @param result: Raw pipeline result returned by Transformers.
+        @return: Lower-case, whitespace-normalized caption text.
+        """
+        if isinstance(result, list) and result:
+            first = result[0]
+            if isinstance(first, dict):
+                text = str(first.get("generated_text") or first.get("caption") or first.get("text") or "")
+            else:
+                text = str(first)
+        elif isinstance(result, dict):
+            text = str(result.get("generated_text") or result.get("caption") or result.get("text") or "")
+        else:
+            text = str(result or "")
+        return " ".join(text.lower().split())
+
+    def transformers_object_detections(self, image: Any) -> List[Dict[str, Any]]:
+        """
+        Return zero-shot object detections from the configured local model.
+
+        The detector is optional even when the Transformers backend is selected.
+        If the detector model fails after a caption has been produced, the
+        analyzer keeps the caption result and stores a diagnostic object label
+        only in local logs through the raised message when no caption exists.
+
+        @param image: RGB Pillow image.
+        @return: List of compact detection dictionaries.
+        """
+        labels = self.transformers_candidate_labels()
+        if not labels:
+            return []
+        try:
+            pipeline = self.transformers_pipeline("zero-shot-object-detection", self.transformers_detector_model)
+            result = pipeline(image, candidate_labels=labels, threshold=self.transformers_detection_threshold)
+        except TypeError:
+            result = pipeline(image, candidate_labels=labels)
+        except Exception as exc:  # noqa: BLE001
+            logging.info("Local Transformers detector unavailable: %s", exc)
+            return []
+
+        detections: List[Dict[str, Any]] = []
+        if not isinstance(result, list):
+            return detections
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            score = float(item.get("score") or 0.0)
+            if score < self.transformers_detection_threshold:
+                continue
+            label = " ".join(str(item.get("label") or "").lower().split())
+            if not label:
+                continue
+            box = item.get("box") if isinstance(item.get("box"), dict) else {}
+            detections.append({
+                "label": label,
+                "score": round(score, 4),
+                "box": {
+                    "xmin": int(float(box.get("xmin") or 0)),
+                    "ymin": int(float(box.get("ymin") or 0)),
+                    "xmax": int(float(box.get("xmax") or 0)),
+                    "ymax": int(float(box.get("ymax") or 0)),
+                } if box else {},
+            })
+        detections.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+        return detections[:40]
+
+    def transformers_pipeline(self, task: str, model_name: str) -> Any:
+        """
+        Load and cache one Transformers pipeline inside the current process.
+
+        @param task: Transformers pipeline task name.
+        @param model_name: Hugging Face model identifier or local model path.
+        @return: Pipeline callable.
+        @raises RuntimeError: Raised when optional packages are not installed.
+        """
+        cache_key = (task, model_name)
+        with _AI_TRANSFORMERS_LOCK:
+            if cache_key in _AI_TRANSFORMERS_PIPELINES:
+                return _AI_TRANSFORMERS_PIPELINES[cache_key]
+            try:
+                transformers = importlib.import_module("transformers")
+                importlib.import_module("torch")
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(
+                    "Local Transformers backend needs optional packages. Use the AI tab button "
+                    "or run: python -m pip install --user transformers torch torchvision"
+                ) from exc
+            try:
+                pipeline = transformers.pipeline(task, model=model_name)
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError(f"Could not load local Transformers model {model_name!r} for {task}: {exc}") from exc
+            _AI_TRANSFORMERS_PIPELINES[cache_key] = pipeline
+            return pipeline
+
+    def transformers_candidate_labels(self) -> List[str]:
+        """
+        Return normalized object labels for local zero-shot detection.
+
+        @return: Deduplicated candidate label list.
+        """
+        return self.normalize_label_list(self.transformers_object_labels)
+
+    def labels_from_caption(self, caption: str, candidates: List[str]) -> List[str]:
+        """
+        Extract configured search labels explicitly mentioned in a caption.
+
+        @param caption: Caption text from the local caption model.
+        @param candidates: Candidate labels configured for object detection.
+        @return: Labels found in the caption.
+        """
+        caption_text = " " + " ".join(caption.lower().replace("-", " ").split()) + " "
+        found: List[str] = []
+        for label in candidates:
+            label_text = " ".join(label.lower().replace("-", " ").split())
+            if not label_text:
+                continue
+            plural = label_text + "s"
+            if f" {label_text} " in caption_text or f" {plural} " in caption_text:
+                if label_text not in found:
+                    found.append(label_text)
+        return found[:40]
+
+    def analyze_with_ollama(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+        """
+        Produce semantic image metadata with a local Ollama vision model.
+
+        This backend keeps heavy analysis on the Windows machine. It contacts
+        only the configured local Ollama endpoint and never sends image bytes to
+        PHP Gallery except for the final internal metadata result.
+
+        @param image_path: Local path to the downloaded image.
+        @param job: Server job payload.
+        @return: Tuple of metadata dictionary and searchable text.
+        @raises RuntimeError: Raised when Ollama is unavailable or returns bad data.
+        """
+        image_info = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
+        with image_path.open("rb") as handle:
+            encoded_image = base64.b64encode(handle.read()).decode("ascii")
+
+        payload = {
+            "model": self.ollama_model,
+            "prompt": self.semantic_prompt,
+            "images": [encoded_image],
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.1,
+                "num_predict": 512,
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            self.ollama_url + "/api/generate",
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=AI_ANALYZER_TIMEOUT_SECONDS) as response:
+                response_payload = json.loads(response.read().decode("utf-8", "replace"))
+        except error.URLError as exc:
+            raise RuntimeError(f"Ollama vision backend is unavailable at {self.ollama_url}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Ollama vision backend returned invalid JSON.") from exc
+
+        raw_response = str(response_payload.get("response") or "").strip()
+        semantic = self.parse_semantic_json(raw_response)
+        labels = self.normalize_label_list(semantic.get("labels"))
+        objects = self.normalize_label_list(semantic.get("objects"))
+        activities = self.normalize_label_list(semantic.get("activities"))
+        scene = str(semantic.get("scene") or "").strip().lower()
+        recognized_text = str(semantic.get("text") or "").strip()
+        internal_description = str(semantic.get("internal_description") or "").strip()
+        if not internal_description:
+            internal_description = self.semantic_description_from_parts(scene, objects, activities, labels)
+        if not internal_description:
+            internal_description = "semantic image metadata generated locally"
+
+        metadata = {
+            "analyzer": "local-ollama-vision-metadata",
+            "analyzer_version": "1",
+            "backend": "ollama",
+            "ollama_url": self.ollama_url,
+            "ollama_model": self.ollama_model,
+            "internal_description": internal_description,
+            "labels": sorted(set(labels + objects + activities + ([scene] if scene else []))),
+            "objects": objects,
+            "scene": scene,
+            "activities": activities,
+            "text": recognized_text,
+            "confidence_notes": str(semantic.get("confidence_notes") or "").strip(),
+            "source": {
+                "filename": str(image_info.get("filename") or image_path.name),
+                "image_id": int(image_info.get("id") or 0),
+                "checksum_sha256": str(image_info.get("checksum_sha256") or ""),
+            },
+        }
+        searchable_parts = [
+            internal_description,
+            scene,
+            recognized_text,
+            " ".join(metadata["labels"]),
+            str(image_info.get("filename") or ""),
+        ]
+        searchable_text = " ".join(part for part in searchable_parts if part).strip()
+        return metadata, searchable_text
+
+    def parse_semantic_json(self, raw_response: str) -> Dict[str, Any]:
+        """
+        Decode the JSON object produced by a local vision model.
+
+        Vision models sometimes wrap JSON in explanatory text despite explicit
+        prompting. This parser first tries strict JSON, then extracts the first
+        object-shaped range as a practical recovery path.
+
+        @param raw_response: Raw response text from the local model.
+        @return: Decoded dictionary.
+        @raises RuntimeError: Raised when no JSON object can be decoded.
+        """
+        try:
+            decoded = json.loads(raw_response)
+        except json.JSONDecodeError:
+            start = raw_response.find("{")
+            end = raw_response.rfind("}")
+            if start < 0 or end <= start:
+                raise RuntimeError(f"Ollama vision backend did not return a JSON object: {raw_response[:500]}")
+            try:
+                decoded = json.loads(raw_response[start:end + 1])
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Ollama vision backend returned unusable JSON: {raw_response[:500]}") from exc
+        if not isinstance(decoded, dict):
+            raise RuntimeError("Ollama vision backend JSON must be an object.")
+        return decoded
+
+    def normalize_label_list(self, value: Any) -> List[str]:
+        """
+        Normalize model-produced labels into short searchable strings.
+
+        @param value: Raw JSON value, usually a list of strings.
+        @return: Deduplicated list of lower-case labels.
+        """
+        if isinstance(value, str):
+            candidates = [part.strip() for part in value.replace(";", ",").split(",")]
+        elif isinstance(value, list):
+            candidates = [str(part).strip() for part in value]
+        else:
+            candidates = []
+        labels: List[str] = []
+        for candidate in candidates:
+            label = " ".join(candidate.lower().split())
+            if label and len(label) <= 80 and label not in labels:
+                labels.append(label)
+        return labels[:40]
+
+    def semantic_description_from_parts(self, scene: str, objects: List[str], activities: List[str], labels: List[str]) -> str:
+        """
+        Create a compact fallback sentence from semantic model fields.
+
+        @param scene: Scene label returned by the model.
+        @param objects: Visible object labels.
+        @param activities: Visible activity labels.
+        @param labels: General labels.
+        @return: Compact internal description.
+        """
+        parts: List[str] = []
+        if scene:
+            parts.append(scene)
+        if objects:
+            parts.append("objects: " + ", ".join(objects[:12]))
+        if activities:
+            parts.append("activities: " + ", ".join(activities[:8]))
+        if not parts and labels:
+            parts.append(", ".join(labels[:12]))
+        return "; ".join(parts)
+
+    def analyze_with_pillow(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+        """
+        Produce internal searchable metadata using local Pillow inspection.
+
+        This is a conservative fallback, not an authoritative human caption. It
+        records technical and visual descriptors that help search find likely
+        images while a stronger local model can be configured later.
+
+        @param image_path: Local path to the downloaded image.
+        @param job: Server job payload.
+        @return: Tuple of metadata dictionary and searchable text.
+        @raises RuntimeError: Raised when Pillow is unavailable or cannot read the file.
+        """
+        if Image is None or ImageOps is None or ImageStat is None:
+            raise RuntimeError("Pillow is required for the built-in AI metadata analyzer. Use Install or repair dependencies.")
+
+        image_info = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
+        with Image.open(image_path) as opened:
+            image = ImageOps.exif_transpose(opened)
+            width, height = image.size
+            mode = image.mode
+            fmt = str(opened.format or image_path.suffix.lstrip(".")).upper()
+            rgb = image.convert("RGB")
+            sample = rgb.copy()
+            sample.thumbnail((256, 256))
+            grayscale = sample.convert("L")
+            luminance_stat = ImageStat.Stat(grayscale)
+            rgb_stat = ImageStat.Stat(sample)
+            mean_luminance = float(luminance_stat.mean[0]) if luminance_stat.mean else 0.0
+            luminance_std = float(luminance_stat.stddev[0]) if luminance_stat.stddev else 0.0
+            colorfulness = self.colorfulness_score(rgb_stat)
+            dominant_colors = self.dominant_color_labels(sample)
+
+        orientation = self.orientation_label(width, height)
+        brightness = self.brightness_label(mean_luminance)
+        contrast = self.contrast_label(luminance_std)
+        color_label = self.colorfulness_label(colorfulness)
+        labels = [orientation, brightness, contrast, color_label]
+        labels.extend(dominant_colors)
+        labels = [label for label in labels if label]
+        internal_description = f"{orientation} image, {brightness}, {contrast}, {color_label}"
+        if dominant_colors:
+            internal_description += ", dominant colors: " + ", ".join(dominant_colors)
+
+        metadata = {
+            "analyzer": "local-pillow-visual-metadata",
+            "analyzer_version": "1",
+            "internal_description": internal_description,
+            "labels": labels,
+            "dominant_colors": dominant_colors,
+            "technical": {
+                "width": width,
+                "height": height,
+                "aspect_ratio": round(width / height, 4) if height else None,
+                "orientation": orientation,
+                "mode": mode,
+                "format": fmt,
+                "mean_luminance": round(mean_luminance, 2),
+                "luminance_stddev": round(luminance_std, 2),
+                "colorfulness": round(colorfulness, 2),
+            },
+            "source": {
+                "filename": str(image_info.get("filename") or image_path.name),
+                "image_id": int(image_info.get("id") or 0),
+                "checksum_sha256": str(image_info.get("checksum_sha256") or ""),
+            },
+        }
+        searchable_text = " ".join([internal_description, " ".join(labels), str(image_info.get("filename") or "")])
+        return metadata, searchable_text
+
+    def colorfulness_score(self, stat: Any) -> float:
+        """
+        Return a simple RGB dispersion score for colorfulness.
+
+        @param stat: ImageStat.Stat instance for a sampled RGB image.
+        @return: Approximate colorfulness score.
+        """
+        if not stat.mean or len(stat.mean) < 3:
+            return 0.0
+        red, green, blue = [float(value) for value in stat.mean[:3]]
+        rg = abs(red - green)
+        yb = abs(0.5 * (red + green) - blue)
+        return math.sqrt((rg * rg) + (yb * yb))
+
+    def dominant_color_labels(self, image: Any) -> List[str]:
+        """
+        Return compact color labels from a sampled image.
+
+        @param image: PIL RGB image.
+        @return: List of color labels suitable for internal search.
+        """
+        adaptive_palette = getattr(Image, "ADAPTIVE", None)
+        if adaptive_palette is None and hasattr(Image, "Palette"):
+            adaptive_palette = getattr(Image.Palette, "ADAPTIVE", 1)
+        if adaptive_palette is None:
+            adaptive_palette = 1
+        quantized = image.convert("P", palette=adaptive_palette, colors=5).convert("RGB")
+        colors = quantized.getcolors(maxcolors=256 * 256) or []
+        colors = sorted(colors, key=lambda item: item[0], reverse=True)[:5]
+        labels: List[str] = []
+        for _count, rgb in colors:
+            label = self.rgb_label(rgb)
+            if label and label not in labels:
+                labels.append(label)
+        return labels[:4]
+
+    def rgb_label(self, rgb: Tuple[int, int, int]) -> str:
+        """
+        Convert one RGB color into a coarse human-readable label.
+
+        @param rgb: Red, green, and blue tuple.
+        @return: Coarse color label.
+        """
+        red, green, blue = rgb
+        maximum = max(red, green, blue)
+        minimum = min(red, green, blue)
+        if maximum < 45:
+            return "black"
+        if minimum > 215:
+            return "white"
+        if maximum - minimum < 24:
+            if maximum < 95:
+                return "dark gray"
+            if maximum > 175:
+                return "light gray"
+            return "gray"
+        if red >= green and red >= blue:
+            if green > 140 and blue < 110:
+                return "yellow"
+            if blue > 120 and green < 120:
+                return "magenta"
+            return "red"
+        if green >= red and green >= blue:
+            if red > 130 and blue < 110:
+                return "yellow-green"
+            if blue > 120:
+                return "cyan"
+            return "green"
+        if red > 120 and green < 120:
+            return "purple"
+        return "blue"
+
+    def orientation_label(self, width: int, height: int) -> str:
+        """
+        Return landscape, portrait, square, or panorama from image dimensions.
+
+        @param width: Image width in pixels.
+        @param height: Image height in pixels.
+        @return: Orientation label.
+        """
+        if width <= 0 or height <= 0:
+            return "unknown orientation"
+        ratio = width / height
+        if ratio > 2.0:
+            return "panorama"
+        if ratio > 1.15:
+            return "landscape"
+        if ratio < 0.87:
+            return "portrait"
+        return "square"
+
+    def brightness_label(self, luminance: float) -> str:
+        """
+        Return a coarse brightness label.
+
+        @param luminance: Mean luminance from 0 to 255.
+        @return: Brightness label.
+        """
+        if luminance < 55:
+            return "dark"
+        if luminance < 115:
+            return "dim"
+        if luminance < 185:
+            return "balanced brightness"
+        return "bright"
+
+    def contrast_label(self, stddev: float) -> str:
+        """
+        Return a coarse contrast label.
+
+        @param stddev: Luminance standard deviation.
+        @return: Contrast label.
+        """
+        if stddev < 28:
+            return "low contrast"
+        if stddev > 72:
+            return "high contrast"
+        return "medium contrast"
+
+    def colorfulness_label(self, score: float) -> str:
+        """
+        Return a coarse colorfulness label.
+
+        @param score: Approximate colorfulness score.
+        @return: Colorfulness label.
+        """
+        if score < 18:
+            return "muted colors"
+        if score > 70:
+            return "very colorful"
+        return "colorful"
+
+
+class AIAnalysisWorkerThread(threading.Thread):
+    """
+    Background worker that asks PHP Gallery for server-assigned AI jobs.
+
+    It never scans the gallery by itself. The server is authoritative: each poll
+    either returns one claimed job with a lease token or no job. This makes it
+    safe to run several companion app instances against the same gallery key.
+    """
+
+    def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
+        """
+        Create a background AI-analysis worker.
+
+        @param config: Runtime configuration captured when the worker starts.
+        @param events: Queue used to send status lines back to the UI.
+        @return: None.
+        """
+        super().__init__(name="PHPGalleryAIAnalysisWorker", daemon=True)
+        self.config = config
+        self.events = events
+        self.stop_event = threading.Event()
+        self.worker_id = ai_worker_id()
+        self.progress_lock = threading.Lock()
+        self.progress_percent = 0
+        self.progress_message = "Starting."
+
+    def stop(self) -> None:
+        """
+        Request the worker loop to stop.
+
+        @return: None.
+        """
+        self.stop_event.set()
+
+    def emit(self, level: str, message: str) -> None:
+        """
+        Send one worker event to the UI and file log.
+
+        @param level: Severity label.
+        @param message: Human-readable status text.
+        @return: None.
+        """
+        logging.log(logging.ERROR if level == "error" else logging.INFO, "%s", message)
+        self.events.put((level, message))
+
+    def update_progress(self, percent: int, message: str) -> None:
+        """
+        Store the current progress text used by heartbeat requests.
+
+        @param percent: Integer progress from 0 to 99 while running.
+        @param message: Short status text.
+        @return: None.
+        """
+        with self.progress_lock:
+            self.progress_percent = max(0, min(99, int(percent)))
+            self.progress_message = message
+
+    def current_progress(self) -> Tuple[int, str]:
+        """
+        Return the latest heartbeat progress tuple.
+
+        @return: Progress percent and message.
+        """
+        with self.progress_lock:
+            return self.progress_percent, self.progress_message
+
+    def run(self) -> None:
+        """
+        Poll the server and process claimed jobs until stopped.
+
+        @return: None.
+        """
+        enter_background_thread_mode()
+        upload_url = normalize_upload_url(self.config.gallery_url)
+        api_key = self.config.api_key.strip()
+        if not self.config.ai_worker_enabled:
+            self.emit("info", "AI metadata worker is disabled in configuration.")
+            return
+        if not upload_url or not api_key:
+            self.emit("error", "AI metadata worker needs Gallery URL and API key.")
+            return
+
+        poll_seconds = max(AI_WORKER_MIN_POLL_SECONDS, float(self.config.ai_worker_poll_seconds or DEFAULT_AI_WORKER_POLL_SECONDS))
+        lease_seconds = max(60, min(AI_WORKER_MAX_LEASE_SECONDS, int(self.config.ai_worker_lease_seconds or DEFAULT_AI_WORKER_LEASE_SECONDS)))
+        model_name = self.config.ai_model_name.strip() or AI_MODEL_NAME_DEFAULT
+        model_version = self.config.ai_model_version.strip() or AI_MODEL_VERSION_DEFAULT
+        self.emit("info", f"AI metadata worker started as {self.worker_id} using {model_name} {model_version}.")
+
+        while not self.stop_event.is_set():
+            try:
+                claimed = post_json(
+                    upload_url,
+                    api_key,
+                    {
+                        "action": "ai_next_job",
+                        "worker_id": self.worker_id,
+                        "model_name": model_name,
+                        "model_version": model_version,
+                        "lease_seconds": lease_seconds,
+                    },
+                    timeout_seconds=60,
+                )
+                job = claimed.get("job")
+                if not isinstance(job, dict):
+                    wait_seconds = float(claimed.get("poll_after_seconds") or poll_seconds)
+                    self.update_progress(0, "No job available.")
+                    self.stop_event.wait(max(AI_WORKER_MIN_POLL_SECONDS, wait_seconds))
+                    continue
+                self.process_job(upload_url, api_key, job, lease_seconds)
+            except Exception as exc:  # noqa: BLE001
+                self.emit("warning", f"AI metadata worker poll failed: {exc}")
+                self.stop_event.wait(poll_seconds)
+
+        self.emit("info", "AI metadata worker stopped.")
+
+    def process_job(self, upload_url: str, api_key: str, job: Dict[str, Any], lease_seconds: int) -> None:
+        """
+        Download, analyze, and report one claimed AI job.
+
+        @param upload_url: Normalized upload automation endpoint.
+        @param api_key: Gallery-scoped API key.
+        @param job: Claimed job payload from the server.
+        @param lease_seconds: Requested lease extension length.
+        @return: None.
+        """
+        job_id = int(job.get("job_id") or 0)
+        claim_token = str(job.get("claim_token") or "")
+        image = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
+        filename = str(image.get("filename") or f"job-{job_id}.img")
+        if job_id <= 0 or not claim_token:
+            self.emit("warning", "AI metadata worker received an invalid job payload.")
+            return
+
+        heartbeat = PeriodicAIHeartbeat(upload_url, api_key, job_id, claim_token, lease_seconds, self.current_progress, self.emit)
+        heartbeat.start()
+        temp_dir = Path(tempfile.mkdtemp(prefix="php_gallery_ai_"))
+        downloaded_path = temp_dir / ("source" + extension_for_content_type(str(image.get("mime_type") or ""), filename))
+        try:
+            self.update_progress(5, "Downloading assigned image.")
+            self.emit("info", f"AI metadata worker claimed job {job_id} for {filename}.")
+            content_type, downloaded = post_binary_to_file(
+                upload_url,
+                api_key,
+                {
+                    "action": "ai_asset",
+                    "job_id": str(job_id),
+                    "claim_token": claim_token,
+                },
+                downloaded_path,
+                timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
+            )
+            if downloaded <= 0:
+                raise RuntimeError("Server returned an empty image asset.")
+            corrected_suffix = extension_for_content_type(content_type, filename)
+            if downloaded_path.suffix.lower() != corrected_suffix:
+                corrected_path = temp_dir / ("source" + corrected_suffix)
+                downloaded_path.rename(corrected_path)
+                downloaded_path = corrected_path
+
+            self.update_progress(35, "Analyzing image locally.")
+            analyzer = AIImageAnalyzer(self.config)
+            metadata, searchable_text = analyzer.analyze(downloaded_path, job)
+            self.update_progress(90, "Reporting AI metadata.")
+            post_json(
+                upload_url,
+                api_key,
+                {
+                    "action": "ai_complete",
+                    "job_id": job_id,
+                    "claim_token": claim_token,
+                    "status": "succeeded",
+                    "metadata": metadata,
+                    "searchable_text": searchable_text,
+                },
+                timeout_seconds=60,
+            )
+            self.update_progress(100, "Completed.")
+            self.emit("info", f"AI metadata stored for {filename}.")
+        except Exception as exc:  # noqa: BLE001
+            self.update_progress(0, "Reporting failure.")
+            self.report_failure(upload_url, api_key, job_id, claim_token, filename, exc)
+        finally:
+            heartbeat.stop()
+            heartbeat.join(timeout=2.0)
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def report_failure(self, upload_url: str, api_key: str, job_id: int, claim_token: str, filename: str, exc: Exception) -> None:
+        """
+        Report one failed job to the server without hiding local diagnostics.
+
+        @param upload_url: Normalized upload automation endpoint.
+        @param api_key: Gallery-scoped API key.
+        @param job_id: Failed server job id.
+        @param claim_token: Claim token returned with the job.
+        @param filename: Original filename for readable logging.
+        @param exc: Exception raised during processing.
+        @return: None.
+        """
+        message = str(exc)
+        try:
+            post_json(
+                upload_url,
+                api_key,
+                {
+                    "action": "ai_complete",
+                    "job_id": job_id,
+                    "claim_token": claim_token,
+                    "status": "failed",
+                    "error": message,
+                },
+                timeout_seconds=60,
+            )
+        except Exception as report_exc:  # noqa: BLE001
+            self.emit("warning", f"AI metadata worker could not report failure for {filename}: {report_exc}")
+        self.emit("warning", f"AI metadata worker failed for {filename}: {message}")
 
 
 class WatcherThread(threading.Thread):
@@ -2306,13 +3558,17 @@ class WatcherApp:
 
         self.root = tk.Tk()
         self.root.title(APP_DISPLAY_NAME)
-        self.root.geometry("980x760")
+        self.root.geometry("980x860")
 
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
         self.events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
         self.worker: Optional[WatcherThread] = None
         self.manual_worker: Optional[ManualUploadThread] = None
+        self.ai_worker: Optional[AIAnalysisWorkerThread] = None
+        self.ai_worker_stop_requested = False
+        self.semantic_ai_install_running = False
+        self.semantic_ai_install_button: Optional[Any] = None
         self.manual_paths: List[Path] = []
         self.tray_icon: Optional[Any] = None
         self.tray_thread: Optional[threading.Thread] = None
@@ -2332,10 +3588,27 @@ class WatcherApp:
         self.manual_thumbnail_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_thumbnail_workers))
         self.manual_upload_workers_var = tk.StringVar(value=format_worker_choice(self.config.manual_upload_workers))
         self.inventory_refresh_var = tk.StringVar(value=f"{self.config.inventory_refresh_seconds:g}")
+        self.ai_worker_enabled_var = tk.BooleanVar(value=self.config.ai_worker_enabled)
+        self.ai_worker_poll_var = tk.StringVar(value=f"{self.config.ai_worker_poll_seconds:g}")
+        self.ai_worker_lease_var = tk.StringVar(value=str(self.config.ai_worker_lease_seconds))
+        self.ai_model_name_var = tk.StringVar(value=self.config.ai_model_name)
+        self.ai_model_version_var = tk.StringVar(value=self.config.ai_model_version)
+        self.ai_external_command_var = tk.StringVar(value=self.config.ai_external_command)
+        self.ai_vision_backend_var = tk.StringVar(value=normalize_ai_vision_backend(self.config.ai_vision_backend))
+        self.ai_transformers_caption_model_var = tk.StringVar(value=self.config.ai_transformers_caption_model)
+        self.ai_transformers_detector_model_var = tk.StringVar(value=self.config.ai_transformers_detector_model)
+        self.ai_transformers_object_labels_var = tk.StringVar(value=self.config.ai_transformers_object_labels)
+        self.ai_transformers_detection_threshold_var = tk.StringVar(value=f"{self.config.ai_transformers_detection_threshold:g}")
+        self.ai_ollama_url_var = tk.StringVar(value=self.config.ai_ollama_url)
+        self.ai_ollama_model_var = tk.StringVar(value=self.config.ai_ollama_model)
+        self.ai_semantic_prompt_var = tk.StringVar(value=self.config.ai_semantic_prompt)
+        self.ai_advanced_visible_var = tk.BooleanVar(value=False)
+        self.ai_advanced_frame = None
         self.thumbnail_runtime_var = tk.StringVar(value=thumbnail_runtime_status())
         self.manual_selection_var = tk.StringVar(value="No files selected")
         self.status_var = tk.StringVar(value="Watcher stopped")
         self.manual_status_var = tk.StringVar(value="Manual upload idle")
+        self.ai_status_var = tk.StringVar(value="AI metadata worker idle")
         self.monitor_state_var = tk.StringVar(value="Monitoring disabled")
         self.monitor_detail_var = tk.StringVar(value="No watcher is active.")
         self.monitor_state = "disabled"
@@ -2362,7 +3635,7 @@ class WatcherApp:
         title.pack(anchor="w")
         subtitle = ttk.Label(
             outer,
-            text="Uploads images through one gallery-scoped API key, either from a watched folder or from a manual selection.",
+            text="Uploads images through one gallery-scoped API key, either from a watched folder, from a manual selection, or from the optional AI metadata worker.",
         )
         subtitle.pack(anchor="w", pady=(2, 14))
 
@@ -2398,11 +3671,14 @@ class WatcherApp:
 
         watch_tab = ttk.Frame(notebook, padding=12)
         manual_tab = ttk.Frame(notebook, padding=12)
+        ai_tab = ttk.Frame(notebook, padding=12)
         notebook.add(watch_tab, text="Watch folder")
         notebook.add(manual_tab, text="Manual upload")
+        notebook.add(ai_tab, text="AI metadata")
 
         self.build_watch_tab(watch_tab)
         self.build_manual_tab(manual_tab)
+        self.build_ai_tab(ai_tab)
 
         log_frame = ttk.LabelFrame(outer, text="Status log")
         log_frame.pack(fill="both", expand=True)
@@ -2451,6 +3727,8 @@ class WatcherApp:
                 pystray.MenuItem("Open", self.tray_restore_window, default=True),
                 pystray.MenuItem("Start watching", self.tray_start_watching),
                 pystray.MenuItem("Stop watching", self.tray_stop_watching),
+                pystray.MenuItem("Start AI metadata worker", self.tray_start_ai_worker),
+                pystray.MenuItem("Stop AI metadata worker", self.tray_stop_ai_worker),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Exit", self.tray_exit_application),
             )
@@ -2501,6 +3779,22 @@ class WatcherApp:
         """
         self.schedule_ui(self.stop)
 
+    def tray_start_ai_worker(self, *_args: Any) -> None:
+        """
+        Start the optional AI metadata worker from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.start_ai_worker)
+
+    def tray_stop_ai_worker(self, *_args: Any) -> None:
+        """
+        Stop the optional AI metadata worker from the tray menu.
+
+        @return: None.
+        """
+        self.schedule_ui(self.stop_ai_worker)
+
     def tray_exit_application(self, *_args: Any) -> None:
         """
         Exit the application from the tray menu.
@@ -2522,7 +3816,7 @@ class WatcherApp:
         if self.background_work_active():
             choice = messagebox.askyesnocancel(
                 APP_DISPLAY_NAME,
-                "The watcher or manual upload is still running. Choose Yes to hide to tray, No to stop work and exit, or Cancel to keep this window open.",
+                "Background work is still running. Choose Yes to hide to tray, No to stop work and exit, or Cancel to keep this window open.",
             )
             if choice is None:
                 return
@@ -2534,11 +3828,15 @@ class WatcherApp:
 
     def background_work_active(self) -> bool:
         """
-        Return whether a watcher or manual upload worker is running.
+        Return whether any background worker is running.
 
         @return: True when any background worker is alive.
         """
-        return bool((self.worker and self.worker.is_alive()) or (self.manual_worker and self.manual_worker.is_alive()))
+        return bool(
+            (self.worker and self.worker.is_alive())
+            or (self.manual_worker and self.manual_worker.is_alive())
+            or (self.ai_worker and self.ai_worker.is_alive())
+        )
 
     def handle_window_unmap(self, event: Any) -> None:
         """
@@ -2720,6 +4018,132 @@ class WatcherApp:
         ttk.Button(actions, text="Stop manual upload", command=self.stop_manual_upload).pack(side="left", padx=8)
         ttk.Label(actions, textvariable=self.manual_status_var).pack(side="right")
 
+    def build_ai_tab(self, parent: Any) -> None:
+        """
+        Build controls for the optional AI metadata worker.
+
+        The tab intentionally keeps the normal operator view small. The common
+        workflow is enable, choose the local backend, install dependencies if
+        needed, and start the worker. Low-level tuning fields stay available in
+        a collapsible advanced section, but they do not dominate the UI.
+
+        @param parent: Tkinter frame that receives the controls.
+        @return: None.
+        """
+        parent.columnconfigure(1, weight=1)
+
+        intro = ttk.Label(
+            parent,
+            text="Optional server-assigned worker mode. The gallery server gives this PC one image job at a time. Heavy analysis runs locally and only internal searchable metadata is sent back.",
+            wraplength=880,
+        )
+        intro.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+        ttk.Checkbutton(
+            parent,
+            text="Enable AI metadata worker on this PC",
+            variable=self.ai_worker_enabled_var,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=5)
+
+        quick = ttk.LabelFrame(parent, text="Normal use")
+        quick.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 8))
+        quick.columnconfigure(1, weight=1)
+
+        ttk.Label(quick, text="Vision backend").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.OptionMenu(quick, self.ai_vision_backend_var, normalize_ai_vision_backend(self.ai_vision_backend_var.get()), *AI_VISION_BACKEND_CHOICES).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ttk.Label(quick, text="Use transformers for local semantic labels without a separate server. Auto keeps safe fallbacks.", foreground="#666666", wraplength=420).grid(row=0, column=2, sticky="w", padx=8, pady=6)
+
+        ttk.Label(quick, text="Model version").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Entry(quick, textvariable=self.ai_model_version_var, width=24).grid(row=1, column=1, sticky="w", padx=8, pady=6)
+        ttk.Label(quick, text="Change this when you want the server to treat results as a new generation.", foreground="#666666", wraplength=420).grid(row=1, column=2, sticky="w", padx=8, pady=6)
+
+        runtime_row = ttk.Frame(quick)
+        runtime_row.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(2, 8))
+        runtime_row.columnconfigure(0, weight=1)
+        ttk.Label(runtime_row, textvariable=self.thumbnail_runtime_var, wraplength=560).grid(row=0, column=0, sticky="w")
+        self.semantic_ai_install_button = ttk.Button(runtime_row, text="Install local AI module", command=self.repair_semantic_ai_dependencies)
+        self.semantic_ai_install_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        ttk.Button(runtime_row, text="Install or repair basic dependencies", command=self.repair_dependencies).grid(row=0, column=2, sticky="e", padx=(8, 0))
+
+        advanced_toggle = ttk.Checkbutton(
+            parent,
+            text="Show advanced AI settings",
+            variable=self.ai_advanced_visible_var,
+            command=self.toggle_ai_advanced_settings,
+        )
+        advanced_toggle.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 4))
+
+        advanced = ttk.LabelFrame(parent, text="Advanced AI settings")
+        self.ai_advanced_frame = advanced
+        advanced.columnconfigure(1, weight=1)
+
+        ttk.Label(advanced, text="Poll seconds when idle").grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_worker_poll_var, width=12).grid(row=0, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Default 60. Larger values keep the server quieter.", foreground="#666666").grid(row=0, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Lease seconds per job").grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_worker_lease_var, width=12).grid(row=1, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Default 600. Heartbeats extend the lease while analysis runs.", foreground="#666666").grid(row=1, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Model or analyzer name").grid(row=2, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_model_name_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Transformers caption model").grid(row=3, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_transformers_caption_model_var).grid(row=3, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Label(advanced, text="First use may download model files locally.", foreground="#666666", wraplength=360).grid(row=3, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Transformers object detector").grid(row=4, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_transformers_detector_model_var).grid(row=4, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Label(advanced, text="Zero-shot object labels such as person, bridge, guitar, house.", foreground="#666666").grid(row=4, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Detector threshold").grid(row=5, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_transformers_detection_threshold_var, width=12).grid(row=5, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Default 0.18. Lower sees more objects but may add noise.", foreground="#666666").grid(row=5, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Object labels").grid(row=6, column=0, sticky="nw", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_transformers_object_labels_var).grid(row=6, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Local Ollama URL").grid(row=7, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_ollama_url_var).grid(row=7, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Label(advanced, text="Optional fallback when you intentionally run Ollama.", foreground="#666666").grid(row=7, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Ollama vision model").grid(row=8, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_ollama_model_var, width=32).grid(row=8, column=1, sticky="w", padx=8, pady=5)
+        ttk.Label(advanced, text="Examples: llava:latest or llama3.2-vision:latest.", foreground="#666666").grid(row=8, column=2, sticky="w", padx=8, pady=5)
+
+        ttk.Label(advanced, text="Semantic prompt").grid(row=9, column=0, sticky="nw", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_semantic_prompt_var).grid(row=9, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(advanced, text="External analyzer command").grid(row=10, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(advanced, textvariable=self.ai_external_command_var).grid(row=10, column=1, columnspan=2, sticky="ew", padx=8, pady=5)
+        ttk.Label(
+            advanced,
+            text="Optional. Use {image_path}, {filename}, and {job_id}. The command must print JSON metadata to stdout. Leave blank unless you use your own local analyzer.",
+            foreground="#666666",
+            wraplength=820,
+        ).grid(row=11, column=1, columnspan=2, sticky="w", padx=8, pady=(0, 6))
+
+        actions = ttk.Frame(parent)
+        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+        ttk.Button(actions, text="Start AI metadata worker", command=self.start_ai_worker).pack(side="left")
+        ttk.Button(actions, text="Stop AI metadata worker", command=self.stop_ai_worker).pack(side="left", padx=8)
+        ttk.Label(actions, textvariable=self.ai_status_var).pack(side="right")
+
+        self.toggle_ai_advanced_settings()
+
+    def toggle_ai_advanced_settings(self) -> None:
+        """
+        Show or hide low-level AI worker tuning controls.
+
+        @return: None.
+        """
+        if not self.ai_advanced_frame:
+            return
+        if self.ai_advanced_visible_var.get():
+            self.ai_advanced_frame.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+        else:
+            self.ai_advanced_frame.grid_remove()
+
     def refresh_thumbnail_controls(self) -> None:
         """
         Refresh local thumbnail availability in the manual upload tab.
@@ -2764,8 +4188,11 @@ class WatcherApp:
             thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
             upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
             inventory_refresh = max(1.0, float(self.inventory_refresh_var.get().strip() or DEFAULT_INVENTORY_REFRESH_SECONDS))
+            ai_worker_poll = max(AI_WORKER_MIN_POLL_SECONDS, float(self.ai_worker_poll_var.get().strip() or DEFAULT_AI_WORKER_POLL_SECONDS))
+            ai_worker_lease = max(60, min(AI_WORKER_MAX_LEASE_SECONDS, int(self.ai_worker_lease_var.get().strip() or DEFAULT_AI_WORKER_LEASE_SECONDS)))
+            ai_transformers_detection_threshold = max(0.01, min(0.95, float(self.ai_transformers_detection_threshold_var.get().strip() or AI_TRANSFORMERS_DETECTION_THRESHOLD_DEFAULT)))
         except ValueError as exc:
-            raise ValueError("Scan interval, stable file seconds, inventory reconnect seconds, and worker counts must be numeric.") from exc
+            raise ValueError("Scan interval, stable file seconds, inventory reconnect seconds, AI worker timing, detector threshold, and worker counts must be numeric.") from exc
 
         return WatcherConfig(
             watched_folder=self.watched_folder_var.get().strip(),
@@ -2780,6 +4207,20 @@ class WatcherApp:
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
             inventory_refresh_seconds=inventory_refresh,
+            ai_worker_enabled=bool(self.ai_worker_enabled_var.get()),
+            ai_worker_poll_seconds=ai_worker_poll,
+            ai_worker_lease_seconds=ai_worker_lease,
+            ai_model_name=self.ai_model_name_var.get().strip() or AI_MODEL_NAME_DEFAULT,
+            ai_model_version=self.ai_model_version_var.get().strip() or AI_MODEL_VERSION_DEFAULT,
+            ai_external_command=self.ai_external_command_var.get().strip(),
+            ai_vision_backend=normalize_ai_vision_backend(self.ai_vision_backend_var.get()),
+            ai_transformers_caption_model=self.ai_transformers_caption_model_var.get().strip() or AI_TRANSFORMERS_CAPTION_MODEL_DEFAULT,
+            ai_transformers_detector_model=self.ai_transformers_detector_model_var.get().strip() or AI_TRANSFORMERS_DETECTOR_MODEL_DEFAULT,
+            ai_transformers_object_labels=self.ai_transformers_object_labels_var.get().strip() or AI_TRANSFORMERS_OBJECT_LABELS_DEFAULT,
+            ai_transformers_detection_threshold=ai_transformers_detection_threshold,
+            ai_ollama_url=self.ai_ollama_url_var.get().strip() or AI_OLLAMA_URL_DEFAULT,
+            ai_ollama_model=self.ai_ollama_model_var.get().strip() or AI_OLLAMA_MODEL_DEFAULT,
+            ai_semantic_prompt=self.ai_semantic_prompt_var.get().strip() or AI_SEMANTIC_PROMPT_DEFAULT,
         )
 
     def browse_folder(self) -> None:
@@ -2951,6 +4392,84 @@ class WatcherApp:
         self.manual_status_var.set("Manual upload stopped")
         self.refresh_revoke_button_state()
 
+    def repair_semantic_ai_dependencies(self) -> None:
+        """
+        Install optional in-process AI packages without freezing the tray UI.
+
+        PyTorch and Transformers are large packages, so pip can run for a long
+        time and produce a lot of output. The installation is therefore handled
+        by a small background thread and reported through the same event queue as
+        watcher and AI worker messages. Tkinter remains responsive while pip is
+        downloading or checking packages.
+
+        @return: None.
+        """
+        if self.semantic_ai_install_running:
+            self.write_log("Optional local AI module dependency installation is already running.")
+            return
+
+        self.semantic_ai_install_running = True
+        if self.semantic_ai_install_button is not None:
+            self.semantic_ai_install_button.configure(state="disabled")
+        self.write_log("Installing optional local AI module dependencies into the current Python runtime...")
+
+        def installer() -> None:
+            """
+            Run pip installation away from the Tkinter event loop.
+
+            @return: None.
+            """
+            ok, output = install_semantic_ai_dependencies_for_current_runtime()
+            safe_output = output.strip() if output else "pip produced no output"
+            if ok:
+                self.events.put(("info", "Optional local AI module dependency installation finished successfully. Restart the app before running the Transformers backend for the first time."))
+            else:
+                self.events.put(("error", "Optional local AI module dependency installation finished with errors: " + safe_output[:4000]))
+
+        threading.Thread(target=installer, daemon=True).start()
+
+    def start_ai_worker(self) -> None:
+        """
+        Start the optional AI metadata worker using current shared connection fields.
+
+        @return: None.
+        """
+        if self.ai_worker and self.ai_worker.is_alive():
+            self.write_log("AI metadata worker is already running.")
+            return
+
+        try:
+            config = self.current_config()
+            self.config_store.save(config)
+            self.config = config
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Configuration error", str(exc))
+            return
+
+        if not config.ai_worker_enabled:
+            messagebox.showwarning("AI metadata worker", "Enable the AI metadata worker before starting it.")
+            return
+
+        self.ai_worker_stop_requested = False
+        self.ai_worker = AIAnalysisWorkerThread(config, self.events)
+        self.ai_worker.start()
+        self.ai_status_var.set("AI metadata worker running")
+        self.write_log("AI metadata worker started.", "success")
+        self.refresh_revoke_button_state()
+
+    def stop_ai_worker(self) -> None:
+        """
+        Request the optional AI metadata worker to stop.
+
+        @return: None.
+        """
+        if self.ai_worker:
+            self.ai_worker.stop()
+            self.ai_worker_stop_requested = True
+        self.ai_status_var.set("AI metadata worker stopping")
+        self.refresh_activity_monitor_state()
+        self.refresh_revoke_button_state()
+
     def refresh_revoke_button_state(self) -> None:
         """
         Enable revocation only when the watcher and manual uploader are idle.
@@ -2962,7 +4481,8 @@ class WatcherApp:
         api_key_present = bool(self.api_key_var.get().strip())
         watcher_running = bool(self.worker and self.worker.is_alive())
         manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
-        if api_key_present and not watcher_running and not manual_running:
+        ai_running = bool(self.ai_worker and self.ai_worker.is_alive())
+        if api_key_present and not watcher_running and not manual_running and not ai_running:
             self.revoke_button.state(["!disabled"])
         else:
             self.revoke_button.state(["disabled"])
@@ -2978,6 +4498,9 @@ class WatcherApp:
             return
         if self.manual_worker and self.manual_worker.is_alive():
             messagebox.showwarning("Revoke API key", "Wait for manual upload to finish before revoking the key.")
+            return
+        if self.ai_worker and self.ai_worker.is_alive():
+            messagebox.showwarning("Revoke API key", "Stop the AI metadata worker before revoking the key.")
             return
 
         upload_url = normalize_upload_url(self.gallery_url_var.get())
@@ -3014,6 +4537,7 @@ class WatcherApp:
         self.stop_tray_icon()
         self.stop()
         self.stop_manual_upload()
+        self.stop_ai_worker()
         self.root.after(150, self.root.destroy)
 
     def open_config_folder(self) -> None:
@@ -3024,6 +4548,32 @@ class WatcherApp:
         """
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         webbrowser.open(str(CONFIG_DIR))
+
+    def refresh_activity_monitor_state(self) -> None:
+        """
+        Recalculate the top activity indicator from the live worker objects.
+
+        The tray app has three independent background activities: folder
+        monitoring, manual upload, and optional AI metadata processing. Stopping
+        one activity must not leave stale text from another activity in the
+        shared monitor strip.
+
+        @return: None.
+        """
+        watcher_running = bool(self.worker and self.worker.is_alive())
+        manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
+        ai_running = bool(self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested)
+
+        if watcher_running:
+            self.update_monitor_state("green", "Folder monitoring is active.")
+            return
+        if manual_running:
+            self.update_monitor_state("green", "Manual upload is active.")
+            return
+        if ai_running:
+            self.update_monitor_state("green", "AI metadata worker is active.")
+            return
+        self.update_monitor_state("disabled", "No background worker is active.")
 
     def drain_events(self) -> None:
         """
@@ -3053,20 +4603,42 @@ class WatcherApp:
                 self.status_var.set("Stopped")
                 self.update_monitor_state("disabled", "Watcher stopped.")
                 self.refresh_revoke_button_state()
+            elif message.startswith("AI metadata worker stopped"):
+                self.ai_worker_stop_requested = False
+                self.ai_status_var.set("AI metadata worker stopped")
+                self.refresh_activity_monitor_state()
+                self.refresh_revoke_button_state()
+            elif message.startswith("AI metadata worker started"):
+                self.ai_worker_stop_requested = False
+                self.ai_status_var.set("AI metadata worker running")
+                self.update_monitor_state("green", "AI metadata worker is active.")
+                self.refresh_revoke_button_state()
             elif level == "error" or level == "warning":
                 self.status_var.set("Running with errors")
                 self.update_monitor_state("red", message)
                 if self.manual_worker and self.manual_worker.is_alive():
                     self.manual_status_var.set("Manual upload has errors")
+                if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested:
+                    self.ai_status_var.set("AI metadata worker has errors")
             elif level in {"info", "debug"}:
                 if "Upload failed" not in message and "error" not in message.lower():
                     if self.worker and self.worker.is_alive():
                         self.status_var.set("Running")
-                        self.update_monitor_state("green", self.monitor_detail)
+                        self.update_monitor_state("green", "Folder monitoring is active.")
+                    if self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested and message.startswith("AI metadata"):
+                        self.ai_status_var.set("AI metadata worker running")
+                        self.update_monitor_state("green", "AI metadata worker is active.")
             if message.startswith("Watching ") or message.startswith("Upload endpoint:"):
-                self.update_monitor_state("green", "Monitoring is active.")
+                self.update_monitor_state("green", "Folder monitoring is active.")
             if message.startswith("Uploaded ") or message.startswith("Skipped duplicate content"):
-                self.update_monitor_state("green", "Monitoring is active.")
+                self.update_monitor_state("green", "Folder monitoring is active.")
+            if message.startswith("AI metadata stored") and not self.ai_worker_stop_requested:
+                self.ai_status_var.set("AI metadata worker running")
+                self.update_monitor_state("green", "AI metadata worker is active.")
+            if message.startswith("Optional local AI module dependency installation finished"):
+                self.semantic_ai_install_running = False
+                if self.semantic_ai_install_button is not None:
+                    self.semantic_ai_install_button.configure(state="normal")
             if message.startswith("Manual upload started"):
                 self.write_log("Manual upload job accepted.", "system")
 
@@ -3128,11 +4700,11 @@ class WatcherApp:
             return "error"
         if level == "warning":
             return "warning"
-        if any(lower.startswith(prefix) for prefix in ["watching ", "upload endpoint:", "watcher started", "configuration saved", "manual upload started", "manual upload worker started", "manual upload finished"]):
+        if any(lower.startswith(prefix) for prefix in ["watching ", "upload endpoint:", "watcher started", "configuration saved", "manual upload started", "manual upload worker started", "manual upload finished", "ai metadata worker started", "ai metadata stored"]):
             return "success"
         if lower.startswith("uploaded ") or lower.startswith("skipped duplicate content") or lower.startswith("generated "):
             return "success"
-        if lower.startswith("manual upload stopped") or lower.startswith("watcher stopped"):
+        if lower.startswith("manual upload stopped") or lower.startswith("watcher stopped") or lower.startswith("ai metadata worker stopped"):
             return "system"
         return "system"
 

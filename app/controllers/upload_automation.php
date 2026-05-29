@@ -107,6 +107,205 @@ function upload_automation_request_action(array $jsonPayload): string
 }
 
 /**
+ * Dispatch API-key authenticated AI image-analysis queue actions.
+ *
+ * @param string $action Normalized action name from form data or JSON.
+ * @param int $galleryId Gallery scope authorized by the current API key.
+ * @param array<string,mixed> $gallery Gallery row for the authorized scope.
+ * @param array<string,mixed> $tokenRow Upload automation token row.
+ * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ */
+function upload_automation_handle_ai_action(string $action, int $galleryId, array $gallery, array $tokenRow, array $jsonPayload): void
+{
+    if (!ai_image_analysis_schema_ready()) {
+        upload_automation_json(['ok' => false, 'error' => 'AI image analysis queue is not installed. Run pending database migrations first.'], 503);
+        return;
+    }
+
+    try {
+        if ($action === 'ai_next_job') {
+            upload_automation_handle_ai_next_job($galleryId, $tokenRow, $jsonPayload);
+            return;
+        }
+        if ($action === 'ai_heartbeat') {
+            upload_automation_handle_ai_heartbeat($galleryId, $tokenRow, $jsonPayload);
+            return;
+        }
+        if ($action === 'ai_complete') {
+            upload_automation_handle_ai_complete($galleryId, $tokenRow, $jsonPayload);
+            return;
+        }
+        if ($action === 'ai_asset') {
+            upload_automation_stream_ai_asset($galleryId);
+            return;
+        }
+
+        upload_automation_json(['ok' => false, 'error' => 'Unknown AI analysis action.'], 400);
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'upload_automation.ai_action_failed', 'AI image-analysis automation request failed.', [
+            'token_id' => (int) ($tokenRow['id'] ?? 0),
+            'gallery_id' => $galleryId,
+            'action' => $action,
+            'error' => $exception->getMessage(),
+        ]);
+        upload_automation_json(['ok' => false, 'error' => $exception->getMessage()], 422);
+    }
+}
+
+/**
+ * Claim and return one AI image-analysis job for a worker.
+ *
+ * @param array<string,mixed> $tokenRow Upload automation token row.
+ * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ */
+function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, array $jsonPayload): void
+{
+    $workerId = ai_image_analysis_normalize_worker_id((string) ($jsonPayload['worker_id'] ?? ''));
+    $modelName = ai_image_analysis_normalize_label((string) ($jsonPayload['model_name'] ?? ''), 'local-image-metadata');
+    $modelVersion = ai_image_analysis_normalize_label((string) ($jsonPayload['model_version'] ?? ''), '1');
+    $leaseSeconds = ai_image_analysis_normalize_lease_seconds((int) ($jsonPayload['lease_seconds'] ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS));
+
+    $job = ai_image_analysis_claim_next_job($galleryId, $workerId, $modelName, $modelVersion, $leaseSeconds);
+    mark_upload_automation_token_used((int) $tokenRow['id']);
+
+    if ($job === null) {
+        upload_automation_json([
+            'ok' => true,
+            'job' => null,
+            'poll_after_seconds' => 60,
+            'message' => 'No AI image-analysis job is currently available.',
+        ]);
+        return;
+    }
+
+    admin_log_event('info', 'upload_automation.ai_job_claimed', 'AI image-analysis job claimed by companion app worker.', [
+        'token_id' => (int) ($tokenRow['id'] ?? 0),
+        'gallery_id' => $galleryId,
+        'job_id' => (int) ($job['job_id'] ?? 0),
+        'image_id' => (int) ($job['image']['id'] ?? 0),
+        'worker_id' => $workerId,
+        'model_name' => $modelName,
+        'model_version' => $modelVersion,
+    ]);
+
+    upload_automation_json([
+        'ok' => true,
+        'job' => $job,
+        'asset_action' => 'ai_asset',
+    ]);
+}
+
+/**
+ * Extend one active AI job lease for a worker.
+ *
+ * @param array<string,mixed> $tokenRow Upload automation token row.
+ * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ */
+function upload_automation_handle_ai_heartbeat(int $galleryId, array $tokenRow, array $jsonPayload): void
+{
+    $jobId = (int) ($jsonPayload['job_id'] ?? 0);
+    $claimToken = (string) ($jsonPayload['claim_token'] ?? '');
+    $leaseSeconds = ai_image_analysis_normalize_lease_seconds((int) ($jsonPayload['lease_seconds'] ?? AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS));
+    $progressPercent = max(0, min(99, (int) ($jsonPayload['progress_percent'] ?? 0)));
+    $message = (string) ($jsonPayload['message'] ?? 'Worker heartbeat.');
+
+    if (!ai_image_analysis_record_heartbeat($galleryId, $jobId, $claimToken, $leaseSeconds, $progressPercent, $message)) {
+        upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+        return;
+    }
+
+    mark_upload_automation_token_used((int) $tokenRow['id']);
+    upload_automation_json([
+        'ok' => true,
+        'job_id' => $jobId,
+        'message' => 'Heartbeat accepted.',
+    ]);
+}
+
+/**
+ * Complete or fail one active AI image-analysis job.
+ *
+ * @param array<string,mixed> $tokenRow Upload automation token row.
+ * @param array<string,mixed> $jsonPayload Decoded JSON request body.
+ */
+function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, array $jsonPayload): void
+{
+    $jobId = (int) ($jsonPayload['job_id'] ?? 0);
+    $claimToken = (string) ($jsonPayload['claim_token'] ?? '');
+    $status = (string) ($jsonPayload['status'] ?? 'succeeded');
+
+    if ($status === 'succeeded') {
+        $metadata = $jsonPayload['metadata'] ?? [];
+        if (!is_array($metadata)) {
+            throw new RuntimeException('AI metadata payload must be a JSON object.');
+        }
+        $searchableText = (string) ($jsonPayload['searchable_text'] ?? '');
+        if (!ai_image_analysis_complete_success($galleryId, $jobId, $claimToken, $metadata, $searchableText)) {
+            upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+            return;
+        }
+
+        mark_upload_automation_token_used((int) $tokenRow['id']);
+        admin_log_event('info', 'upload_automation.ai_job_completed', 'AI image-analysis job completed by companion app worker.', [
+            'token_id' => (int) ($tokenRow['id'] ?? 0),
+            'gallery_id' => $galleryId,
+            'job_id' => $jobId,
+        ]);
+        upload_automation_json([
+            'ok' => true,
+            'job_id' => $jobId,
+            'status' => 'succeeded',
+            'message' => 'AI metadata stored.',
+        ]);
+        return;
+    }
+
+    $errorMessage = (string) ($jsonPayload['error'] ?? 'Worker failed without a detailed error.');
+    if (!ai_image_analysis_complete_failure($galleryId, $jobId, $claimToken, $errorMessage)) {
+        upload_automation_json(['ok' => false, 'error' => 'AI job claim is invalid or expired.'], 409);
+        return;
+    }
+
+    mark_upload_automation_token_used((int) $tokenRow['id']);
+    admin_log_event('warning', 'upload_automation.ai_job_failed', 'AI image-analysis job failed and may be retried later.', [
+        'token_id' => (int) ($tokenRow['id'] ?? 0),
+        'gallery_id' => $galleryId,
+        'job_id' => $jobId,
+        'error' => ai_image_analysis_limit_text($errorMessage, 500),
+    ]);
+    upload_automation_json([
+        'ok' => true,
+        'job_id' => $jobId,
+        'status' => 'failed',
+        'message' => 'AI job failure recorded.',
+    ]);
+}
+
+/**
+ * Stream the image asset for one active claimed AI job.
+ */
+function upload_automation_stream_ai_asset(int $galleryId): void
+{
+    $jobId = (int) ($_POST['job_id'] ?? 0);
+    $claimToken = (string) ($_POST['claim_token'] ?? '');
+    $asset = ai_image_analysis_claimed_asset($galleryId, $jobId, $claimToken);
+    if ($asset === null) {
+        upload_automation_json(['ok' => false, 'error' => 'AI job asset is not available or the claim expired.'], 409);
+        return;
+    }
+
+    $path = (string) $asset['path'];
+    $mime = (string) $asset['mime'];
+    $filename = basename((string) $asset['filename']);
+    header('Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Disposition: attachment; filename="' . addcslashes($filename !== '' ? $filename : 'image.bin', "\"\\") . '"');
+    header('Cache-Control: no-store, private');
+    header('Content-Length: ' . (int) filesize($path));
+    readfile($path);
+}
+
+/**
  * Handle POST uploads from the Windows folder watcher app.
  */
 function cms_upload_automation_upload(): void
@@ -178,6 +377,11 @@ function cms_upload_automation_upload(): void
             'token_id' => $tokenId,
             'message' => 'API key revoked.',
         ]);
+        return;
+    }
+
+    if (str_starts_with($action, 'ai_')) {
+        upload_automation_handle_ai_action($action, $galleryId, $gallery, $tokenRow, $jsonPayload);
         return;
     }
 
