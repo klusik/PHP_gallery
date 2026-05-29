@@ -234,7 +234,8 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
         $cachedData = application_patch_notes_read_cache($branch, $ttlSeconds);
         if ($cachedData !== null) {
             $currentVersion = cms_current_version();
-            if (isset($cachedData['versions'][$currentVersion]) || empty($cachedData['versions'])) {
+            $currentEntry = (array) ($cachedData['versions'][$currentVersion] ?? []);
+            if ((isset($currentEntry['released_label']) && (string) $currentEntry['released_label'] !== '') || empty($cachedData['versions'])) {
                 return $cachedData;
             }
             application_patch_notes_clear_cache($branch);
@@ -377,9 +378,12 @@ function application_patch_notes_parse_versions(string $markdown): array
     foreach ($lines as $line) {
         if (preg_match('/^##\s+(?:Version\s+)?v?([0-9]+(?:\.[0-9]+){1,2})\b(.*)$/i', (string) $line, $match)) {
             if ($currentVersion !== null) {
+                $releaseMetadata = application_patch_notes_release_metadata_for_version($currentVersion);
                 $versions[$currentVersion] = [
                     'version' => $currentVersion,
                     'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+                    'released_at' => $releaseMetadata['released_at'],
+                    'released_label' => $releaseMetadata['released_label'],
                     'markdown' => trim(implode("\n", $buffer)),
                     'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
                 ];
@@ -396,9 +400,12 @@ function application_patch_notes_parse_versions(string $markdown): array
     }
 
     if ($currentVersion !== null) {
+        $releaseMetadata = application_patch_notes_release_metadata_for_version($currentVersion);
         $versions[$currentVersion] = [
             'version' => $currentVersion,
             'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+            'released_at' => $releaseMetadata['released_at'],
+            'released_label' => $releaseMetadata['released_label'],
             'markdown' => trim(implode("\n", $buffer)),
             'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
         ];
@@ -406,6 +413,49 @@ function application_patch_notes_parse_versions(string $markdown): array
 
     uksort($versions, static fn (string $a, string $b): int => version_compare($b, $a));
     return $versions;
+}
+
+/**
+ * Return release metadata for a patch-note version from the checked-in release map.
+ */
+function application_patch_notes_release_metadata_for_version(string $version): array
+{
+    static $cache = [];
+    if (isset($cache[$version])) {
+        return $cache[$version];
+    }
+
+    $metadata = [
+        'released_at' => null,
+        'released_label' => '',
+    ];
+
+    $metadataFile = application_update_project_root() . '/release-metadata.json';
+    if (is_file($metadataFile)) {
+        $json = (string) file_get_contents($metadataFile);
+        $json = preg_replace('/^\xEF\xBB\xBF/', '', $json) ?? $json;
+        $allMetadata = json_decode($json, true);
+        if (is_array($allMetadata) && isset($allMetadata[$version]) && is_array($allMetadata[$version])) {
+            $entry = $allMetadata[$version];
+            $releasedAt = trim((string) ($entry['released_at'] ?? ''));
+            $releasedLabel = trim((string) ($entry['released_label'] ?? ''));
+            if ($releasedAt !== '') {
+                $metadata['released_at'] = $releasedAt;
+            }
+            if ($releasedLabel !== '') {
+                $metadata['released_label'] = $releasedLabel;
+            } elseif ($releasedAt !== '') {
+                try {
+                    $metadata['released_label'] = (new DateTimeImmutable($releasedAt))->format('j. F Y, H:i');
+                } catch (Throwable) {
+                    $metadata['released_label'] = '';
+                }
+            }
+        }
+    }
+
+    $cache[$version] = $metadata;
+    return $metadata;
 }
 
 /**

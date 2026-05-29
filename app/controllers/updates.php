@@ -89,6 +89,9 @@ function cms_render_update_patch_notes_fragment(array $patchNotesModel): string
         $selectedEntry = (array) $patchNotesVersions[$selectedPatchVersion];
         echo '<article class="patch-notes-content">';
         echo '<h3>' . e((string) ($selectedEntry['title'] ?? ('Version ' . $selectedPatchVersion))) . '</h3>';
+        if (!empty($selectedEntry['released_label'])) {
+            echo '<p class="muted patch-notes-release-label">' . e(t('admin.updates.patch_notes_released', 'Released: {date}', ['date' => (string) $selectedEntry['released_label']])) . '</p>';
+        }
         echo (string) ($selectedEntry['html'] ?? '');
         echo '</article>';
     } else {
@@ -320,6 +323,9 @@ function cms_admin_update(): void
     }
     $selectedPatchEntry = (array) ($patchNotesVersions[$selectedPatchVersion] ?? []);
     $selectedPatchLabel = (string) ($selectedPatchEntry['title'] ?? ('Version ' . $selectedPatchVersion));
+    if (!empty($selectedPatchEntry['released_label'])) {
+        $selectedPatchLabel .= ' · ' . (string) $selectedPatchEntry['released_label'];
+    }
     echo '<div class="patch-notes-toolbar">';
     echo '<form method="get" class="patch-notes-select-form" data-patch-notes-form>';
     echo '<input type="hidden" name="page" value="admin_update">';
@@ -343,9 +349,16 @@ function cms_admin_update(): void
             $isInstalled = (string) $version === cms_current_version();
             $isLatest = empty($status['error']) && !empty($status['latest_version']) && (string) $version === (string) $status['latest_version'];
             $itemClass = 'patch-notes-version-option' . ($isSelected ? ' is-selected' : '') . ($isInstalled ? ' is-installed' : '') . ($isLatest ? ' is-latest' : '');
-            echo '<button type="button" class="' . e($itemClass) . '" role="option" aria-selected="' . ($isSelected ? 'true' : 'false') . '" data-patch-version="' . e((string) $version) . '" data-patch-label="' . e((string) ($entry['title'] ?? ('Version ' . $version))) . '">';
+            $optionLabel = (string) ($entry['title'] ?? ('Version ' . $version));
+            if (!empty($entry['released_label'])) {
+                $optionLabel .= ' · ' . (string) $entry['released_label'];
+            }
+            echo '<button type="button" class="' . e($itemClass) . '" role="option" aria-selected="' . ($isSelected ? 'true' : 'false') . '" data-patch-version="' . e((string) $version) . '" data-patch-label="' . e($optionLabel) . '">';
             echo '<span class="patch-notes-version-number">' . e((string) $version) . '</span>';
             echo '<span class="patch-notes-version-meta">';
+            if (!empty($entry['released_label'])) {
+                echo '<small>' . e((string) $entry['released_label']) . '</small>';
+            }
             if ($isInstalled) {
                 echo '<small>' . e(t('admin.updates.patch_notes_installed_badge', 'Installed')) . '</small>';
             }
