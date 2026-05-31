@@ -90,6 +90,10 @@ require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
 require_once __DIR__ . '/services/logs.php';
+// Load durable login helpers before authentication controllers restore expired PHP sessions.
+require_once __DIR__ . '/services/auth_persistence.php';
+// Load Google login helpers after logs and before auth controllers render account linking controls.
+require_once __DIR__ . '/services/google_auth.php';
 // Load authentication throttling after logs so rate-limit events can be recorded safely.
 require_once __DIR__ . '/services/auth_throttle.php';
 require_once __DIR__ . '/services/telemetry_settings.php';

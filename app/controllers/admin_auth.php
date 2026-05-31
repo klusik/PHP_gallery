@@ -569,6 +569,113 @@ function cms_find_valid_password_reset_token(string $selector, string $token): ?
 }
 
 
+/**
+ * Start Google login or account linking through OpenID Connect.
+ */
+function cms_admin_google_start(): void
+{
+    // $mode stores whether Google should authenticate a login or link the current profile.
+    $mode = (string) ($_GET['mode'] ?? 'login');
+    $mode = $mode === 'link' ? 'link' : 'login';
+    // $returnTarget stores the local page that should reopen after successful authentication.
+    $returnTarget = sanitize_login_return_target((string) ($_GET['return'] ?? ''), url_for('admin'));
+
+    if (!function_exists('google_auth_ready') || !google_auth_ready()) {
+        flash_message('admin_notice', t('admin.google.not_configured', 'Google login is not configured yet. Add the OAuth client ID and secret to config.php, then run the database migrations.'));
+        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+    }
+
+    if ($mode === 'link') {
+        require_admin();
+    }
+
+    redirect_to(google_auth_authorization_url($mode, $returnTarget));
+}
+
+/**
+ * Handle the Google OpenID Connect callback for login and account linking.
+ */
+function cms_admin_google_callback(): void
+{
+    // $state stores the returned OAuth state used to prevent request forgery.
+    $state = (string) ($_GET['state'] ?? '');
+    // $stateEntry stores the local state metadata saved before redirecting to Google.
+    $stateEntry = function_exists('google_auth_consume_state') ? google_auth_consume_state($state) : null;
+    if (!$stateEntry) {
+        flash_message('admin_notice', t('admin.google.state_invalid', 'Google login expired or returned an invalid state. Try again.'));
+        redirect_to(url_for('admin_login'));
+    }
+
+    // $mode stores whether this callback belongs to login or profile linking.
+    $mode = (string) ($stateEntry['mode'] ?? 'login');
+    // $returnTarget stores the local target restored after successful login.
+    $returnTarget = sanitize_login_return_target((string) ($stateEntry['return'] ?? ''), url_for('admin'));
+
+    if (!empty($_GET['error'])) {
+        flash_message('admin_notice', t('admin.google.callback_error', 'Google login failed: {error}', ['error' => (string) $_GET['error']]));
+        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+    }
+
+    // $code stores the authorization code returned by Google.
+    $code = (string) ($_GET['code'] ?? '');
+    if ($code === '') {
+        flash_message('admin_notice', t('admin.google.code_missing', 'Google did not return an authorization code.'));
+        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+    }
+
+    try {
+        // $claims stores verified Google identity claims.
+        $claims = google_auth_claims_from_code($code);
+        if ($mode === 'link') {
+            // $currentUser stores the admin profile that initiated linking.
+            $currentUser = current_user();
+            if (!$currentUser || (int) $currentUser['id'] !== (int) ($stateEntry['user_id'] ?? 0)) {
+                flash_message('admin_notice', t('admin.google.link_session_expired', 'Your admin session expired before Google linking finished. Log in again and retry linking.'));
+                redirect_to(url_for('admin_login', ['return' => url_for('admin_account')]));
+            }
+            google_auth_link_account((int) $currentUser['id'], $claims);
+            admin_log_event('info', 'auth.google_linked', t('admin.google.log_linked', 'Admin linked a Google account.'), [
+                'user_id' => (int) $currentUser['id'],
+                'google_sub_sha256' => hash('sha256', (string) ($claims['sub'] ?? '')),
+                'email_domain' => str_contains((string) ($claims['email'] ?? ''), '@') ? substr(strrchr((string) $claims['email'], '@'), 1) : '',
+            ]);
+            redirect_to(url_for('admin_account', ['google' => 'linked']));
+        }
+
+        // $linkedUser stores the existing admin account connected to this Google account.
+        $linkedUser = google_auth_user_by_subject((string) ($claims['sub'] ?? ''));
+        if (!$linkedUser || (string) ($linkedUser['role'] ?? '') !== 'admin') {
+            admin_log_event('warning', 'auth.google_unlinked_login', t('admin.google.log_unlinked_login', 'Google login was rejected because the Google account is not linked to an admin profile.'), [
+                'google_sub_sha256' => hash('sha256', (string) ($claims['sub'] ?? '')),
+                'email_domain' => str_contains((string) ($claims['email'] ?? ''), '@') ? substr(strrchr((string) $claims['email'], '@'), 1) : '',
+            ]);
+            redirect_to(url_for('admin_login', ['google' => 'not_linked', 'return' => $returnTarget]));
+        }
+
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = (int) $linkedUser['id'];
+        if (function_exists('auth_issue_persistent_login')) {
+            auth_issue_persistent_login((int) $linkedUser['id']);
+        }
+        if (function_exists('google_auth_touch_login')) {
+            google_auth_touch_login((int) $linkedUser['google_account_id']);
+        }
+        admin_log_event('info', 'auth.google_login', t('admin.google.log_login', 'Admin logged in with Google.'), [
+            'user_id' => (int) $linkedUser['id'],
+            'username' => (string) $linkedUser['username'],
+        ]);
+        redirect_to($returnTarget);
+    } catch (Throwable $exception) {
+        admin_log_event('warning', 'auth.google_callback_failed', t('admin.google.log_callback_failed', 'Google login callback failed.'), [
+            'mode' => $mode,
+            'error' => $exception->getMessage(),
+        ]);
+        flash_message('admin_notice', t('admin.google.callback_failed', 'Google login could not be completed: {error}', ['error' => $exception->getMessage()]));
+        redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
+    }
+}
+
+
 function cms_admin_login(): void
 {
     // $returnTarget stores the local page that should reopen after successful authentication.
@@ -607,6 +714,9 @@ function cms_admin_login(): void
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
+                if (!empty($_POST['remember_login']) && function_exists('auth_issue_persistent_login')) {
+                    auth_issue_persistent_login((int) $user['id']);
+                }
                 // Redirect to the page where the visitor clicked the login link, not always to the admin dashboard.
                 redirect_to($returnTarget);
             }
@@ -622,16 +732,34 @@ function cms_admin_login(): void
     if (isset($_GET['reset'])) {
         echo '<div class="notice">' . e(t('admin.auth.password_reset_completed')) . '</div>';
     }
+    if ((string) ($_GET['google'] ?? '') === 'not_linked') {
+        echo '<div class="notice">' . e(t('admin.google.login_not_linked', 'This Google account is not linked to an admin profile yet. Log in with your password first, then link Google in Account settings.')) . '</div>';
+    }
+    if ($flash = flash_message('admin_notice')) {
+        echo '<div class="notice">' . e($flash) . '</div>';
+    }
     if (isset($error)) {
         echo '<div class="notice">' . e($error) . '</div>';
     }
+    // $rememberConfig stores persistent login defaults for the checkbox below.
+    $rememberConfig = function_exists('auth_persistence_config') ? auth_persistence_config() : ['persistent_login_default_checked' => true];
+    // $rememberReady stores whether DB-backed persistent login can be issued on this installation.
+    $rememberReady = function_exists('auth_persistent_login_ready') && auth_persistent_login_ready();
+    // $googleReady stores whether Google sign-in can be used on this installation.
+    $googleReady = function_exists('google_auth_ready') && google_auth_ready();
     echo '<section class="panel"><h1>' . e(t('admin.auth.login_title')) . '</h1><form method="post" class="form-grid">';
     echo csrf_field();
     // Keep the sanitized return target through failed login attempts without exposing unsafe redirect data.
     echo '<input type="hidden" name="return" value="' . e($returnTarget) . '">';
     echo '<label>' . e(t('admin.auth.username_or_email')) . '<input name="identifier" required autocomplete="username"></label>';
     echo '<label>' . e(t('admin.auth.password')) . '<input name="password" type="password" required autocomplete="current-password"></label>';
+    if ($rememberReady) {
+        echo '<label class="account-settings-toggle account-settings-compact-toggle"><input type="checkbox" name="remember_login" value="1"' . (!empty($rememberConfig['persistent_login_default_checked']) ? ' checked' : '') . '> <span><strong>' . e(t('admin.auth.keep_signed_in', 'Keep me signed in')) . '</strong><small>' . e(t('admin.auth.keep_signed_in_help', 'Uses a hashed browser token so the admin session can survive normal shared-host PHP session cleanup.')) . '</small></span></label>';
+    }
     echo '<button type="submit">' . e(t('admin.auth.login_button')) . '</button></form>';
+    if ($googleReady) {
+        echo '<div class="admin-google-login-choice"><span>' . e(t('admin.auth.or', 'or')) . '</span><a class="button secondary" href="' . e(url_for('admin_google_start', ['mode' => 'login', 'return' => $returnTarget])) . '">' . e(t('admin.google.continue_with_google', 'Continue with Google')) . '</a></div>';
+    }
     echo '<p class="muted"><a href="' . e(url_for('admin_forgot_password')) . '">' . e(t('admin.auth.forgot_password_link')) . '</a></p></section>';
     render_footer();
 }
@@ -783,7 +911,12 @@ function cms_admin_reset_password(): void
  */
 function cms_admin_logout(): void
 {
+    if (function_exists('auth_revoke_current_persistent_login')) {
+        auth_revoke_current_persistent_login();
+    }
     unset($_SESSION['user_id']);
+    unset($_SESSION['csrf_token']);
+    session_regenerate_id(true);
     redirect_to(url_for('home'));
 }
 
@@ -832,6 +965,26 @@ function cms_admin_account(): void
                     'email_delivery' => $testDelivery,
                 ]);
                 redirect_to(url_for('admin_account', ['test_email' => !empty($testDelivery['sent']) ? 'sent' : 'failed']));
+            }
+        } elseif ($accountAction === 'google_disconnect') {
+            // $currentPassword stores the profile password used to authorize Google unlinking.
+            $currentPassword = (string) ($_POST['current_password'] ?? '');
+            // $stmt stores the password hash for the authenticated profile owner.
+            $stmt = db()->prepare('SELECT password_hash FROM users WHERE id = ?');
+            $stmt->execute([(int) $user['id']]);
+            // $account stores the account row needed for the password challenge.
+            $account = $stmt->fetch();
+            if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
+                $error = t('admin.account.error_current_password_required');
+            } else {
+                if (function_exists('google_auth_disconnect_account')) {
+                    google_auth_disconnect_account((int) $user['id']);
+                }
+                admin_log_event('info', 'auth.google_disconnected', t('admin.google.log_disconnected', 'Admin disconnected a Google account.'), [
+                    'user_id' => (int) $user['id'],
+                    'username' => (string) $user['username'],
+                ]);
+                redirect_to(url_for('admin_account', ['google' => 'disconnected']));
             }
         } elseif ($accountAction === 'openai_text_settings') {
             // $currentPassword stores the profile password used to authorize credential changes.
@@ -923,8 +1076,14 @@ function cms_admin_account(): void
                 // Variable $stmt stores this steps working value.
                 $stmt = db()->prepare($sql);
                 $stmt->execute($params);
+                if ($newPassword !== '' && function_exists('auth_revoke_user_persistent_logins')) {
+                    auth_revoke_user_persistent_logins((int) $user['id']);
+                }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
+                if ($newPassword !== '' && function_exists('auth_issue_persistent_login')) {
+                    auth_issue_persistent_login((int) $user['id']);
+                }
                 redirect_to(url_for('admin_account', ['saved' => 1]));
             }
             // Variable $error stores this steps working value.
@@ -948,6 +1107,14 @@ function cms_admin_account(): void
     $openaiReady = function_exists('openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
     // $openaiImageInputColumnReady stores whether the optional thumbnail-consent setting can be saved yet.
     $openaiImageInputColumnReady = function_exists('openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
+    // $googleSchemaReady stores whether the linked Google account table exists.
+    $googleSchemaReady = function_exists('google_auth_schema_ready') && google_auth_schema_ready();
+    // $googleReady stores whether Google login has complete config and database support.
+    $googleReady = function_exists('google_auth_ready') && google_auth_ready();
+    // $googleConfig stores the OAuth client readiness state and callback URL.
+    $googleConfig = function_exists('google_auth_config') ? google_auth_config() : ['redirect_uri' => ''];
+    // $googleLinkedAccount stores the Google identity linked to the current admin profile.
+    $googleLinkedAccount = function_exists('google_auth_linked_account') ? google_auth_linked_account((int) $user['id']) : null;
 
     render_header(t('admin.account.title'));
     if (isset($_GET['saved'])) {
@@ -961,6 +1128,15 @@ function cms_admin_account(): void
     }
     if (isset($_GET['openai_saved'])) {
         echo '<div class="notice">' . e(t('admin.openai.notice_saved', 'OpenAI text-assistance settings were saved.')) . '</div>';
+    }
+    if ((string) ($_GET['google'] ?? '') === 'linked') {
+        echo '<div class="notice">' . e(t('admin.google.notice_linked', 'Google account linked. You can now use Continue with Google on the login page.')) . '</div>';
+    }
+    if ((string) ($_GET['google'] ?? '') === 'disconnected') {
+        echo '<div class="notice">' . e(t('admin.google.notice_disconnected', 'Google account disconnected. Password login remains available.')) . '</div>';
+    }
+    if ($flash = flash_message('admin_notice')) {
+        echo '<div class="notice">' . e($flash) . '</div>';
     }
     if (isset($error)) {
         echo '<div class="notice">' . e($error) . '</div>';
@@ -1027,6 +1203,36 @@ function cms_admin_account(): void
     echo '<input type="hidden" name="account_action" value="password_reset_test_email">';
     echo '<div><strong>' . e(t('admin.account.delivery_test')) . '</strong><p class="muted">' . e(t('admin.account.delivery_test_help')) . '</p></div>';
     echo '<button type="submit" class="button secondary">' . e(t('admin.account.send_test_email')) . '</button></form></article>';
+
+    echo '<article class="account-settings-card account-google-settings-card">';
+    echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.google.profile_title', 'Google login')) . '</h2><p class="muted">' . e(t('admin.google.profile_description', 'Optional Google sign-in for this admin account. Password login remains available.')) . '</p></div></div>';
+    echo '<div class="account-settings-readiness ' . ($googleReady ? 'is-ready' : 'is-incomplete') . '">';
+    echo '<strong>' . e(t('admin.google.status', 'Status')) . '</strong> ';
+    if (!$googleSchemaReady) {
+        echo e(t('admin.google.status_migration_required', 'Database migration required before Google login can be configured.'));
+    } elseif (!$googleReady) {
+        echo e(t('admin.google.status_config_required', 'Add Google OAuth client ID and secret to config.php before linking accounts.'));
+    } elseif ($googleLinkedAccount) {
+        echo e(t('admin.google.status_linked', 'Linked and ready for login.'));
+    } else {
+        echo e(t('admin.google.status_ready_to_link', 'Configured. Link this profile to a Google account before using Google login.'));
+    }
+    echo '</div>';
+    echo '<p class="account-settings-help"><strong>' . e(t('admin.google.callback_url', 'Authorized redirect URI')) . ':</strong> <code>' . e((string) ($googleConfig['redirect_uri'] ?? '')) . '</code></p>';
+    if ($googleLinkedAccount) {
+        echo '<div class="account-settings-callout"><strong>' . e(t('admin.google.linked_account', 'Linked Google account')) . '</strong> ' . e(trim((string) ($googleLinkedAccount['email'] ?? '')) !== '' ? (string) $googleLinkedAccount['email'] : t('admin.google.linked_account_no_email', 'Google account is linked without a stored email.')) . '</div>';
+        if (!empty($googleLinkedAccount['name'])) {
+            echo '<p class="account-settings-help">' . e(t('admin.google.linked_name', 'Google display name')) . ': ' . e((string) $googleLinkedAccount['name']) . '</p>';
+        }
+        echo '<form method="post" class="form-grid account-settings-form account-settings-google-form">' . csrf_field();
+        echo '<input type="hidden" name="account_action" value="google_disconnect">';
+        echo '<label>' . e(t('admin.account.current_password')) . '<input name="current_password" type="password" required autocomplete="current-password"></label>';
+        echo '<div class="account-settings-actions"><button type="submit" class="button secondary">' . e(t('admin.google.disconnect', 'Disconnect Google account')) . '</button></div></form>';
+    } elseif ($googleReady) {
+        echo '<p class="account-settings-help">' . e(t('admin.google.link_help', 'Linking must be started while you are logged in with your normal admin password. After that, Google login will accept only this linked Google account.')) . '</p>';
+        echo '<div class="account-settings-actions"><a class="button" href="' . e(url_for('admin_google_start', ['mode' => 'link', 'return' => url_for('admin_account')])) . '">' . e(t('admin.google.link_button', 'Link Google account')) . '</a></div>';
+    }
+    echo '</article>';
 
     echo '<article class="account-settings-card account-openai-settings-card">';
     echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.openai.profile_title', 'OpenAI text assistance')) . '</h2><p class="muted">' . e(t('admin.openai.profile_description', 'Optional profile-level API access for gallery description drafts and text cleanup.')) . '</p></div></div>';

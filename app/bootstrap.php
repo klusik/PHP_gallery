@@ -125,8 +125,12 @@ function cms_run(): void
     $config = cms_config();
     session_name((string) $config['admin_session_name']);
     if (session_status() !== PHP_SESSION_ACTIVE) {
+        // $adminSessionLifetime stores the browser cookie and PHP session lifetime for admin sessions.
+        $adminSessionLifetime = function_exists('auth_admin_session_lifetime_seconds') ? auth_admin_session_lifetime_seconds() : 1209600;
+        ini_set('session.gc_maxlifetime', (string) $adminSessionLifetime);
+        ini_set('session.cookie_lifetime', (string) $adminSessionLifetime);
         session_set_cookie_params([
-            'lifetime' => 0,
+            'lifetime' => $adminSessionLifetime,
             'path' => '/',
             'secure' => request_is_https(),
             'httponly' => true,
@@ -179,6 +183,8 @@ function cms_run(): void
         'admin_login' => 'cms_admin_login',
         'admin_forgot_password' => 'cms_admin_forgot_password',
         'admin_reset_password' => 'cms_admin_reset_password',
+        'admin_google_start' => 'cms_admin_google_start',
+        'admin_google_callback' => 'cms_admin_google_callback',
         'admin_logout' => 'cms_admin_logout',
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',

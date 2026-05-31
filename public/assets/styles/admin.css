@@ -4951,3 +4951,26 @@ button.gallery-row-action.secondary {
     color: #50575e;
     line-height: 1.45;
 }
+
+/* Keeps optional Google login controls visually aligned with existing admin forms. */
+.admin-google-login-choice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    color: var(--muted-text);
+}
+
+.admin-google-login-choice span {
+    font-size: 0.9rem;
+}
+
+.account-google-settings-card code {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.15rem 0.35rem;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.06);
+    overflow-wrap: anywhere;
+}
