@@ -745,13 +745,29 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
         if (image_nsfw_restricted($image, $gallery)) {
             continue;
         }
-        $items[] = [
+        $imageName = image_alt_text($image, $gallery, $position);
+        $item = [
             '@type' => 'ImageObject',
             'position' => $position++,
-            'name' => image_alt_text($image, $gallery, $position - 1),
-            'contentUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld visible content 800', static fn (): string => thumbnail_url($image, 800))),
+            'name' => $imageName,
+            'description' => trim((string) ($image['description'] ?? '')) !== '' ? trim((string) $image['description']) : $imageName,
+            'contentUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200', static fn (): string => thumbnail_url($image, 1200, 'jpg'))),
+            'thumbnailUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800', static fn (): string => thumbnail_url($image, 800, 'jpg'))),
             'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
+        if (!empty($image['width'])) {
+            $item['width'] = (int) $image['width'];
+        }
+        if (!empty($image['height'])) {
+            $item['height'] = (int) $image['height'];
+        }
+        if (function_exists('public_sitemap_lastmod')) {
+            $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
+            if ($dateModified !== null) {
+                $item['dateModified'] = $dateModified;
+            }
+        }
+        $items[] = $item;
     }
     // $jsonLd stores an intermediate value used by the surrounding gallery workflow.
     $jsonLd = [
@@ -776,18 +792,46 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
 }
 
 /**
- * Output the sitemap XML with public gallery URLs.
+ * Output the sitemap XML with public gallery URLs and image sitemap metadata.
  */
 function output_sitemap_xml(): void
 {
     header('Content-Type: application/xml; charset=utf-8');
-    // $base stores an intermediate value used by the surrounding gallery workflow.
-    $base = public_base_url();
+    $entries = function_exists('public_sitemap_entries')
+        ? public_sitemap_entries()
+        : array_map(static fn (string $url): array => ['loc' => $url, 'images' => []], public_gallery_sitemap_entries());
+
     echo '<?xml version="1.0" encoding="UTF-8"?>';
-    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
-    echo '<url><loc>' . e($base . '/') . '</loc></url>';
-    foreach (public_gallery_sitemap_entries() as $url) {
-        echo '<url><loc>' . e($url) . '</loc></url>';
+    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">';
+    foreach ($entries as $entry) {
+        $loc = trim((string) ($entry['loc'] ?? ''));
+        if ($loc === '') {
+            continue;
+        }
+        echo '<url>';
+        echo '<loc>' . e($loc) . '</loc>';
+        if (!empty($entry['lastmod'])) {
+            echo '<lastmod>' . e((string) $entry['lastmod']) . '</lastmod>';
+        }
+        if (!empty($entry['priority'])) {
+            echo '<priority>' . e((string) $entry['priority']) . '</priority>';
+        }
+        foreach (($entry['images'] ?? []) as $image) {
+            $imageLoc = trim((string) ($image['loc'] ?? ''));
+            if ($imageLoc === '') {
+                continue;
+            }
+            echo '<image:image>';
+            echo '<image:loc>' . e($imageLoc) . '</image:loc>';
+            if (!empty($image['title'])) {
+                echo '<image:title>' . e((string) $image['title']) . '</image:title>';
+            }
+            if (!empty($image['caption'])) {
+                echo '<image:caption>' . e((string) $image['caption']) . '</image:caption>';
+            }
+            echo '</image:image>';
+        }
+        echo '</url>';
     }
     echo '</urlset>';
 }
