@@ -295,6 +295,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $showFilenames = gallery_filename_display_schema_ready() ? admin_gallery_checkbox_input($input, 'show_filenames', $showFilenamesDefault) : 0;
     // $countBadgeVisibility stores the optional gallery-card count badge override for this gallery.
     $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? ($gallery['count_badge_visibility'] ?? 'inherit')) : null;
+    // $lightboxBrowsingMode stores the optional gallery-level lightbox browsing-mode override.
+    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit'))) : null;
     // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
     $nsfwEnabled = nsfw_guard_schema_ready() ? admin_gallery_checkbox_input($input, 'nsfw_enabled', $nsfwDefault) : 0;
     if ($pictureGameEnabled) {
@@ -517,6 +519,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     }
     if (gallery_count_badge_schema_ready()) {
         $fields['count_badge_visibility = ?'] = $countBadgeVisibility;
+    }
+    if (gallery_lightbox_browsing_mode_schema_ready()) {
+        $fields['lightbox_browsing_mode = ?'] = $lightboxBrowsingMode;
     }
     if (nsfw_guard_schema_ready()) {
         $fields['nsfw_enabled = ?'] = $nsfwEnabled;
@@ -877,6 +882,19 @@ function cms_admin_edit_gallery(): void
         echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.count_badge_help', 'Current source: {source}. Effective state: {state}. This controls the stacked-picture icon and contained-image number on gallery cards.', ['source' => gallery_count_badge_source_label($gallery), 'state' => gallery_count_badge_state_label($effectiveCountBadgeEnabled)])) . '</p></div>';
     } else {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.count_badge_migration_hidden', 'Contained-picture badge overrides will be available after the database migration is applied.')) . '</p></div>';
+    }
+    if (gallery_lightbox_browsing_mode_schema_ready()) {
+        // $currentLightboxBrowsingMode stores the optional value saved directly on this gallery.
+        $currentLightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
+        // $effectiveLightboxBrowsingMode stores the public mode before any form edits.
+        $effectiveLightboxBrowsingMode = gallery_effective_lightbox_browsing_mode($gallery);
+        echo '<div class="admin-edit-card"><h3>' . e(t('admin.gallery_editor.lightbox_mode_title', 'Lightbox browsing mode')) . '</h3><label>' . e(t('admin.gallery_editor.lightbox_mode_label', 'Gallery lightbox')) . '<select name="lightbox_browsing_mode"><option value="inherit"' . ($currentLightboxBrowsingMode === 'inherit' ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_override_label('inherit')) . '</option>';
+        foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
+            echo '<option value="' . e($lightboxModeOption) . '"' . ($currentLightboxBrowsingMode === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+        }
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.lightbox_mode_help', 'Current source: {source}. Effective mode: {mode}. Single image keeps the classic viewer, picture strip adds nearby thumbnails below the photo, and 3D carousel places a small set of neighboring photos behind the active image. Fullscreen and slideshow keep their existing behavior.', ['source' => gallery_lightbox_browsing_mode_source_label($gallery), 'mode' => gallery_lightbox_browsing_mode_label($effectiveLightboxBrowsingMode)])) . '</p></div>';
+    } else {
+        echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.lightbox_mode_migration_hidden', 'Lightbox browsing-mode overrides will be available after the database migration is applied.')) . '</p></div>';
     }
     if (gallery_grid_schema_ready()) {
         // $galleryUsesCustomGrid stores whether this gallery row has its own display-grid override.

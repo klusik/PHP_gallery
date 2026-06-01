@@ -511,8 +511,44 @@ Supported branding concepts include:
 6. Grid columns and rows.
 7. Gallery description layout.
 8. Count badge visibility.
-9. Thumbnail size bounds.
-10. Custom CSS presets.
+9. Lightbox browsing mode.
+10. Thumbnail size bounds.
+11. Custom CSS presets.
+
+## Lightbox Browsing Mode Model
+
+The public lightbox supports three browsing modes:
+
+1. `single`, the legacy focused single-image lightbox.
+2. `picture_strip`, the picture-strip lightbox with a centered primary image and de-emphasized nearby images below it.
+3. `3d_carousel`, a focused layered carousel where a small number of neighboring images sit behind the active photo on the left and right.
+
+The older `strip` value is accepted as a legacy alias and normalized to `picture_strip` before new settings or sidecars are written.
+
+Configuration is split across Theme defaults and per-gallery overrides:
+
+```text
+app/controllers/admin_theme.php
+app/controllers/admin_galleries_edit.php
+app/services/gallery_lightbox_mode.php
+app/services/theme.php
+app/services/gallery_sidecars.php
+```
+
+`theme_lightbox_browsing_mode()` reads the site-level default from `app_settings.theme_lightbox_browsing_mode`. `gallery_effective_lightbox_browsing_mode()` resolves the effective public mode by reading the nullable `galleries.lightbox_browsing_mode` override first, then falling back to the Theme default, then to `single`. A `NULL` gallery value means inherit, matching the existing description-layout and count-badge override model.
+
+Public rendering emits the resolved value as `data-lightbox-browsing-mode` from `app/controllers/public_gallery.php`. Browser behavior is owned by `public/assets/gallery-modules/lightbox.js`; the visual treatment is owned by `public/assets/styles/lightbox.css` and mobile fallback rules in `public/assets/styles/mobile-gallery.css`. The JSON lightbox endpoint remains unchanged, so slideshow, fullscreen, map overlays, votes, admin inline editing and image ordering continue to use the existing metadata pipeline. Both enhanced modes share the same neighbor-selection logic in JavaScript, while CSS decides whether the neighbors render as a flat strip or as a layered 3D carousel.
+
+The `picture_strip` and `3d_carousel` modes select adjacent images from already-rendered gallery cards and lazily request sparse lightbox metadata when a neighbor is missing. Neighbor previews are preloaded opportunistically and navigation remains index-based, so paginated or partially hydrated lightbox data degrades to the available nearby photos instead of failing. The carousel skips rendering a duplicate active thumbnail, because the main stage itself is the active state.
+
+Persistence details:
+
+```text
+database/migrations/202606010001_gallery_lightbox_browsing_mode.php
+database/migrations/202606010002_gallery_lightbox_browsing_mode_carousel.php
+galleries.lightbox_browsing_mode ENUM('single','picture_strip','3d_carousel') NULL
+gallery.json key: lightbox_browsing_mode
+```
 
 ## Thumbnail Model
 

@@ -77,6 +77,7 @@ function theme_settings(): array
         'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
         'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
         'gallery_count_badge_enabled' => !function_exists('theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
+        'lightbox_browsing_mode' => function_exists('theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
     ];
 }
 
@@ -112,6 +113,7 @@ function theme_override_settings(): array
         'branding_separator_stretch' => app_setting('theme_branding_separator_stretch'),
         'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
         'gallery_count_badge_enabled' => app_setting('theme_gallery_count_badge_enabled'),
+        'lightbox_browsing_mode' => app_setting('theme_lightbox_browsing_mode'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }

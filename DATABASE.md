@@ -66,6 +66,8 @@ Current migration sequence:
 | `202605290001_user_openai_text_settings.php` | Per-user OpenAI text settings. |
 | `202605290002_user_openai_image_input_flag.php` | OpenAI image input permission flag. |
 | `202605310001_admin_persistent_auth_and_google_login.php` | Durable admin login and linked Google accounts. |
+| `202606010001_gallery_lightbox_browsing_mode.php` | Nullable per-gallery lightbox browsing-mode override. |
+| `202606010002_gallery_lightbox_browsing_mode_carousel.php` | Adds `picture_strip` and `3d_carousel`, and upgrades legacy `strip` values. |
 
 ## Entity Relationship Overview
 
@@ -160,6 +162,7 @@ Important columns:
 | `show_filenames` | Shows filenames in public UI. |
 | `description_layout` | `vertical` or `horizontal`, nullable for inherited/default behavior. |
 | `count_badge_visibility` | `show` or `hide`, nullable for inherited/default behavior. |
+| `lightbox_browsing_mode` | `single`, `picture_strip`, or `3d_carousel`, nullable for inherited Theme behavior. |
 | `grid_columns`, `grid_rows` | Optional per-gallery grid dimensions. |
 | `grid_use_for_subgalleries` | Whether child galleries inherit grid settings. |
 | `nsfw_enabled` | Marks gallery as restricted/sensitive. |
@@ -175,6 +178,20 @@ Important columns:
 | `logo_image_path` | Gallery logo asset path. |
 | `separator_image_path` | Gallery separator asset path. |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+### Lightbox Browsing Mode Settings
+
+The Theme default is stored in `app_settings` under `theme_lightbox_browsing_mode`. Accepted values are `single`, `picture_strip`, and `3d_carousel`; invalid stored values are normalized back to `single` by `app/services/gallery_lightbox_mode.php`. The older `strip` value is accepted as a legacy alias and normalized to `picture_strip`.
+
+The per-gallery override is stored in `galleries.lightbox_browsing_mode`. `NULL` means inherit the Theme default. Non-null values currently support:
+
+| Value | Meaning |
+| --- | --- |
+| `single` | Use the legacy single-image lightbox for this gallery. |
+| `picture_strip` | Use the picture-strip lightbox for this gallery. |
+| `3d_carousel` | Use the layered 3D carousel lightbox for this gallery. |
+
+`gallery.json` sidecars may also contain `lightbox_browsing_mode`. The import path stores only valid explicit values; inheritance remains `NULL`.
 
 Important indexes and constraints:
 

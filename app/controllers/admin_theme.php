@@ -369,6 +369,16 @@ function cms_admin_theme(): void
                 set_app_setting('theme_public_content_revision', (string) time());
             }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
+            // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
+            $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
+            // $nextLightboxBrowsingMode stores the submitted public lightbox browsing-mode default after validation.
+            $nextLightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single');
+            set_app_setting('theme_lightbox_browsing_mode', $nextLightboxBrowsingMode);
+            if ($nextLightboxBrowsingMode !== $previousLightboxBrowsingMode) {
+                // The lightbox browsing mode changes public data attributes and optional strip rendering behavior.
+                // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
+                set_app_setting('theme_public_content_revision', (string) time());
+            }
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
             set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
@@ -613,6 +623,13 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.layout.rows_per_page', 'Rows per page')) . ' <span class="muted" data-pagination-rows-display>' . (int) $paginationSettings['rows'] . '</span><input type="range" name="pagination_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $paginationSettings['rows'] . '" data-pagination-rows></label>';
     echo '<p class="muted">' . e(t('admin.theme.layout.items_per_page_preview', 'Items per page preview:')) . ' <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
     echo '<p class="muted">' . e(t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.')) . '</p>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid" id="admin-lightbox-mode"><legend>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode')) . '<select name="theme_lightbox_browsing_mode">';
+    foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
+        echo '<option value="' . e($lightboxModeOption) . '"' . (($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+    }
+    echo '</select><span class="muted">' . e(t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.')) . '</span></label>';
     echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-home-grid"><legend>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</legend>';
     echo '<label>' . e(t('admin.theme.layout.main_page_columns', 'Main page columns')) . ' <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';

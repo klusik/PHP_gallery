@@ -34,6 +34,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Gallery cards | `app/controllers/public_gallery.php` | `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/gallery_grid.php` |
 | Image grid | `app/controllers/public_gallery.php` | `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php` |
 | Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
+| Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
 | Public tags | `app/controllers/public_tags.php` | `app/services/tags.php`, `app/services/tag_metadata.php` |
 | Picture game | `app/controllers/picture_game.php` | `app/services/picture_game.php` |
 | Voting | `app/controllers/votes.php` | `app/services/votes.php`, `app/services/picture_game.php` |
@@ -140,6 +141,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Custom CSS presets | `app/services/custom_css.php`, `custom_css/*.css` |
 | Favicon | `app/services/favicon.php`, `app/controllers/theme_assets.php` |
 | Gallery branding | `app/services/gallery_branding.php`, `app/controllers/public_gallery.php`, `app/controllers/public_media.php` |
+| Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |
+| Picture-strip and 3D-carousel lightbox UI | `public/assets/gallery-modules/lightbox.js`, `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css` |
 | Public/admin styling | `public/assets/styles.css`, `public/assets/custom.css` |
 | Browser UI behavior | `public/assets/gallery.js` |
 

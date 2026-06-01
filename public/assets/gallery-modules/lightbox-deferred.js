@@ -32,7 +32,7 @@
  *   2026-05-10
  */
 
-const lightboxModuleUrl = './lightbox.js?v=20260528-tag-pills-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260601-3d-carousel-v2';
 
 const deferredLightboxState = {
     controller: null,
