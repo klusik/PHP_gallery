@@ -355,6 +355,9 @@ function cms_admin_theme(): void
             $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
+            set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
+            set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
             // $previousDescriptionLayout stores the rendered public-card layout before this save.
             $previousDescriptionLayout = theme_gallery_description_layout();
             // $nextDescriptionLayout stores the submitted public-card layout after validation.
@@ -408,7 +411,7 @@ function cms_admin_theme(): void
 
     $themeTabs = [
         ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
-        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Media')],
+        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],
         ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
         ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
         ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
@@ -475,8 +478,53 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Favicon and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage browser identity and the global gallery background fallback.')) . '</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Branding & media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
+    $themeBrandingDefinitions = theme_branding_asset_types();
+    $themeBannerDefinition = $themeBrandingDefinitions['banner'] ?? null;
+    if ($themeBannerDefinition !== null) {
+        // $bannerAssetUrl stores the current global fallback banner URL.
+        $bannerAssetUrl = theme_branding_asset_url('banner');
+        echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding-banner"><legend>' . e(t('admin.theme.media.public_header_banner', 'Public header banner')) . '</legend>';
+        echo '<p class="muted">' . e(t('admin.theme.media.public_header_banner_hint', 'Upload the default public header banner here. It replaces the visible site title when no gallery-specific banner is configured.')) . '</p>';
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $themeBannerDefinition['label']) . '</strong><span class="muted">' . e((string) $themeBannerDefinition['description']) . '</span></div>';
+        if ($bannerAssetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-banner" src="' . e($bannerAssetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $themeBannerDefinition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_banner" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $themeBannerDefinition['label']])) . '</button></div>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
+        }
+        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_banner" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
+        echo '</div>';
+        echo '</fieldset>';
+    }
+
+    $themeSeparatorDefinition = $themeBrandingDefinitions['separator'] ?? null;
+    if ($themeSeparatorDefinition !== null) {
+        // $separatorAssetUrl stores the current global fallback separator URL.
+        $separatorAssetUrl = theme_branding_asset_url('separator');
+        $brandingSeparatorWidth = theme_branding_separator_width_value($theme['branding_separator_width'] ?? null);
+        $brandingSeparatorHeight = theme_branding_separator_height_value($theme['branding_separator_height'] ?? null);
+        $brandingSeparatorStretch = theme_branding_separator_stretch_enabled($theme['branding_separator_stretch'] ?? null);
+        echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding-separator"><legend>' . e(t('admin.theme.media.public_header_separator', 'Public header separator')) . '</legend>';
+        echo '<p class="muted">' . e(t('admin.theme.media.public_header_separator_hint', 'Upload and size the decorative horizontal separator shown under the shared public header. Per-gallery separators still override this Theme fallback on their gallery page.')) . '</p>';
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $themeSeparatorDefinition['label']) . '</strong><span class="muted">' . e((string) $themeSeparatorDefinition['description']) . '</span></div>';
+        if ($separatorAssetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-separator" src="' . e($separatorAssetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $themeSeparatorDefinition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_separator" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $themeSeparatorDefinition['label']])) . '</button></div>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
+        }
+        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_separator" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
+        echo '<div class="admin-branding-separator-size">';
+        echo '<label>' . e(t('admin.theme.media.separator_width', 'Separator width')) . '<input type="number" name="theme_branding_separator_width" min="0" max="3840" step="1" value="' . $brandingSeparatorWidth . '"><span class="muted">' . e(t('admin.theme.media.separator_width_hint', 'Pixels. Use 0 to keep the current responsive page width.')) . '</span></label>';
+        echo '<label>' . e(t('admin.theme.media.separator_height', 'Separator height')) . '<input type="number" name="theme_branding_separator_height" min="8" max="512" step="1" value="' . $brandingSeparatorHeight . '"><span class="muted">' . e(t('admin.theme.media.separator_height_hint', 'Pixels. With aspect ratio enabled this is a maximum; with stretching enabled this is the exact render height.')) . '</span></label>';
+        echo '<label class="checkbox-label admin-branding-separator-stretch"><input type="checkbox" name="theme_branding_separator_stretch" value="1"' . ($brandingSeparatorStretch ? ' checked' : '') . '> ' . e(t('admin.theme.media.separator_stretch', 'Stretch to exact width and height')) . '<span class="muted">' . e(t('admin.theme.media.separator_stretch_hint', 'Allows the separator image to scale non-proportionally instead of preserving its original aspect ratio.')) . '</span></label>';
+        echo '</div>';
+        echo '</div>';
+        echo '</fieldset>';
+    }
+
     echo '<fieldset class="form-grid" id="admin-favicon"><legend>' . e(t('admin.theme.media.favicon_legend', 'Favicon')) . '</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
@@ -526,22 +574,6 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.media.background_transparency', 'Background transparency')) . ' <span data-theme-background-opacity-display>' . (int) ($theme['background_opacity'] ?? 65) . '%</span><input type="range" name="theme_background_opacity" min="0" max="100" value="' . (int) ($theme['background_opacity'] ?? 65) . '" data-theme-override-control data-theme-background-opacity><span class="muted">' . e(t('admin.theme.media.background_transparency_hint', 'Higher means more visible image, lower means more of the color underneath.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback')) . '<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_none', 'No fallback set')) . '</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_upload', 'Upload new image')) . '</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images')) . '</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.')) . '</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>' . e(t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds')) . '</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>' . e(t('admin.theme.media.remove_theme_background', 'Remove theme background')) . '</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>' . e(t('admin.theme.media.remove_favicon', 'Remove favicon')) . '</button></div>';
-    echo '</fieldset>';
-    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>' . e(t('admin.theme.media.public_header_branding', 'Public header branding')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.media.public_header_branding_hint', 'These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.')) . '</p>';
-    foreach (theme_branding_asset_types() as $themeBrandingKind => $definition) {
-        // $assetUrl stores the current global fallback asset URL for one branding type.
-        $assetUrl = theme_branding_asset_url((string) $themeBrandingKind);
-        echo '<div class="admin-branding-asset">';
-        echo '<div class="admin-branding-copy"><strong>' . e((string) $definition['label']) . '</strong><span class="muted">' . e((string) $definition['description']) . '</span></div>';
-        if ($assetUrl !== '') {
-            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $definition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $definition['label']])) . '</button></div>';
-        } else {
-            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
-        }
-        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
-        echo '</div>';
-    }
     echo '</fieldset>';
     echo '</div>';
     $mediaHtml = ob_get_clean();

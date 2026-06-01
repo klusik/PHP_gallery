@@ -4986,3 +4986,27 @@ button.gallery-row-action.secondary {
     background: rgba(0, 0, 0, 0.06);
     overflow-wrap: anywhere;
 }
+
+.admin-branding-separator-size {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.admin-branding-separator-size input[type="number"] {
+    max-width: 12rem;
+}
+
+.admin-branding-separator-stretch {
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.admin-branding-separator-stretch .muted {
+    display: block;
+    margin-left: 1.6rem;
+}
