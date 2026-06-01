@@ -185,33 +185,127 @@ function public_sitemap_image_caption(array $image, array $gallery, int $positio
  */
 function public_sitemap_gallery_last_modified(array $gallery, array $images): ?string
 {
-    $values = [
-        (string) ($gallery['updated_at'] ?? ''),
-        (string) ($gallery['created_at'] ?? ''),
-    ];
-    foreach ($images as $image) {
-        $values[] = public_sitemap_image_last_modified($image);
+    $values = public_sitemap_gallery_filesystem_dates($gallery);
+    foreach (public_sitemap_gallery_freshness_images($gallery, $images) as $image) {
+        $values[] = public_sitemap_image_last_modified($image, $gallery);
     }
     $values = array_filter($values, static fn (?string $value): bool => trim((string) $value) !== '');
     if (!$values) {
-        return null;
+        return public_sitemap_newest_date([
+            (string) ($gallery['updated_at'] ?? ''),
+            (string) ($gallery['created_at'] ?? ''),
+        ]);
     }
-    rsort($values, SORT_STRING);
-    return $values[0];
+    return public_sitemap_newest_date($values);
+}
+
+/**
+ * Return public images used only for gallery freshness calculation.
+ *
+ * The visible image sitemap payload intentionally stays capped, but the gallery
+ * URL lastmod should still reflect newer public photos that are not part of the
+ * first payload set.
+ */
+function public_sitemap_gallery_freshness_images(array $gallery, array $seedImages): array
+{
+    try {
+        $stmt = db()->prepare('SELECT *
+            FROM images
+            WHERE gallery_id = ? AND visibility = ?
+            ORDER BY sort_order, filename');
+        $stmt->execute([(int) $gallery['id'], 'public']);
+        $images = [];
+        foreach ($stmt->fetchAll() as $image) {
+            if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+                continue;
+            }
+            $images[] = $image;
+        }
+        return $images;
+    } catch (Throwable) {
+        return $seedImages;
+    }
+}
+
+/**
+ * Return filesystem-derived dates that can make one gallery URL fresh.
+ */
+function public_sitemap_gallery_filesystem_dates(array $gallery): array
+{
+    $values = [];
+    try {
+        $galleryPath = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+        $values[] = public_sitemap_file_lastmod($galleryPath);
+        $values[] = public_sitemap_file_lastmod($galleryPath . DIRECTORY_SEPARATOR . 'gallery.json');
+    } catch (Throwable) {
+        return [];
+    }
+    return $values;
 }
 
 /**
  * Return the strongest known last modified value for one image URL.
  */
-function public_sitemap_image_last_modified(array $image): ?string
+function public_sitemap_image_last_modified(array $image, ?array $gallery = null): ?string
 {
-    foreach (['updated_at', 'modified_at', 'created_at'] as $column) {
+    if ($gallery !== null) {
+        try {
+            $fileDate = public_sitemap_file_lastmod(image_abs_path($image, $gallery));
+            if ($fileDate !== null) {
+                return $fileDate;
+            }
+        } catch (Throwable) {
+            // Fall back to database dates below when the original file cannot be resolved.
+        }
+    }
+
+    foreach (['modified_at', 'updated_at', 'created_at'] as $column) {
         $value = trim((string) ($image[$column] ?? ''));
         if ($value !== '') {
             return $value;
         }
     }
     return null;
+}
+
+/**
+ * Return a sitemap-compatible date for one filesystem path.
+ */
+function public_sitemap_file_lastmod(string $path): ?string
+{
+    if ($path === '' || !file_exists($path)) {
+        return null;
+    }
+    $mtime = @filemtime($path);
+    if ($mtime === false) {
+        return null;
+    }
+    return gmdate('Y-m-d H:i:s', $mtime);
+}
+
+/**
+ * Return the newest valid date string from mixed SQL, ISO, and filesystem values.
+ */
+function public_sitemap_newest_date(array $values): ?string
+{
+    $newestTimestamp = null;
+    foreach ($values as $value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            continue;
+        }
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            continue;
+        }
+        if ($newestTimestamp === null || $timestamp > $newestTimestamp) {
+            $newestTimestamp = $timestamp;
+        }
+    }
+    if ($newestTimestamp === null) {
+        return null;
+    }
+    return gmdate('Y-m-d H:i:s', $newestTimestamp);
 }
 
 /**
