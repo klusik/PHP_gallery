@@ -38,12 +38,13 @@ declare(strict_types=1);
 /**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
  */
-function media_renamer_gallery_rows(): array
+function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 {
+    $having = $hideEmptyGalleries ? ' HAVING direct_image_count > 0' : '';
     $stmt = db()->query("SELECT g.*, COUNT(i.id) AS direct_image_count
         FROM galleries g
         LEFT JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
-        GROUP BY g.id
+        GROUP BY g.id" . $having . "
         ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.title, g.id");
     return $stmt->fetchAll();
 }
@@ -53,9 +54,157 @@ function media_renamer_gallery_rows(): array
  *
  * @return array<int>
  */
-function media_renamer_all_gallery_ids(): array
+function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 {
-    return array_map('intval', db()->query('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll(PDO::FETCH_COLUMN));
+    if (!$hideEmptyGalleries) {
+        return array_map('intval', db()->query('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    $stmt = db()->query("SELECT g.id
+        FROM galleries g
+        INNER JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
+        GROUP BY g.id
+        ORDER BY CHAR_LENGTH(g.folder_path), g.folder_path, g.id");
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+
+/**
+ * Add pending-rename counts to gallery rows and optionally keep only galleries with rename candidates.
+ *
+ * This scan is intentionally separated from the normal gallery-list query because each gallery needs
+ * a deterministic dry-run plan for the current filename pattern.
+ *
+ * @param array<int,array<string,mixed>> $galleryRows
+ * @return array{rows:array<int,array<string,mixed>>,availability:array<int,array<string,int>>}
+ */
+function media_renamer_gallery_rows_with_rename_availability(array $galleryRows, string $pattern = '', bool $hideWithoutRenameCandidates = false): array
+{
+    $rows = [];
+    $availability = [];
+    $pattern = media_renamer_normalize_pattern($pattern);
+
+    foreach ($galleryRows as $galleryRow) {
+        $galleryId = (int) ($galleryRow['id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+
+        try {
+            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
+            $summary = (array) ($plan['summary'] ?? []);
+            $renameCount = (int) ($summary['rename'] ?? 0);
+            $warningCount = (int) (($summary['warnings'] ?? 0) + ($summary['missing'] ?? 0) + ($summary['collision'] ?? 0) + ($summary['skipped'] ?? 0));
+        } catch (Throwable $exception) {
+            $renameCount = 0;
+            $warningCount = 1;
+        }
+
+        $availability[$galleryId] = [
+            'rename_count' => $renameCount,
+            'warning_count' => $warningCount,
+        ];
+
+        if ($hideWithoutRenameCandidates && $renameCount <= 0) {
+            continue;
+        }
+
+        $galleryRow['rename_candidate_count'] = $renameCount;
+        $galleryRow['rename_warning_count'] = $warningCount;
+        $rows[] = $galleryRow;
+    }
+
+    return [
+        'rows' => $rows,
+        'availability' => $availability,
+    ];
+}
+
+
+
+/**
+ * Return pending-rename availability counts for selected gallery ids.
+ *
+ * @param array<int|string> $galleryIds
+ * @return array<int,array<string,int>>
+ */
+function media_renamer_availability_for_gallery_ids(array $galleryIds, string $pattern = ''): array
+{
+    $availability = [];
+    $pattern = media_renamer_normalize_pattern($pattern);
+
+    foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
+        try {
+            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
+            $summary = (array) ($plan['summary'] ?? []);
+            $availability[$galleryId] = [
+                'rename_count' => (int) ($summary['rename'] ?? 0),
+                'warning_count' => (int) (($summary['warnings'] ?? 0) + ($summary['missing'] ?? 0) + ($summary['collision'] ?? 0) + ($summary['skipped'] ?? 0)),
+            ];
+        } catch (Throwable $exception) {
+            $availability[$galleryId] = [
+                'rename_count' => 0,
+                'warning_count' => 1,
+            ];
+        }
+    }
+
+    return $availability;
+}
+
+/**
+ * Add previously checked pending-rename counts to gallery rows and optionally filter them.
+ *
+ * @param array<int,array<string,mixed>> $galleryRows
+ * @param array<int,array<string,int>> $availability
+ * @return array<int,array<string,mixed>>
+ */
+function media_renamer_gallery_rows_with_submitted_availability(array $galleryRows, array $availability, bool $hideWithoutRenameCandidates = false): array
+{
+    $rows = [];
+
+    foreach ($galleryRows as $galleryRow) {
+        $galleryId = (int) ($galleryRow['id'] ?? 0);
+        $counts = (array) ($availability[$galleryId] ?? []);
+        $renameCount = (int) ($counts['rename_count'] ?? 0);
+        $warningCount = (int) ($counts['warning_count'] ?? 0);
+
+        if ($hideWithoutRenameCandidates && $renameCount <= 0) {
+            continue;
+        }
+
+        $galleryRow['rename_candidate_count'] = $renameCount;
+        $galleryRow['rename_warning_count'] = $warningCount;
+        $rows[] = $galleryRow;
+    }
+
+    return $rows;
+}
+
+/**
+ * Filter gallery ids to galleries that still have at least one pending rename candidate.
+ *
+ * @param array<int|string> $galleryIds
+ * @return array<int>
+ */
+function media_renamer_gallery_ids_with_pending_renames(array $galleryIds, string $pattern = ''): array
+{
+    $filtered = [];
+    $pattern = media_renamer_normalize_pattern($pattern);
+
+    foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
+        try {
+            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
+            $summary = (array) ($plan['summary'] ?? []);
+            if ((int) ($summary['rename'] ?? 0) > 0) {
+                $filtered[] = $galleryId;
+            }
+        } catch (Throwable $exception) {
+            // Unreadable galleries are not silently selected by the availability filter.
+        }
+    }
+
+    return $filtered;
 }
 
 /**
@@ -126,7 +275,9 @@ function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): a
             $currentFileKeys,
             $usedTargetPaths
         );
-        $items[] = $item;
+        if (!media_renamer_plan_item_is_hidden_noop($item)) {
+            $items[] = $item;
+        }
         $sequence++;
     }
 
@@ -137,6 +288,21 @@ function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): a
         'context_base' => $contextBase,
         'pattern' => $pattern,
     ];
+}
+
+/**
+ * Return true for no-op rows that should stay out of previews and apply details.
+ *
+ * Already-renamed files are intentionally treated as invisible no-ops. This keeps
+ * repeated preview/apply runs focused only on files that still need a physical
+ * rename or require operator attention, while the deterministic sequence still
+ * advances according to the gallery image order.
+ */
+function media_renamer_plan_item_is_hidden_noop(array $item): bool
+{
+    return (string) ($item['status'] ?? '') === 'already_matches'
+        && empty($item['warnings'])
+        && empty($item['can_rename']);
 }
 
 /**

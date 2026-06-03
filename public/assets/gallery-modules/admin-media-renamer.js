@@ -45,6 +45,39 @@ export function setupAdminMediaRenamer() {
     }
     mediaRenamerReady = true;
     document.addEventListener('submit', handleMediaRenamerSubmit);
+    document.addEventListener('change', handleMediaRenamerSettingChange);
+}
+
+/**
+ * Refresh the site-wide selector when filter-style options change.
+ *
+ * @param {Event} event Browser change event.
+ * @returns {void}
+ */
+function handleMediaRenamerSettingChange(event) {
+    const control = event.target;
+    if (!(control instanceof HTMLInputElement) || !['hide_empty_galleries', 'hide_done_galleries'].includes(control.name)) {
+        return;
+    }
+
+    const form = control.form;
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-admin-media-renamer-form]')) {
+        return;
+    }
+
+    if (form.dataset.mediaRenamerAutosubmitting === '1') {
+        return;
+    }
+
+    form.dataset.mediaRenamerAutosubmitting = '1';
+    if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+    } else {
+        form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+    }
+    window.setTimeout(() => {
+        delete form.dataset.mediaRenamerAutosubmitting;
+    }, 1000);
 }
 
 /**
@@ -73,6 +106,14 @@ async function handleMediaRenamerSubmit(event) {
     setRenamerFormDisabled(form, true);
 
     try {
+        if (isAvailabilityCheckSubmitter(submitter)) {
+            const payload = await submitAvailabilityCheckInBatches(form, submitter, progress);
+            setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
+            replaceRenamerWorkspace(form, payload);
+            setRenamerProgress(null, 100, '');
+            return;
+        }
+
         const response = await submitRenamerForm(form, submitter, (percent, label) => setRenamerProgress(progress, percent, label));
         const payload = await parseRenamerJsonResponse(response, form);
         if (!response.ok || payload.ok === false) {
@@ -85,6 +126,165 @@ async function handleMediaRenamerSubmit(event) {
         setRenamerProgress(progress, 100, error instanceof Error ? error.message : String(error));
         setRenamerFormDisabled(form, false);
     }
+}
+
+
+/**
+ * Detect the explicit on-demand availability scan button.
+ *
+ * @param {HTMLElement|null} submitter Button that submitted the form.
+ * @returns {boolean} True when the submitter starts the availability scan.
+ */
+function isAvailabilityCheckSubmitter(submitter) {
+    return submitter instanceof HTMLButtonElement
+        && submitter.name === 'renamer_action'
+        && submitter.value === 'check_availability';
+}
+
+/**
+ * Run rename-availability checks in small AJAX batches so the button can show a real counter.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {HTMLElement|null} submitter Button that submitted the form.
+ * @param {HTMLElement|null} progress Progress element.
+ * @returns {Promise<object>} Final workspace JSON payload.
+ */
+async function submitAvailabilityCheckInBatches(form, submitter, progress) {
+    const galleryIds = availabilityGalleryIdsFromForm(form);
+    const total = galleryIds.length;
+    const availability = {};
+    const batchSize = 20;
+    let processed = 0;
+
+    updateAvailabilityButton(submitter, processed, total);
+    setRenamerProgress(progress, 12, i18n('admin.media_renamer.availability_progress_start', 'Checking rename availability...'));
+
+    if (total > 0) {
+        for (let offset = 0; offset < total; offset += batchSize) {
+            const batchIds = galleryIds.slice(offset, offset + batchSize);
+            const response = await submitAvailabilityBatch(form, batchIds);
+            const payload = await parseRenamerJsonResponse(response, form);
+            if (!response.ok || payload.ok === false) {
+                throw new Error(payload.error || payload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+            }
+            Object.assign(availability, payload.availability || {});
+            processed += batchIds.length;
+            updateAvailabilityButton(submitter, processed, total);
+            const percent = total > 0 ? 12 + Math.round((processed / total) * 72) : 84;
+            setRenamerProgress(progress, percent, i18n('admin.media_renamer.availability_progress_counter', 'Checked {processed}/{total} galleries...', {
+                processed: String(processed),
+                total: String(total),
+            }));
+        }
+    }
+
+    const finalResponse = await submitAvailabilityFinalRefresh(form, availability);
+    const finalPayload = await parseRenamerJsonResponse(finalResponse, form);
+    if (!finalResponse.ok || finalPayload.ok === false) {
+        throw new Error(finalPayload.error || finalPayload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+    }
+
+    return finalPayload;
+}
+
+/**
+ * Return gallery ids currently present in the site-wide gallery table.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @returns {string[]} Gallery ids in current UI order.
+ */
+function availabilityGalleryIdsFromForm(form) {
+    const ids = [];
+    form.querySelectorAll('input[name="gallery_ids[]"]').forEach((input) => {
+        if (input instanceof HTMLInputElement && input.value && !ids.includes(input.value)) {
+            ids.push(input.value);
+        }
+    });
+    return ids;
+}
+
+/**
+ * Submit one availability-check batch.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {string[]} batchIds Gallery ids in this batch.
+ * @returns {Promise<Response>} Fetch response.
+ */
+async function submitAvailabilityBatch(form, batchIds) {
+    const body = new FormData(form);
+    body.delete('gallery_ids[]');
+    batchIds.forEach((galleryId) => body.append('gallery_ids[]', galleryId));
+    body.set('renamer_action', 'check_availability_batch');
+    body.set('ajax', '1');
+
+    const requestUrl = formActionUrl(form);
+    const response = await fetch(requestUrl, {
+        method: 'POST',
+        body,
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+    });
+    response.mediaRenamerRequestUrl = requestUrl;
+    return response;
+}
+
+/**
+ * Submit the final refresh after all availability batches have completed.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {object} availability Availability counts keyed by gallery id.
+ * @returns {Promise<Response>} Fetch response.
+ */
+async function submitAvailabilityFinalRefresh(form, availability) {
+    const body = new FormData(form);
+    body.set('renamer_action', 'check_availability');
+    body.set('rename_availability_checked', '1');
+    body.set('rename_availability_payload', JSON.stringify(availability));
+    body.set('ajax', '1');
+
+    const requestUrl = formActionUrl(form);
+    const response = await fetch(requestUrl, {
+        method: 'POST',
+        body,
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+    });
+    response.mediaRenamerRequestUrl = requestUrl;
+    return response;
+}
+
+/**
+ * Resolve the explicit form action URL.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @returns {string} Absolute request URL.
+ */
+function formActionUrl(form) {
+    const action = form.getAttribute('action') || window.location.href;
+    return new URL(action, window.location.href).toString();
+}
+
+/**
+ * Update the availability scan button with a processed/total counter.
+ *
+ * @param {HTMLElement|null} submitter Button that submitted the form.
+ * @param {number} processed Processed gallery count.
+ * @param {number} total Total gallery count.
+ * @returns {void}
+ */
+function updateAvailabilityButton(submitter, processed, total) {
+    if (!(submitter instanceof HTMLButtonElement)) {
+        return;
+    }
+    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18n('admin.media_renamer.check_availability_button', 'Check availability');
+    submitter.dataset.originalLabel = baseLabel;
+    submitter.textContent = `${baseLabel} ${processed}/${total}`;
 }
 
 /**

@@ -50,6 +50,10 @@ function cms_admin_media_renamer(): void
     $pattern = media_renamer_default_pattern();
     $action = '';
     $lastResult = null;
+    $hideEmptyGalleries = true;
+    $hideGalleriesWithoutRenameCandidates = false;
+    $renameAvailabilityChecked = false;
+    $renameAvailability = [];
 
     if (request_method() === 'POST') {
         if (!admin_media_renamer_verify_csrf_for_ajax()) {
@@ -60,12 +64,32 @@ function cms_admin_media_renamer(): void
             admin_media_renamer_handle_client_error();
             return;
         }
+        $hideEmptyGalleries = admin_media_renamer_hide_empty_from_post();
+        $hideGalleriesWithoutRenameCandidates = admin_media_renamer_hide_done_from_post();
+        $renameAvailabilityChecked = admin_media_renamer_availability_checked_from_post($action);
         $selectedScope = admin_media_renamer_scope_from_post();
         $selectedSingleGalleryId = (int) ($_POST['single_gallery_id'] ?? 0);
         $pattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
-        $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post($selectedScope);
+        $submittedAvailability = admin_media_renamer_availability_payload_from_post();
 
-        if (!$selectedGalleryIds) {
+        if ($action === 'check_availability_batch') {
+            $batchIds = media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
+            admin_media_renamer_json_response([
+                'ok' => true,
+                'availability' => media_renamer_availability_for_gallery_ids($batchIds, $pattern),
+                'processed' => count($batchIds),
+            ]);
+        }
+
+        $filterSelectedFromSubmittedAvailability = $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && $submittedAvailability;
+        $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && !$submittedAvailability, $pattern);
+        if ($filterSelectedFromSubmittedAvailability) {
+            $selectedGalleryIds = admin_media_renamer_filter_gallery_ids_by_availability($selectedGalleryIds, $submittedAvailability);
+        }
+
+        if ($action === 'check_availability') {
+            $notice = t('admin.media_renamer.availability_checked', 'Rename availability was checked for the current list. Galleries with no pending renames can now be hidden.');
+        } elseif (!$selectedGalleryIds) {
             $notice = t('admin.media_renamer.no_galleries_selected', 'Select at least one gallery to preview or rename.');
         } elseif ($action === 'apply') {
             if (empty($_POST['confirm_media_rename'])) {
@@ -97,24 +121,38 @@ function cms_admin_media_renamer(): void
         }
     }
 
-    $galleryRows = media_renamer_gallery_rows();
+    $galleryRows = media_renamer_gallery_rows($hideEmptyGalleries);
+    if ($renameAvailabilityChecked) {
+        $submittedAvailability = request_method() === 'POST' ? admin_media_renamer_availability_payload_from_post() : [];
+        if ($submittedAvailability) {
+            $renameAvailability = $submittedAvailability;
+            $galleryRows = media_renamer_gallery_rows_with_submitted_availability($galleryRows, $renameAvailability, $hideGalleriesWithoutRenameCandidates);
+        } else {
+            $availabilityResult = media_renamer_gallery_rows_with_rename_availability($galleryRows, $pattern, $hideGalleriesWithoutRenameCandidates);
+            $galleryRows = (array) ($availabilityResult['rows'] ?? []);
+            $renameAvailability = (array) ($availabilityResult['availability'] ?? []);
+        }
+        if ($selectedScope === 'all') {
+            $selectedGalleryIds = array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $galleryRows);
+        }
+    }
     if (admin_wants_json()) {
         header('Content-Type: application/json');
         echo json_encode([
             'ok' => true,
             'message' => $notice,
-            'body_html' => admin_media_renamer_render_site_workspace($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $plans, $notice, $lastResult),
+            'body_html' => admin_media_renamer_render_site_workspace($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $plans, $notice, $lastResult, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability),
         ]);
         return;
     }
-    render_header(t('admin.media_renamer.page_title', 'Media renamer'), 'admin_media_renamer');
+    render_header(t('admin.media_renamer.page_title', 'Media renamer'));
 
     echo '<section class="admin-dashboard-hero admin-media-renamer-hero">';
     echo '<div><p class="admin-kicker">' . e(t('admin.media_renamer.kicker', 'Maintenance')) . '</p><h1>' . e(t('admin.media_renamer.heading', 'Context-aware file renamer')) . '</h1><p class="muted">' . e(t('admin.media_renamer.intro', 'Preview and physically rename image files from gallery context and photo order. Database rows, generated derivatives, public paths, and stale download ZIP archives are updated after execution.')) . '</p></div>';
     echo '<nav class="admin-hero-actions"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.media_renamer.back_to_admin', 'Back to admin')) . '</a></nav>';
     echo '</section>';
 
-    echo admin_media_renamer_render_site_workspace($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $plans, $notice, $lastResult);
+    echo admin_media_renamer_render_site_workspace($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $plans, $notice, $lastResult, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability);
 
     render_footer();
 }
@@ -126,14 +164,14 @@ function cms_admin_media_renamer(): void
  * @param array<int> $selectedGalleryIds
  * @param array<int,array<string,mixed>> $plans
  */
-function admin_media_renamer_render_site_workspace(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, array $plans, string $notice = '', ?array $lastResult = null): string
+function admin_media_renamer_render_site_workspace(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, array $plans, string $notice = '', ?array $lastResult = null, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): string
 {
     ob_start();
     echo '<div class="admin-media-renamer-workspace" data-admin-media-renamer-workspace="site" data-media-renamer-log-url="' . e(url_for('admin_media_renamer')) . '">';
     if ($notice !== '') {
         echo '<div class="notice">' . e($notice) . '</div>';
     }
-    render_admin_media_renamer_scope_form($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern);
+    render_admin_media_renamer_scope_form($galleryRows, $selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability);
 
     if ($plans) {
         echo '<section class="panel admin-media-renamer-preview">';
@@ -142,7 +180,7 @@ function admin_media_renamer_render_site_workspace(array $galleryRows, string $s
         if ($lastResult !== null) {
             render_admin_media_renamer_execution_details((array) ($lastResult['details'] ?? []));
         }
-        render_admin_media_renamer_apply_form($selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern);
+        render_admin_media_renamer_apply_form($selectedScope, $selectedGalleryIds, $selectedSingleGalleryId, $pattern, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates, $renameAvailabilityChecked, $renameAvailability);
         echo '</section>';
     }
     echo '<div class="thumbnail-progress admin-media-renamer-progress" data-admin-media-renamer-progress hidden><progress class="thumbnail-progress-bar" value="0" max="100" data-admin-media-renamer-progress-bar></progress><p class="muted" data-admin-media-renamer-progress-text></p></div>';
@@ -222,33 +260,46 @@ function render_admin_media_renamer_pattern_preview_form(int $galleryId, string 
  * @param array<int,array<string,mixed>> $galleryRows
  * @param array<int> $selectedGalleryIds
  */
-function render_admin_media_renamer_scope_form(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern): void
+function render_admin_media_renamer_scope_form(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): void
 {
     $selectedMap = array_fill_keys(array_map('intval', $selectedGalleryIds), true);
+    $pendingTotal = array_sum(array_map(static fn (array $row): int => (int) ($row['rename_candidate_count'] ?? 0), $galleryRows));
 
     echo '<section class="panel admin-media-renamer-scope">';
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.media_renamer.scope_kicker', 'Scope')) . '</p><h2>' . e(t('admin.media_renamer.scope_title', 'Choose galleries')) . '</h2></div><p class="muted">' . e(t('admin.media_renamer.scope_help', 'Start with a dry-run preview. Applying a rename requires a second confirmation.')) . '</p></div>';
     echo '<form method="post" action="' . e(url_for('admin_media_renamer')) . '" data-admin-media-renamer-form data-media-renamer-target="[data-admin-media-renamer-workspace=site]">' . csrf_field();
-    echo '<div class="admin-edit-card-grid">';
-    echo '<div class="admin-edit-card">';
-    echo '<label class="checkbox-label"><input type="radio" name="renamer_scope" value="all"' . ($selectedScope === 'all' ? ' checked' : '') . '> ' . e(t('admin.media_renamer.scope_all', 'All galleries')) . '</label>';
-    echo '<label class="checkbox-label"><input type="radio" name="renamer_scope" value="single"' . ($selectedScope === 'single' ? ' checked' : '') . '> ' . e(t('admin.media_renamer.scope_single', 'Single gallery')) . '</label>';
-    echo '<label class="checkbox-label"><input type="radio" name="renamer_scope" value="selected"' . ($selectedScope === 'selected' ? ' checked' : '') . '> ' . e(t('admin.media_renamer.scope_selected', 'Checked galleries')) . '</label>';
+    echo '<div class="admin-media-renamer-scope-grid">';
+    echo '<fieldset class="admin-edit-card admin-media-renamer-scope-card"><legend>' . e(t('admin.media_renamer.scope_mode_legend', 'Rename scope')) . '</legend>';
+    echo '<div class="admin-media-renamer-scope-buttons" role="radiogroup" aria-label="' . e(t('admin.media_renamer.scope_mode_legend', 'Rename scope')) . '">';
+    echo '<label class="admin-media-renamer-scope-option"><input type="radio" name="renamer_scope" value="all"' . ($selectedScope === 'all' ? ' checked' : '') . '><span class="admin-media-renamer-scope-button"><strong>' . e(t('admin.media_renamer.scope_all', 'All galleries')) . '</strong><small>' . e(t('admin.media_renamer.scope_all_help', 'Preview every gallery currently visible in this selector.')) . '</small></span></label>';
+    echo '<label class="admin-media-renamer-scope-option"><input type="radio" name="renamer_scope" value="single"' . ($selectedScope === 'single' ? ' checked' : '') . '><span class="admin-media-renamer-scope-button"><strong>' . e(t('admin.media_renamer.scope_single', 'Single gallery')) . '</strong><small>' . e(t('admin.media_renamer.scope_single_help', 'Choose exactly one gallery from the dropdown.')) . '</small></span></label>';
+    echo '<label class="admin-media-renamer-scope-option"><input type="radio" name="renamer_scope" value="selected"' . ($selectedScope === 'selected' ? ' checked' : '') . '><span class="admin-media-renamer-scope-button"><strong>' . e(t('admin.media_renamer.scope_selected', 'Checked galleries')) . '</strong><small>' . e(t('admin.media_renamer.scope_selected_help', 'Use the checkboxes in the gallery table below.')) . '</small></span></label>';
     echo '</div>';
-    echo '<div class="admin-edit-card">';
+    echo '</fieldset>';
+    echo '<div class="admin-edit-card admin-media-renamer-options-card">';
     echo '<label>' . e(t('admin.media_renamer.single_gallery', 'Single gallery')) . '<select name="single_gallery_id"><option value="0">' . e(t('admin.media_renamer.choose_gallery', 'Choose gallery')) . '</option>';
     foreach ($galleryRows as $gallery) {
         $id = (int) ($gallery['id'] ?? 0);
         echo '<option value="' . $id . '"' . ($selectedSingleGalleryId === $id ? ' selected' : '') . '>' . e((string) ($gallery['folder_path'] ?? $gallery['title'] ?? ('#' . $id))) . '</option>';
     }
     echo '</select><span class="muted">' . e(t('admin.media_renamer.single_gallery_help', 'Use this for a focused site-wide operation outside the gallery editor.')) . '</span></label>';
+    echo '<label class="checkbox-label admin-media-renamer-hide-empty"><input type="checkbox" name="hide_empty_galleries" value="1"' . ($hideEmptyGalleries ? ' checked' : '') . '> <span><strong>' . e(t('admin.media_renamer.hide_empty_galleries', 'Hide galleries with 0 pictures')) . '</strong><small>' . e(t('admin.media_renamer.hide_empty_galleries_help', 'Useful for parent folders that only contain subgalleries. When enabled, All galleries also skips them.')) . '</small></span></label>';
+    echo '<label class="checkbox-label admin-media-renamer-hide-done"><input type="checkbox" name="hide_done_galleries" value="1"' . ($hideGalleriesWithoutRenameCandidates ? ' checked' : '') . '> <span><strong>' . e(t('admin.media_renamer.hide_done_galleries', 'Hide galleries with 0 pictures to rename')) . '</strong><small>' . e(t('admin.media_renamer.hide_done_galleries_help', 'Uses the latest availability check. Already-renamed galleries stay visible until you run Check availability.')) . '</small></span></label>';
+    echo '<input type="hidden" name="rename_availability_checked" value="' . ($renameAvailabilityChecked ? '1' : '0') . '">';
+    echo '<input type="hidden" name="rename_availability_payload" value="' . e(admin_media_renamer_encode_availability_payload($renameAvailability)) . '">';
+    $checkAvailabilityLabel = t('admin.media_renamer.check_availability_button', 'Check availability');
+    echo '<button type="submit" class="secondary" name="renamer_action" value="check_availability" data-media-renamer-availability-button data-original-label="' . e($checkAvailabilityLabel) . '">' . e($checkAvailabilityLabel) . '</button>';
+    if ($renameAvailabilityChecked) {
+        echo '<span class="muted">' . e(t('admin.media_renamer.availability_summary', '{count} files still need renaming in the shown galleries.', ['count' => (string) $pendingTotal])) . '</span>';
+    }
     echo '</div>';
-    echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '<input type="text" name="renamer_pattern" value="' . e($pattern) . '" placeholder="' . e(media_renamer_default_pattern()) . '"><span class="muted">' . e(t('admin.media_renamer.pattern_help', 'Wildcards: {wildcards}', ['wildcards' => media_renamer_pattern_help_text()])) . '</span></label></div></div>';
+    echo '<div class="admin-edit-card admin-media-renamer-pattern-card"><label>' . e(t('admin.media_renamer.pattern_label', 'Filename pattern')) . '<input type="text" name="renamer_pattern" value="' . e($pattern) . '" placeholder="' . e(media_renamer_default_pattern()) . '"><span class="muted">' . e(t('admin.media_renamer.pattern_help', 'Wildcards: {wildcards}', ['wildcards' => media_renamer_pattern_help_text()])) . '</span></label></div></div>';
 
-    echo '<div class="admin-log-table-wrap"><table class="admin-log-table admin-media-renamer-gallery-table"><thead><tr><th>' . e(t('admin.media_renamer.select', 'Select')) . '</th><th>' . e(t('admin.media_renamer.gallery', 'Gallery')) . '</th><th>' . e(t('admin.media_renamer.path', 'Path')) . '</th><th>' . e(t('admin.media_renamer.images', 'Images')) . '</th></tr></thead><tbody>';
+    echo '<div class="admin-media-renamer-gallery-list-header"><strong>' . e(t('admin.media_renamer.gallery_list_title', 'Gallery list')) . '</strong><span class="muted">' . e(t('admin.media_renamer.gallery_list_count', '{count} galleries shown', ['count' => (string) count($galleryRows)])) . '</span></div>';
+    echo '<div class="admin-log-table-wrap"><table class="admin-log-table admin-media-renamer-gallery-table"><thead><tr><th>' . e(t('admin.media_renamer.select', 'Select')) . '</th><th>' . e(t('admin.media_renamer.gallery', 'Gallery')) . '</th><th>' . e(t('admin.media_renamer.path', 'Path')) . '</th><th>' . e(t('admin.media_renamer.images', 'Images')) . '</th><th>' . e(t('admin.media_renamer.to_rename', 'To rename')) . '</th></tr></thead><tbody>';
     foreach ($galleryRows as $gallery) {
         $id = (int) ($gallery['id'] ?? 0);
-        echo '<tr><td><input type="checkbox" name="gallery_ids[]" value="' . $id . '"' . (isset($selectedMap[$id]) ? ' checked' : '') . '></td><td><a href="' . e(url_for('admin_edit_gallery', ['id' => $id, 'tab' => 'admin-edit-renamer']) . '#admin-edit-renamer') . '">' . e((string) ($gallery['title'] ?? ('#' . $id))) . '</a></td><td>' . e((string) ($gallery['folder_path'] ?? '')) . '</td><td>' . (int) ($gallery['direct_image_count'] ?? 0) . '</td></tr>';
+        echo '<tr><td><input type="checkbox" name="gallery_ids[]" value="' . $id . '"' . (isset($selectedMap[$id]) ? ' checked' : '') . '></td><td><a href="' . e(url_for('admin_edit_gallery', ['id' => $id, 'tab' => 'admin-edit-renamer']) . '#admin-edit-renamer') . '">' . e((string) ($gallery['title'] ?? ('#' . $id))) . '</a></td><td>' . e((string) ($gallery['folder_path'] ?? '')) . '</td><td>' . (int) ($gallery['direct_image_count'] ?? 0) . '</td><td>' . ($renameAvailabilityChecked ? (int) ($gallery['rename_candidate_count'] ?? 0) : e(t('admin.media_renamer.not_checked', 'Not checked'))) . '</td></tr>';
     }
     echo '</tbody></table></div>';
     echo '<div class="admin-edit-gallery-savebar"><button type="submit" name="renamer_action" value="preview">' . e(t('admin.media_renamer.preview_button', 'Preview rename plan')) . '</button><span class="muted">' . e(t('admin.media_renamer.preview_button_help', 'No file or database changes are made during preview.')) . '</span></div>';
@@ -260,7 +311,7 @@ function render_admin_media_renamer_scope_form(array $galleryRows, string $selec
  *
  * @param array<int> $selectedGalleryIds
  */
-function render_admin_media_renamer_apply_form(string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern): void
+function render_admin_media_renamer_apply_form(string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): void
 {
     $aggregate = admin_media_renamer_aggregate_plans(media_renamer_plans_for_galleries($selectedGalleryIds, $pattern));
     $renameCount = (int) ($aggregate['rename'] ?? 0);
@@ -270,6 +321,10 @@ function render_admin_media_renamer_apply_form(string $selectedScope, array $sel
     echo '<input type="hidden" name="renamer_scope" value="' . e($selectedScope) . '">';
     echo '<input type="hidden" name="single_gallery_id" value="' . (int) $selectedSingleGalleryId . '">';
     echo '<input type="hidden" name="renamer_pattern" value="' . e($pattern) . '">';
+    echo '<input type="hidden" name="hide_empty_galleries" value="' . ($hideEmptyGalleries ? '1' : '0') . '">';
+    echo '<input type="hidden" name="hide_done_galleries" value="' . ($hideGalleriesWithoutRenameCandidates ? '1' : '0') . '">';
+    echo '<input type="hidden" name="rename_availability_checked" value="' . ($renameAvailabilityChecked ? '1' : '0') . '">';
+    echo '<input type="hidden" name="rename_availability_payload" value="' . e(admin_media_renamer_encode_availability_payload($renameAvailability)) . '">';
     foreach ($selectedGalleryIds as $galleryId) {
         echo '<input type="hidden" name="gallery_ids[]" value="' . (int) $galleryId . '">';
     }
@@ -406,17 +461,122 @@ function admin_media_renamer_scope_from_post(): string
  *
  * @return array<int>
  */
-function admin_media_renamer_gallery_ids_from_post(string $scope): array
+function admin_media_renamer_gallery_ids_from_post(string $scope, bool $hideEmptyGalleries = false, bool $hideGalleriesWithoutRenameCandidates = false, string $pattern = ''): array
 {
     if ($scope === 'all') {
-        return media_renamer_all_gallery_ids();
+        $galleryIds = media_renamer_all_gallery_ids($hideEmptyGalleries);
+    } elseif ($scope === 'single') {
+        $galleryIds = media_renamer_existing_gallery_ids([(int) ($_POST['single_gallery_id'] ?? 0)]);
+    } else {
+        $galleryIds = media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
     }
-    if ($scope === 'single') {
-        return media_renamer_existing_gallery_ids([(int) ($_POST['single_gallery_id'] ?? 0)]);
+
+    if ($hideGalleriesWithoutRenameCandidates) {
+        $galleryIds = media_renamer_gallery_ids_with_pending_renames($galleryIds, $pattern);
     }
-    return media_renamer_existing_gallery_ids((array) ($_POST['gallery_ids'] ?? []));
+
+    return $galleryIds;
 }
 
+
+
+/**
+ * Read whether zero-image galleries should be hidden from the site-wide selector.
+ */
+function admin_media_renamer_hide_empty_from_post(): bool
+{
+    $raw = (string) ($_POST['hide_empty_galleries'] ?? '0');
+    return in_array($raw, ['1', 'true', 'on', 'yes'], true);
+}
+
+
+/**
+ * Read whether already-renamed galleries should be hidden after availability was checked.
+ */
+function admin_media_renamer_hide_done_from_post(): bool
+{
+    $raw = (string) ($_POST['hide_done_galleries'] ?? '0');
+    return in_array($raw, ['1', 'true', 'on', 'yes'], true);
+}
+
+/**
+ * Read whether the expensive rename availability scan has already been requested.
+ */
+function admin_media_renamer_availability_checked_from_post(string $action): bool
+{
+    if ($action === 'check_availability') {
+        return true;
+    }
+    $raw = (string) ($_POST['rename_availability_checked'] ?? '0');
+    return in_array($raw, ['1', 'true', 'on', 'yes'], true);
+}
+
+
+
+/**
+ * Decode a submitted availability payload produced by the on-demand batch checker.
+ *
+ * @return array<int,array<string,int>>
+ */
+function admin_media_renamer_availability_payload_from_post(): array
+{
+    $raw = (string) ($_POST['rename_availability_payload'] ?? '');
+    if ($raw === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $availability = [];
+    foreach ($decoded as $galleryId => $counts) {
+        $id = (int) $galleryId;
+        if ($id <= 0 || !is_array($counts)) {
+            continue;
+        }
+        $availability[$id] = [
+            'rename_count' => max(0, (int) ($counts['rename_count'] ?? 0)),
+            'warning_count' => max(0, (int) ($counts['warning_count'] ?? 0)),
+        ];
+    }
+
+    return $availability;
+}
+
+/**
+ * Encode availability counts for hidden form transport between AJAX refreshes.
+ *
+ * @param array<int,array<string,int>> $availability
+ */
+function admin_media_renamer_encode_availability_payload(array $availability): string
+{
+    if (!$availability) {
+        return '';
+    }
+
+    return (string) json_encode($availability, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
+/**
+ * Keep only gallery ids that still have at least one pending rename candidate.
+ *
+ * @param array<int|string> $galleryIds
+ * @param array<int,array<string,int>> $availability
+ * @return array<int>
+ */
+function admin_media_renamer_filter_gallery_ids_by_availability(array $galleryIds, array $availability): array
+{
+    $filtered = [];
+    foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
+        if ((int) ($availability[$galleryId]['rename_count'] ?? 0) > 0) {
+            $filtered[] = $galleryId;
+        }
+    }
+
+    return $filtered;
+}
 
 /**
  * Verify CSRF for media-renamer AJAX routes and emit JSON/logs on failure.
