@@ -114,6 +114,14 @@ async function handleMediaRenamerSubmit(event) {
             return;
         }
 
+        if (isSiteWideApplyForm(form)) {
+            const payload = await submitApplyInBatches(form, submitter, progress);
+            setRenamerProgress(progress, 92, i18n('admin.media_renamer.progress_refreshing', 'Refreshing the renamer view...'));
+            replaceRenamerWorkspace(form, payload);
+            setRenamerProgress(null, 100, '');
+            return;
+        }
+
         const response = await submitRenamerForm(form, submitter, (percent, label) => setRenamerProgress(progress, percent, label));
         const payload = await parseRenamerJsonResponse(response, form);
         if (!response.ok || payload.ok === false) {
@@ -139,6 +147,221 @@ function isAvailabilityCheckSubmitter(submitter) {
     return submitter instanceof HTMLButtonElement
         && submitter.name === 'renamer_action'
         && submitter.value === 'check_availability';
+}
+
+/**
+ * Detect the site-wide physical apply form.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @returns {boolean} True when the form should be applied through photo batches.
+ */
+function isSiteWideApplyForm(form) {
+    const action = form.querySelector('input[name="renamer_action"]');
+    return action instanceof HTMLInputElement
+        && action.value === 'apply'
+        && form.dataset.mediaRenamerTarget === '[data-admin-media-renamer-workspace=site]'
+        && form.querySelectorAll('input[name="rename_candidate_image_ids[]"]').length > 0;
+}
+
+/**
+ * Run physical renames in small AJAX batches so long operations do not look frozen
+ * and are less likely to hit PHP/shared-hosting request timeouts.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {HTMLElement|null} submitter Button that submitted the form.
+ * @param {HTMLElement|null} progress Progress element.
+ * @returns {Promise<object>} Final workspace JSON payload.
+ */
+async function submitApplyInBatches(form, submitter, progress) {
+    const imageIds = renameCandidateImageIdsFromForm(form);
+    const total = imageIds.length;
+    const batchSize = 15;
+    let processed = 0;
+    const aggregate = emptyApplyResult();
+    aggregate.galleries_requested = galleryIdsFromForm(form).length;
+
+    updateApplyButton(submitter, processed, total);
+    setRenamerProgress(progress, 10, i18n('admin.media_renamer.apply_progress_start', 'Starting physical rename batches...'));
+
+    if (total > 0) {
+        for (let offset = 0; offset < total; offset += batchSize) {
+            const batchIds = imageIds.slice(offset, offset + batchSize);
+            const response = await submitApplyBatch(form, batchIds);
+            const payload = await parseRenamerJsonResponse(response, form);
+            if (!response.ok || payload.ok === false) {
+                throw new Error(payload.error || payload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+            }
+            mergeApplyResult(aggregate, payload.result || {});
+            processed += batchIds.length;
+            updateApplyButton(submitter, processed, total);
+            const percent = total > 0 ? 10 + Math.round((processed / total) * 78) : 88;
+            setRenamerProgress(progress, percent, i18n('admin.media_renamer.apply_progress_counter', 'Renamed photo batch {processed}/{total}...', {
+                processed: String(processed),
+                total: String(total),
+            }));
+        }
+    }
+
+    aggregate.galleries_processed = aggregate.galleries_requested;
+    const finalResponse = await submitApplyFinalRefresh(form, aggregate);
+    const finalPayload = await parseRenamerJsonResponse(finalResponse, form);
+    if (!finalResponse.ok || finalPayload.ok === false) {
+        throw new Error(finalPayload.error || finalPayload.message || i18n('admin.media_renamer.progress_failed', 'Rename request failed.'));
+    }
+
+    return finalPayload;
+}
+
+/**
+ * Return planned image ids from the apply form.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @returns {string[]} Image ids in preview order.
+ */
+function renameCandidateImageIdsFromForm(form) {
+    const ids = [];
+    form.querySelectorAll('input[name="rename_candidate_image_ids[]"]').forEach((input) => {
+        if (input instanceof HTMLInputElement && input.value && !ids.includes(input.value)) {
+            ids.push(input.value);
+        }
+    });
+    return ids;
+}
+
+/**
+ * Return selected gallery ids from the apply form.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @returns {string[]} Gallery ids.
+ */
+function galleryIdsFromForm(form) {
+    const ids = [];
+    form.querySelectorAll('input[name="gallery_ids[]"]').forEach((input) => {
+        if (input instanceof HTMLInputElement && input.value && !ids.includes(input.value)) {
+            ids.push(input.value);
+        }
+    });
+    return ids;
+}
+
+/**
+ * Submit one physical rename batch.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {string[]} batchIds Image ids in this batch.
+ * @returns {Promise<Response>} Fetch response.
+ */
+async function submitApplyBatch(form, batchIds) {
+    const body = new FormData(form);
+    body.delete('rename_candidate_image_ids[]');
+    body.delete('batch_image_ids[]');
+    batchIds.forEach((imageId) => body.append('batch_image_ids[]', imageId));
+    body.set('renamer_action', 'apply_batch');
+    body.set('ajax', '1');
+
+    const requestUrl = formActionUrl(form);
+    const response = await fetch(requestUrl, {
+        method: 'POST',
+        body,
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+    });
+    response.mediaRenamerRequestUrl = requestUrl;
+    return response;
+}
+
+/**
+ * Submit the final refresh after all physical rename batches have completed.
+ *
+ * @param {HTMLFormElement} form Submitted form.
+ * @param {object} aggregate Aggregate result from all batches.
+ * @returns {Promise<Response>} Fetch response.
+ */
+async function submitApplyFinalRefresh(form, aggregate) {
+    const body = new FormData(form);
+    body.delete('rename_candidate_image_ids[]');
+    body.set('renamer_action', 'apply_refresh');
+    body.set('batch_result_payload', JSON.stringify(aggregate));
+    body.set('ajax', '1');
+
+    const requestUrl = formActionUrl(form);
+    const response = await fetch(requestUrl, {
+        method: 'POST',
+        body,
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+    });
+    response.mediaRenamerRequestUrl = requestUrl;
+    return response;
+}
+
+/**
+ * Return an empty aggregate result object matching the PHP result shape.
+ *
+ * @returns {object} Mutable aggregate result.
+ */
+function emptyApplyResult() {
+    return {
+        galleries_requested: 0,
+        galleries_processed: 0,
+        renamed: 0,
+        already_matches: 0,
+        missing: 0,
+        skipped: 0,
+        collisions: 0,
+        derivatives_moved: 0,
+        derivatives_cleaned: 0,
+        derivative_failures: 0,
+        zip_archives_deleted: 0,
+        titles_updated: 0,
+        details: [],
+        warnings: [],
+        failures: [],
+    };
+}
+
+/**
+ * Merge one batch result into the aggregate result.
+ *
+ * @param {object} target Aggregate result.
+ * @param {object} source Batch result from PHP.
+ * @returns {void}
+ */
+function mergeApplyResult(target, source) {
+    ['galleries_processed', 'renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'].forEach((key) => {
+        target[key] = Number(target[key] || 0) + Number(source[key] || 0);
+    });
+    ['details', 'warnings', 'failures'].forEach((key) => {
+        if (Array.isArray(source[key])) {
+            target[key].push(...source[key]);
+        }
+    });
+    target.details = target.details.slice(0, 500);
+    target.warnings = target.warnings.slice(0, 50);
+    target.failures = target.failures.slice(0, 50);
+}
+
+/**
+ * Update the physical apply button with a processed/total counter.
+ *
+ * @param {HTMLElement|null} submitter Button that submitted the form.
+ * @param {number} processed Processed photo count.
+ * @param {number} total Total photo count.
+ * @returns {void}
+ */
+function updateApplyButton(submitter, processed, total) {
+    if (!(submitter instanceof HTMLButtonElement)) {
+        return;
+    }
+    const baseLabel = submitter.dataset.originalLabel || submitter.textContent || i18n('admin.media_renamer.apply_site_button', 'Apply planned renames');
+    submitter.dataset.originalLabel = baseLabel;
+    submitter.textContent = `${baseLabel} ${processed}/${total}`;
 }
 
 /**

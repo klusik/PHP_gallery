@@ -660,15 +660,82 @@ function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): ar
 }
 
 /**
- * Execute rename operations for several galleries.
+ * Execute a bounded set of image renames inside one gallery from a freshly generated plan.
  *
- * @param array<int|string> $galleryIds
+ * The full gallery plan is still generated first, so deterministic sequence numbers and
+ * collision checks remain based on complete gallery order. Only the requested image ids
+ * are physically renamed in this request.
+ *
+ * @param array<int|string> $imageIds
  * @return array<string,mixed>
  */
-function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''): array
+function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageIds, string $pattern = ''): array
 {
-    $result = [
-        'galleries_requested' => count($galleryIds),
+    $requested = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $idMap = array_fill_keys($requested, true);
+    $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
+    $plan['items'] = array_values(array_filter((array) ($plan['items'] ?? []), static function (array $item) use ($idMap): bool {
+        return isset($idMap[(int) ($item['image_id'] ?? 0)]);
+    }));
+    $plan['summary'] = media_renamer_summarize_items((array) ($plan['items'] ?? []));
+    return media_renamer_execute_plan($plan);
+}
+
+/**
+ * Execute a bounded set of image renames grouped by gallery.
+ *
+ * This is used by the AJAX batch runner so long site-wide operations are split into
+ * multiple short requests instead of one request that can hit shared-hosting timeouts.
+ *
+ * @param array<int|string> $imageIds
+ * @return array<string,mixed>
+ */
+function media_renamer_execute_image_batch(array $imageIds, string $pattern = ''): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    $result = media_renamer_empty_execution_result(0);
+    if (!$ids) {
+        return $result;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare('SELECT id, gallery_id FROM images WHERE id IN (' . $placeholders . ') ORDER BY gallery_id, sort_order, id');
+    $stmt->execute($ids);
+    $byGallery = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $galleryId = (int) ($row['gallery_id'] ?? 0);
+        $imageId = (int) ($row['id'] ?? 0);
+        if ($galleryId <= 0 || $imageId <= 0) {
+            continue;
+        }
+        $byGallery[$galleryId][] = $imageId;
+    }
+
+    $result['galleries_requested'] = count($byGallery);
+    foreach ($byGallery as $galleryId => $galleryImageIds) {
+        try {
+            $galleryResult = media_renamer_execute_gallery_image_batch((int) $galleryId, $galleryImageIds, $pattern);
+            $result['galleries_processed']++;
+            media_renamer_merge_execution_result($result, $galleryResult);
+        } catch (Throwable $exception) {
+            $gallery = find_gallery((int) $galleryId, true);
+            $label = $gallery ? (string) ($gallery['folder_path'] ?? ('#' . $galleryId)) : ('#' . $galleryId);
+            $result['failures'][] = $label . ': ' . $exception->getMessage();
+        }
+    }
+
+    return $result;
+}
+
+/**
+ * Return an initialized aggregate execution result.
+ *
+ * @return array<string,mixed>
+ */
+function media_renamer_empty_execution_result(int $requestedGalleries = 0): array
+{
+    return [
+        'galleries_requested' => $requestedGalleries,
         'galleries_processed' => 0,
         'renamed' => 0,
         'already_matches' => 0,
@@ -684,30 +751,45 @@ function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''
         'warnings' => [],
         'failures' => [],
     ];
+}
+
+/**
+ * Merge one gallery or batch result into an aggregate result.
+ *
+ * @param array<string,mixed> $target
+ * @param array<string,mixed> $source
+ */
+function media_renamer_merge_execution_result(array &$target, array $source): void
+{
+    foreach (['renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'] as $key) {
+        $target[$key] = (int) ($target[$key] ?? 0) + (int) ($source[$key] ?? 0);
+    }
+    foreach ((array) ($source['details'] ?? []) as $detail) {
+        $target['details'][] = $detail;
+    }
+    foreach ((array) ($source['warnings'] ?? []) as $warning) {
+        $target['warnings'][] = (string) $warning;
+    }
+    foreach ((array) ($source['failures'] ?? []) as $failure) {
+        $target['failures'][] = (string) $failure;
+    }
+}
+
+/**
+ * Execute rename operations for several galleries.
+ *
+ * @param array<int|string> $galleryIds
+ * @return array<string,mixed>
+ */
+function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''): array
+{
+    $result = media_renamer_empty_execution_result(count($galleryIds));
 
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
         try {
             $galleryResult = media_renamer_execute_gallery($galleryId, $pattern);
             $result['galleries_processed']++;
-            $result['renamed'] += (int) ($galleryResult['renamed'] ?? 0);
-            $result['already_matches'] += (int) ($galleryResult['already_matches'] ?? 0);
-            $result['missing'] += (int) ($galleryResult['missing'] ?? 0);
-            $result['skipped'] += (int) ($galleryResult['skipped'] ?? 0);
-            $result['collisions'] += (int) ($galleryResult['collisions'] ?? 0);
-            $result['derivatives_moved'] += (int) ($galleryResult['derivatives_moved'] ?? 0);
-            $result['derivatives_cleaned'] += (int) ($galleryResult['derivatives_cleaned'] ?? 0);
-            $result['derivative_failures'] += (int) ($galleryResult['derivative_failures'] ?? 0);
-            $result['zip_archives_deleted'] += (int) ($galleryResult['zip_archives_deleted'] ?? 0);
-            $result['titles_updated'] += (int) ($galleryResult['titles_updated'] ?? 0);
-            foreach ((array) ($galleryResult['details'] ?? []) as $detail) {
-                $result['details'][] = $detail;
-            }
-            foreach ((array) ($galleryResult['warnings'] ?? []) as $warning) {
-                $result['warnings'][] = (string) $warning;
-            }
-            foreach ((array) ($galleryResult['failures'] ?? []) as $failure) {
-                $result['failures'][] = (string) $failure;
-            }
+            media_renamer_merge_execution_result($result, $galleryResult);
         } catch (Throwable $exception) {
             $gallery = find_gallery($galleryId, true);
             $label = $gallery ? (string) ($gallery['folder_path'] ?? ('#' . $galleryId)) : ('#' . $galleryId);

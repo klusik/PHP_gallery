@@ -81,6 +81,47 @@ function cms_admin_media_renamer(): void
             ]);
         }
 
+        if ($action === 'apply_batch') {
+            if (empty($_POST['confirm_media_rename'])) {
+                admin_media_renamer_json_response([
+                    'ok' => false,
+                    'error' => t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.'),
+                ], 400);
+            }
+            $batchImageIds = admin_media_renamer_image_ids_from_post('batch_image_ids');
+            try {
+                admin_media_renamer_json_response([
+                    'ok' => true,
+                    'result' => admin_media_renamer_bounded_result(media_renamer_execute_image_batch($batchImageIds, $pattern)),
+                    'processed' => count($batchImageIds),
+                ]);
+            } catch (Throwable $exception) {
+                admin_media_renamer_log_exception('media_renamer.site_batch_failed', 'Site-wide media rename batch failed.', $exception, [
+                    'selected_scope' => $selectedScope,
+                    'selected_gallery_ids' => $selectedGalleryIds,
+                    'batch_image_ids' => $batchImageIds,
+                    'pattern' => $pattern,
+                ]);
+                admin_media_renamer_json_response([
+                    'ok' => false,
+                    'error' => $exception->getMessage(),
+                ], 500);
+            }
+        }
+
+        if ($action === 'apply_refresh') {
+            $lastResult = admin_media_renamer_result_payload_from_post();
+            $notice = admin_media_renamer_result_notice($lastResult);
+            $completionSeverity = admin_media_renamer_result_log_severity($lastResult);
+            admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.site_completed', 'Site-wide media rename completed.', [
+                'selected_scope' => $selectedScope,
+                'selected_gallery_ids' => admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, false, $pattern),
+                'pattern' => $pattern,
+                'batched' => true,
+                'result' => admin_media_renamer_loggable_result($lastResult),
+            ], ['category' => 'media', 'severity' => $completionSeverity]);
+        }
+
         $filterSelectedFromSubmittedAvailability = $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && $submittedAvailability;
         $selectedGalleryIds = admin_media_renamer_gallery_ids_from_post($selectedScope, $hideEmptyGalleries, $hideGalleriesWithoutRenameCandidates && $renameAvailabilityChecked && !$submittedAvailability, $pattern);
         if ($filterSelectedFromSubmittedAvailability) {
@@ -89,6 +130,8 @@ function cms_admin_media_renamer(): void
 
         if ($action === 'check_availability') {
             $notice = t('admin.media_renamer.availability_checked', 'Rename availability was checked for the current list. Galleries with no pending renames can now be hidden.');
+        } elseif ($action === 'apply_refresh') {
+            $plans = $selectedGalleryIds ? media_renamer_plans_for_galleries($selectedGalleryIds, $pattern) : [];
         } elseif (!$selectedGalleryIds) {
             $notice = t('admin.media_renamer.no_galleries_selected', 'Select at least one gallery to preview or rename.');
         } elseif ($action === 'apply') {
@@ -317,7 +360,8 @@ function render_admin_media_renamer_apply_form(string $selectedScope, array $sel
     $aggregate = admin_media_renamer_aggregate_plans(media_renamer_plans_for_galleries($selectedGalleryIds, $pattern));
     $renameCount = (int) ($aggregate['rename'] ?? 0);
 
-    echo '<form method="post" action="' . e(url_for('admin_media_renamer')) . '" class="admin-inline-form" data-admin-media-renamer-form data-media-renamer-target="[data-admin-media-renamer-workspace=site]" data-media-renamer-confirm="' . e(t('admin.media_renamer.apply_site_confirm', 'Physically rename the planned files now?')) . '">' . csrf_field();
+    $candidateImageIds = admin_media_renamer_candidate_image_ids_from_plans(media_renamer_plans_for_galleries($selectedGalleryIds, $pattern));
+    echo '<form method="post" action="' . e(url_for('admin_media_renamer')) . '" class="admin-inline-form" data-admin-media-renamer-form data-media-renamer-target="[data-admin-media-renamer-workspace=site]" data-media-renamer-confirm="' . e(t('admin.media_renamer.apply_site_confirm', 'Physically rename the planned files now?')) . '" data-media-renamer-apply-total="' . count($candidateImageIds) . '">' . csrf_field();
     echo '<input type="hidden" name="renamer_action" value="apply">';
     echo '<input type="hidden" name="renamer_scope" value="' . e($selectedScope) . '">';
     echo '<input type="hidden" name="single_gallery_id" value="' . (int) $selectedSingleGalleryId . '">';
@@ -329,8 +373,11 @@ function render_admin_media_renamer_apply_form(string $selectedScope, array $sel
     foreach ($selectedGalleryIds as $galleryId) {
         echo '<input type="hidden" name="gallery_ids[]" value="' . (int) $galleryId . '">';
     }
+    foreach ($candidateImageIds as $imageId) {
+        echo '<input type="hidden" name="rename_candidate_image_ids[]" value="' . (int) $imageId . '">';
+    }
     echo '<label class="checkbox-label"><input type="checkbox" name="confirm_media_rename" value="1"' . ($renameCount > 0 ? '' : ' disabled') . '> ' . e(t('admin.media_renamer.reviewed_checkbox', 'I reviewed the preview and want to rename files on disk.')) . '</label>';
-    echo '<button type="submit" class="secondary danger"' . ($renameCount > 0 ? '' : ' disabled') . '>' . e(t('admin.media_renamer.apply_site_button', 'Apply planned renames')) . '</button>';
+    echo '<button type="submit" class="secondary danger" data-media-renamer-apply-button data-original-label="' . e(t('admin.media_renamer.apply_site_button', 'Apply planned renames')) . '"' . ($renameCount > 0 ? '' : ' disabled') . '>' . e(t('admin.media_renamer.apply_site_button', 'Apply planned renames')) . '</button>';
     if ($renameCount <= 0) {
         echo '<span class="muted">' . e(t('admin.media_renamer.nothing_to_rename', 'No files currently need renaming.')) . '</span>';
     }
@@ -403,6 +450,77 @@ function render_admin_media_renamer_execution_details(array $details): void
         echo '</tr>';
     }
     echo '</tbody></table></div></section>';
+}
+
+/**
+ * Return image ids that are planned for physical rename.
+ *
+ * @param array<int,array<string,mixed>> $plans
+ * @return array<int>
+ */
+function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
+{
+    $ids = [];
+    foreach ($plans as $plan) {
+        foreach ((array) ($plan['items'] ?? []) as $item) {
+            if (!empty($item['can_rename']) && (string) ($item['status'] ?? '') === 'rename') {
+                $ids[] = (int) ($item['image_id'] ?? 0);
+            }
+        }
+    }
+    return array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+}
+
+/**
+ * Read image ids from a posted array field.
+ *
+ * @return array<int>
+ */
+function admin_media_renamer_image_ids_from_post(string $field): array
+{
+    return array_values(array_unique(array_filter(array_map('intval', (array) ($_POST[$field] ?? [])), static fn (int $id): bool => $id > 0)));
+}
+
+/**
+ * Trim large batch results before returning them through AJAX.
+ *
+ * @return array<string,mixed>
+ */
+function admin_media_renamer_bounded_result(array $result, int $detailLimit = 300): array
+{
+    if (isset($result['details']) && is_array($result['details'])) {
+        $result['details'] = array_slice($result['details'], 0, $detailLimit);
+    }
+    if (isset($result['warnings']) && is_array($result['warnings'])) {
+        $result['warnings'] = array_slice(array_map('strval', $result['warnings']), 0, 50);
+    }
+    if (isset($result['failures']) && is_array($result['failures'])) {
+        $result['failures'] = array_slice(array_map('strval', $result['failures']), 0, 50);
+    }
+    return $result;
+}
+
+/**
+ * Decode the aggregate result produced by the AJAX batch runner.
+ *
+ * @return array<string,mixed>
+ */
+function admin_media_renamer_result_payload_from_post(): array
+{
+    $raw = (string) ($_POST['batch_result_payload'] ?? '');
+    $decoded = $raw !== '' ? json_decode($raw, true) : null;
+    if (!is_array($decoded)) {
+        return media_renamer_empty_execution_result(0);
+    }
+
+    $result = media_renamer_empty_execution_result((int) ($decoded['galleries_requested'] ?? 0));
+    foreach (['galleries_processed', 'renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'] as $key) {
+        $result[$key] = max(0, (int) ($decoded[$key] ?? 0));
+    }
+    $result['details'] = array_slice((array) ($decoded['details'] ?? []), 0, 500);
+    $result['warnings'] = array_slice(array_map('strval', (array) ($decoded['warnings'] ?? [])), 0, 50);
+    $result['failures'] = array_slice(array_map('strval', (array) ($decoded['failures'] ?? [])), 0, 50);
+    return $result;
 }
 
 /**
