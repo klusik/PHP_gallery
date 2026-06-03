@@ -715,21 +715,33 @@ function cms_admin_edit_gallery(): void
             try {
                 $renameResult = media_renamer_execute_gallery((int) $gallery['id'], $renamerPattern);
                 if (function_exists('admin_media_renamer_log_event')) {
-                    admin_media_renamer_log_event('info', 'media_renamer.gallery_completed', 'Gallery media rename completed.', [
+                    $completionSeverity = function_exists('admin_media_renamer_result_log_severity') ? admin_media_renamer_result_log_severity($renameResult) : 'info';
+                    admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.gallery_completed', 'Gallery media rename completed.', [
                         'gallery_id' => (int) $gallery['id'],
                         'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
                         'pattern' => $renamerPattern,
                         'result' => function_exists('admin_media_renamer_loggable_result') ? admin_media_renamer_loggable_result($renameResult) : $renameResult,
-                    ], ['category' => 'media', 'severity' => 'info']);
+                    ], ['category' => 'media', 'severity' => $completionSeverity]);
                 }
-                $notice = t('admin.media_renamer.gallery_result_notice', 'Renamed {renamed} file(s), moved {derivatives} generated derivative(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
+                $notice = t('admin.media_renamer.gallery_result_notice', 'Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
                     'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
-                    'derivatives' => (string) (int) ($renameResult['derivatives_moved'] ?? 0),
+                    'derivatives' => (string) ((int) ($renameResult['derivatives_moved'] ?? 0) + (int) ($renameResult['derivatives_cleaned'] ?? 0)),
                     'missing' => (string) (int) ($renameResult['missing'] ?? 0),
                     'skipped' => (string) ((int) ($renameResult['skipped'] ?? 0) + (int) ($renameResult['collisions'] ?? 0)),
                     'archives' => (string) (int) ($renameResult['zip_archives_deleted'] ?? 0),
                     'titles' => (string) (int) ($renameResult['titles_updated'] ?? 0),
                 ]);
+                if ((int) ($renameResult['derivative_failures'] ?? 0) > 0) {
+                    $notice .= ' ' . t('admin.media_renamer.gallery_derivative_warnings', 'Generated derivative warnings: {count}.', [
+                        'count' => (string) (int) ($renameResult['derivative_failures'] ?? 0),
+                    ]);
+                }
+                $renameWarnings = array_slice(array_map('strval', (array) ($renameResult['warnings'] ?? [])), 0, 5);
+                if ($renameWarnings) {
+                    $notice .= ' ' . t('admin.media_renamer.gallery_warnings', 'Warnings: {warnings}', [
+                        'warnings' => implode(' | ', $renameWarnings),
+                    ]);
+                }
             } catch (Throwable $exception) {
                 $notice = $exception->getMessage();
                 if (function_exists('admin_media_renamer_log_exception')) {

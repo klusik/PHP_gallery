@@ -676,9 +676,12 @@ function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''
         'skipped' => 0,
         'collisions' => 0,
         'derivatives_moved' => 0,
+        'derivatives_cleaned' => 0,
+        'derivative_failures' => 0,
         'zip_archives_deleted' => 0,
         'titles_updated' => 0,
         'details' => [],
+        'warnings' => [],
         'failures' => [],
     ];
 
@@ -692,10 +695,15 @@ function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''
             $result['skipped'] += (int) ($galleryResult['skipped'] ?? 0);
             $result['collisions'] += (int) ($galleryResult['collisions'] ?? 0);
             $result['derivatives_moved'] += (int) ($galleryResult['derivatives_moved'] ?? 0);
+            $result['derivatives_cleaned'] += (int) ($galleryResult['derivatives_cleaned'] ?? 0);
+            $result['derivative_failures'] += (int) ($galleryResult['derivative_failures'] ?? 0);
             $result['zip_archives_deleted'] += (int) ($galleryResult['zip_archives_deleted'] ?? 0);
             $result['titles_updated'] += (int) ($galleryResult['titles_updated'] ?? 0);
             foreach ((array) ($galleryResult['details'] ?? []) as $detail) {
                 $result['details'][] = $detail;
+            }
+            foreach ((array) ($galleryResult['warnings'] ?? []) as $warning) {
+                $result['warnings'][] = (string) $warning;
             }
             foreach ((array) ($galleryResult['failures'] ?? []) as $failure) {
                 $result['failures'][] = (string) $failure;
@@ -733,9 +741,12 @@ function media_renamer_execute_plan(array $plan): array
         'skipped' => (int) ($summary['skipped'] ?? 0),
         'collisions' => (int) ($summary['collision'] ?? 0),
         'derivatives_moved' => 0,
+        'derivatives_cleaned' => 0,
+        'derivative_failures' => 0,
         'zip_archives_deleted' => 0,
         'titles_updated' => 0,
         'details' => media_renamer_execution_details_for_plan($plan, []),
+        'warnings' => [],
         'failures' => [],
     ];
 
@@ -752,6 +763,11 @@ function media_renamer_execute_plan(array $plan): array
         foreach ($manifest as $entry) {
             $stagingPath = media_renamer_staging_path((string) $entry['from']);
             if (!@rename((string) $entry['from'], $stagingPath)) {
+                if (media_renamer_manifest_entry_is_optional_derivative($entry)) {
+                    $result['derivative_failures']++;
+                    $result['warnings'][] = media_renamer_derivative_move_warning($entry, 'stage');
+                    continue;
+                }
                 throw new RuntimeException(t('admin.media_renamer.error_stage_failed', 'Could not stage file for rename: {file}', ['file' => basename((string) $entry['from'])]));
             }
             $entry['staging'] = $stagingPath;
@@ -761,9 +777,21 @@ function media_renamer_execute_plan(array $plan): array
         foreach ($stagedFiles as $entry) {
             $targetDir = dirname((string) $entry['to']);
             if (!is_dir($targetDir) && !@mkdir($targetDir, 0775, true) && !is_dir($targetDir)) {
+                if (media_renamer_manifest_entry_is_optional_derivative($entry)) {
+                    media_renamer_restore_staged_entry($entry);
+                    $result['derivative_failures']++;
+                    $result['warnings'][] = media_renamer_derivative_move_warning($entry, 'target_dir');
+                    continue;
+                }
                 throw new RuntimeException(t('admin.media_renamer.error_target_dir_failed', 'Could not create target folder for generated files.'));
             }
             if (!@rename((string) $entry['staging'], (string) $entry['to'])) {
+                if (media_renamer_manifest_entry_is_optional_derivative($entry)) {
+                    media_renamer_restore_staged_entry($entry);
+                    $result['derivative_failures']++;
+                    $result['warnings'][] = media_renamer_derivative_move_warning($entry, 'finish');
+                    continue;
+                }
                 throw new RuntimeException(t('admin.media_renamer.error_final_failed', 'Could not finish file rename: {file}', ['file' => basename((string) $entry['to'])]));
             }
             $finalFiles[] = $entry;
@@ -775,10 +803,17 @@ function media_renamer_execute_plan(array $plan): array
         throw $exception;
     }
 
+    $cleanupResult = media_renamer_cleanup_generated_derivatives($items, $gallery);
+
     $result['renamed'] = count($items);
     $result['titles_updated'] = (int) ($databaseResult['titles_updated'] ?? 0);
     $result['details'] = media_renamer_execution_details_for_plan($plan, array_map(static fn (array $item): int => (int) ($item['image_id'] ?? 0), $items));
-    $result['derivatives_moved'] = count(array_filter($manifest, static fn (array $entry): bool => (string) ($entry['kind'] ?? '') === 'derivative'));
+    $result['derivatives_moved'] = count(array_filter($finalFiles, static fn (array $entry): bool => (string) ($entry['kind'] ?? '') === 'derivative'));
+    $result['derivatives_cleaned'] = (int) ($cleanupResult['cleaned'] ?? 0);
+    $result['derivative_failures'] += (int) ($cleanupResult['failures'] ?? 0);
+    foreach ((array) ($cleanupResult['warnings'] ?? []) as $warning) {
+        $result['warnings'][] = (string) $warning;
+    }
     $result['zip_archives_deleted'] = media_renamer_clear_download_archives([$galleryId]);
 
     if (function_exists('thumbnail_maintenance_summary_cache_clear')) {
@@ -860,28 +895,91 @@ function media_renamer_file_manifest(array $gallery, string $galleryRoot, array 
         $targetOriginal = image_abs_path($targetImage, $gallery);
         media_renamer_add_manifest_entry($manifest, $targetKeys, $occupiedSourceKeys, $galleryRoot, $sourceOriginal, $targetOriginal, 'original', $label, true);
 
-        foreach (thumbnail_sizes() as $size) {
-            foreach (['jpg', 'webp'] as $format) {
-                $sourceThumbnail = thumbnail_abs_path($image, $gallery, (int) $size, $format);
-                $targetThumbnail = thumbnail_abs_path($targetImage, $gallery, (int) $size, $format);
-                media_renamer_add_manifest_entry($manifest, $targetKeys, $occupiedSourceKeys, $galleryRoot, $sourceThumbnail, $targetThumbnail, 'derivative', $label, false);
-            }
-        }
-
-        if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
-            $sourceDisplayMaster = dng_display_master_abs_path($image, $gallery, false);
-            $targetDisplayMaster = dng_display_master_abs_path($targetImage, $gallery, false);
-            media_renamer_add_manifest_entry($manifest, $targetKeys, $occupiedSourceKeys, $galleryRoot, $sourceDisplayMaster, $targetDisplayMaster, 'derivative', $label, false);
-        }
+        // Generated thumbnails and DNG display files are intentionally not moved here.
+        // On Windows and some shared hosts these generated files are often locked by
+        // the web server or image pipeline. The original image rename is the durable
+        // operation; generated derivatives are invalidated after the database update
+        // and regenerated on demand under the new filename.
     }
 
     return $manifest;
 }
 
 /**
+ * Remove generated derivatives for old and new names after a successful original rename.
+ *
+ * Generated thumbnails are cache artifacts. Keeping stale files is safe but wasteful, and
+ * moving them can fail on Windows when Apache, PHP, an image viewer, or antivirus has a
+ * handle open. Invalidating them is more robust: the app will regenerate thumbnails for
+ * the new filename when they are requested.
+ *
+ * @param array<int,array<string,mixed>> $items
+ * @return array{cleaned:int,failures:int,warnings:array<int,string>}
+ */
+function media_renamer_cleanup_generated_derivatives(array $items, array $gallery): array
+{
+    $result = ['cleaned' => 0, 'failures' => 0, 'warnings' => []];
+    $paths = [];
+
+    foreach ($items as $item) {
+        foreach (['image', 'target_image'] as $key) {
+            $image = (array) ($item[$key] ?? []);
+            foreach (media_renamer_generated_derivative_paths($image, $gallery) as $path) {
+                $paths[media_renamer_path_key($path)] = $path;
+            }
+        }
+    }
+
+    foreach ($paths as $path) {
+        if (!is_file($path)) {
+            continue;
+        }
+        clearstatcache(true, $path);
+        if (@unlink($path)) {
+            $result['cleaned']++;
+            continue;
+        }
+
+        $result['failures']++;
+        $reason = media_renamer_last_filesystem_error();
+        $message = t('admin.media_renamer.warning_derivative_cleanup', 'Could not remove generated derivative cache file: {file}', [
+            'file' => basename($path),
+        ]);
+        if ($reason !== '') {
+            $message .= ' (' . $reason . ')';
+        }
+        $message .= '. ' . t('admin.media_renamer.warning_derivative_stale_safe', 'The original image rename is complete; this stale cache file is safe to remove later.');
+        $result['warnings'][] = $message;
+    }
+
+    return $result;
+}
+
+/**
+ * Return generated derivative paths belonging to one image row.
+ *
+ * @return array<int,string>
+ */
+function media_renamer_generated_derivative_paths(array $image, array $gallery): array
+{
+    $paths = [];
+    foreach (thumbnail_sizes() as $size) {
+        foreach (['jpg', 'webp'] as $format) {
+            $paths[] = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+        }
+    }
+
+    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        $paths[] = dng_display_master_abs_path($image, $gallery, false);
+    }
+
+    return $paths;
+}
+
+/**
  * Add one source-to-target file move to a manifest after safety checks.
  *
- * @param array<int,array{from:string,to:string,kind:string,label:string}> $manifest
+ * @param array<int,array{from:string,to:string,kind:string,label:string,required:bool}> $manifest
  * @param array<string,bool> $targetKeys
  */
 function media_renamer_add_manifest_entry(array &$manifest, array &$targetKeys, array $occupiedSourceKeys, string $galleryRoot, string $sourcePath, string $targetPath, string $kind, string $label, bool $required): void
@@ -911,7 +1009,63 @@ function media_renamer_add_manifest_entry(array &$manifest, array &$targetKeys, 
     }
 
     $targetKeys[$targetKey] = true;
-    $manifest[] = ['from' => $sourcePath, 'to' => $targetPath, 'kind' => $kind, 'label' => $label];
+    $manifest[] = ['from' => $sourcePath, 'to' => $targetPath, 'kind' => $kind, 'label' => $label, 'required' => $required];
+}
+
+/**
+ * Return true when a manifest entry is a generated derivative that may be skipped safely.
+ */
+function media_renamer_manifest_entry_is_optional_derivative(array $entry): bool
+{
+    return (string) ($entry['kind'] ?? '') === 'derivative' && empty($entry['required']);
+}
+
+/**
+ * Build a warning for a generated derivative that could not be moved.
+ */
+function media_renamer_derivative_move_warning(array $entry, string $phase): string
+{
+    $label = (string) ($entry['label'] ?? '');
+    $file = basename((string) ($entry['from'] ?? ''));
+    $reason = media_renamer_last_filesystem_error();
+    $phaseLabel = match ($phase) {
+        'stage' => t('admin.media_renamer.warning_derivative_stage', 'could not stage generated derivative'),
+        'target_dir' => t('admin.media_renamer.warning_derivative_target_dir', 'could not prepare target folder for generated derivative'),
+        'finish' => t('admin.media_renamer.warning_derivative_finish', 'could not finish generated derivative rename'),
+        default => t('admin.media_renamer.warning_derivative_move', 'could not move generated derivative'),
+    };
+
+    $message = trim($label . ': ' . $phaseLabel . ': ' . $file);
+    if ($reason !== '') {
+        $message .= ' (' . $reason . ')';
+    }
+    $message .= '. ' . t('admin.media_renamer.warning_derivative_regenerate', 'The original image rename can continue; the derivative can be regenerated later.');
+    return $message;
+}
+
+/**
+ * Return the last PHP filesystem warning, if one was recorded.
+ */
+function media_renamer_last_filesystem_error(): string
+{
+    $error = error_get_last();
+    $message = is_array($error) ? (string) ($error['message'] ?? '') : '';
+    return $message !== '' ? substr($message, 0, 240) : '';
+}
+
+/**
+ * Put a staged optional derivative back to its original filename.
+ */
+function media_renamer_restore_staged_entry(array $entry): void
+{
+    $staging = (string) ($entry['staging'] ?? '');
+    $source = (string) ($entry['from'] ?? '');
+    if ($staging === '' || $source === '' || !is_file($staging)) {
+        return;
+    }
+    if (!file_exists($source)) {
+        @rename($staging, $source);
+    }
 }
 
 /**

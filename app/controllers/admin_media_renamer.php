@@ -100,12 +100,13 @@ function cms_admin_media_renamer(): void
                     $result = media_renamer_execute_galleries($selectedGalleryIds, $pattern);
                     $lastResult = $result;
                     $notice = admin_media_renamer_result_notice($result);
-                    admin_media_renamer_log_event('info', 'media_renamer.site_completed', 'Site-wide media rename completed.', [
+                    $completionSeverity = admin_media_renamer_result_log_severity($result);
+                    admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.site_completed', 'Site-wide media rename completed.', [
                         'selected_scope' => $selectedScope,
                         'selected_gallery_ids' => $selectedGalleryIds,
                         'pattern' => $pattern,
                         'result' => admin_media_renamer_loggable_result($result),
-                    ], ['category' => 'media', 'severity' => 'info']);
+                    ], ['category' => 'media', 'severity' => $completionSeverity]);
                 } catch (Throwable $exception) {
                     $notice = $exception->getMessage();
                     admin_media_renamer_log_exception('media_renamer.site_failed', 'Site-wide media rename failed.', $exception, [
@@ -785,6 +786,9 @@ function admin_media_renamer_request_log_context(): array
 function admin_media_renamer_loggable_result(array $result): array
 {
     unset($result['details']);
+    if (isset($result['warnings']) && is_array($result['warnings'])) {
+        $result['warnings'] = array_slice(array_map('strval', $result['warnings']), 0, 20);
+    }
     if (isset($result['failures']) && is_array($result['failures'])) {
         $result['failures'] = array_slice(array_map('strval', $result['failures']), 0, 20);
     }
@@ -796,19 +800,43 @@ function admin_media_renamer_loggable_result(array $result): array
  */
 function admin_media_renamer_result_notice(array $result): string
 {
-    $message = t('admin.media_renamer.result_notice', 'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), moved {derivatives} generated derivative(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
+    $message = t('admin.media_renamer.result_notice', 'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
         'galleries' => (string) (int) ($result['galleries_processed'] ?? 0),
         'renamed' => (string) (int) ($result['renamed'] ?? 0),
-        'derivatives' => (string) (int) ($result['derivatives_moved'] ?? 0),
+        'derivatives' => (string) ((int) ($result['derivatives_moved'] ?? 0) + (int) ($result['derivatives_cleaned'] ?? 0)),
         'skipped' => (string) ((int) ($result['skipped'] ?? 0) + (int) ($result['collisions'] ?? 0)),
         'missing' => (string) (int) ($result['missing'] ?? 0),
         'archives' => (string) (int) ($result['zip_archives_deleted'] ?? 0),
         'titles' => (string) (int) ($result['titles_updated'] ?? 0),
     ]);
 
+    $derivativeFailures = (int) ($result['derivative_failures'] ?? 0);
+    if ($derivativeFailures > 0) {
+        $message .= ' ' . t('admin.media_renamer.result_derivative_warnings', 'Generated derivative warnings: {count}.', ['count' => (string) $derivativeFailures]);
+    }
+
+    $warnings = (array) ($result['warnings'] ?? []);
+    if ($warnings) {
+        $message .= ' ' . t('admin.media_renamer.result_warnings', 'Warnings: {warnings}', ['warnings' => implode(' | ', array_map('strval', array_slice($warnings, 0, 8)))]);
+    }
+
     $failures = (array) ($result['failures'] ?? []);
     if ($failures) {
         $message .= ' ' . t('admin.media_renamer.result_failures', 'Failures: {failures}', ['failures' => implode(' | ', array_map('strval', $failures))]);
     }
     return $message;
+}
+
+/**
+ * Return the Admin Logs severity for a completed media rename run.
+ */
+function admin_media_renamer_result_log_severity(array $result): string
+{
+    if (!empty($result['failures'])) {
+        return 'warning';
+    }
+    if (!empty($result['warnings']) || (int) ($result['derivative_failures'] ?? 0) > 0) {
+        return 'warning';
+    }
+    return 'info';
 }
