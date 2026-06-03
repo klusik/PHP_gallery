@@ -63,7 +63,7 @@ function cms_admin_scan_images(): void
 function admin_edit_gallery_tab_id(string $tab): string
 {
     // $allowedTabs stores admin edit tab identifiers that may be returned after POST actions.
-    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images'];
+    $allowedTabs = ['admin-edit-identity', 'admin-edit-access', 'admin-edit-display', 'admin-edit-media', 'admin-edit-api', 'admin-edit-images', 'admin-edit-renamer'];
     return in_array($tab, $allowedTabs, true) ? $tab : '';
 }
 
@@ -80,6 +80,18 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
         $params['tab'] = $resolvedTab;
     }
     return url_for('admin_edit_gallery', $params) . ($resolvedTab !== '' ? '#' . $resolvedTab : '');
+}
+
+/**
+ * Build the gallery editor renamer URL while preserving a custom pattern.
+ */
+function admin_edit_gallery_tab_url_with_renamer_pattern(int $galleryId, string $pattern): string
+{
+    $params = ['id' => $galleryId, 'tab' => 'admin-edit-renamer'];
+    if ($pattern !== media_renamer_default_pattern()) {
+        $params['renamer_pattern'] = $pattern;
+    }
+    return url_for('admin_edit_gallery', $params) . '#admin-edit-renamer';
 }
 
 /**
@@ -629,6 +641,17 @@ function cms_admin_edit_gallery(): void
         cms_not_found();
         return;
     }
+    if (request_method() === 'GET' && admin_wants_json() && (string) ($_GET['tab'] ?? '') === 'admin-edit-renamer' && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+        $pattern = media_renamer_normalize_pattern((string) ($_GET['renamer_pattern'] ?? ''));
+        header('Content-Type: application/json');
+        echo json_encode([
+            'ok' => true,
+            'message' => '',
+            'panel_html' => admin_media_renamer_render_gallery_panel_html($gallery, $pattern),
+        ]);
+        return;
+    }
+
     // Variable $pictureGameReady stores this steps working value.
 
     $pictureGameReady = picture_game_schema_ready();
@@ -639,7 +662,17 @@ function cms_admin_edit_gallery(): void
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     if (request_method() === 'POST') {
-        verify_csrf();
+        // Media-renamer AJAX requests need JSON CSRF failures and diagnostics.
+        // The normal verifier exits with plain text, which makes fetch() report
+        // a confusing non-JSON response and leaves the admin without a log row.
+        $isMediaRenamerPost = (string) ($_POST['action'] ?? '') === 'rename_files';
+        if ($isMediaRenamerPost && function_exists('admin_media_renamer_verify_csrf_for_ajax')) {
+            if (!admin_media_renamer_verify_csrf_for_ajax()) {
+                return;
+            }
+        } else {
+            verify_csrf();
+        }
         // $returnTab stores the tab fragment used after saving the gallery editor form.
         $returnTab = admin_return_tab_from_post('admin-edit-identity');
         if ((string) ($_POST['action'] ?? '') === 'cover' && isset($_POST['image_ids'])) {
@@ -660,6 +693,70 @@ function cms_admin_edit_gallery(): void
                 'queued' => (int) ($resetResult['jobs_queued'] ?? 0),
             ]));
             redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+        }
+        if ((string) ($_POST['action'] ?? '') === 'rename_files') {
+            $renamerPattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
+            $renamerReturnUrl = admin_edit_gallery_tab_url_with_renamer_pattern((int) $gallery['id'], $renamerPattern);
+            $renameResult = null;
+            if (empty($_POST['confirm_media_rename'])) {
+                $notice = t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.');
+                if (admin_wants_json() && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'ok' => false,
+                        'error' => $notice,
+                        'panel_html' => admin_media_renamer_render_gallery_panel_html($gallery, $renamerPattern, $notice),
+                    ]);
+                    return;
+                }
+                flash_message('admin_notice', $notice);
+                redirect_to($renamerReturnUrl);
+            }
+            try {
+                $renameResult = media_renamer_execute_gallery((int) $gallery['id'], $renamerPattern);
+                if (function_exists('admin_media_renamer_log_event')) {
+                    admin_media_renamer_log_event('info', 'media_renamer.gallery_completed', 'Gallery media rename completed.', [
+                        'gallery_id' => (int) $gallery['id'],
+                        'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
+                        'pattern' => $renamerPattern,
+                        'result' => function_exists('admin_media_renamer_loggable_result') ? admin_media_renamer_loggable_result($renameResult) : $renameResult,
+                    ], ['category' => 'media', 'severity' => 'info']);
+                }
+                $notice = t('admin.media_renamer.gallery_result_notice', 'Renamed {renamed} file(s), moved {derivatives} generated derivative(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
+                    'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
+                    'derivatives' => (string) (int) ($renameResult['derivatives_moved'] ?? 0),
+                    'missing' => (string) (int) ($renameResult['missing'] ?? 0),
+                    'skipped' => (string) ((int) ($renameResult['skipped'] ?? 0) + (int) ($renameResult['collisions'] ?? 0)),
+                    'archives' => (string) (int) ($renameResult['zip_archives_deleted'] ?? 0),
+                    'titles' => (string) (int) ($renameResult['titles_updated'] ?? 0),
+                ]);
+            } catch (Throwable $exception) {
+                $notice = $exception->getMessage();
+                if (function_exists('admin_media_renamer_log_exception')) {
+                    admin_media_renamer_log_exception('media_renamer.gallery_failed', 'Gallery media rename failed.', $exception, [
+                        'gallery_id' => (int) $gallery['id'],
+                        'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
+                        'pattern' => $renamerPattern,
+                    ]);
+                } elseif (function_exists('admin_log_event')) {
+                    admin_log_event('error', 'media_renamer.gallery_failed', 'Gallery media rename failed.', [
+                        'gallery_id' => (int) $gallery['id'],
+                        'error' => $exception->getMessage(),
+                    ], ['category' => 'media', 'severity' => 'error']);
+                }
+            }
+            $updatedGallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
+            if (admin_wants_json() && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'ok' => $renameResult !== null,
+                    'message' => $notice,
+                    'panel_html' => admin_media_renamer_render_gallery_panel_html($updatedGallery, $renamerPattern, $notice, $renameResult),
+                ]);
+                return;
+            }
+            flash_message('admin_notice', $notice);
+            redirect_to($renamerReturnUrl);
         }
         try {
             // $saveResult stores the shared gallery save outcome used by both page and panel workflows.
@@ -737,6 +834,7 @@ function cms_admin_edit_gallery(): void
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
         ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
+        ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')],
     ];
 
     echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
@@ -965,6 +1063,13 @@ function cms_admin_edit_gallery(): void
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
+
+    ob_start();
+    if (function_exists('render_admin_media_renamer_gallery_panel')) {
+        render_admin_media_renamer_gallery_panel($gallery);
+    }
+    render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');
+
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
     render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');

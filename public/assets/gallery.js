@@ -82,7 +82,8 @@ import {
     setupPictureGame,
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
-} from './gallery-modules/admin-operations.js?v=20260521-navdata-feedback-v2';
+    setupAdminMediaRenamer,
+} from './gallery-modules/admin-operations.js?v=20260603-media-renamer-ajax-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -123,6 +124,7 @@ function bootGalleryBrowserFeatures() {
     setupSimbriefDescriptionGenerator();
     setupOpenAITextAssist();
     setupAdminGalleryMigration();
+    setupAdminMediaRenamer();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();
