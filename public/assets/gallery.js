@@ -71,6 +71,7 @@ import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
     setupAdminTabs,
+    setupAdminNestedTabs,
     setupAdminGalleryReordering,
     setupAdminImageReordering,
     setupPublicGalleryPageReordering,
@@ -83,7 +84,7 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260603-media-renamer-ajax-v1';
+} from './gallery-modules/admin-operations.js?v=20260604-admin-subtabs-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -120,6 +121,7 @@ function bootGalleryBrowserFeatures() {
     setupImageBulkMoveFields();
     setupThumbnailCacheDeleteConfirmation();
     setupAdminTabs();
+    setupAdminNestedTabs();
     setupAdminDatePickers();
     setupSimbriefDescriptionGenerator();
     setupOpenAITextAssist();
