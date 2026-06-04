@@ -42,6 +42,129 @@ function image_uses_dng_display_derivatives(array $image): bool
     return is_dng_image_path((string) ($image['relative_path'] ?? $image['filename'] ?? ''));
 }
 
+
+/**
+ * Return supported DNG source policy values.
+ *
+ * @return array<int, string>
+ */
+function dng_conversion_source_policy_options(): array
+{
+    return ['auto_fallback', 'prefer_raw', 'prefer_preview'];
+}
+
+/**
+ * Return supported DNG color policy values.
+ *
+ * @return array<int, string>
+ */
+function dng_conversion_color_policy_options(): array
+{
+    return ['force_srgb', 'preserve_look', 'camera_white_balance'];
+}
+
+/**
+ * Normalize one DNG source policy value.
+ */
+function dng_normalize_conversion_source_policy(?string $value): string
+{
+    $value = strtolower(trim((string) $value));
+    return in_array($value, dng_conversion_source_policy_options(), true) ? $value : 'auto_fallback';
+}
+
+/**
+ * Normalize one DNG color policy value.
+ */
+function dng_normalize_conversion_color_policy(?string $value): string
+{
+    $value = strtolower(trim((string) $value));
+    return in_array($value, dng_conversion_color_policy_options(), true) ? $value : 'force_srgb';
+}
+
+/**
+ * Return the configured DNG source conversion policy.
+ */
+function dng_conversion_source_policy(): string
+{
+    return dng_normalize_conversion_source_policy(function_exists('app_setting') ? app_setting('dng_conversion_source_policy', 'auto_fallback') : 'auto_fallback');
+}
+
+/**
+ * Return the configured DNG color handling policy.
+ */
+function dng_conversion_color_policy(): string
+{
+    return dng_normalize_conversion_color_policy(function_exists('app_setting') ? app_setting('dng_conversion_color_policy', 'force_srgb') : 'force_srgb');
+}
+
+/**
+ * Return available DNG derivative source paths for the current runtime.
+ *
+ * @return array{raw:bool,preview_imagick:bool,preview_gd:bool}
+ */
+function dng_conversion_runtime_capabilities(): array
+{
+    return [
+        'raw' => function_exists('dng_conversion_supported') && dng_conversion_supported(),
+        'preview_imagick' => class_exists('Imagick') && function_exists('imagick_format_supported') && imagick_format_supported('JPEG') && imagick_format_supported('WEBP'),
+        'preview_gd' => extension_loaded('gd') && function_exists('imagecreatefromjpeg') && function_exists('imagewebp'),
+    ];
+}
+
+/**
+ * Build the ordered source attempts for one configured DNG policy.
+ *
+ * @param array{raw?:bool,preview_imagick?:bool,preview_gd?:bool} $capabilities
+ * @return array<int, string>
+ */
+function dng_conversion_attempt_order(string $sourcePolicy, array $capabilities): array
+{
+    $sourcePolicy = dng_normalize_conversion_source_policy($sourcePolicy);
+    $rawAvailable = !empty($capabilities['raw']);
+    $previewImagickAvailable = !empty($capabilities['preview_imagick']);
+    $previewGdAvailable = !empty($capabilities['preview_gd']);
+
+    $previewAttempts = [];
+    if ($previewImagickAvailable) {
+        $previewAttempts[] = 'preview_imagick';
+    }
+    if ($previewGdAvailable) {
+        $previewAttempts[] = 'preview_gd';
+    }
+
+    if ($sourcePolicy === 'prefer_preview') {
+        return array_values(array_unique(array_merge($previewAttempts, $rawAvailable ? ['raw'] : [])));
+    }
+
+    return array_values(array_unique(array_merge($rawAvailable ? ['raw'] : [], $previewAttempts)));
+}
+
+/**
+ * Store the most recent DNG conversion diagnostic for this request.
+ */
+function dng_set_last_conversion_error(string $code, string $message, array $context = []): void
+{
+    $GLOBALS['cms_last_dng_conversion_error'] = ['code' => $code, 'message' => $message, 'context' => $context];
+}
+
+/**
+ * Return the most recent DNG conversion diagnostic for this request.
+ *
+ * @return array{code:string,message:string,context:array<string,mixed>}|null
+ */
+function dng_last_conversion_error(): ?array
+{
+    return isset($GLOBALS['cms_last_dng_conversion_error']) && is_array($GLOBALS['cms_last_dng_conversion_error']) ? $GLOBALS['cms_last_dng_conversion_error'] : null;
+}
+
+/**
+ * Clear the most recent DNG conversion diagnostic for this request.
+ */
+function dng_clear_last_conversion_error(): void
+{
+    unset($GLOBALS['cms_last_dng_conversion_error']);
+}
+
 /**
  * Return whether DNG display derivative generation is available.
  */
@@ -58,14 +181,16 @@ function dng_derivative_generation_supported(): bool
  */
 function dng_derivative_generation_status(): array
 {
-    if (function_exists('dng_conversion_supported') && dng_conversion_supported()) {
-        return ['supported' => true, 'reason' => t('thumbnail.dng_support.imagick_raw')];
-    }
-    if (function_exists('dng_embedded_preview_supported') && dng_embedded_preview_supported()) {
-        return ['supported' => true, 'reason' => t('thumbnail.dng_support.embedded_preview')];
-    }
-    if (!dng_embedded_preview_supported()) {
-        return ['supported' => false, 'reason' => t('thumbnail.dng_support.preview_decode_unavailable')];
+    $capabilities = dng_conversion_runtime_capabilities();
+    $attempts = dng_conversion_attempt_order(dng_conversion_source_policy(), $capabilities);
+    if ($attempts !== []) {
+        $labels = array_map(static fn (string $attempt): string => match ($attempt) {
+            'raw' => t('thumbnail.dng_support.path_raw', 'full RAW decode'),
+            'preview_imagick' => t('thumbnail.dng_support.path_preview_imagick', 'embedded preview through Imagick'),
+            'preview_gd' => t('thumbnail.dng_support.path_preview_gd', 'embedded preview through GD'),
+            default => $attempt,
+        }, $attempts);
+        return ['supported' => true, 'reason' => t('thumbnail.dng_support.policy_paths', 'DNG conversion is available. Active order: {paths}.', ['paths' => implode(', ', $labels)])];
     }
     if (!extension_loaded('imagick') || !class_exists(Imagick::class)) {
         return ['supported' => false, 'reason' => t('thumbnail.dng_support.imagick_missing')];
@@ -75,7 +200,7 @@ function dng_derivative_generation_status(): array
             return ['supported' => false, 'reason' => t('thumbnail.dng_support.format_missing', ['format' => $format])];
         }
     }
-    return ['supported' => false, 'reason' => t('thumbnail.dng_support.no_path')];
+    return ['supported' => false, 'reason' => t('thumbnail.dng_support.preview_decode_unavailable')];
 }
 
 /**
@@ -170,10 +295,43 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
  */
 function create_dng_display_master(string $sourcePath, string $targetPath): bool
 {
-    if (write_dng_imagick_derivative($sourcePath, $targetPath, 'webp', null)) {
-        return true;
+    return write_dng_derivative($sourcePath, $targetPath, 'webp', null);
+}
+
+
+/**
+ * Apply the configured color policy to an Imagick DNG or preview image.
+ */
+function dng_apply_imagick_color_policy(Imagick $image): void
+{
+    $colorPolicy = dng_conversion_color_policy();
+    if ($colorPolicy === 'preserve_look') {
+        return;
     }
-    return write_dng_embedded_preview_derivative($sourcePath, $targetPath, 'webp', null);
+
+    if ($colorPolicy === 'camera_white_balance') {
+        try {
+            if (method_exists($image, 'autoLevelImage')) {
+                $image->autoLevelImage();
+            }
+        } catch (Throwable) {
+            // Keep conversion resilient when the host Imagick build cannot apply this operation.
+        }
+    }
+
+    try {
+        if (method_exists($image, 'transformImageColorspace')) {
+            $image->transformImageColorspace(Imagick::COLORSPACE_SRGB);
+        } else {
+            $image->setImageColorspace(Imagick::COLORSPACE_SRGB);
+        }
+    } catch (Throwable) {
+        try {
+            $image->setImageColorspace(Imagick::COLORSPACE_SRGB);
+        } catch (Throwable) {
+            // Color conversion is best-effort. Failed color conversion must not block fallback paths.
+        }
+    }
 }
 
 /**
@@ -182,6 +340,7 @@ function create_dng_display_master(string $sourcePath, string $targetPath): bool
 function write_dng_imagick_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
     if (!function_exists('dng_conversion_supported') || !dng_conversion_supported()) {
+        dng_set_last_conversion_error('raw_delegate_missing', t('thumbnail.dng_error.raw_delegate_missing', 'Imagick is available, but the required DNG, JPEG, or WebP delegate support is missing.'));
         return false;
     }
     if (!in_array($format, ['jpg', 'webp'], true)) {
@@ -203,13 +362,7 @@ function write_dng_imagick_derivative(string $sourcePath, string $targetPath, st
         if ($maxSide !== null) {
             $image->thumbnailImage($maxSide, $maxSide, true, true);
         }
-        // Apple ProRAW embedded previews may use wide-gamut or grayscale-tagged profiles.
-        // Force standard sRGB output so generated browser derivatives preserve expected colors.
-        if (method_exists($image, 'transformImageColorspace')) {
-            $image->transformImageColorspace(Imagick::COLORSPACE_SRGB);
-        } else {
-            $image->setImageColorspace(Imagick::COLORSPACE_SRGB);
-        }
+        dng_apply_imagick_color_policy($image);
         if ($format === 'jpg') {
             $image->setImageBackgroundColor('white');
             $image = $image->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
@@ -223,7 +376,8 @@ function write_dng_imagick_derivative(string $sourcePath, string $targetPath, st
         $image->clear();
         $image->destroy();
         return $written && is_file($targetPath);
-    } catch (Throwable) {
+    } catch (Throwable $exception) {
+        dng_set_last_conversion_error('raw_decode_failed', t('thumbnail.dng_error.raw_decode_failed', 'Full DNG RAW decode failed: {error}', ['error' => $exception->getMessage()]));
         thumbnail_remove_partial_file($targetPath);
         if ($image instanceof Imagick) {
             $image->clear();
@@ -257,13 +411,7 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
             $image->autoOrientImage();
         }
         $image->thumbnailImage($maxSide, $maxSide, true, true);
-        // Apple ProRAW previews may decode with incorrect grayscale-like output unless
-        // the derivative is explicitly converted into sRGB before encoding.
-        if (method_exists($image, 'transformImageColorspace')) {
-            $image->transformImageColorspace(Imagick::COLORSPACE_SRGB);
-        } else {
-            $image->setImageColorspace(Imagick::COLORSPACE_SRGB);
-        }
+        dng_apply_imagick_color_policy($image);
         if ($format === 'jpg') {
             $image->setImageBackgroundColor('white');
             $image = $image->mergeImageLayers(Imagick::LAYERMETHOD_FLATTEN);
@@ -278,7 +426,8 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
         $image->clear();
         $image->destroy();
         return $written && is_file($targetPath);
-    } catch (Throwable) {
+    } catch (Throwable $exception) {
+        dng_set_last_conversion_error('preview_imagick_failed', t('thumbnail.dng_error.preview_imagick_failed', 'Embedded DNG preview conversion through Imagick failed: {error}', ['error' => $exception->getMessage()]));
         thumbnail_remove_partial_file($targetPath);
         if ($image instanceof Imagick) {
             $image->clear();
@@ -291,9 +440,10 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
 /**
  * Write one DNG derivative from the embedded JPEG preview fallback.
  */
-function write_dng_embedded_preview_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
+function write_dng_embedded_preview_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide, ?string $forcedPreviewPath = null): bool
 {
     if (!function_exists('dng_extract_embedded_jpeg_preview') || !dng_embedded_preview_supported()) {
+        dng_set_last_conversion_error('preview_decoder_missing', t('thumbnail.dng_error.preview_decoder_missing', 'No usable embedded DNG preview decoder is available through Imagick or GD.'));
         return false;
     }
     if (!in_array($format, ['jpg', 'webp'], true)) {
@@ -308,6 +458,7 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
 
     try {
         if (!dng_extract_embedded_jpeg_preview($sourcePath, $temporaryPath)) {
+            dng_set_last_conversion_error('preview_extraction_failed', t('thumbnail.dng_error.preview_extraction_failed', 'No usable embedded JPEG preview could be extracted from the DNG file.'));
             @unlink($temporaryPath);
             return false;
         }
@@ -319,12 +470,16 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
         }
         // $effectiveMaxSide stores the requested thumbnail size or the full preview side for the display master.
         $effectiveMaxSide = $maxSide ?? max((int) $info[0], (int) $info[1]);
-        // $written stores whether the strongest preview decoder successfully wrote the derivative.
-        $written = write_dng_preview_derivative_with_imagick($temporaryPath, $targetPath, $format, $effectiveMaxSide);
-        if (!$written) {
+        // $written stores whether the selected preview decoder successfully wrote the derivative.
+        $written = false;
+        if ($forcedPreviewPath !== 'preview_gd') {
+            $written = write_dng_preview_derivative_with_imagick($temporaryPath, $targetPath, $format, $effectiveMaxSide);
+        }
+        if (!$written && $forcedPreviewPath !== 'preview_imagick') {
             // $source stores the GD image created from the embedded JPEG preview.
             $source = @imagecreatefromjpeg($temporaryPath);
             if (!$source) {
+                dng_set_last_conversion_error('preview_gd_decode_failed', t('thumbnail.dng_error.preview_gd_decode_failed', 'GD could not decode the extracted DNG JPEG preview.'));
                 @unlink($temporaryPath);
                 return false;
             }
@@ -337,11 +492,13 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
         }
         @unlink($temporaryPath);
         if (!$written || !is_file($targetPath)) {
+            dng_set_last_conversion_error('write_failed', t('thumbnail.dng_error.write_failed', 'DNG derivative write failed for {file}.', ['file' => basename($targetPath)]));
             thumbnail_remove_partial_file($targetPath);
             return false;
         }
         return true;
-    } catch (Throwable) {
+    } catch (Throwable $exception) {
+        dng_set_last_conversion_error('preview_conversion_failed', t('thumbnail.dng_error.preview_conversion_failed', 'Embedded DNG preview conversion failed: {error}', ['error' => $exception->getMessage()]));
         thumbnail_remove_partial_file($targetPath);
         @unlink($temporaryPath);
         return false;
@@ -353,10 +510,33 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
  */
 function write_dng_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
-    if (write_dng_imagick_derivative($sourcePath, $targetPath, $format, $maxSide)) {
-        return true;
+    dng_clear_last_conversion_error();
+    $attempts = dng_conversion_attempt_order(dng_conversion_source_policy(), dng_conversion_runtime_capabilities());
+    if ($attempts === []) {
+        dng_set_last_conversion_error('no_conversion_path', t('thumbnail.dng_error.no_conversion_path', 'No usable DNG conversion path is available on this server.'));
+        return false;
     }
-    return write_dng_embedded_preview_derivative($sourcePath, $targetPath, $format, $maxSide);
+
+    $errors = [];
+    foreach ($attempts as $attempt) {
+        $written = false;
+        if ($attempt === 'raw') {
+            $written = write_dng_imagick_derivative($sourcePath, $targetPath, $format, $maxSide);
+        } elseif ($attempt === 'preview_imagick' || $attempt === 'preview_gd') {
+            $written = write_dng_embedded_preview_derivative($sourcePath, $targetPath, $format, $maxSide, $attempt);
+        }
+        if ($written) {
+            dng_clear_last_conversion_error();
+            return true;
+        }
+        $lastError = dng_last_conversion_error();
+        if ($lastError !== null) {
+            $errors[] = (string) $lastError['message'];
+        }
+    }
+
+    dng_set_last_conversion_error('all_paths_failed', t('thumbnail.dng_error.all_paths_failed', 'All DNG conversion paths failed: {errors}', ['errors' => implode(' | ', array_values(array_unique($errors)))]));
+    return false;
 }
 
 /**
@@ -395,7 +575,8 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     } else {
         $webpSkipped++;
         $failed++;
-        $errors[] = t('thumbnails.dng.error_master_failed');
+        $lastError = dng_last_conversion_error();
+        $errors[] = $lastError !== null ? (string) $lastError['message'] : t('thumbnails.dng.error_master_failed');
     }
 
     foreach (thumbnail_sizes() as $size) {
@@ -414,6 +595,10 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
                 $failed++;
                 if ($format === 'webp') {
                     $webpSkipped++;
+                }
+                $lastError = dng_last_conversion_error();
+                if ($lastError !== null) {
+                    $errors[] = (string) $lastError['message'];
                 }
             }
         }

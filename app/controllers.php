@@ -65,6 +65,7 @@ require_once __DIR__ . '/controllers/admin_logs.php';
 require_once __DIR__ . '/controllers/telemetry.php';
 require_once __DIR__ . '/controllers/admin_telemetry.php';
 require_once __DIR__ . '/controllers/updates.php';
+require_once __DIR__ . '/controllers/admin_diagnostics.php';
 require_once __DIR__ . '/controllers/picture_game.php';
 require_once __DIR__ . '/controllers/tags.php';
 require_once __DIR__ . '/controllers/exif.php';

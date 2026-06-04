@@ -189,6 +189,7 @@ function cms_run(): void
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',
         'admin_update' => 'cms_admin_update',
+        'admin_diagnostics' => 'cms_admin_diagnostics',
         'admin_features' => 'cms_admin_features',
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',

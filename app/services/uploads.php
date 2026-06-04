@@ -179,6 +179,51 @@ function dng_conversion_supported(): bool
 }
 
 /**
+ * Normalize the browser-side upload format preference.
+ */
+function admin_upload_client_format_mode_normalize(mixed $value): string
+{
+    // $mode stores the submitted or configured upload picker preference.
+    $mode = strtolower(trim((string) $value));
+    return in_array($mode, ['server_supported', 'phone_jpeg'], true) ? $mode : 'server_supported';
+}
+
+/**
+ * Return the browser-side upload format preference.
+ *
+ * server_supported keeps the historic picker behavior. phone_jpeg asks mobile
+ * browsers for browser-ready image formats and intentionally avoids RAW/DNG.
+ */
+function admin_upload_client_format_mode(): string
+{
+    return admin_upload_client_format_mode_normalize(app_setting('admin_upload_client_format_mode', 'server_supported'));
+}
+
+/**
+ * Build the upload accept attribute for the selected browser-side format policy.
+ */
+function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, bool $rawSupported): string
+{
+    // $normalizedMode stores the safe policy value used for the accept list.
+    $normalizedMode = admin_upload_client_format_mode_normalize($mode);
+    if ($normalizedMode === 'phone_jpeg') {
+        return implode(',', ['image/jpeg', '.jpg', '.jpeg', 'image/png', '.png', 'image/webp', '.webp', 'image/gif', '.gif']);
+    }
+
+    // $acceptTypes stores the historic upload picker capability list.
+    $acceptTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    if ($heicSupported) {
+        $acceptTypes[] = '.heic';
+        $acceptTypes[] = '.heif';
+    }
+    if ($rawSupported) {
+        $acceptTypes[] = '.dng';
+    }
+    $acceptTypes[] = 'image/*';
+    return implode(',', $acceptTypes);
+}
+
+/**
  * Return whether this server can use an embedded DNG JPEG preview as a derivative source.
  */
 function dng_embedded_preview_supported(): bool
