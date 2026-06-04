@@ -198,6 +198,8 @@ function cms_run(): void
         'admin_new_gallery' => 'cms_admin_new_gallery',
         'admin_upload' => 'cms_admin_upload',
         'admin_upload_automation_token' => 'cms_admin_upload_automation_token',
+        'admin_mobile_uploads' => 'cms_admin_mobile_uploads',
+        'mobile_webdav' => 'cms_mobile_webdav',
         'upload_automation_upload' => 'cms_upload_automation_upload',
         'admin_api_manager' => 'cms_admin_api_manager',
         'gallery_migration_manifest' => 'cms_gallery_migration_manifest',
@@ -295,6 +297,15 @@ function cms_route_from_request(): array
     }
     if ($segments === ['api', 'upload']) {
         return ['page' => 'upload_automation_upload', 'params' => []];
+    }
+    if (($segments[0] ?? '') === 'webdav' && isset($segments[1])) {
+        return [
+            'page' => 'mobile_webdav',
+            'params' => [
+                'token' => rawurldecode($segments[1]),
+                'target_path' => rawurldecode(implode('/', array_slice($segments, 2))),
+            ],
+        ];
     }
     if ($segments[0] === 'galleries' && isset($segments[1]) && preg_match('/^[0-9]+$/', $segments[1]) === 1) {
         return ['page' => 'home', 'params' => ['gallery_page' => max(1, (int) $segments[1])]];
