@@ -81,6 +81,9 @@ function gallery_voting_schema_ready(): bool
  */
 function gallery_voting_allowed(array $gallery): bool
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
+        return false;
+    }
     return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
 }
 

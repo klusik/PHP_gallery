@@ -160,6 +160,10 @@ declare(strict_types=1);
 function cms_admin_theme(): void
 {
     require_admin();
+    // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
+    $gpsMapsFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps');
+    // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
+    $lightboxModesFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
 
     if (isset($_GET['download_language_pack'])) {
         // $downloadLanguage stores the normalized language code requested for export.
@@ -340,21 +344,26 @@ function cms_admin_theme(): void
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
-            set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
-            set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
-            if (!empty($_POST['reset_gps_pin_size'])) {
-                set_app_setting('theme_gps_pin_enabled', '1');
-                set_app_setting('theme_gps_pin_background_enabled', '1');
-                set_app_setting('theme_gps_pin_size', '26');
-                set_app_setting('theme_gps_pin_background_size', '22');
+            if ($gpsMapsFeatureEnabled) {
+                set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
+                set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
+                set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
+                set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
+                if (!empty($_POST['reset_gps_pin_size'])) {
+                    set_app_setting('theme_gps_pin_enabled', '1');
+                    set_app_setting('theme_gps_pin_background_enabled', '1');
+                    set_app_setting('theme_gps_pin_size', '26');
+                    set_app_setting('theme_gps_pin_background_size', '22');
+                }
+                // The GPS pin controls are part of the theme editor even when no color/font override changed.
+                // Mark the form as changed so the save flow consistently persists the full appearance state.
+                $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             }
-            // The GPS pin controls are part of the theme editor even when no color/font override changed.
-            // Mark the form as changed so the save flow consistently persists the full appearance state.
-            $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
+            set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
+            set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
             // $previousDescriptionLayout stores the rendered public-card layout before this save.
             $previousDescriptionLayout = theme_gallery_description_layout();
             // $nextDescriptionLayout stores the submitted public-card layout after validation.
@@ -366,6 +375,18 @@ function cms_admin_theme(): void
                 set_app_setting('theme_public_content_revision', (string) time());
             }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
+            if ($lightboxModesFeatureEnabled) {
+                // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
+                $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
+                // $nextLightboxBrowsingMode stores the submitted public lightbox browsing-mode default after validation.
+                $nextLightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single');
+                set_app_setting('theme_lightbox_browsing_mode', $nextLightboxBrowsingMode);
+                if ($nextLightboxBrowsingMode !== $previousLightboxBrowsingMode) {
+                    // The lightbox browsing mode changes public data attributes and optional strip rendering behavior.
+                    // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
+                    set_app_setting('theme_public_content_revision', (string) time());
+                }
+            }
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
             set_app_setting('pagination_columns', (string) pagination_dimension_value($_POST['pagination_columns'] ?? CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_DEFAULT_COLUMNS, CMS_PAGINATION_MAX_COLUMNS));
@@ -408,7 +429,7 @@ function cms_admin_theme(): void
 
     $themeTabs = [
         ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
-        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Media')],
+        ['id' => 'admin-theme-tab-media', 'label' => t('admin.theme.tab_media', 'Branding & media')],
         ['id' => 'admin-theme-tab-layout', 'label' => t('admin.theme.tab_layout', 'Layout')],
         ['id' => 'admin-theme-tab-language', 'label' => t('admin.theme.language.tab_label', 'Language')],
         ['id' => 'admin-theme-tab-custom-css', 'label' => t('admin.theme.tab_custom_css', 'Custom CSS')],
@@ -433,22 +454,24 @@ function cms_admin_theme(): void
     echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.gallery_title_color', 'Gallery title color')) . '<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">' . e(t('admin.theme.appearance.gallery_title_color_hint', 'Open gallery title and hero text.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.appearance.rounded_corners', 'Rounded corners')) . ' <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
     echo '<label>' . e(t('admin.theme.appearance.font_style', 'Font style')) . '<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_serif', 'Classic serif')) . '</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_sans', 'Clean sans-serif')) . '</option></select></label>';
-    // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
-    $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
-    // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
-    $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1';
-    // $gpsPinSize stores the configured pin diameter in pixels.
-    $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
-    // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
-    $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
-    echo '<fieldset class="theme-gps-pin-settings"><legend>' . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin')) . '</legend>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> ' . e(t('admin.theme.appearance.show_gps_pin', 'Show GPS pin on photo cards')) . '</label>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> ' . e(t('admin.theme.appearance.show_pin_background', 'Show pin background underlay')) . '</label>';
-    echo '<label>' . e(t('admin.theme.appearance.pin_size', 'Pin size')) . ' <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
-    echo '<label>' . e(t('admin.theme.appearance.pin_background_size', 'Background size')) . ' <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
-    echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="' . e(t('admin.theme.appearance.gps_pin_preview_label', 'GPS pin preview')) . '"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">' . e(t('admin.theme.appearance.gps_pin_preview_hint', 'Live preview of the photo pin.')) . '</span></div>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>' . e(t('admin.theme.appearance.reset_pin_size', 'Reset pin size')) . '</button></div>';
-    echo '</fieldset>';
+    if ($gpsMapsFeatureEnabled) {
+        // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
+        $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
+        // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
+        $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1';
+        // $gpsPinSize stores the configured pin diameter in pixels.
+        $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
+        // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
+        $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
+        echo '<fieldset class="theme-gps-pin-settings"><legend>' . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin')) . '</legend>';
+        echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> ' . e(t('admin.theme.appearance.show_gps_pin', 'Show GPS pin on photo cards')) . '</label>';
+        echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> ' . e(t('admin.theme.appearance.show_pin_background', 'Show pin background underlay')) . '</label>';
+        echo '<label>' . e(t('admin.theme.appearance.pin_size', 'Pin size')) . ' <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
+        echo '<label>' . e(t('admin.theme.appearance.pin_background_size', 'Background size')) . ' <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
+        echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="' . e(t('admin.theme.appearance.gps_pin_preview_label', 'GPS pin preview')) . '"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">' . e(t('admin.theme.appearance.gps_pin_preview_hint', 'Live preview of the photo pin.')) . '</span></div>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>' . e(t('admin.theme.appearance.reset_pin_size', 'Reset pin size')) . '</button></div>';
+        echo '</fieldset>';
+    }
     // $pageWidthMode stores the normalized layout preset selected for the public page container.
     $pageWidthMode = theme_page_width_mode((string) ($theme['page_width'] ?? 'default'));
     // $customPageWidth stores the saved custom container width in pixels. It is always rendered so switching presets does not discard it.
@@ -475,8 +498,53 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Favicon and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage browser identity and the global gallery background fallback.')) . '</p></div>';
+    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Branding & media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
+    $themeBrandingDefinitions = theme_branding_asset_types();
+    $themeBannerDefinition = $themeBrandingDefinitions['banner'] ?? null;
+    if ($themeBannerDefinition !== null) {
+        // $bannerAssetUrl stores the current global fallback banner URL.
+        $bannerAssetUrl = theme_branding_asset_url('banner');
+        echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding-banner"><legend>' . e(t('admin.theme.media.public_header_banner', 'Public header banner')) . '</legend>';
+        echo '<p class="muted">' . e(t('admin.theme.media.public_header_banner_hint', 'Upload the default public header banner here. It replaces the visible site title when no gallery-specific banner is configured.')) . '</p>';
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $themeBannerDefinition['label']) . '</strong><span class="muted">' . e((string) $themeBannerDefinition['description']) . '</span></div>';
+        if ($bannerAssetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-banner" src="' . e($bannerAssetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $themeBannerDefinition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_banner" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $themeBannerDefinition['label']])) . '</button></div>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
+        }
+        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_banner" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
+        echo '</div>';
+        echo '</fieldset>';
+    }
+
+    $themeSeparatorDefinition = $themeBrandingDefinitions['separator'] ?? null;
+    if ($themeSeparatorDefinition !== null) {
+        // $separatorAssetUrl stores the current global fallback separator URL.
+        $separatorAssetUrl = theme_branding_asset_url('separator');
+        $brandingSeparatorWidth = theme_branding_separator_width_value($theme['branding_separator_width'] ?? null);
+        $brandingSeparatorHeight = theme_branding_separator_height_value($theme['branding_separator_height'] ?? null);
+        $brandingSeparatorStretch = theme_branding_separator_stretch_enabled($theme['branding_separator_stretch'] ?? null);
+        echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding-separator"><legend>' . e(t('admin.theme.media.public_header_separator', 'Public header separator')) . '</legend>';
+        echo '<p class="muted">' . e(t('admin.theme.media.public_header_separator_hint', 'Upload and size the decorative horizontal separator shown under the shared public header. Per-gallery separators still override this Theme fallback on their gallery page.')) . '</p>';
+        echo '<div class="admin-branding-asset">';
+        echo '<div class="admin-branding-copy"><strong>' . e((string) $themeSeparatorDefinition['label']) . '</strong><span class="muted">' . e((string) $themeSeparatorDefinition['description']) . '</span></div>';
+        if ($separatorAssetUrl !== '') {
+            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-separator" src="' . e($separatorAssetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $themeSeparatorDefinition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_separator" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $themeSeparatorDefinition['label']])) . '</button></div>';
+        } else {
+            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
+        }
+        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_separator" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
+        echo '<div class="admin-branding-separator-size">';
+        echo '<label>' . e(t('admin.theme.media.separator_width', 'Separator width')) . '<input type="number" name="theme_branding_separator_width" min="0" max="3840" step="1" value="' . $brandingSeparatorWidth . '"><span class="muted">' . e(t('admin.theme.media.separator_width_hint', 'Pixels. Use 0 to keep the current responsive page width.')) . '</span></label>';
+        echo '<label>' . e(t('admin.theme.media.separator_height', 'Separator height')) . '<input type="number" name="theme_branding_separator_height" min="8" max="512" step="1" value="' . $brandingSeparatorHeight . '"><span class="muted">' . e(t('admin.theme.media.separator_height_hint', 'Pixels. With aspect ratio enabled this is a maximum; with stretching enabled this is the exact render height.')) . '</span></label>';
+        echo '<label class="checkbox-label admin-branding-separator-stretch"><input type="checkbox" name="theme_branding_separator_stretch" value="1"' . ($brandingSeparatorStretch ? ' checked' : '') . '> ' . e(t('admin.theme.media.separator_stretch', 'Stretch to exact width and height')) . '<span class="muted">' . e(t('admin.theme.media.separator_stretch_hint', 'Allows the separator image to scale non-proportionally instead of preserving its original aspect ratio.')) . '</span></label>';
+        echo '</div>';
+        echo '</div>';
+        echo '</fieldset>';
+    }
+
     echo '<fieldset class="form-grid" id="admin-favicon"><legend>' . e(t('admin.theme.media.favicon_legend', 'Favicon')) . '</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
@@ -527,22 +595,6 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback')) . '<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_none', 'No fallback set')) . '</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_upload', 'Upload new image')) . '</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images')) . '</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.')) . '</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>' . e(t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds')) . '</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>' . e(t('admin.theme.media.remove_theme_background', 'Remove theme background')) . '</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>' . e(t('admin.theme.media.remove_favicon', 'Remove favicon')) . '</button></div>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid admin-theme-branding-assets" id="admin-theme-branding"><legend>' . e(t('admin.theme.media.public_header_branding', 'Public header branding')) . '</legend>';
-    echo '<p class="muted">' . e(t('admin.theme.media.public_header_branding_hint', 'These images replace the visible site title and add an optional divider under the shared public header. Per-gallery banner and separator settings still override these Theme defaults on that gallery page.')) . '</p>';
-    foreach (theme_branding_asset_types() as $themeBrandingKind => $definition) {
-        // $assetUrl stores the current global fallback asset URL for one branding type.
-        $assetUrl = theme_branding_asset_url((string) $themeBrandingKind);
-        echo '<div class="admin-branding-asset">';
-        echo '<div class="admin-branding-copy"><strong>' . e((string) $definition['label']) . '</strong><span class="muted">' . e((string) $definition['description']) . '</span></div>';
-        if ($assetUrl !== '') {
-            echo '<div class="admin-branding-current"><img class="admin-branding-preview admin-theme-branding-preview-' . e((string) $themeBrandingKind) . '" src="' . e($assetUrl) . '" alt="' . e(t('admin.theme.media.current_branding_alt', 'Current {label}', ['label' => (string) $definition['label']])) . '"><button type="submit" class="secondary" name="reset_theme_branding_' . e((string) $themeBrandingKind) . '" value="1" formnovalidate>' . e(t('admin.theme.media.remove_branding_asset', 'Remove {label}', ['label' => (string) $definition['label']])) . '</button></div>';
-        } else {
-            echo '<p class="muted">' . e(t('admin.theme.media.no_fallback_image', 'No fallback image is stored yet.')) . '</p>';
-        }
-        echo '<label>' . e(t('admin.theme.media.upload_replacement', 'Upload replacement')) . '<input type="file" name="theme_branding_' . e((string) $themeBrandingKind) . '" accept="image/png,image/jpeg,image/gif,image/webp,image/*"><span class="muted">' . e(t('admin.theme.media.accepted_formats_8mb', 'Accepted formats: JPG, PNG, GIF, WebP. Maximum size: 8 MB.')) . '</span></label>';
-        echo '</div>';
-    }
-    echo '</fieldset>';
     echo '</div>';
     $mediaHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-media', $mediaHtml, false);
@@ -582,6 +634,15 @@ function cms_admin_theme(): void
     echo '<p class="muted">' . e(t('admin.theme.layout.items_per_page_preview', 'Items per page preview:')) . ' <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
     echo '<p class="muted">' . e(t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.')) . '</p>';
     echo '</fieldset>';
+    if ($lightboxModesFeatureEnabled) {
+        echo '<fieldset class="form-grid" id="admin-lightbox-mode"><legend>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</legend>';
+        echo '<label>' . e(t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode')) . '<select name="theme_lightbox_browsing_mode">';
+        foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
+            echo '<option value="' . e($lightboxModeOption) . '"' . (($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+        }
+        echo '</select><span class="muted">' . e(t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.')) . '</span></label>';
+        echo '</fieldset>';
+    }
     echo '<fieldset class="form-grid" id="admin-home-grid"><legend>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</legend>';
     echo '<label>' . e(t('admin.theme.layout.main_page_columns', 'Main page columns')) . ' <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
     echo '<label>' . e(t('admin.theme.layout.main_page_rows', 'Main page rows')) . ' <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';

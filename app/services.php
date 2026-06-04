@@ -39,6 +39,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/services/app_settings.php';
 // Load translation helpers early so controllers can use t() for visible text.
 require_once __DIR__ . '/services/translations.php';
+// Load global feature visibility helpers before optional feature modules initialize.
+require_once __DIR__ . '/services/feature_flags.php';
 // Load schema helpers before feature modules perform optional-column checks.
 require_once __DIR__ . '/services/database_helpers.php';
 // Load public render profiling helpers before public gallery services can record timings.
@@ -73,6 +75,7 @@ require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
+require_once __DIR__ . '/services/mobile_webdav.php';
 require_once __DIR__ . '/services/thumbnails.php';
 // Load AI-analysis queue helpers after media path helpers are available.
 require_once __DIR__ . '/services/ai_image_analysis.php';
@@ -83,13 +86,21 @@ require_once __DIR__ . '/services/gallery_branding.php';
 require_once __DIR__ . '/services/gallery_access.php';
 require_once __DIR__ . '/services/public_paths.php';
 require_once __DIR__ . '/services/gallery_lookup.php';
+// Load lightbox browsing-mode helpers before sidecar import/export reads gallery.json overrides.
+require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
 require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';
 require_once __DIR__ . '/services/downloads.php';
+// Load media renaming after downloads so stale ZIP archives can be invalidated.
+require_once __DIR__ . '/services/media_renamer.php';
 require_once __DIR__ . '/services/logs.php';
+// Load durable login helpers before authentication controllers restore expired PHP sessions.
+require_once __DIR__ . '/services/auth_persistence.php';
+// Load Google login helpers after logs and before auth controllers render account linking controls.
+require_once __DIR__ . '/services/google_auth.php';
 // Load authentication throttling after logs so rate-limit events can be recorded safely.
 require_once __DIR__ . '/services/auth_throttle.php';
 require_once __DIR__ . '/services/telemetry_settings.php';

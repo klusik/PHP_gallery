@@ -128,11 +128,11 @@ function admin_dashboard_parent_sync_fingerprint(): string
 function admin_dashboard_view_model(): array
 {
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready());
+    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready());
+    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // Variable $votingReady stores this steps working value.
-    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready());
+    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // Variable $filenameDisplayReady stores this steps working value.
     $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
     // Variable $migrationPending stores this steps working value.
@@ -146,9 +146,9 @@ function admin_dashboard_view_model(): array
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
     $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
     // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
-    $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready());
+    $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('navigation_data'));
     // $flightNavdataStatus stores maintenance information for the admin navdata card.
-    $flightNavdataStatus = admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status());
+    $flightNavdataStatus = $flightNavdataReady ? admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status()) : [];
 
     if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
         // Self-heal voting/game state periodically instead of on every admin navigation.

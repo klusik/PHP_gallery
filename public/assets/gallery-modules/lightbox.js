@@ -127,6 +127,30 @@ export function setupGalleryLightbox() {
     );
     // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
     const lightboxGalleryMapPayloadPromises = new Map();
+    /**
+     * Normalize the browsing mode emitted by PHP before it drives DOM behavior.
+     *
+     * Older deployments used strip as the stored picture-strip value. The public
+     * data attribute now uses picture_strip, but accepting the legacy value keeps
+     * cached markup and not-yet-migrated rows from falling back unexpectedly.
+     *
+     * @param {string} value Raw server-rendered browsing mode value.
+     * @returns {'single'|'picture_strip'|'3d_carousel'} Supported browser mode.
+     */
+    function normalizeLightboxBrowsingMode(value) {
+        const mode = String(value || '').trim().toLowerCase();
+        if (mode === 'strip') {
+            return 'picture_strip';
+        }
+        return ['single', 'picture_strip', '3d_carousel'].includes(mode) ? mode : 'single';
+    }
+
+    // lightboxBrowsingMode stores the effective Theme plus gallery override emitted by PHP.
+    const lightboxBrowsingMode = normalizeLightboxBrowsingMode(
+        (lightboxConfig instanceof HTMLElement ? lightboxConfig.dataset.lightboxBrowsingMode || '' : '') ||
+        (overlay instanceof HTMLElement ? overlay.dataset.lightboxBrowsingMode || '' : '') ||
+        'single'
+    );
     // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
     const lightboxPendingWindows = new Map();
 
@@ -420,6 +444,20 @@ export function setupGalleryLightbox() {
     const lightboxMapSplitTitle = overlay.querySelector('[data-lightbox-map-split-title]');
     // lightboxMapSplitCanvas stores state or configuration for the gallery front-end flow.
     const lightboxMapSplitCanvas = overlay.querySelector('[data-lightbox-map-split-canvas]');
+    // pictureStrip stores the optional nearby-photo browser container rendered only for enhanced public lightbox modes.
+    const pictureStrip = overlay.querySelector('[data-lightbox-strip]');
+    // pictureStripTrack stores the animated row or 3D plane whose children are rebuilt when the active index changes.
+    const pictureStripTrack = overlay.querySelector('[data-lightbox-strip-track]');
+    // pictureStripEnabled stores whether the current gallery wants the flat picture-strip mode and the needed markup exists.
+    const pictureStripEnabled = lightboxBrowsingMode === 'picture_strip' && pictureStrip instanceof HTMLElement && pictureStripTrack instanceof HTMLElement;
+    // threeDCarouselEnabled stores whether the current gallery wants layered neighboring cards behind the main image.
+    const threeDCarouselEnabled = lightboxBrowsingMode === '3d_carousel' && pictureStrip instanceof HTMLElement && pictureStripTrack instanceof HTMLElement;
+    // lightboxNeighborBrowserEnabled means either enhanced nearby-photo mode owns the shared strip container.
+    const lightboxNeighborBrowserEnabled = pictureStripEnabled || threeDCarouselEnabled;
+    // pictureStripAnimationToken prevents late animation cleanup from a previous navigation from touching the current strip state.
+    let pictureStripAnimationToken = 0;
+    // pictureStripLastIndex stores the last rendered center index so the animation direction can be inferred.
+    let pictureStripLastIndex = -1;
     // Variable `currentIndex` stores this steps working value.
     let currentIndex = 0;
     // lightboxReturnUrl stores state or configuration for the gallery front-end flow.
@@ -481,6 +519,12 @@ export function setupGalleryLightbox() {
     // isLightboxDebugEnabled stores state or configuration for the gallery front-end flow.
     const isLightboxDebugEnabled = detectLightboxDebugFlag();
     overlay.classList.toggle('is-mobile-device', isMobileTouchDevice);
+    overlay.classList.toggle('is-picture-strip-mode', pictureStripEnabled);
+    overlay.classList.toggle('is-3d-carousel-mode', threeDCarouselEnabled);
+    if (pictureStrip instanceof HTMLElement) {
+        pictureStrip.hidden = !lightboxNeighborBrowserEnabled;
+        pictureStrip.setAttribute('aria-label', threeDCarouselEnabled ? i18n('lightbox.3d_carousel_label', '3D carousel nearby photos') : i18n('lightbox.picture_strip_label', 'Nearby photos'));
+    }
     prepareMobileLightboxOverlay();
     updateMobileLightboxViewport();
     window.__LIGHTBOX_DEBUG__ = isLightboxDebugEnabled;
@@ -540,7 +584,15 @@ export function setupGalleryLightbox() {
             document.exitFullscreen().catch(() => undefined);
         }
         overlay.hidden = true;
-        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow');
+        overlay.classList.remove('is-fullscreen', 'is-mobile-fullscreen', 'is-ui-visible', 'is-map-split', 'is-map-split-disabled', 'is-slideshow', 'is-picture-strip-animating', 'is-3d-carousel-mode');
+        overlay.classList.toggle('is-picture-strip-mode', pictureStripEnabled);
+        overlay.classList.toggle('is-3d-carousel-mode', threeDCarouselEnabled);
+        if (pictureStripTrack instanceof HTMLElement) {
+            pictureStripTrack.replaceChildren();
+        }
+        if (pictureStrip instanceof HTMLElement) {
+            pictureStrip.hidden = !lightboxNeighborBrowserEnabled;
+        }
         overlay.removeAttribute('data-current-image-id');
         overlay.removeAttribute('data-current-title');
         if (image) {
@@ -1433,6 +1485,306 @@ export function setupGalleryLightbox() {
     }
 
     /**
+     * Return the nearby-photo radius that is usable for the current viewport and mode.
+     *
+     * Picture-strip mode shows the same nearby-photo radius in a flat rail.
+     * The 3D carousel uses up to three neighbors per side on desktop, then
+     * reduces the radius on cramped or touch-first screens so navigation remains
+     * usable and the central image stays dominant.
+     *
+     * @returns {number} Number of neighbors to attempt on each side.
+     */
+    function pictureStripRadius() {
+        const viewportWidth = window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || 0;
+        if (isMobileTouchDevice || viewportWidth <= 520) {
+            return 1;
+        }
+        if (threeDCarouselEnabled) {
+            if (viewportWidth <= 900) {
+                return 2;
+            }
+            return 3;
+        }
+        if (viewportWidth <= 820) {
+            return 2;
+        }
+        return 3;
+    }
+
+    /**
+     * Return a normalized neighbor index when the gallery can be navigated in a loop.
+     *
+     * @param {number} index Candidate gallery index.
+     * @returns {number} Index wrapped into the known card range.
+     */
+    function normalizeLightboxIndex(index) {
+        if (cards.length <= 0) {
+            return -1;
+        }
+        return ((index % cards.length) + cards.length) % cards.length;
+    }
+
+    /**
+     * Return a small signed offset from the active image to a rendered neighbor.
+     *
+     * Wrapped galleries need this helper so the last image can appear as the
+     * previous neighbor of the first image instead of looking many positions away.
+     * CSS uses this value to place carousel cards to the left or right and to scale
+     * deeper cards down predictably.
+     *
+     * @param {number} itemIndex Candidate gallery index.
+     * @param {number} centerIndex Active lightbox index.
+     * @returns {number} Signed relative offset near the active image.
+     */
+    function lightboxRelativeOffset(itemIndex, centerIndex) {
+        if (cards.length <= 0) {
+            return itemIndex - centerIndex;
+        }
+        let offset = itemIndex - centerIndex;
+        const half = cards.length / 2;
+        if (offset > half) {
+            offset -= cards.length;
+        } else if (offset < -half) {
+            offset += cards.length;
+        }
+        return offset;
+    }
+
+
+    /**
+     * Return presentation variables for one 3D carousel neighbor.
+     *
+     * CSS receives explicit distance, scale, depth, and blur values instead of
+     * deriving every layer from one linear offset. That keeps the inner cards
+     * large and readable, while the outer cards stay smaller and farther back.
+     * The center image is rendered by the real lightbox stage, so offset zero
+     * remains intentionally neutral here.
+     *
+     * @param {number} relativeOffset Signed distance from the active image.
+     * @returns {{x: string, scale: string, hoverScale: string, rotate: string, opacity: string, blur: string, brightness: string, depth: string, hoverDepth: string, zIndex: number}}
+     */
+    function threeDCarouselPresentation(relativeOffset) {
+        const absoluteOffset = Math.min(3, Math.abs(relativeOffset));
+        const direction = relativeOffset < 0 ? -1 : 1;
+        const layers = {
+            0: {x: '0px', scale: '1', hoverScale: '1', rotate: '0deg', opacity: '0', blur: '0px', brightness: '1', depth: '0rem', hoverDepth: '0rem', zIndex: 1},
+            1: {x: 'clamp(21rem, 31vw, 36rem)', scale: '1.08', hoverScale: '1.12', rotate: '-7deg', opacity: '0.94', blur: '0.08px', brightness: '0.84', depth: '-2rem', hoverDepth: '-1.25rem', zIndex: 14},
+            2: {x: 'clamp(31rem, 43vw, 50rem)', scale: '0.88', hoverScale: '0.925', rotate: '-12deg', opacity: '0.74', blur: '0.55px', brightness: '0.66', depth: '-6rem', hoverDepth: '-4.75rem', zIndex: 9},
+            3: {x: 'clamp(40rem, 53vw, 62rem)', scale: '0.68', hoverScale: '0.725', rotate: '-16deg', opacity: '0.52', blur: '1.1px', brightness: '0.5', depth: '-11rem', hoverDepth: '-9rem', zIndex: 5},
+        };
+        const layer = layers[absoluteOffset] || layers[3];
+        const signedX = direction < 0 ? `calc(0px - ${layer.x})` : layer.x;
+        const signedRotation = direction < 0 ? layer.rotate.replace('-', '') : layer.rotate;
+
+        return {
+            x: signedX,
+            scale: layer.scale,
+            hoverScale: layer.hoverScale,
+            rotate: signedRotation,
+            opacity: layer.opacity,
+            blur: layer.blur,
+            brightness: layer.brightness,
+            depth: layer.depth,
+            hoverDepth: layer.hoverDepth,
+            zIndex: layer.zIndex,
+        };
+    }
+
+    /**
+     * Ensure lazy metadata for the strip neighborhood is available.
+     *
+     * The strip is visual navigation, so it must tolerate paginated galleries and
+     * sparse client caches. Missing neighbors trigger the same lazy JSON endpoint
+     * as keyboard and next/previous navigation, then the strip is rebuilt when
+     * those items arrive. The function never changes the authoritative order.
+     *
+     * @param {number} centerIndex Active lightbox index.
+     * @returns {void}
+     */
+    function fetchPictureStripNeighbors(centerIndex) {
+        if (!lightboxNeighborBrowserEnabled || cards.length <= 0) {
+            return;
+        }
+        const radius = pictureStripRadius();
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            const neighborIndex = normalizeLightboxIndex(centerIndex + offset);
+            if (neighborIndex >= 0 && !cards[neighborIndex]) {
+                fetchLightboxWindowAround(neighborIndex).then((loaded) => {
+                    if (loaded && !controller.signal.aborted && currentIndex === centerIndex) {
+                        renderPictureStrip(centerIndex, false);
+                    }
+                });
+            }
+        }
+    }
+
+    /**
+     * Preload strip thumbnails and close neighbors without promoting every item to full-size preloading.
+     *
+     * @param {number} centerIndex Active lightbox index.
+     * @returns {void}
+     */
+    function preloadPictureStripNeighbors(centerIndex) {
+        if (!lightboxNeighborBrowserEnabled || shouldLimitLightboxPreloading()) {
+            return;
+        }
+        const radius = pictureStripRadius();
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            const neighborIndex = normalizeLightboxIndex(centerIndex + offset);
+            const neighborCard = neighborIndex >= 0 ? cards[neighborIndex] : null;
+            if (neighborCard) {
+                preloadCardLightboxImages(neighborCard, Math.abs(offset) <= 1);
+            }
+        }
+    }
+
+    /**
+     * Build one accessible strip thumbnail button for an already loaded card.
+     *
+     * @param {HTMLElement} card Lightbox metadata source for the thumbnail.
+     * @param {number} itemIndex Zero-based lightbox index represented by the button.
+     * @param {number} centerIndex Zero-based active lightbox index.
+     * @returns {HTMLButtonElement} Thumbnail button ready to append into the strip.
+     */
+    function createPictureStripButton(card, itemIndex, centerIndex) {
+        const button = document.createElement('button');
+        const relativeOffset = lightboxRelativeOffset(itemIndex, centerIndex);
+        const absoluteOffset = Math.abs(relativeOffset);
+        button.type = 'button';
+        button.className = 'lightbox-strip-item';
+        button.dataset.lightboxStripIndex = String(itemIndex);
+        button.dataset.stripOffset = String(relativeOffset);
+        button.style.setProperty('--lightbox-carousel-offset', String(relativeOffset));
+        button.style.setProperty('--lightbox-carousel-abs', String(absoluteOffset));
+        if (threeDCarouselEnabled) {
+            const presentation = threeDCarouselPresentation(relativeOffset);
+            button.style.setProperty('--lightbox-carousel-x', presentation.x);
+            button.style.setProperty('--lightbox-carousel-scale', presentation.scale);
+            button.style.setProperty('--lightbox-carousel-hover-scale', presentation.hoverScale);
+            button.style.setProperty('--lightbox-carousel-rotate', presentation.rotate);
+            button.style.setProperty('--lightbox-carousel-opacity', presentation.opacity);
+            button.style.setProperty('--lightbox-carousel-blur', presentation.blur);
+            button.style.setProperty('--lightbox-carousel-brightness', presentation.brightness);
+            button.style.setProperty('--lightbox-carousel-depth', presentation.depth);
+            button.style.setProperty('--lightbox-carousel-hover-depth', presentation.hoverDepth);
+            button.style.zIndex = String(presentation.zIndex);
+        } else {
+            button.style.zIndex = String(Math.max(1, 8 - absoluteOffset));
+        }
+        button.setAttribute('aria-label', i18n(threeDCarouselEnabled ? 'lightbox.3d_carousel_open' : 'lightbox.picture_strip_open', 'Open photo {current} of {total}', {current: itemIndex + 1, total: cards.length}));
+        if (itemIndex === centerIndex) {
+            button.classList.add('is-active');
+            button.setAttribute('aria-current', 'true');
+        }
+        const img = document.createElement('img');
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.alt = '';
+        img.src = card.dataset.previewSrc || card.dataset.fullSrc || '';
+        button.append(img);
+        return button;
+    }
+
+    /**
+     * Render or rerender the picture strip centered on the active image.
+     *
+     * The strip intentionally rebuilds a small fixed window rather than moving
+     * long DOM lists around. Animation state is kept by the last center index and
+     * a short-lived class. This preserves keyboard and button navigation behavior
+     * while giving visual continuity when the active image changes.
+     *
+     * @param {number} centerIndex Active zero-based lightbox index.
+     * @param {boolean} animate Whether to run the short slide/fade animation.
+     * @returns {void}
+     */
+    function renderPictureStrip(centerIndex, animate = true) {
+        if (!lightboxNeighborBrowserEnabled || cards.length <= 1) {
+            if (pictureStrip instanceof HTMLElement) {
+                pictureStrip.hidden = true;
+            }
+            return;
+        }
+        const radius = pictureStripRadius();
+        const fragment = document.createDocumentFragment();
+        const usedIndexes = new Set();
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            if (threeDCarouselEnabled && offset === 0) {
+                continue;
+            }
+            const itemIndex = normalizeLightboxIndex(centerIndex + offset);
+            if (itemIndex < 0 || usedIndexes.has(itemIndex)) {
+                continue;
+            }
+            usedIndexes.add(itemIndex);
+            const card = cards[itemIndex];
+            if (!card) {
+                const placeholder = document.createElement('span');
+                const relativeOffset = lightboxRelativeOffset(itemIndex, centerIndex);
+                const absoluteOffset = Math.abs(relativeOffset);
+                placeholder.className = 'lightbox-strip-item lightbox-strip-placeholder';
+                placeholder.dataset.stripOffset = String(relativeOffset);
+                placeholder.style.setProperty('--lightbox-carousel-offset', String(relativeOffset));
+                placeholder.style.setProperty('--lightbox-carousel-abs', String(absoluteOffset));
+                if (threeDCarouselEnabled) {
+                    const presentation = threeDCarouselPresentation(relativeOffset);
+                    placeholder.style.setProperty('--lightbox-carousel-x', presentation.x);
+                    placeholder.style.setProperty('--lightbox-carousel-scale', presentation.scale);
+                    placeholder.style.setProperty('--lightbox-carousel-hover-scale', presentation.hoverScale);
+                    placeholder.style.setProperty('--lightbox-carousel-rotate', presentation.rotate);
+                    placeholder.style.setProperty('--lightbox-carousel-opacity', presentation.opacity);
+                    placeholder.style.setProperty('--lightbox-carousel-blur', presentation.blur);
+                    placeholder.style.setProperty('--lightbox-carousel-brightness', presentation.brightness);
+                    placeholder.style.setProperty('--lightbox-carousel-depth', presentation.depth);
+                    placeholder.style.setProperty('--lightbox-carousel-hover-depth', presentation.hoverDepth);
+                    placeholder.style.zIndex = String(presentation.zIndex);
+                } else {
+                    placeholder.style.zIndex = String(Math.max(1, 8 - absoluteOffset));
+                }
+                placeholder.setAttribute('aria-hidden', 'true');
+                fragment.append(placeholder);
+                continue;
+            }
+            fragment.append(createPictureStripButton(card, itemIndex, centerIndex));
+        }
+
+        pictureStrip.hidden = false;
+        const direction = pictureStripLastIndex < 0 || centerIndex === pictureStripLastIndex
+            ? 0
+            : (centerIndex > pictureStripLastIndex ? 1 : -1);
+        pictureStripLastIndex = centerIndex;
+        pictureStripAnimationToken += 1;
+        const animationToken = pictureStripAnimationToken;
+        pictureStripTrack.style.setProperty('--lightbox-strip-shift', `${direction * -14}px`);
+        overlay.style.setProperty('--lightbox-carousel-direction', String(direction));
+        pictureStripTrack.replaceChildren(fragment);
+        pictureStripTrack.scrollLeft = Math.max(0, Math.round((pictureStripTrack.scrollWidth - pictureStripTrack.clientWidth) / 2));
+        if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            return;
+        }
+        overlay.classList.add('is-picture-strip-animating');
+        window.setTimeout(() => {
+            if (animationToken === pictureStripAnimationToken) {
+                overlay.classList.remove('is-picture-strip-animating');
+            }
+        }, threeDCarouselEnabled ? 640 : 220);
+    }
+
+    /**
+     * Synchronize the picture strip after the active lightbox image changes.
+     *
+     * @param {number} centerIndex Active zero-based lightbox index.
+     * @returns {void}
+     */
+    function syncPictureStrip(centerIndex) {
+        if (!lightboxNeighborBrowserEnabled) {
+            return;
+        }
+        renderPictureStrip(centerIndex, true);
+        fetchPictureStripNeighbors(centerIndex);
+        preloadPictureStripNeighbors(centerIndex);
+    }
+
+    /**
      * Notify the optional anonymous telemetry module about a lightbox photo view.
      * @param {*} card Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
@@ -1642,6 +1994,7 @@ export function setupGalleryLightbox() {
             swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
             scheduleLightboxSlideshowNext();
         });
+        syncPictureStrip(normalizedIndex);
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
                 closeLightboxMapSplit();
@@ -1807,7 +2160,13 @@ export function setupGalleryLightbox() {
         exitLightboxFullscreen();
         clearLightboxHudTimer();
         resetMobileSwipeVisuals(false);
-        overlay.classList.remove('is-ui-visible');
+        overlay.classList.remove('is-ui-visible', 'is-picture-strip-animating');
+        if (pictureStripTrack instanceof HTMLElement) {
+            pictureStripTrack.replaceChildren();
+        }
+        if (pictureStrip instanceof HTMLElement) {
+            pictureStrip.hidden = !lightboxNeighborBrowserEnabled;
+        }
         clearTouchGesture();
         updateLightboxViewportMode();
         hideInitialLightboxLoader();
@@ -1982,6 +2341,15 @@ export function setupGalleryLightbox() {
             toggleLightboxSlideshow();
             return;
         }
+        const stripButton = target?.closest('[data-lightbox-strip-index]');
+        if (stripButton instanceof HTMLElement) {
+            event.preventDefault();
+            const stripIndex = Number.parseInt(stripButton.dataset.lightboxStripIndex || '-1', 10);
+            if (Number.isInteger(stripIndex) && stripIndex >= 0 && stripIndex < cards.length) {
+                openAt(stripIndex);
+            }
+            return;
+        }
         // mapButton stores state or configuration for the gallery front-end flow.
         const mapButton = target?.closest('[data-lightbox-map]');
         if (mapButton) {
@@ -2029,6 +2397,7 @@ export function setupGalleryLightbox() {
         }
         updateMobileLightboxViewport();
         updateNormalLightboxStageSize(cards[currentIndex]);
+        renderPictureStrip(currentIndex, false);
         updateFullscreenMapImageFit(cards[currentIndex]);
     }, {signal: controller.signal});
     window.visualViewport?.addEventListener('resize', updateMobileLightboxViewport, {signal: controller.signal});

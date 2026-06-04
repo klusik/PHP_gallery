@@ -155,6 +155,12 @@ function cms_theme_css(): void
     $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
     // $customPageWidth stores the validated pixel width used by the Custom page-width layout preset.
     $customPageWidth = theme_page_width_custom_value($theme['page_width_custom'] ?? null);
+    // $brandingSeparatorWidth stores the optional fixed separator width. Zero keeps the responsive container width.
+    $brandingSeparatorWidth = theme_branding_separator_width_value($theme['branding_separator_width'] ?? null);
+    // $brandingSeparatorHeight stores the public separator image height limit.
+    $brandingSeparatorHeight = theme_branding_separator_height_value($theme['branding_separator_height'] ?? null);
+    // $brandingSeparatorStretch stores whether the separator can ignore its native aspect ratio.
+    $brandingSeparatorStretch = theme_branding_separator_stretch_enabled($theme['branding_separator_stretch'] ?? null);
     echo ':root{';
     echo '--accent:' . css_value((string) $theme['accent']) . ';';
     echo '--accent-dark:' . css_value((string) $theme['accent_dark']) . ';';
@@ -187,6 +193,14 @@ function cms_theme_css(): void
     echo '.public-page.page-width-wide .site-header,.public-page.page-width-wide .site-main,.public-page.page-width-wide .site-footer{width:min(var(--page-width-wide,1440px),calc(100% - 2rem));max-width:none;}';
     echo '.public-page.page-width-custom .site-header,.public-page.page-width-custom .site-main,.public-page.page-width-custom .site-footer{width:min(var(--page-width-custom,1440px),calc(100% - 2rem));max-width:none;}';
     echo '.public-page.page-width-full .site-header,.public-page.page-width-full .site-main,.public-page.page-width-full .site-footer{width:calc(100% - clamp(1rem,3vw,3rem));max-width:none;}';
+    if ($brandingSeparatorWidth > 0) {
+        echo '.public-page .site-branding-separator{width:min(' . $brandingSeparatorWidth . 'px,calc(100% - 2rem));max-width:none;}';
+    }
+    if ($brandingSeparatorStretch) {
+        echo '.public-page .site-branding-separator img{height:' . $brandingSeparatorHeight . 'px;max-height:none;object-fit:fill;}';
+    } else {
+        echo '.public-page .site-branding-separator img{height:auto;max-height:' . $brandingSeparatorHeight . 'px;object-fit:contain;}';
+    }
     echo '.theme-background-shell{position:fixed;inset:0;pointer-events:none;z-index:0;}';
     echo '.theme-background-base,.theme-background-image{position:absolute;inset:0;}';
     echo '.theme-background-base{background:var(--paper);}';

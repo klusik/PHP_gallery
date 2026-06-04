@@ -51,7 +51,9 @@ function view_admin_menu_structure(): array
                 ['label' => t('admin.menu.all_galleries', 'All galleries'), 'page' => 'admin', 'url' => url_for('admin') . '#admin-tab-galleries'],
                 ['label' => t('admin.menu.create_gallery', 'Create gallery'), 'page' => 'admin_new_gallery', 'url' => url_for('admin_new_gallery')],
                 ['label' => t('admin.menu.upload_photos', 'Upload photos'), 'page' => 'admin_upload', 'url' => url_for('admin_upload')],
-                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager')],
+                ['label' => t('admin.menu.mobile_uploads', 'Mobile uploads'), 'page' => 'admin_mobile_uploads', 'url' => url_for('admin_mobile_uploads'), 'feature' => 'mobile_webdav'],
+                ['label' => t('admin.menu.media_renamer', 'Media renamer'), 'page' => 'admin_media_renamer', 'url' => url_for('admin_media_renamer'), 'feature' => 'media_renamer'],
+                ['label' => t('admin.menu.api_manager', 'API manager'), 'page' => 'admin_api_manager', 'url' => url_for('admin_api_manager'), 'feature' => 'upload_api'],
                 ['label' => t('admin.menu.edit_tags', 'Edit tags'), 'page' => 'admin_tags', 'url' => url_for('admin_tags')],
             ],
         ],
@@ -59,15 +61,16 @@ function view_admin_menu_structure(): array
             'label' => t('admin.menu.appearance', 'Appearance'),
             'items' => [
                 ['label' => t('admin.menu.theme', 'Theme'), 'page' => 'admin_theme', 'url' => url_for('admin_theme')],
+                ['label' => t('admin.menu.features', 'Features'), 'page' => 'admin_features', 'url' => url_for('admin_features')],
             ],
         ],
         [
             'label' => t('admin.menu.maintenance', 'Maintenance'),
             'items' => [
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
-                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry')],
+                ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
                 ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
-                ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata')],
+                ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],
         ],
@@ -195,6 +198,10 @@ function view_render_admin_sidebar(string $currentPage): void
         echo '<h2>' . e((string) $group['label']) . '</h2>';
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
+            $featureKey = (string) ($item['feature'] ?? '');
+            if ($featureKey !== '' && function_exists('feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+                continue;
+            }
             $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
             $highlightClass = !empty($item['highlight']) ? ' is-update-pending' : '';
             echo '<a class="admin-menu-link' . e($activeClass . $highlightClass) . '" href="' . e((string) $item['url']) . '">' . e((string) $item['label']) . '</a>';

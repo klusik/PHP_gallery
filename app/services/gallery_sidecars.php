@@ -322,6 +322,13 @@ function write_gallery_sidecar(array $gallery): void
             $data['count_badge_visibility'] = $countBadgeVisibility;
         }
     }
+    if (gallery_lightbox_browsing_mode_schema_ready()) {
+        // $lightboxBrowsingMode stores a per-gallery lightbox mode override, when this gallery has one.
+        $lightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null);
+        if ($lightboxBrowsingMode !== null) {
+            $data['lightbox_browsing_mode'] = $lightboxBrowsingMode;
+        }
+    }
     if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
         $data['grid_columns'] = (int) $gallery['grid_columns'];
         $data['grid_rows'] = (int) $gallery['grid_rows'];
@@ -388,6 +395,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
         'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
         'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
+        'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value($metadata['lightbox_browsing_mode'] ?? null),
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
@@ -438,6 +446,8 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $descriptionLayout = gallery_description_layout_schema_ready() ? gallery_description_layout_storage_value($candidate['description_layout'] ?? null) : null;
     // $countBadgeVisibility stores a per-gallery count badge override read from gallery.json.
     $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($candidate['count_badge_visibility'] ?? null) : null;
+    // $lightboxBrowsingMode stores a per-gallery lightbox mode override read from gallery.json.
+    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($candidate['lightbox_browsing_mode'] ?? null) : null;
     // $galleryDate stores the optional manual gallery date read from gallery.json.
     $galleryDate = gallery_date_schema_ready() ? gallery_date_sidecar_value($candidate['gallery_date'] ?? '') : null;
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
@@ -477,6 +487,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_count_badge_schema_ready()) {
         $columns[] = 'count_badge_visibility';
         $values[] = $countBadgeVisibility;
+    }
+    if (gallery_lightbox_browsing_mode_schema_ready()) {
+        $columns[] = 'lightbox_browsing_mode';
+        $values[] = $lightboxBrowsingMode;
     }
     if (gallery_date_schema_ready()) {
         $columns[] = 'gallery_date';
@@ -570,6 +584,8 @@ function create_empty_gallery(array $input): array
     $showFilenames = !empty($input['show_filenames']) ? 1 : 0;
     // $countBadgeVisibility stores the optional per-gallery count badge override.
     $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? 'inherit') : null;
+    // $lightboxBrowsingMode stores the optional per-gallery lightbox browsing-mode override.
+    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? 'inherit') : null;
     // $parentId stores an intermediate value used by the surrounding gallery workflow.
     $parentId = (int) ($input['parent_id'] ?? 0);
     // $parent stores an intermediate value used by the surrounding gallery workflow.
@@ -608,6 +624,9 @@ function create_empty_gallery(array $input): array
     ];
     if ($countBadgeVisibility !== null) {
         $sidecarData['count_badge_visibility'] = $countBadgeVisibility;
+    }
+    if ($lightboxBrowsingMode !== null) {
+        $sidecarData['lightbox_browsing_mode'] = $lightboxBrowsingMode;
     }
     // $sidecarWritten stores an intermediate value used by the surrounding gallery workflow.
     $sidecarWritten = write_gallery_sidecar_for_path($folderPath, $sidecarData);

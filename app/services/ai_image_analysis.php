@@ -57,6 +57,9 @@ const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
  */
 function ai_image_analysis_schema_ready(): bool
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+        return false;
+    }
     if (!db_table_exists('image_ai_analysis_jobs') || !db_table_exists('image_ai_metadata')) {
         return false;
     }

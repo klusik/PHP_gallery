@@ -100,6 +100,12 @@ function cms_admin_upload(): void
             ob_start();
         }
         try {
+            if (!empty($_POST['update_upload_preferences'])) {
+                // $clientFormatMode stores the safe browser-side upload picker policy.
+                $clientFormatMode = admin_upload_client_format_mode_normalize($_POST['admin_upload_client_format_mode'] ?? 'server_supported');
+                set_app_setting('admin_upload_client_format_mode', $clientFormatMode);
+                redirect_to(url_for('admin_upload', ['saved' => 'upload_preferences']));
+            }
             // $mode stores an intermediate value used by the surrounding gallery workflow.
             $mode = (string) ($_POST['upload_mode'] ?? 'existing');
             // $entries stores an intermediate value used by the surrounding gallery workflow.
@@ -258,6 +264,9 @@ function cms_admin_upload(): void
     if ($error !== '') {
         echo '<div class="notice">' . e(t('admin.upload.failed_value', 'Upload failed: {error}', ['error' => $error])) . '</div>';
     }
+    if ((string) ($_GET['saved'] ?? '') === 'upload_preferences') {
+        echo '<div class="notice success">' . e(t('admin.upload.preferences_saved', 'Upload preferences saved.')) . '</div>';
+    }
     render_admin_upload_support_panel();
     if ($requestedUploadMode === 'new' || $prefillParentId > 0) {
         render_admin_upload_new_gallery_form($prefillParentId);
@@ -305,17 +314,7 @@ function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGa
  */
 function admin_upload_accept_value(): string
 {
-    // $acceptTypes stores an intermediate value used by the surrounding gallery workflow.
-    $acceptTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    if (heic_conversion_supported()) {
-        $acceptTypes[] = '.heic';
-        $acceptTypes[] = '.heif';
-    }
-    if (raw_conversion_supported()) {
-        $acceptTypes[] = '.dng';
-    }
-    $acceptTypes[] = 'image/*';
-    return implode(',', $acceptTypes);
+    return admin_upload_accept_value_for_mode(admin_upload_client_format_mode(), heic_conversion_supported(), raw_conversion_supported());
 }
 
 /**
@@ -327,6 +326,8 @@ function render_admin_upload_support_panel(): void
     $heicSupported = heic_conversion_supported();
     // $rawSupported stores an intermediate value used by the surrounding gallery workflow.
     $rawSupported = raw_conversion_supported();
+    // $clientFormatMode stores the selected browser-side upload picker preference.
+    $clientFormatMode = admin_upload_client_format_mode();
     echo '<section class="panel compact-support"><h2>' . e(t('admin.upload.support_title', 'Upload support')) . '</h2><table class="support-matrix"><thead><tr><th>' . e(t('admin.upload.type', 'Type')) . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th></tr></thead><tbody><tr>';
     echo '<th scope="row">' . e(t('admin.upload.available', 'Available')) . '</th>';
     echo '<td class="support-yes">✓</td>';
@@ -335,7 +336,12 @@ function render_admin_upload_support_panel(): void
     echo '<td class="support-yes">✓</td>';
     echo '<td class="' . ($heicSupported ? 'support-yes' : 'support-no') . '">' . ($heicSupported ? '✓' : '✕') . '</td>';
     echo '<td class="' . ($rawSupported ? 'support-yes' : 'support-no') . '">' . ($rawSupported ? '✓' : '✕') . '</td>';
-    echo '</tr></tbody></table></section>';
+    echo '</tr></tbody></table>';
+    echo '<form method="post" action="' . e(url_for('admin_upload')) . '" class="form-grid">' . csrf_field();
+    echo '<input type="hidden" name="update_upload_preferences" value="1">';
+    echo '<label>' . e(t('admin.upload.client_format_mode', 'Phone upload format')) . '<select name="admin_upload_client_format_mode"><option value="server_supported"' . ($clientFormatMode === 'server_supported' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_server_supported', 'Allow all server-supported formats')) . '</option><option value="phone_jpeg"' . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')) . '</option></select><span class="muted">' . e(t('admin.upload.client_format_help', 'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.')) . '</span></label>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.upload.save_preferences', 'Save upload preferences')) . '</button>';
+    echo '</form></section>';
 }
 
 /**

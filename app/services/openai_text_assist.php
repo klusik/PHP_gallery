@@ -390,6 +390,9 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
  */
 function openai_text_assist_available(int $userId): bool
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+        return false;
+    }
     if ($userId <= 0 || !openai_text_assist_schema_ready()) {
         return false;
     }

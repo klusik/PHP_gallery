@@ -525,3 +525,95 @@
         transition: none;
     }
 }
+
+@media (max-width: 760px), (pointer: coarse) {
+    /* Picture-strip mode degrades into a compact horizontally scrollable navigator on mobile. */
+    .lightbox.is-mobile-device .lightbox-strip,
+    .lightbox.is-mobile-fullscreen .lightbox-strip {
+        position: absolute;
+        z-index: 5;
+        right: 0;
+        bottom: max(4.4rem, env(safe-area-inset-bottom));
+        left: 0;
+        width: 100%;
+        max-width: 100%;
+        padding-inline: 0.5rem;
+        overflow: hidden;
+        pointer-events: auto;
+    }
+
+    .lightbox.is-mobile-device .lightbox-strip-track,
+    .lightbox.is-mobile-fullscreen .lightbox-strip-track {
+        justify-content: flex-start;
+        min-height: 3.9rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0.2rem 40vw;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .lightbox.is-mobile-device .lightbox-strip-track::-webkit-scrollbar,
+    .lightbox.is-mobile-fullscreen .lightbox-strip-track::-webkit-scrollbar {
+        display: none;
+    }
+
+    .lightbox.is-mobile-device .lightbox-strip-item,
+    .lightbox.is-mobile-fullscreen .lightbox-strip-item {
+        flex-basis: 4.2rem;
+        width: 4.2rem;
+        height: 3.15rem;
+        border-radius: 10px;
+    }
+}
+
+@media (max-width: 760px), (pointer: coarse) {
+    /* 3D carousel uses the same neighbor data on mobile, but renders as a calm scroller to avoid cramped depth effects. */
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-stage-link,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-stage-link {
+        overflow: visible;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        transform: none;
+    }
+
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-track,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-track {
+        display: flex;
+        position: static;
+        width: auto;
+        height: auto;
+        transform-style: flat;
+        perspective: none;
+    }
+
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-item,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-item {
+        position: relative;
+        top: auto;
+        left: auto;
+        opacity: 0.64;
+        transform: scale(0.92);
+        box-shadow: 0 0.55rem 1.25rem rgba(0, 0, 0, 0.28);
+    }
+
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-item.is-active,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-item.is-active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-item:hover,
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-item:focus-visible,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-item:hover,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-item:focus-visible {
+        opacity: 0.86;
+        transform: scale(0.98);
+    }
+
+    .lightbox.is-mobile-device.is-3d-carousel-mode .lightbox-strip-item img,
+    .lightbox.is-mobile-fullscreen.is-3d-carousel-mode .lightbox-strip-item img {
+        filter: brightness(0.54) blur(0.8px) saturate(0.82);
+    }
+}

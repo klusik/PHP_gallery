@@ -66,7 +66,7 @@ import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260528-tag-pills-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260601-3d-carousel-v2';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -82,7 +82,8 @@ import {
     setupPictureGame,
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
-} from './gallery-modules/admin-operations.js?v=20260521-navdata-feedback-v2';
+    setupAdminMediaRenamer,
+} from './gallery-modules/admin-operations.js?v=20260603-media-renamer-ajax-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -123,6 +124,7 @@ function bootGalleryBrowserFeatures() {
     setupSimbriefDescriptionGenerator();
     setupOpenAITextAssist();
     setupAdminGalleryMigration();
+    setupAdminMediaRenamer();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

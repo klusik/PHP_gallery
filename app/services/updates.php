@@ -233,7 +233,12 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
         // $cachedData stores the file-backed payload when it is still fresh enough for admin viewing.
         $cachedData = application_patch_notes_read_cache($branch, $ttlSeconds);
         if ($cachedData !== null) {
-            return $cachedData;
+            $currentVersion = cms_current_version();
+            $currentEntry = (array) ($cachedData['versions'][$currentVersion] ?? []);
+            if ((isset($currentEntry['released_label']) && (string) $currentEntry['released_label'] !== '') || empty($cachedData['versions'])) {
+                return $cachedData;
+            }
+            application_patch_notes_clear_cache($branch);
         }
     }
 
@@ -337,6 +342,24 @@ function application_patch_notes_write_cache(string $branch, array $data): void
 }
 
 /**
+ * Remove cached patch notes so the next view refreshes from the source.
+ */
+function application_patch_notes_clear_cache(?string $branch = null): void
+{
+    if ($branch !== null && $branch !== '') {
+        $paths = [application_patch_notes_cache_path($branch)];
+    } else {
+        $paths = glob(application_patch_notes_cache_dir() . DIRECTORY_SEPARATOR . '*.json') ?: [];
+    }
+
+    foreach ($paths as $path) {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+}
+
+/**
  * Parse PATCH_NOTES.md into normalized version sections.
  */
 function application_patch_notes_parse_versions(string $markdown): array
@@ -355,9 +378,12 @@ function application_patch_notes_parse_versions(string $markdown): array
     foreach ($lines as $line) {
         if (preg_match('/^##\s+(?:Version\s+)?v?([0-9]+(?:\.[0-9]+){1,2})\b(.*)$/i', (string) $line, $match)) {
             if ($currentVersion !== null) {
+                $releaseMetadata = application_patch_notes_release_metadata_for_version($currentVersion);
                 $versions[$currentVersion] = [
                     'version' => $currentVersion,
                     'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+                    'released_at' => $releaseMetadata['released_at'],
+                    'released_label' => $releaseMetadata['released_label'],
                     'markdown' => trim(implode("\n", $buffer)),
                     'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
                 ];
@@ -374,9 +400,12 @@ function application_patch_notes_parse_versions(string $markdown): array
     }
 
     if ($currentVersion !== null) {
+        $releaseMetadata = application_patch_notes_release_metadata_for_version($currentVersion);
         $versions[$currentVersion] = [
             'version' => $currentVersion,
             'title' => trim($currentTitle) !== '' ? trim($currentTitle) : 'Version ' . $currentVersion,
+            'released_at' => $releaseMetadata['released_at'],
+            'released_label' => $releaseMetadata['released_label'],
             'markdown' => trim(implode("\n", $buffer)),
             'html' => application_patch_notes_markdown_to_html(trim(implode("\n", $buffer))),
         ];
@@ -384,6 +413,49 @@ function application_patch_notes_parse_versions(string $markdown): array
 
     uksort($versions, static fn (string $a, string $b): int => version_compare($b, $a));
     return $versions;
+}
+
+/**
+ * Return release metadata for a patch-note version from the checked-in release map.
+ */
+function application_patch_notes_release_metadata_for_version(string $version): array
+{
+    static $cache = [];
+    if (isset($cache[$version])) {
+        return $cache[$version];
+    }
+
+    $metadata = [
+        'released_at' => null,
+        'released_label' => '',
+    ];
+
+    $metadataFile = application_update_project_root() . '/release-metadata.json';
+    if (is_file($metadataFile)) {
+        $json = (string) file_get_contents($metadataFile);
+        $json = preg_replace('/^\xEF\xBB\xBF/', '', $json) ?? $json;
+        $allMetadata = json_decode($json, true);
+        if (is_array($allMetadata) && isset($allMetadata[$version]) && is_array($allMetadata[$version])) {
+            $entry = $allMetadata[$version];
+            $releasedAt = trim((string) ($entry['released_at'] ?? ''));
+            $releasedLabel = trim((string) ($entry['released_label'] ?? ''));
+            if ($releasedAt !== '') {
+                $metadata['released_at'] = $releasedAt;
+            }
+            if ($releasedLabel !== '') {
+                $metadata['released_label'] = $releasedLabel;
+            } elseif ($releasedAt !== '') {
+                try {
+                    $metadata['released_label'] = (new DateTimeImmutable($releasedAt))->format('j. F Y, H:i');
+                } catch (Throwable) {
+                    $metadata['released_label'] = '';
+                }
+            }
+        }
+    }
+
+    $cache[$version] = $metadata;
+    return $metadata;
 }
 
 /**
@@ -923,6 +995,7 @@ function install_application_beta(string $commitId): array
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
     cache_application_update_check(check_application_update());
+    application_patch_notes_clear_cache();
     set_app_setting('application_update_channel', 'beta');
     set_app_setting('application_update_beta_commit', $commitId);
     set_app_setting('application_update_beta_backup_path', str_replace('\\', '/', substr($backupPath, strlen($root) + 1)));
@@ -996,6 +1069,7 @@ function restore_application_stable_release(): array
         'application_update_beta_backup_path',
         'application_update_check_cache',
     ]);
+    application_patch_notes_clear_cache();
 
     // $restoredVersion stores an intermediate value used by the surrounding gallery workflow.
     $restoredVersion = application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') ?? cms_current_version();
@@ -1178,6 +1252,7 @@ function install_application_update(): array
     $migrations = run_migrations();
     application_update_invalidate_opcache($root, $sourceRoot);
     delete_app_settings(['application_update_check_cache', 'application_update_check_status_json', 'application_update_check_cached_at']);
+    application_patch_notes_clear_cache();
 
     return [
         'version' => (string) $status['latest_version'],

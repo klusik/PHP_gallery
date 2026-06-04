@@ -70,7 +70,8 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Signed downloads** - Optional signature verification for secure links
 
 ### Theming & Customization
-- **Theme editor** - Customize colors, fonts, spacing from the admin interface
+- **Theme editor** - Customize colors, fonts, spacing and default lightbox browsing mode from the admin interface
+- **Lightbox browsing modes** - Use the classic single image viewer, a picture strip, or a focused 3D carousel as a Theme default with per-gallery overrides
 - **Dark mode** - Switch between light and dark themes
 - **Language support** - English and Czech; easily extensible
 - **Gallery branding** - Per-gallery logo, background, cover image
@@ -293,7 +294,7 @@ Then open `http://localhost:8000/` in your browser.
 1. Use **Gallery list** to view the hierarchy
 2. **Bulk actions** to rename, move, or change visibility of multiple galleries at once
 3. **Drag-and-drop reordering** to change display order (JavaScript enabled)
-4. **Edit gallery** to change metadata, cover image, tags, or description layout
+4. **Edit gallery** to change metadata, cover image, tags, description layout, or lightbox browsing-mode override
 
 #### Editing Images
 
@@ -339,7 +340,7 @@ Then open `http://localhost:8000/` in your browser.
 
 #### Customizing Appearance
 
-1. Go to **Theme** to customize colors, fonts, and layout
+1. Go to **Theme** to customize colors, fonts, layout, and the default lightbox browsing mode
 2. Choose light or dark mode
 3. Set default gallery card layout (vertical or horizontal)
 4. Choose language (English, Czech, etc.)

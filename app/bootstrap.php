@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.73';
+const CMS_VERSION = '0.74';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -125,8 +125,12 @@ function cms_run(): void
     $config = cms_config();
     session_name((string) $config['admin_session_name']);
     if (session_status() !== PHP_SESSION_ACTIVE) {
+        // $adminSessionLifetime stores the browser cookie and PHP session lifetime for admin sessions.
+        $adminSessionLifetime = function_exists('auth_admin_session_lifetime_seconds') ? auth_admin_session_lifetime_seconds() : 1209600;
+        ini_set('session.gc_maxlifetime', (string) $adminSessionLifetime);
+        ini_set('session.cookie_lifetime', (string) $adminSessionLifetime);
         session_set_cookie_params([
-            'lifetime' => 0,
+            'lifetime' => $adminSessionLifetime,
             'path' => '/',
             'secure' => request_is_https(),
             'httponly' => true,
@@ -179,10 +183,14 @@ function cms_run(): void
         'admin_login' => 'cms_admin_login',
         'admin_forgot_password' => 'cms_admin_forgot_password',
         'admin_reset_password' => 'cms_admin_reset_password',
+        'admin_google_start' => 'cms_admin_google_start',
+        'admin_google_callback' => 'cms_admin_google_callback',
         'admin_logout' => 'cms_admin_logout',
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',
         'admin_update' => 'cms_admin_update',
+        'admin_diagnostics' => 'cms_admin_diagnostics',
+        'admin_features' => 'cms_admin_features',
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
@@ -192,6 +200,8 @@ function cms_run(): void
         'admin_new_gallery' => 'cms_admin_new_gallery',
         'admin_upload' => 'cms_admin_upload',
         'admin_upload_automation_token' => 'cms_admin_upload_automation_token',
+        'admin_mobile_uploads' => 'cms_admin_mobile_uploads',
+        'mobile_webdav' => 'cms_mobile_webdav',
         'upload_automation_upload' => 'cms_upload_automation_upload',
         'admin_api_manager' => 'cms_admin_api_manager',
         'gallery_migration_manifest' => 'cms_gallery_migration_manifest',
@@ -201,6 +211,7 @@ function cms_run(): void
         'gallery_migration_receive_complete' => 'cms_gallery_migration_receive_complete',
         'gallery_migration_receive_status' => 'cms_gallery_migration_receive_status',
         'admin_gallery_migration' => 'cms_admin_gallery_migration',
+        'admin_media_renamer' => 'cms_admin_media_renamer',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',
@@ -235,6 +246,11 @@ function cms_run(): void
         'admin_public_update_image' => 'cms_admin_public_update_image',
         'setup' => 'cms_setup',
     ];
+
+    if (function_exists('feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
+        feature_flag_render_disabled_route($page);
+        return;
+    }
 
     // Variable $handler stores this steps working value.
     $handler = $routes[$page] ?? 'cms_not_found';
@@ -288,6 +304,15 @@ function cms_route_from_request(): array
     }
     if ($segments === ['api', 'upload']) {
         return ['page' => 'upload_automation_upload', 'params' => []];
+    }
+    if (($segments[0] ?? '') === 'webdav' && isset($segments[1])) {
+        return [
+            'page' => 'mobile_webdav',
+            'params' => [
+                'token' => rawurldecode($segments[1]),
+                'target_path' => rawurldecode(implode('/', array_slice($segments, 2))),
+            ],
+        ];
     }
     if ($segments[0] === 'galleries' && isset($segments[1]) && preg_match('/^[0-9]+$/', $segments[1]) === 1) {
         return ['page' => 'home', 'params' => ['gallery_page' => max(1, (int) $segments[1])]];

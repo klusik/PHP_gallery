@@ -1,0 +1,447 @@
+{
+    "0.1":  {
+                "released_at":  "2026-04-27 09:28:39",
+                "released_label":  "27. April 2026, 09:28",
+                "tag":  "v_0.1"
+            },
+    "0.10":  {
+                 "released_at":  "2026-04-28 14:28:43",
+                 "released_label":  "28. April 2026, 14:28",
+                 "tag":  "v_0.10"
+             },
+    "0.11":  {
+                 "released_at":  "2026-04-28 15:04:07",
+                 "released_label":  "28. April 2026, 15:04",
+                 "tag":  "v_0.11"
+             },
+    "0.11B":  {
+                  "released_at":  "2026-04-28 18:07:20",
+                  "released_label":  "28. April 2026, 18:07",
+                  "tag":  "v_0.11B"
+              },
+    "0.12":  {
+                 "released_at":  "2026-04-28 19:38:55",
+                 "released_label":  "28. April 2026, 19:38",
+                 "tag":  "v_0.12"
+             },
+    "0.12B":  {
+                  "released_at":  "2026-04-28 21:20:21",
+                  "released_label":  "28. April 2026, 21:20",
+                  "tag":  "v_0.12B"
+              },
+    "0.13":  {
+                 "released_at":  "2026-04-29 19:40:18",
+                 "released_label":  "29. April 2026, 19:40",
+                 "tag":  "v_0.13"
+             },
+    "0.13_B":  {
+                   "released_at":  "2026-04-29 20:48:16",
+                   "released_label":  "29. April 2026, 20:48",
+                   "tag":  "v_0.13_B"
+               },
+    "0.14":  {
+                 "released_at":  "2026-04-29 22:18:09",
+                 "released_label":  "29. April 2026, 22:18",
+                 "tag":  "v_0.14"
+             },
+    "0.15":  {
+                 "released_at":  "2026-04-29 22:30:14",
+                 "released_label":  "29. April 2026, 22:30",
+                 "tag":  "v_0.15"
+             },
+    "0.16":  {
+                 "released_at":  "2026-04-30 07:56:27",
+                 "released_label":  "30. April 2026, 07:56",
+                 "tag":  "v_0.16"
+             },
+    "0.17":  {
+                 "released_at":  "2026-04-30 08:03:40",
+                 "released_label":  "30. April 2026, 08:03",
+                 "tag":  "v_0.17"
+             },
+    "0.18":  {
+                 "released_at":  "2026-04-30 08:10:40",
+                 "released_label":  "30. April 2026, 08:10",
+                 "tag":  "v_0.18"
+             },
+    "0.19":  {
+                 "released_at":  "2026-04-30 08:15:20",
+                 "released_label":  "30. April 2026, 08:15",
+                 "tag":  "v_0.19"
+             },
+    "0.2":  {
+                "released_at":  "2026-04-27 17:42:26",
+                "released_label":  "27. April 2026, 17:42",
+                "tag":  "v_0.2"
+            },
+    "0.20":  {
+                 "released_at":  "2026-04-30 08:22:12",
+                 "released_label":  "30. April 2026, 08:22",
+                 "tag":  "v_0.20"
+             },
+    "0.21":  {
+                 "released_at":  "2026-04-30 08:31:47",
+                 "released_label":  "30. April 2026, 08:31",
+                 "tag":  "v_0.21"
+             },
+    "0.22":  {
+                 "released_at":  "2026-04-30 09:47:54",
+                 "released_label":  "30. April 2026, 09:47",
+                 "tag":  "v_0.22"
+             },
+    "0.23":  {
+                 "released_at":  "2026-04-30 11:57:16",
+                 "released_label":  "30. April 2026, 11:57",
+                 "tag":  "v_0.23"
+             },
+    "0.24":  {
+                 "released_at":  "2026-04-30 13:54:28",
+                 "released_label":  "30. April 2026, 13:54",
+                 "tag":  "v_0.24"
+             },
+    "0.25":  {
+                 "released_at":  "2026-04-30 15:36:12",
+                 "released_label":  "30. April 2026, 15:36",
+                 "tag":  "v_0.25"
+             },
+    "0.26":  {
+                 "released_at":  "2026-04-30 15:54:13",
+                 "released_label":  "30. April 2026, 15:54",
+                 "tag":  "v_0.26"
+             },
+    "0.27":  {
+                 "released_at":  "2026-04-30 15:58:38",
+                 "released_label":  "30. April 2026, 15:58",
+                 "tag":  "v_0.27"
+             },
+    "0.28":  {
+                 "released_at":  "2026-04-30 16:50:16",
+                 "released_label":  "30. April 2026, 16:50",
+                 "tag":  "v_0.28"
+             },
+    "0.29":  {
+                 "released_at":  "2026-04-30 16:53:37",
+                 "released_label":  "30. April 2026, 16:53",
+                 "tag":  "v_0.29"
+             },
+    "0.3":  {
+                "released_at":  "2026-04-27 18:21:11",
+                "released_label":  "27. April 2026, 18:21",
+                "tag":  "v_0.3"
+            },
+    "0.30":  {
+                 "released_at":  "2026-04-30 17:39:51",
+                 "released_label":  "30. April 2026, 17:39",
+                 "tag":  "v_0.30"
+             },
+    "0.31":  {
+                 "released_at":  "2026-04-30 18:02:24",
+                 "released_label":  "30. April 2026, 18:02",
+                 "tag":  "v_0.31"
+             },
+    "0.32":  {
+                 "released_at":  "2026-04-30 19:43:09",
+                 "released_label":  "30. April 2026, 19:43",
+                 "tag":  "v_0.32"
+             },
+    "0.33":  {
+                 "released_at":  "2026-04-30 19:59:09",
+                 "released_label":  "30. April 2026, 19:59",
+                 "tag":  "v_0.33"
+             },
+    "0.34":  {
+                 "released_at":  "2026-04-30 20:03:37",
+                 "released_label":  "30. April 2026, 20:03",
+                 "tag":  "v_0.34"
+             },
+    "0.35":  {
+                 "released_at":  "2026-04-30 21:37:39",
+                 "released_label":  "30. April 2026, 21:37",
+                 "tag":  "v_0.35"
+             },
+    "0.36":  {
+                 "released_at":  "2026-04-30 21:49:37",
+                 "released_label":  "30. April 2026, 21:49",
+                 "tag":  "v_0.36"
+             },
+    "0.37":  {
+                 "released_at":  "2026-05-01 15:43:15",
+                 "released_label":  "1. May 2026, 15:43",
+                 "tag":  "v_0.37"
+             },
+    "0.38":  {
+                 "released_at":  "2026-05-01 19:40:59",
+                 "released_label":  "1. May 2026, 19:40",
+                 "tag":  "v_0.38"
+             },
+    "0.39":  {
+                 "released_at":  "2026-05-01 20:05:00",
+                 "released_label":  "1. May 2026, 20:05",
+                 "tag":  "v_0.39"
+             },
+    "0.4":  {
+                "released_at":  "2026-04-27 18:43:52",
+                "released_label":  "27. April 2026, 18:43",
+                "tag":  "v_0.4"
+            },
+    "0.40":  {
+                 "released_at":  "2026-05-01 21:38:29",
+                 "released_label":  "1. May 2026, 21:38",
+                 "tag":  "v_0.40"
+             },
+    "0.41":  {
+                 "released_at":  "2026-05-02 01:07:47",
+                 "released_label":  "2. May 2026, 01:07",
+                 "tag":  "v_0.41"
+             },
+    "0.42":  {
+                 "released_at":  "2026-05-02 15:38:33",
+                 "released_label":  "2. May 2026, 15:38",
+                 "tag":  "v_0.42"
+             },
+    "0.43":  {
+                 "released_at":  "2026-05-02 17:12:03",
+                 "released_label":  "2. May 2026, 17:12",
+                 "tag":  "v_0.43"
+             },
+    "0.44":  {
+                 "released_at":  "2026-05-02 21:40:37",
+                 "released_label":  "2. May 2026, 21:40",
+                 "tag":  "v_0.44"
+             },
+    "0.45":  {
+                 "released_at":  "2026-05-02 22:50:29",
+                 "released_label":  "2. May 2026, 22:50",
+                 "tag":  "v_0.45"
+             },
+    "0.46":  {
+                 "released_at":  "2026-05-03 00:28:56",
+                 "released_label":  "3. May 2026, 00:28",
+                 "tag":  "v_0.46"
+             },
+    "0.47":  {
+                 "released_at":  "2026-05-03 00:47:27",
+                 "released_label":  "3. May 2026, 00:47",
+                 "tag":  "v_0.47"
+             },
+    "0.48":  {
+                 "released_at":  "2026-05-03 04:30:29",
+                 "released_label":  "3. May 2026, 04:30",
+                 "tag":  "v_0.48"
+             },
+    "0.49":  {
+                 "released_at":  "2026-05-04 00:33:54",
+                 "released_label":  "4. May 2026, 00:33",
+                 "tag":  "v_0.49"
+             },
+    "0.5":  {
+                "released_at":  "2026-04-27 18:50:21",
+                "released_label":  "27. April 2026, 18:50",
+                "tag":  "v_0.5"
+            },
+    "0.50":  {
+                 "released_at":  "2026-05-04 01:09:49",
+                 "released_label":  "4. May 2026, 01:09",
+                 "tag":  "v_0.50"
+             },
+    "0.51":  {
+                 "released_at":  "2026-05-04 08:25:21",
+                 "released_label":  "4. May 2026, 08:25",
+                 "tag":  "v_0.51"
+             },
+    "0.52":  {
+                 "released_at":  "2026-05-04 13:51:24",
+                 "released_label":  "4. May 2026, 13:51",
+                 "tag":  "v_0.52"
+             },
+    "0.53":  {
+                 "released_at":  "2026-05-04 14:57:04",
+                 "released_label":  "4. May 2026, 14:57",
+                 "tag":  "v_0.53"
+             },
+    "0.54":  {
+                 "released_at":  "2026-05-04 21:09:41",
+                 "released_label":  "4. May 2026, 21:09",
+                 "tag":  "v_0.54"
+             },
+    "0.55":  {
+                 "released_at":  "2026-05-05 15:22:36",
+                 "released_label":  "5. May 2026, 15:22",
+                 "tag":  "v_0.55"
+             },
+    "0.56":  {
+                 "released_at":  "2026-05-05 20:30:49",
+                 "released_label":  "5. May 2026, 20:30",
+                 "tag":  "v_0.56"
+             },
+    "0.57":  {
+                 "released_at":  "2026-05-06 16:28:37",
+                 "released_label":  "6. May 2026, 16:28",
+                 "tag":  "v_0.57"
+             },
+    "0.58":  {
+                 "released_at":  "2026-05-07 17:00:30",
+                 "released_label":  "7. May 2026, 17:00",
+                 "tag":  "v_0.58"
+             },
+    "0.59":  {
+                 "released_at":  "2026-05-08 19:43:29",
+                 "released_label":  "8. May 2026, 19:43",
+                 "tag":  "v_0.59"
+             },
+    "0.6":  {
+                "released_at":  "2026-04-27 19:05:48",
+                "released_label":  "27. April 2026, 19:05",
+                "tag":  "v_0.6"
+            },
+    "0.60":  {
+                 "released_at":  "2026-05-09 16:11:52",
+                 "released_label":  "9. May 2026, 16:11",
+                 "tag":  "v_0.60"
+             },
+    "0.61":  {
+                 "released_at":  "2026-05-10 00:47:43",
+                 "released_label":  "10. May 2026, 00:47",
+                 "tag":  "v_0.61"
+             },
+    "0.61B":  {
+                  "released_at":  "2026-05-10 01:36:10",
+                  "released_label":  "10. May 2026, 01:36",
+                  "tag":  "v_0.61B"
+              },
+    "0.62":  {
+                 "released_at":  "2026-05-10 01:41:29",
+                 "released_label":  "10. May 2026, 01:41",
+                 "tag":  "v_0.62"
+             },
+    "0.62.1":  {
+                   "released_at":  "2026-05-10 08:03:42",
+                   "released_label":  "10. May 2026, 08:03",
+                   "tag":  "v_0.62.1"
+               },
+    "0.62.2":  {
+                   "released_at":  "2026-05-10 15:50:42",
+                   "released_label":  "10. May 2026, 15:50",
+                   "tag":  "v_0.62.2"
+               },
+    "0.63":  {
+                 "released_at":  "2026-05-10 17:14:30",
+                 "released_label":  "10. May 2026, 17:14",
+                 "tag":  "v_0.63"
+             },
+    "0.64":  {
+                 "released_at":  "2026-05-10 19:41:42",
+                 "released_label":  "10. May 2026, 19:41",
+                 "tag":  "v_0.64"
+             },
+    "0.65":  {
+                 "released_at":  "2026-05-11 23:04:34",
+                 "released_label":  "11. May 2026, 23:04",
+                 "tag":  "v_0.65"
+             },
+    "0.65.1":  {
+                   "released_at":  "2026-05-12 00:47:18",
+                   "released_label":  "12. May 2026, 00:47",
+                   "tag":  "v_0.65.1"
+               },
+    "0.65.2":  {
+                   "released_at":  "2026-05-12 08:07:20",
+                   "released_label":  "12. May 2026, 08:07",
+                   "tag":  "v_0.65.2"
+               },
+    "0.65.3":  {
+                   "released_at":  "2026-05-12 09:02:02",
+                   "released_label":  "12. May 2026, 09:02",
+                   "tag":  "v_0.65.3"
+               },
+    "0.65.4":  {
+                   "released_at":  "2026-05-12 09:11:15",
+                   "released_label":  "12. May 2026, 09:11",
+                   "tag":  "v_0.65.4"
+               },
+    "0.65.5":  {
+                   "released_at":  "2026-05-12 09:29:18",
+                   "released_label":  "12. May 2026, 09:29",
+                   "tag":  "v_0.65.5"
+               },
+    "0.65.6":  {
+                   "released_at":  "2026-05-12 10:20:01",
+                   "released_label":  "12. May 2026, 10:20",
+                   "tag":  "v_0.65.6"
+               },
+    "0.65.7":  {
+                   "released_at":  "2026-05-12 10:39:57",
+                   "released_label":  "12. May 2026, 10:39",
+                   "tag":  "v_0.65.7"
+               },
+    "0.66":  {
+                 "released_at":  "2026-05-12 21:59:34",
+                 "released_label":  "12. May 2026, 21:59",
+                 "tag":  "v_0.66"
+             },
+    "0.67":  {
+                 "released_at":  "2026-05-15 14:16:56",
+                 "released_label":  "15. May 2026, 14:16",
+                 "tag":  "v_0.67"
+             },
+    "0.68":  {
+                 "released_at":  "2026-05-17 10:03:13",
+                 "released_label":  "17. May 2026, 10:03",
+                 "tag":  "v_0.68"
+             },
+    "0.69":  {
+                 "released_at":  "2026-05-18 13:07:10",
+                 "released_label":  "18. May 2026, 13:07",
+                 "tag":  "v_0.69"
+             },
+    "0.7":  {
+                "released_at":  "2026-04-27 22:56:30",
+                "released_label":  "27. April 2026, 22:56",
+                "tag":  "v_0.7"
+            },
+    "0.70":  {
+                 "released_at":  "2026-05-24 23:00:26",
+                 "released_label":  "24. May 2026, 23:00",
+                 "tag":  "v_0.70"
+             },
+    "0.70.1":  {
+                   "released_at":  "2026-05-25 13:27:57",
+                   "released_label":  "25. May 2026, 13:27",
+                   "tag":  "v_0.70.1"
+               },
+    "0.71":  {
+                 "released_at":  "2026-05-27 17:22:57",
+                 "released_label":  "27. May 2026, 17:22",
+                 "tag":  "v_0.71"
+             },
+    "0.72":  {
+                 "released_at":  "2026-05-27 23:08:59",
+                 "released_label":  "27. May 2026, 23:08",
+                 "tag":  "v_0.72"
+             },
+    "0.72.1":  {
+                   "released_at":  "2026-05-27 23:38:11",
+                   "released_label":  "27. May 2026, 23:38",
+                   "tag":  "v_0.72.1"
+               },
+    "0.73":  {
+                 "released_at":  "2026-05-29 13:00:57",
+                 "released_label":  "29. May 2026, 13:00",
+                 "tag":  "v_0.73"
+             },
+    "0.74":  {
+                 "released_at":  "2026-06-04 12:45:54",
+                 "released_label":  "4. June 2026, 12:45",
+                 "tag":  "v_0.74"
+             },
+    "0.8":  {
+                "released_at":  "2026-04-28 09:21:52",
+                "released_label":  "28. April 2026, 09:21",
+                "tag":  "v_0.8"
+            },
+    "0.9":  {
+                "released_at":  "2026-04-28 13:32:04",
+                "released_label":  "28. April 2026, 13:32",
+                "tag":  "v_0.9"
+            }
+}

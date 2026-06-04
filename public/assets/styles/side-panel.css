@@ -1526,3 +1526,120 @@ body.has-admin-side-panel {
     color: #b42318;
     font-weight: 700;
 }
+
+.admin-media-renamer-scope-grid {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) minmax(18rem, 1fr);
+    gap: 0.85rem;
+    align-items: stretch;
+}
+
+.admin-media-renamer-scope-card {
+    grid-column: 1 / -1;
+    border: 1px solid var(--admin-border);
+}
+
+.admin-media-renamer-scope-card legend {
+    padding: 0 0.35rem;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.admin-media-renamer-scope-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.admin-media-renamer-scope-option {
+    cursor: pointer;
+    min-width: 0;
+}
+
+.admin-media-renamer-scope-option input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+
+.admin-media-renamer-scope-button {
+    display: grid;
+    gap: 0.2rem;
+    min-height: 5.25rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(148, 163, 184, 0.38);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.admin-media-renamer-scope-button strong {
+    font-size: 0.98rem;
+}
+
+.admin-media-renamer-scope-button small,
+.admin-media-renamer-hide-empty small,
+.admin-media-renamer-hide-done small {
+    color: #64748b;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.admin-media-renamer-scope-option:hover .admin-media-renamer-scope-button,
+.admin-media-renamer-scope-option input:focus-visible + .admin-media-renamer-scope-button {
+    border-color: color-mix(in srgb, var(--accent, #2563eb) 55%, var(--admin-border, #d4dde7));
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+}
+
+.admin-media-renamer-scope-option input:checked + .admin-media-renamer-scope-button {
+    border-color: var(--accent, #2563eb);
+    background: color-mix(in srgb, var(--accent, #2563eb) 10%, #ffffff 90%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #2563eb) 16%, transparent);
+}
+
+.admin-media-renamer-hide-empty,
+.admin-media-renamer-hide-done {
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.admin-media-renamer-hide-empty span,
+.admin-media-renamer-hide-done span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.admin-media-renamer-options-card {
+    gap: 1rem;
+}
+
+.admin-media-renamer-pattern-card {
+    grid-column: 1 / -1;
+}
+
+.admin-media-renamer-gallery-list-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    margin: 1rem 0 0.45rem;
+}
+
+@media (max-width: 900px) {
+    .admin-media-renamer-scope-grid,
+    .admin-media-renamer-scope-buttons {
+        grid-template-columns: 1fr;
+    }
+}

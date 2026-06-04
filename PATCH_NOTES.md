@@ -1,5 +1,276 @@
 # Patch notes
 
+## Version 0.74
+
+Version 0.74 prepares PHP Gallery for a broader shared-hosting release by adding durable admin sessions, linked Google login, global feature switches, mobile WebDAV upload support, runtime diagnostics for RAW conversion, a context-aware media renamer, improved sitemap metadata, refreshed release documentation, and the new lightbox browsing modes.
+
+  ### Highlights
+
+  #### Added persistent admin login and prepared Google sign-in
+
+  - Added longer-lived admin session cookies so production hosting cleanup is less likely to log administrators out unexpectedly.
+  - Added optional persistent login tokens through a `Keep me signed in` login checkbox.
+  - Stored durable login tokens as hashed selectors and secrets instead of raw browser tokens.
+  - Added token revocation on logout and password changes.
+  - Added Google OpenID Connect login routes for account linking and login callback handling.
+  - Required a Google account to be linked from an already authenticated admin profile before it can be used for login.
+  - Added Google account linking and disconnect controls to the admin account page.
+  - Added config placeholders for Google OAuth client ID and secret in `config.example.php`.
+  - Preserved password login as the primary fallback even when Google login is configured.
+
+  #### Added global feature switches
+
+  - Added an Admin Features page for enabling and disabling optional gallery functionality.
+  - Kept all registered features enabled by default so existing installations retain current behavior after update.
+  - Added route-level guards so disabled features cannot be opened directly through known admin or public routes.
+  - Added feature-aware hiding for OpenAI tools, SimBrief controls, public search controls, gallery maps, flight maps, upload API controls, gallery migration, media renamer, image voting, picture game, AI metadata, and lightbox mode controls.
+  - Grouped feature toggles by functional area so administrators can disable incomplete, unwanted, or hosting-heavy integrations without deleting code or data.
+
+  #### Added context-aware media renamer workflow
+
+  - Added a site-wide Media Renamer admin page.
+  - Added a per-gallery File Renamer tab inside the gallery editor.
+  - Added dry-run previews before physical file renames are applied.
+  - Added deterministic rename patterns based on gallery context and image order.
+  - Updated image database rows, generated derivative cache state, derived titles, public path data, and stale ZIP archive rows after renaming.
+  - Added availability-aware filtering so galleries without rename candidates can be hidden after checking.
+  - Added batched rename execution for large selections so the browser does not look frozen during long operations.
+  - Added progress/status feedback for batch rename actions.
+  - Added structured admin logging for completed, warning, and failed rename operations.
+
+  #### Added mobile WebDAV upload framework
+
+  - Added WebDAV-style mobile upload endpoints intended for external mobile upload tools such as PhotoSync.
+  - Added gallery-scoped mobile upload token support.
+  - Added HTTP authorization forwarding in `.htaccess` so bearer/basic credentials can reach PHP behind Apache rewrite rules.
+  - Added admin-facing mobile upload controls and localized labels.
+  - Kept the implementation optional and feature-gated so sites that do not need mobile WebDAV uploads can hide it.
+
+  #### Added runtime diagnostics and stronger DNG conversion policy controls
+
+  - Added an admin-only Runtime Diagnostics page for PHP, GD, Imagick, EXIF, WebP, HEIC, HEIF, DNG, and hosting-limit checks.
+  - Added a copyable plain-text diagnostics report for support and issue reporting.
+  - Added DNG conversion source policy settings for RAW-first, preview-first, and automatic fallback behavior.
+  - Added DNG color handling policy settings for browser-safe sRGB, preserve-look, and camera-white-balance preferences.
+  - Improved DNG derivative generation with more explicit runtime capability checks and fallback ordering.
+  - Added tests covering upload acceptance, DNG GPS handling, and DNG conversion policy behavior.
+
+  #### Improved public SEO and sitemap metadata
+
+  - Added richer sitemap/image metadata handling.
+  - Improved real `lastmod` handling for galleries and images by deriving freshness from file-backed data instead of using one generic timestamp.
+  - Added image metadata to JSON-LD rendering where available.
+  - Updated public path logic used by sitemap generation and SEO output.
+  - Preserved existing public URLs while improving crawler-visible metadata.
+
+  #### Improved theme branding and gallery tag visuals
+
+  - Added configurable site branding separator dimensions.
+  - Added separator stretching behavior so separators can be scaled without preserving aspect ratio when explicitly configured.
+  - Reorganized the Admin Theme page so branding and separator controls are less ambiguous.
+  - Aligned non-hero gallery tag pills with the compact hero tag style.
+  - Preserved the existing hero-panel tags without changing their successful layout.
+
+  #### Added and tuned lightbox browsing modes
+
+  - Added Theme-level default lightbox browsing mode controls.
+  - Added per-gallery lightbox browsing-mode overrides.
+  - Added `picture_strip` browsing mode for nearby image previews.
+  - Added `3d_carousel` browsing mode with neighboring photos layered behind the active image.
+  - Increased the visible carousel context to three neighboring images on each side.
+  - Enlarged the active photo and closest side photos for a more pronounced composition.
+  - Slowed the carousel animation so transitions are easier to perceive.
+  - Kept classic single-image lightbox behavior available through the `single` mode.
+
+  #### Added release, architecture, database, and testing documentation
+
+  - Added `PATCH_NOTES_TEMPLATE.md` for future agent-generated patch notes.
+  - Documented accepted version formats as `X.Y` and `X.Y.Z` with numeric parts of any length and no leading zeroes.
+  - Added `AGENTS.md` with repository guidelines and patch-note instructions for future coding agents.
+  - Added `CODEMAP.md` to map feature areas to controllers, services, migrations, assets, and tests.
+  - Added `DATABASE.md` to document tables, migrations, relationships, settings, and schema authoring rules.
+  - Added `TESTING.md` with syntax-check, script-test, and manual smoke-test guidance.
+  - Reworked `ARCHITECTURE.md` into a current maintainer-oriented architecture guide.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Bumped `CMS_VERSION` in `app/bootstrap.php` to `0.74`.
+  - Added `admin_google_start` and `admin_google_callback` routes.
+  - Added `admin_diagnostics` route.
+  - Added `admin_features` route.
+  - Added `admin_mobile_uploads` route.
+  - Added `mobile_webdav` route.
+  - Added `admin_media_renamer` route.
+  - Added feature flag route guarding through `feature_flag_route_enabled()` and `feature_flag_render_disabled_route()`.
+  - Added Google login/linking logic in `app/controllers/admin_auth.php`.
+  - Added durable login service logic in `app/services/auth_persistence.php`.
+  - Added Google OAuth service logic in `app/services/google_auth.php`.
+  - Added feature flag service logic in `app/services/feature_flags.php`.
+  - Added runtime diagnostics handling in `app/controllers/admin_diagnostics.php`.
+  - Added feature-switch admin handling in `app/controllers/admin_features.php`.
+  - Added media rename UI handling in `app/controllers/admin_media_renamer.php`.
+  - Added media rename filesystem/database logic in `app/services/media_renamer.php`.
+  - Added mobile WebDAV controller logic in `app/controllers/mobile_webdav.php`.
+  - Added mobile WebDAV service logic in `app/services/mobile_webdav.php`.
+  - Added lightbox browsing-mode model logic in `app/services/gallery_lightbox_mode.php`.
+  - Updated `app/controllers/admin_galleries_edit.php` for feature-aware controls, gallery lightbox overrides, media renamer panel handling, and API tab gating.
+  - Updated `app/controllers/admin_dashboard.php` for public-search gating and new admin navigation surfaces.
+  - Updated `app/controllers/admin_theme.php` for theme separator settings and lightbox mode defaults.
+  - Updated `app/controllers/public_gallery.php` for lightbox mode output and public rendering changes.
+  - Updated `app/controllers/theme_assets.php` for theme branding asset behavior.
+  - Updated `app/controllers/updates.php` and `app/services/updates.php` for patch note metadata and update display refinements.
+  - Updated `app/services/public_paths.php` for sitemap and lastmod calculations.
+  - Updated `app/services/dng_derivatives.php` for DNG conversion policy and capability handling.
+  - Updated `app/services/uploads.php` for RAW/DNG upload behavior.
+  - Updated `app/services/theme.php` for separator sizing, stretch settings, and lightbox mode defaults.
+  - Updated service and controller loaders for the new modules.
+  - Updated release metadata in `release-metadata.json` for version `0.74`.
+  - Regenerated `app/core-manifest.json` for the updated release surface.
+
+  #### Database
+
+  - Added migration `202605310001_admin_persistent_auth_and_google_login.php`.
+  - Added migration `202606010001_gallery_lightbox_browsing_mode.php`.
+  - Added migration `202606010002_gallery_lightbox_browsing_mode_carousel.php`.
+  - Added migration `202606040001_mobile_webdav_upload_tokens.php`.
+  - Added `admin_remember_tokens` storage for durable login selectors and hashed token secrets.
+  - Added `user_google_accounts` storage for linked Google identities.
+  - Added nullable `galleries.lightbox_browsing_mode` storage for per-gallery lightbox overrides.
+  - Added mobile WebDAV upload token storage for gallery-scoped mobile integrations.
+  - Added compatibility normalization for legacy lightbox mode values.
+
+  #### Frontend
+
+  - Added `public/assets/gallery-modules/admin-media-renamer.js` for preview, availability checks, batched execution, progress updates, and AJAX refresh behavior.
+  - Updated `public/assets/gallery-modules/lightbox.js` for picture-strip and 3D-carousel browsing modes.
+  - Updated `public/assets/gallery-modules/lightbox-deferred.js` for deferred lightbox behavior.
+  - Updated `public/assets/gallery-modules/admin-operations.js` and `public/assets/gallery-modules/admin-side-panel.js` for admin workflow integration.
+  - Updated `public/assets/gallery.js` for public behavior initialization.
+  - Added and updated `public/assets/styles/lightbox.css` for carousel and strip rendering.
+  - Added and updated `public/assets/styles/mobile-gallery.css` for mobile lightbox fallback behavior.
+  - Added and updated `public/assets/styles/side-panel.css` for admin side-panel polish.
+  - Updated `public/assets/styles/admin.css` for feature settings, diagnostics, media renamer, theme controls, Google login, and related admin UI.
+  - Updated `public/assets/styles/admin-media-tools.css` for media-maintenance controls.
+  - Updated translations in `app/lang/cs.json`, `app/lang/en.json`, `app/lang/cs.php`, and `app/lang/en.php`.
+
+  #### Tests
+
+  - Added `tests/dng_conversion_policy_test.php`.
+  - Added `tests/gallery_lightbox_mode_model_test.php`.
+  - Added `tests/upload_accept_and_dng_gps_test.php`.
+  - Covered DNG conversion policy normalization and attempt ordering.
+  - Covered gallery lightbox browsing-mode normalization, storage, inheritance, and label behavior.
+  - Covered upload acceptance and DNG GPS-related behavior.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public gallery browsing can use the classic lightbox, picture strip, or 3D carousel depending on site and gallery settings.
+  - Public search, maps, voting, and optional integrations can be hidden cleanly when an administrator disables them.
+  - Sitemap and JSON-LD metadata should better represent current gallery and image freshness for search engines.
+  - Gallery tags outside the hero area now use a more compact and consistent visual style.
+
+  #### For administrators
+
+  - Admin login can remain active for days instead of depending only on short shared-host PHP session cleanup windows.
+  - Google login can be enabled after linking a Google account from the admin profile.
+  - Optional, unfinished, or unwanted features can be disabled from a central feature settings page.
+  - Media files can be renamed from previewed plans without manually touching database rows or generated derivatives.
+  - Large rename operations provide progress feedback instead of appearing frozen.
+  - Mobile upload integrations can be prepared through WebDAV-style endpoints and scoped tokens.
+  - Runtime diagnostics make it easier to inspect whether the host supports DNG, HEIC, WebP, Imagick, GD, EXIF, and required upload limits.
+  - DNG conversion can prefer embedded previews or full RAW decoding depending on what works better for the hosting environment and user devices.
+  - Theme branding controls are clearer and separator sizing/stretching is configurable.
+
+  ### Notes
+
+  - Google login requires OAuth client configuration and a linked admin account before it can authenticate anyone.
+  - Persistent login stores hashed browser tokens and should be revoked automatically on logout or password change.
+  - Feature switches hide and guard features, but they do not remove existing data.
+  - Mobile WebDAV support is a compatibility framework for external upload clients, not a dedicated native app.
+  - DNG conversion behavior still depends on server capabilities such as Imagick delegates and available memory.
+  - Media renaming physically changes source filenames, so administrators should review dry-run plans before applying changes.
+  - The patch notes template and maintenance docs are included so future release notes can be generated consistently.
+
+  ### Files changed
+
+  - `.htaccess`
+  - `AGENTS.md`
+  - `ARCHITECTURE.md`
+  - `CODEMAP.md`
+  - `DATABASE.md`
+  - `PATCH_NOTES.md`
+  - `PATCH_NOTES_TEMPLATE.md`
+  - `README.md`
+  - `TESTING.md`
+  - `app/bootstrap.php`
+  - `app/controllers.php`
+  - `app/controllers/admin_auth.php`
+  - `app/controllers/admin_dashboard.php`
+  - `app/controllers/admin_diagnostics.php`
+  - `app/controllers/admin_features.php`
+  - `app/controllers/admin_galleries_edit.php`
+  - `app/controllers/admin_media_renamer.php`
+  - `app/controllers/admin_public_inline.php`
+  - `app/controllers/admin_theme.php`
+  - `app/controllers/admin_uploads.php`
+  - `app/controllers/mobile_webdav.php`
+  - `app/controllers/public_gallery.php`
+  - `app/controllers/theme_assets.php`
+  - `app/controllers/updates.php`
+  - `app/core-manifest.json`
+  - `app/helpers.php`
+  - `app/lang/cs.json`
+  - `app/lang/cs.php`
+  - `app/lang/en.json`
+  - `app/lang/en.php`
+  - `app/security.php`
+  - `app/services.php`
+  - `app/services/admin_dashboard.php`
+  - `app/services/ai_image_analysis.php`
+  - `app/services/auth_persistence.php`
+  - `app/services/dng_derivatives.php`
+  - `app/services/exif.php`
+  - `app/services/feature_flags.php`
+  - `app/services/gallery_lightbox_mode.php`
+  - `app/services/gallery_sidecars.php`
+  - `app/services/google_auth.php`
+  - `app/services/media_renamer.php`
+  - `app/services/mobile_webdav.php`
+  - `app/services/openai_text_assist.php`
+  - `app/services/picture_game.php`
+  - `app/services/public_paths.php`
+  - `app/services/public_search.php`
+  - `app/services/theme.php`
+  - `app/services/updates.php`
+  - `app/services/uploads.php`
+  - `app/views/admin_chrome.php`
+  - `app/views/admin_dashboard.php`
+  - `app/views/seo.php`
+  - `config.example.php`
+  - `database/migrations/202605310001_admin_persistent_auth_and_google_login.php`
+  - `database/migrations/202606010001_gallery_lightbox_browsing_mode.php`
+  - `database/migrations/202606010002_gallery_lightbox_browsing_mode_carousel.php`
+  - `database/migrations/202606040001_mobile_webdav_upload_tokens.php`
+  - `public/assets/gallery-modules/admin-media-renamer.js`
+  - `public/assets/gallery-modules/admin-operations.js`
+  - `public/assets/gallery-modules/admin-side-panel.js`
+  - `public/assets/gallery-modules/lightbox-deferred.js`
+  - `public/assets/gallery-modules/lightbox.js`
+  - `public/assets/gallery.js`
+  - `public/assets/styles/admin-media-tools.css`
+  - `public/assets/styles/admin.css`
+  - `public/assets/styles/lightbox.css`
+  - `public/assets/styles/mobile-gallery.css`
+  - `public/assets/styles/side-panel.css`
+  - `release-metadata.json`
+  - `tests/dng_conversion_policy_test.php`
+  - `tests/gallery_lightbox_mode_model_test.php`
+  - `tests/upload_accept_and_dng_gps_test.php`
+
 ## Version 0.73
 
 Version 0.73 expands PHP Gallery with context-aware tagging, live public search, internal AI image analysis, and optional OpenAI-assisted description generation. It also polishes gallery hero presentation and improves the admin editing flow around gallery and photo metadata.

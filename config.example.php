@@ -48,6 +48,29 @@ return [
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
     'setup_key' => 'replace-with-a-temporary-setup-key',
 
+    // Admin authentication is intentionally durable because shared hosting can
+    // clean PHP session files aggressively. The DB-backed persistent login token
+    // restores the admin session when the browser still has a valid cookie.
+    'auth' => [
+        'session_lifetime_days' => 14,
+        'remember_lifetime_days' => 30,
+        'persistent_login_enabled' => true,
+        'persistent_login_default_checked' => true,
+    ],
+
+    // Google login uses OpenID Connect. Create a Google OAuth 2.0 Web
+    // application client and add this callback URL in Google Cloud Console:
+    // https://your-domain.example/index.php?page=admin_google_callback
+    // The account must first be linked from Admin -> Account before Google
+    // login is accepted on the public login screen.
+    'google_login' => [
+        'enabled' => false,
+        'client_id' => '',
+        'client_secret' => '',
+        'redirect_uri' => '',
+        'prompt' => 'select_account',
+    ],
+
     // Navigation data is offline-first. SimBrief-generated route maps use the
     // OFP coordinates saved with each gallery. The bundled CSV stays available
     // as a small fallback lookup table for manually entered route text.

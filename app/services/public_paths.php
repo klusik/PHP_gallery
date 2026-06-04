@@ -47,24 +47,331 @@ Public URL path and slug helpers.
  */
 function public_gallery_sitemap_entries(): array
 {
-    // $accessReady stores an intermediate value used by the surrounding gallery workflow.
-    $accessReady = gallery_access_schema_ready();
-    // $columns stores an intermediate value used by the surrounding gallery workflow.
-    $columns = $accessReady ? '*' : 'folder_path, slug, visibility';
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
+    return array_values(array_map(
+        static fn (array $entry): string => (string) $entry['loc'],
+        array_filter(
+            public_sitemap_entries(),
+            static fn (array $entry): bool => (string) ($entry['type'] ?? '') === 'gallery'
+        )
+    ));
+}
+
+/**
+ * Return crawler-facing sitemap entries for public galleries and public images.
+ *
+ * Each gallery entry may carry a conservative image sitemap payload so Google
+ * Image Search can discover strong thumbnails, titles, captions, and canonical
+ * image detail URLs without crawling every lightbox interaction first.
+ */
+function public_sitemap_entries(): array
+{
+    $entries = [public_homepage_sitemap_entry()];
+    foreach (public_sitemap_gallery_rows() as $gallery) {
+        if (gallery_access_schema_ready() && gallery_access_requirement($gallery) !== null) {
+            continue;
+        }
+        $images = public_sitemap_gallery_images($gallery, 50);
+        $entries[] = [
+            'type' => 'gallery',
+            'loc' => gallery_public_url($gallery),
+            'lastmod' => public_sitemap_lastmod(public_sitemap_gallery_last_modified($gallery, $images)),
+            'priority' => public_sitemap_gallery_priority($gallery),
+            'images' => public_sitemap_image_payloads($gallery, $images),
+        ];
+        foreach ($images as $image) {
+            $entries[] = [
+                'type' => 'image',
+                'loc' => image_public_url($image, $gallery),
+                'lastmod' => public_sitemap_lastmod(public_sitemap_image_last_modified($image)),
+                'priority' => '0.5',
+                'images' => public_sitemap_image_payloads($gallery, [$image]),
+            ];
+        }
+    }
+    return public_sitemap_unique_entries($entries);
+}
+
+/**
+ * Build the homepage sitemap entry using the newest public gallery timestamp.
+ */
+function public_homepage_sitemap_entry(): array
+{
+    $lastModified = null;
+    try {
+        $lastModified = (string) db()->query("SELECT MAX(updated_at) FROM galleries WHERE visibility = 'public'")->fetchColumn();
+    } catch (Throwable) {
+        $lastModified = null;
+    }
+    return [
+        'type' => 'home',
+        'loc' => public_base_url() . '/',
+        'lastmod' => public_sitemap_lastmod($lastModified),
+        'priority' => '1.0',
+        'images' => [],
+    ];
+}
+
+/**
+ * Fetch public galleries in their stable path order.
+ */
+function public_sitemap_gallery_rows(): array
+{
+    $columns = gallery_access_schema_ready() ? '*' : 'id, parent_id, folder_path, slug, title, description, visibility, cover_image_id, created_at, updated_at';
     $stmt = db()->query("SELECT $columns
         FROM galleries
         WHERE visibility = 'public'
         ORDER BY folder_path");
-    // $urls stores an intermediate value used by the surrounding gallery workflow.
-    $urls = [];
-    foreach ($stmt->fetchAll() as $gallery) {
-        if ($accessReady && gallery_access_requirement($gallery) !== null) {
+    return $stmt->fetchAll();
+}
+
+/**
+ * Fetch public images suitable for sitemap output for one gallery.
+ */
+function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
+{
+    $limit = max(1, min(100, $limit));
+    $stmt = db()->prepare('SELECT *
+        FROM images
+        WHERE gallery_id = ? AND visibility = ?
+        ORDER BY sort_order, filename
+        LIMIT ' . $limit);
+    $stmt->execute([(int) $gallery['id'], 'public']);
+    $images = [];
+    foreach ($stmt->fetchAll() as $image) {
+        if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
             continue;
         }
-        $urls[] = gallery_public_url($gallery);
+        $images[] = $image;
     }
-    return array_values(array_unique($urls));
+    return $images;
+}
+
+/**
+ * Convert public images into Google image sitemap payloads.
+ */
+function public_sitemap_image_payloads(array $gallery, array $images): array
+{
+    $payloads = [];
+    $position = 1;
+    foreach ($images as $image) {
+        $payloads[] = [
+            'loc' => absolute_public_url(thumbnail_url($image, 1200, 'jpg')),
+            'title' => public_sitemap_clean_text(image_alt_text($image, $gallery, $position)),
+            'caption' => public_sitemap_clean_text(public_sitemap_image_caption($image, $gallery, $position)),
+        ];
+        $position++;
+    }
+    return $payloads;
+}
+
+/**
+ * Build a meaningful image caption from the image description and gallery context.
+ */
+function public_sitemap_image_caption(array $image, array $gallery, int $position): string
+{
+    $description = trim((string) ($image['description'] ?? ''));
+    if ($description !== '') {
+        return $description;
+    }
+    $title = trim((string) ($image['title'] ?? ''));
+    if ($title !== '') {
+        return $title . ' - ' . gallery_seo_title($gallery);
+    }
+    return image_alt_text($image, $gallery, $position) . ' - ' . gallery_seo_title($gallery);
+}
+
+/**
+ * Return the strongest known last modified value for one gallery URL.
+ */
+function public_sitemap_gallery_last_modified(array $gallery, array $images): ?string
+{
+    $values = public_sitemap_gallery_filesystem_dates($gallery);
+    foreach (public_sitemap_gallery_freshness_images($gallery, $images) as $image) {
+        $values[] = public_sitemap_image_last_modified($image, $gallery);
+    }
+    $values = array_filter($values, static fn (?string $value): bool => trim((string) $value) !== '');
+    if (!$values) {
+        return public_sitemap_newest_date([
+            (string) ($gallery['updated_at'] ?? ''),
+            (string) ($gallery['created_at'] ?? ''),
+        ]);
+    }
+    return public_sitemap_newest_date($values);
+}
+
+/**
+ * Return public images used only for gallery freshness calculation.
+ *
+ * The visible image sitemap payload intentionally stays capped, but the gallery
+ * URL lastmod should still reflect newer public photos that are not part of the
+ * first payload set.
+ */
+function public_sitemap_gallery_freshness_images(array $gallery, array $seedImages): array
+{
+    try {
+        $stmt = db()->prepare('SELECT *
+            FROM images
+            WHERE gallery_id = ? AND visibility = ?
+            ORDER BY sort_order, filename');
+        $stmt->execute([(int) $gallery['id'], 'public']);
+        $images = [];
+        foreach ($stmt->fetchAll() as $image) {
+            if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+                continue;
+            }
+            $images[] = $image;
+        }
+        return $images;
+    } catch (Throwable) {
+        return $seedImages;
+    }
+}
+
+/**
+ * Return filesystem-derived dates that can make one gallery URL fresh.
+ */
+function public_sitemap_gallery_filesystem_dates(array $gallery): array
+{
+    $values = [];
+    try {
+        $galleryPath = gallery_abs_path((string) ($gallery['folder_path'] ?? ''));
+        $values[] = public_sitemap_file_lastmod($galleryPath);
+        $values[] = public_sitemap_file_lastmod($galleryPath . DIRECTORY_SEPARATOR . 'gallery.json');
+    } catch (Throwable) {
+        return [];
+    }
+    return $values;
+}
+
+/**
+ * Return the strongest known last modified value for one image URL.
+ */
+function public_sitemap_image_last_modified(array $image, ?array $gallery = null): ?string
+{
+    if ($gallery !== null) {
+        try {
+            $fileDate = public_sitemap_file_lastmod(image_abs_path($image, $gallery));
+            if ($fileDate !== null) {
+                return $fileDate;
+            }
+        } catch (Throwable) {
+            // Fall back to database dates below when the original file cannot be resolved.
+        }
+    }
+
+    foreach (['modified_at', 'updated_at', 'created_at'] as $column) {
+        $value = trim((string) ($image[$column] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return null;
+}
+
+/**
+ * Return a sitemap-compatible date for one filesystem path.
+ */
+function public_sitemap_file_lastmod(string $path): ?string
+{
+    if ($path === '' || !file_exists($path)) {
+        return null;
+    }
+    $mtime = @filemtime($path);
+    if ($mtime === false) {
+        return null;
+    }
+    return gmdate('Y-m-d H:i:s', $mtime);
+}
+
+/**
+ * Return the newest valid date string from mixed SQL, ISO, and filesystem values.
+ */
+function public_sitemap_newest_date(array $values): ?string
+{
+    $newestTimestamp = null;
+    foreach ($values as $value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            continue;
+        }
+        $timestamp = strtotime($value);
+        if ($timestamp === false) {
+            continue;
+        }
+        if ($newestTimestamp === null || $timestamp > $newestTimestamp) {
+            $newestTimestamp = $timestamp;
+        }
+    }
+    if ($newestTimestamp === null) {
+        return null;
+    }
+    return gmdate('Y-m-d H:i:s', $newestTimestamp);
+}
+
+/**
+ * Format a SQL or ISO timestamp as an XML sitemap date.
+ */
+function public_sitemap_lastmod(?string $value): ?string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return null;
+    }
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return null;
+    }
+    return gmdate('Y-m-d', $timestamp);
+}
+
+/**
+ * Assign a light priority hint by gallery depth.
+ */
+function public_sitemap_gallery_priority(array $gallery): string
+{
+    $path = trim((string) ($gallery['url_path'] ?? $gallery['folder_path'] ?? ''), '/');
+    if ($path === '') {
+        return '0.8';
+    }
+    $depth = substr_count($path, '/') + 1;
+    if ($depth <= 1) {
+        return '0.8';
+    }
+    if ($depth <= 3) {
+        return '0.7';
+    }
+    return '0.6';
+}
+
+/**
+ * Normalize sitemap text fields and keep them compact.
+ */
+function public_sitemap_clean_text(string $value): string
+{
+    $value = trim(strip_tags($value));
+    $value = preg_replace('/\s+/u', ' ', $value) ?: $value;
+    if (function_exists('mb_substr')) {
+        return mb_substr($value, 0, 300);
+    }
+    return substr($value, 0, 300);
+}
+
+/**
+ * Remove duplicate sitemap URLs while preserving their first occurrence.
+ */
+function public_sitemap_unique_entries(array $entries): array
+{
+    $seen = [];
+    $unique = [];
+    foreach ($entries as $entry) {
+        $loc = (string) ($entry['loc'] ?? '');
+        if ($loc === '' || isset($seen[$loc])) {
+            continue;
+        }
+        $seen[$loc] = true;
+        $unique[] = $entry;
+    }
+    return $unique;
 }
 
 /**

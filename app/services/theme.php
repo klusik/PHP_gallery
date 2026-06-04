@@ -72,8 +72,12 @@ function theme_settings(): array
         'font' => app_setting('theme_font', $defaults['font']),
         'page_width' => theme_page_width_mode((string) app_setting('theme_page_width', 'default')),
         'page_width_custom' => theme_page_width_custom_value(app_setting('theme_page_width_custom')),
+        'branding_separator_width' => theme_branding_separator_width_value(app_setting('theme_branding_separator_width')),
+        'branding_separator_height' => theme_branding_separator_height_value(app_setting('theme_branding_separator_height')),
+        'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
         'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
         'gallery_count_badge_enabled' => !function_exists('theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
+        'lightbox_browsing_mode' => function_exists('theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
     ];
 }
 
@@ -104,8 +108,12 @@ function theme_override_settings(): array
         'font' => app_setting('theme_font'),
         'page_width' => app_setting('theme_page_width'),
         'page_width_custom' => app_setting('theme_page_width_custom'),
+        'branding_separator_width' => app_setting('theme_branding_separator_width'),
+        'branding_separator_height' => app_setting('theme_branding_separator_height'),
+        'branding_separator_stretch' => app_setting('theme_branding_separator_stretch'),
         'gallery_description_layout' => app_setting('theme_gallery_description_layout'),
         'gallery_count_badge_enabled' => app_setting('theme_gallery_count_badge_enabled'),
+        'lightbox_browsing_mode' => app_setting('theme_lightbox_browsing_mode'),
     ];
     return array_filter($settings, static fn (?string $value): bool => $value !== null && $value !== '');
 }
@@ -189,6 +197,48 @@ function theme_page_width_custom_value(mixed $value): int
         return 1440;
     }
     return max(1024, min(2048, $width));
+}
+
+/**
+ * Normalize the optional public header separator width override.
+ *
+ * A value of 0 keeps the current responsive page-width behavior. Positive
+ * values constrain the separator container to a fixed pixel width while still
+ * allowing it to shrink on narrow screens.
+ */
+function theme_branding_separator_width_value(mixed $value): int
+{
+    // $width stores the requested public header separator width before clamping.
+    $width = (int) $value;
+    if ($width <= 0) {
+        return 0;
+    }
+    return max(160, min(3840, $width));
+}
+
+/**
+ * Normalize the public header separator image height limit.
+ */
+function theme_branding_separator_height_value(mixed $value): int
+{
+    // $height stores the requested public header separator image height before clamping.
+    $height = (int) $value;
+    if ($height <= 0) {
+        return 72;
+    }
+    return max(8, min(512, $height));
+}
+
+/**
+ * Normalize whether the public header separator should be stretched to the exact box.
+ *
+ * Disabled keeps the image aspect ratio and treats height as a maximum. Enabled
+ * makes the configured width and height an exact render box, allowing intentional
+ * horizontal or vertical distortion for decorative separators.
+ */
+function theme_branding_separator_stretch_enabled(mixed $value): bool
+{
+    return (string) $value === '1';
 }
 
 /**

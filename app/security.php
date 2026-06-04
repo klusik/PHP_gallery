@@ -77,9 +77,13 @@ function current_user(): ?array
         return $cachedUser;
     }
     if (empty($_SESSION['user_id'])) {
-        // $cache stores an intermediate value used by the surrounding gallery workflow.
-        $cache = true;
-        return $cachedUser = null;
+        // $restoredUser stores a durable login restored from a hashed database token when PHP session storage expired.
+        $restoredUser = function_exists('auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
+        if (!$restoredUser) {
+            // $cache stores an intermediate value used by the surrounding gallery workflow.
+            $cache = true;
+            return $cachedUser = null;
+        }
     }
     try {
         // Variable $stmt stores this steps working value.

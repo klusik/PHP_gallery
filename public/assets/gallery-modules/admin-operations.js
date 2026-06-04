@@ -39,3 +39,4 @@ export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-adm
 export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20260512-modular-admin-v1';
 export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260519-public-drop-refactor-v1';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260519-drag-ghost-v1';
+export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260603-media-renamer-apply-batches-v1';
