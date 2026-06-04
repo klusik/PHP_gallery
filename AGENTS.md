@@ -22,3 +22,6 @@ Git history uses short, imperative messages, often with a feature prefix, for ex
 
 ## Security & Configuration Tips
 Do not commit `config.php`, local caches, uploads, or generated deploy archives. Use `config.example.php` as the baseline for new environments. Keep access checks in `app/services/gallery_access.php` and route-sensitive logic centralized in controllers and services rather than duplicated in views.
+
+## Patch Notes Guidelines
+Patch note generation rules are documented in `PATCH_NOTES_TEMPLATE.md`. When creating release notes, follow that template and the existing `PATCH_NOTES.md` style. Do not edit existing historical entries unless explicitly requested.
