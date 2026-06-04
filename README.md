@@ -58,6 +58,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Togglable voting** - Enable/disable voting per gallery
 
 ### Gallery Navigation
+- **Top navigation shortcuts** - Optionally show up to three admin-selected favorite galleries or the main gallery page as direct header buttons
 - **Breadcrumbs** - Navigate hierarchy on public pages
 - **Gallery cards** - Display subgalleries with cover images and metadata
 - **Pagination** - Handle large galleries without overwhelming the browser
@@ -77,7 +78,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
 - **Custom CSS** - Direct CSS editing for advanced customization
-- **Layout control** - Choose gallery card layout (vertical/horizontal)
+- **Layout control** - Choose gallery card layout (vertical/horizontal) and favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
 - **One-click updates** - Check GitHub and install newer versions from admin dashboard

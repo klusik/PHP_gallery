@@ -20,6 +20,9 @@ The repository already uses direct PHP test scripts under `tests/`. Run them wit
 ```bash
 php tests/gallery_visibility_model_test.php
 php tests/gallery_branding_model_test.php
+php tests/favorite_galleries_model_test.php
+
+The favorite shortcut test covers zero configured shortcuts, direct gallery links, the optional main-page shortcut, duplicate/missing-gallery cleanup, public visibility filtering, and HTML escaping.
 ```
 
 These are best for pure logic, helper functions, and regression checks that do not require a browser session.

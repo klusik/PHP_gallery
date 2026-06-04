@@ -58,6 +58,30 @@ function view_public_header_branding_model(string $siteName, ?array $currentGall
     return $model;
 }
 
+
+/**
+ * Render configured favorite gallery shortcut links for the top navigation.
+ *
+ * @param array<int, array<string, mixed>> $items Resolved favorite gallery navigation items.
+ * @return string Favorite gallery anchor markup, or an empty string when none are configured.
+ */
+function view_favorite_gallery_nav_html(array $items): string
+{
+    // $html stores the compact anchor list inserted into the shared header nav.
+    $html = '';
+    foreach ($items as $item) {
+        // $url stores the final public gallery URL for one configured shortcut.
+        $url = trim((string) ($item['url'] ?? ''));
+        // $title stores the button label, normally the gallery title.
+        $title = trim((string) ($item['title'] ?? ''));
+        if ($url === '' || $title === '') {
+            continue;
+        }
+        $html .= '<a class="nav-favorite-gallery" href="' . e($url) . '">' . e($title) . '</a>';
+    }
+    return $html;
+}
+
 function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     $user = current_user();
@@ -137,7 +161,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
-    echo '<a href="' . e(url_for('home')) . '">' . e(t('nav.galleries', 'Galleries')) . '</a>';
+    // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
+    $favoritePublicOnly = !$user || $anonymousPreview;
+    // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
+    $favoriteGalleryItems = function_exists('theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
+    echo view_favorite_gallery_nav_html($favoriteGalleryItems);
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             $updatePending = application_update_pending();

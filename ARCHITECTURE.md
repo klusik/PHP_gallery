@@ -305,7 +305,7 @@ Key service families:
 
 | Family | Files | Responsibility |
 | --- | --- | --- |
-| Settings | `app_settings.php`, `theme.php`, `custom_css.php`, `translations.php` | DB-backed settings, theme defaults, CSS variables, language packs. |
+| Settings | `app_settings.php`, `theme.php`, `favorite_galleries.php`, `custom_css.php`, `translations.php` | DB-backed settings, theme defaults, favorite gallery/main-page shortcuts, CSS variables, language packs. |
 | Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, display inheritance and presentation options. |
 | Gallery assets | `gallery_covers.php`, `gallery_backgrounds.php`, `gallery_branding.php`, `favicon.php` | Cover, background, banner, logo, separator and favicon handling. |
 | Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, copy/move and DNG helper logic. |
@@ -326,7 +326,7 @@ Important view files:
 
 | File | Purpose |
 | --- | --- |
-| `app/views/layout.php` | Page layout and shared chrome. |
+| `app/views/layout.php` | Page layout, shared chrome, and favorite shortcut rendering. |
 | `app/views/admin_chrome.php` | Admin navigation and shared admin page shell. |
 | `app/views/admin_dashboard.php` | Dashboard visual sections. |
 | `app/views/admin_gallery_forms.php` | Gallery admin form sections. |
@@ -398,6 +398,8 @@ delete_app_settings(array $keys): void
 ```
 
 Settings are used for URL rewrites, site name, dev mode, collapsed admin state, public search, theme behavior, telemetry preferences and related runtime options.
+
+Theme favorite shortcuts are stored as a JSON array in `theme_favorite_gallery_ids`. The array may contain numeric gallery IDs and the `home` token for the main gallery page. `app/services/favorite_galleries.php` normalizes the value, removes duplicates, validates that selected galleries still exist before saving, and resolves public header navigation items in configured order. Anonymous visitors only receive gallery shortcuts that remain public and listed; the main page shortcut is always safe to render.
 
 When adding a setting:
 

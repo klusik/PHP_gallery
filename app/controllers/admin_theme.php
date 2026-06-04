@@ -361,6 +361,11 @@ function cms_admin_theme(): void
             }
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            if (function_exists('save_theme_favorite_gallery_slots')) {
+                save_theme_favorite_gallery_slots($_POST['theme_favorite_gallery_types'] ?? [], $_POST['theme_favorite_gallery_ids'] ?? []);
+            } elseif (function_exists('save_theme_favorite_gallery_ids')) {
+                save_theme_favorite_gallery_ids($_POST['theme_favorite_gallery_ids'] ?? []);
+            }
             set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
             set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
             set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
@@ -602,6 +607,38 @@ function cms_admin_theme(): void
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
     echo '<div class="theme-tab-card-grid">';
+    $favoriteGalleryIds = function_exists('theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
+    echo '<fieldset class="form-grid admin-theme-favorite-galleries" id="admin-theme-favorite-galleries"><legend>' . e(t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.')) . '</p>';
+    echo '<div class="admin-theme-favorite-gallery-list">';
+    for ($favoriteIndex = 0; $favoriteIndex < THEME_FAVORITE_GALLERIES_MAX; $favoriteIndex++) {
+        // $selectedFavoriteShortcut stores the configured shortcut for one visible slot.
+        $selectedFavoriteShortcut = $favoriteGalleryIds[$favoriteIndex] ?? '';
+        // $selectedFavoriteType stores whether this slot targets nothing, the main page, or a gallery.
+        $selectedFavoriteType = $selectedFavoriteShortcut === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? THEME_FAVORITE_GALLERIES_HOME_TOKEN : ((int) $selectedFavoriteShortcut > 0 ? 'gallery' : '');
+        // $selectedFavoriteGalleryId stores the configured gallery ID when this slot targets a gallery.
+        $selectedFavoriteGalleryId = $selectedFavoriteType === 'gallery' ? (int) $selectedFavoriteShortcut : 0;
+        echo '<div class="admin-theme-favorite-gallery-slot"><strong>' . e(t('admin.theme.layout.favorite_gallery_slot', 'Shortcut {number}', ['number' => $favoriteIndex + 1])) . '</strong>';
+        echo '<label>' . e(t('admin.theme.layout.favorite_gallery_type', 'Shortcut target')) . '<select name="theme_favorite_gallery_types[]">';
+        echo '<option value=""' . ($selectedFavoriteType === '' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>';
+        echo '<option value="' . e(THEME_FAVORITE_GALLERIES_HOME_TOKEN) . '"' . ($selectedFavoriteType === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_home', 'Main page')) . '</option>';
+        echo '<option value="gallery"' . ($selectedFavoriteType === 'gallery' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_gallery', 'Gallery')) . '</option>';
+        echo '</select></label>';
+        if (function_exists('render_gallery_search_picker')) {
+            echo render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
+                'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
+                'placeholder' => t('admin.theme.layout.favorite_gallery_placeholder', 'Search gallery by name or path'),
+                'disable_prefill' => true,
+            ]);
+        } else {
+            echo '<select name="theme_favorite_gallery_ids[]"><option value="">' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>' . gallery_options_for_select($selectedFavoriteGalleryId) . '</select>';
+        }
+        echo '<small class="muted">' . e(t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.')) . '</small>';
+        echo '</div>';
+    }
+    echo '</div>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.')) . '</p>';
+    echo '</fieldset>';
     echo '<fieldset class="form-grid admin-theme-description-layout" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.')) . '</p>';
     echo '<label class="admin-theme-description-select">' . e(t('admin.theme.layout.description_layout_label', 'Default gallery-card layout')) . '<select name="theme_gallery_description_layout" data-theme-description-layout-select>';

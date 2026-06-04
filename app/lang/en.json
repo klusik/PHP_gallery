@@ -1157,6 +1157,12 @@
   "admin.theme.layout.description_preview_meta": "12 photos",
   "admin.theme.layout.description_preview_title": "Summer gallery",
   "admin.theme.layout.enable_pagination": "Enable pagination",
+  "admin.theme.layout.favorite_galleries_hint": "Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.",
+  "admin.theme.layout.favorite_galleries_legend": "Favorite gallery shortcuts",
+  "admin.theme.layout.favorite_galleries_visibility_hint": "Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.",
+  "admin.theme.layout.favorite_gallery_empty": "No shortcut",
+  "admin.theme.layout.favorite_gallery_placeholder": "Search gallery by name or path",
+  "admin.theme.layout.favorite_gallery_slot": "Shortcut {number}",
   "admin.theme.layout.items_per_page_preview": "Items per page preview:",
   "admin.theme.layout.kicker": "Layout",
   "admin.theme.layout.lightbox_mode_hint": "Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.",
@@ -1630,6 +1636,7 @@
   "lightbox.toggle_slideshow": "Toggle slideshow",
   "nav.admin": "Admin",
   "nav.admin_login": "Admin login",
+  "nav.favorite_gallery_fallback": "Gallery {id}",
   "nav.galleries": "Galleries",
   "nav.logout": "Logout",
   "pagination.label": "Pagination",
@@ -1758,5 +1765,10 @@
   "upload.error.too_large_server": "An uploaded file is larger than the server allows.",
   "vote.error.too_many_votes": "Too many votes. Try again in a moment.",
   "vote.like": "Like",
-  "vote.no_like": "No like"
+  "vote.no_like": "No like",
+  "admin.theme.layout.favorite_gallery_gallery": "Gallery",
+  "admin.theme.layout.favorite_gallery_gallery_hint": "Gallery picker is used only when the shortcut target is Gallery.",
+  "admin.theme.layout.favorite_gallery_home": "Main page",
+  "admin.theme.layout.favorite_gallery_type": "Shortcut target",
+  "nav.favorite_home": "Main page"
 }

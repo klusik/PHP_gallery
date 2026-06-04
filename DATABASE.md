@@ -294,6 +294,8 @@ Key-value storage for mutable runtime settings.
 
 Use `app/services/app_settings.php` to access this table.
 
+`theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a JSON array of up to three entries. Numeric entries are gallery IDs, and the `home` token represents the main gallery page. The value is resolved by `app/services/favorite_galleries.php`; duplicate entries, missing galleries and unavailable public rows are ignored defensively.
+
 ## Voting and Game Tables
 
 ### `image_votes`

@@ -1157,6 +1157,12 @@
   "admin.theme.layout.description_preview_meta": "12 fotek",
   "admin.theme.layout.description_preview_title": "Letní galerie",
   "admin.theme.layout.enable_pagination": "Zapnout stránkování",
+  "admin.theme.layout.favorite_galleries_hint": "Vyberte až tři zástupce, kteří se zobrazí jako přímá tlačítka v horní navigaci. Každý slot může odkazovat na hlavní stránku nebo na jednu galerii. Pokud necháte všechna tři pole prázdná, původní tlačítko Galerie se úplně skryje.",
+  "admin.theme.layout.favorite_galleries_legend": "Oblíbené galerie v navigaci",
+  "admin.theme.layout.favorite_galleries_visibility_hint": "Smazané galerie a duplicitní výběry se při ukládání ignorují. Anonymní návštěvníci uvidí jen nastavené oblíbené galerie, které jsou stále veřejné a zobrazené v seznamu. Zástupce hlavní stránky zůstane viditelný pro všechny návštěvníky.",
+  "admin.theme.layout.favorite_gallery_empty": "Bez zástupce",
+  "admin.theme.layout.favorite_gallery_placeholder": "Hledat galerii podle názvu nebo cesty",
+  "admin.theme.layout.favorite_gallery_slot": "Zástupce {number}",
   "admin.theme.layout.items_per_page_preview": "Náhled počtu položek na stránku:",
   "admin.theme.layout.kicker": "Rozvržení",
   "admin.theme.layout.lightbox_mode_hint": "Jeden obrázek zachová klasický prohlížeč. Pás obrázků přidá pod fotku kompaktní sousední náhledy. 3D karusel umístí několik sousedních fotek za hlavní obrázek pomocí hloubky a měřítka. Jednotlivé galerie mohou tuto hodnotu dědit nebo přepsat.",
@@ -1630,6 +1636,7 @@
   "lightbox.toggle_slideshow": "Přepnout prezentaci",
   "nav.admin": "Administrace",
   "nav.admin_login": "Přihlášení správce",
+  "nav.favorite_gallery_fallback": "Galerie {id}",
   "nav.galleries": "Galerie",
   "nav.logout": "Odhlásit se",
   "pagination.label": "Stránkování",
@@ -1758,5 +1765,10 @@
   "upload.error.too_large_server": "Nahraný soubor je větší, než server povoluje.",
   "vote.error.too_many_votes": "Hlasujete příliš rychle. Zkuste to za chvíli znovu.",
   "vote.like": "To se mi líbí",
-  "vote.no_like": "Bez hlasu"
+  "vote.no_like": "Bez hlasu",
+  "admin.theme.layout.favorite_gallery_gallery": "Galerie",
+  "admin.theme.layout.favorite_gallery_gallery_hint": "Výběr galerie se použije jen tehdy, když je cíl zástupce nastavený na Galerie.",
+  "admin.theme.layout.favorite_gallery_home": "Hlavní stránka",
+  "admin.theme.layout.favorite_gallery_type": "Cíl zástupce",
+  "nav.favorite_home": "Hlavní stránka"
 }

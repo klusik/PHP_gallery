@@ -87,6 +87,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Dashboard view helpers | `app/views/admin_dashboard.php` |
 | URL rewrite settings | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
 | Public search settings card | `app/controllers/admin_dashboard.php`, `app/services/public_search.php` |
+| Favorite gallery and main-page shortcuts | `app/controllers/admin_theme.php`, `app/services/favorite_galleries.php`, `app/views/layout.php` |
 | Dev mode | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
 | Migrations from admin | `app/controllers/admin_dashboard.php`, `app/migrations.php` |
 | Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` |
