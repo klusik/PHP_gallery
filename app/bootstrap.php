@@ -189,6 +189,7 @@ function cms_run(): void
         'admin_theme' => 'cms_admin_theme',
         'admin_account' => 'cms_admin_account',
         'admin_update' => 'cms_admin_update',
+        'admin_features' => 'cms_admin_features',
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
@@ -244,6 +245,11 @@ function cms_run(): void
         'admin_public_update_image' => 'cms_admin_public_update_image',
         'setup' => 'cms_setup',
     ];
+
+    if (function_exists('feature_flag_route_enabled') && !feature_flag_route_enabled($page)) {
+        feature_flag_render_disabled_route($page);
+        return;
+    }
 
     // Variable $handler stores this steps working value.
     $handler = $routes[$page] ?? 'cms_not_found';

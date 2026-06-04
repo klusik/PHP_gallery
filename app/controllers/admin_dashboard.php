@@ -90,6 +90,10 @@ function cms_admin_public_search_settings(): void
         return;
     }
     verify_csrf();
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+        flash_message('admin_notice', t('admin.dashboard.notice_public_search_disabled', 'Public search is disabled in Admin > Features.'));
+        redirect_to(url_for('admin'));
+    }
     set_public_home_search_enabled(isset($_POST['public_home_search_enabled']));
     admin_log_event('info', 'settings.public_search_updated', 'Admin updated the public home search setting.', [
         'enabled' => public_home_search_enabled(),

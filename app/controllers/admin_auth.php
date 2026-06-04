@@ -987,6 +987,9 @@ function cms_admin_account(): void
                 redirect_to(url_for('admin_account', ['google' => 'disconnected']));
             }
         } elseif ($accountAction === 'openai_text_settings') {
+            if (function_exists('feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+                $error = t('admin.openai.feature_disabled', 'OpenAI text assistance is disabled in Admin > Features.');
+            } else {
             // $currentPassword stores the profile password used to authorize credential changes.
             $currentPassword = (string) ($_POST['current_password'] ?? '');
             // $stmt stores the password hash for the authenticated profile owner.
@@ -1011,6 +1014,7 @@ function cms_admin_account(): void
                     redirect_to(url_for('admin_account', ['openai_saved' => 1]));
                 }
                 $error = implode(' ', (array) ($result['errors'] ?? []));
+            }
             }
         } else {
             // Variable $currentPassword stores this steps working value.
@@ -1099,14 +1103,16 @@ function cms_admin_account(): void
     $accountEmail = trim((string) ($user['email'] ?? ''));
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
     $resetReady = cms_password_reset_schema_ready() && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
+    // $openaiFeatureEnabled stores whether OpenAI profile controls should be visible.
+    $openaiFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('openai_text_assist');
     // $openaiSettings stores the current user's optional OpenAI profile integration settings.
-    $openaiSettings = function_exists('openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
+    $openaiSettings = $openaiFeatureEnabled && function_exists('openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
     // $openaiSchemaReady stores whether the required optional OpenAI settings table exists.
-    $openaiSchemaReady = function_exists('openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
+    $openaiSchemaReady = $openaiFeatureEnabled && function_exists('openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
     // $openaiReady stores whether the current account can use OpenAI text assistance right now.
-    $openaiReady = function_exists('openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
+    $openaiReady = $openaiFeatureEnabled && function_exists('openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
     // $openaiImageInputColumnReady stores whether the optional thumbnail-consent setting can be saved yet.
-    $openaiImageInputColumnReady = function_exists('openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
+    $openaiImageInputColumnReady = $openaiFeatureEnabled && function_exists('openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
     // $googleSchemaReady stores whether the linked Google account table exists.
     $googleSchemaReady = function_exists('google_auth_schema_ready') && google_auth_schema_ready();
     // $googleReady stores whether Google login has complete config and database support.
@@ -1234,6 +1240,7 @@ function cms_admin_account(): void
     }
     echo '</article>';
 
+    if ($openaiFeatureEnabled) {
     echo '<article class="account-settings-card account-openai-settings-card">';
     echo '<div class="account-settings-card-header"><div><h2>' . e(t('admin.openai.profile_title', 'OpenAI text assistance')) . '</h2><p class="muted">' . e(t('admin.openai.profile_description', 'Optional profile-level API access for gallery description drafts and text cleanup.')) . '</p></div></div>';
     echo '<div class="account-settings-readiness ' . ($openaiReady ? 'is-ready' : 'is-incomplete') . '">';
@@ -1287,6 +1294,7 @@ function cms_admin_account(): void
         echo '<div class="account-settings-actions"><button type="submit">' . e(t('admin.openai.save_settings', 'Save OpenAI settings')) . '</button></div></form>';
     }
     echo '</article>';
+    }
 
     echo '</div></section>';
     render_footer();

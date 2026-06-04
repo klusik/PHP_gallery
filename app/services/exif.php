@@ -73,6 +73,9 @@ function exif_gps_schema_ready(): bool
  */
 function gallery_allows_gps_maps(array $gallery): bool
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('gallery_maps')) {
+        return false;
+    }
     if (!exif_gps_schema_ready()) {
         return false;
     }
@@ -421,7 +424,7 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
  */
 function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): bool
 {
-    if (function_exists('gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
+    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
         return true;
     }
 
@@ -437,7 +440,7 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  */
 function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
-    if (function_exists('gallery_flight_map_payload')) {
+    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_flight_map_payload')) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
             $photoPoints = gallery_map_points($gallery, $publicOnly, $recursive);

@@ -222,6 +222,9 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  */
 function render_admin_simbrief_description_tool(int $galleryId): void
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('simbrief')) {
+        return;
+    }
     if (function_exists('view_render_admin_simbrief_description_tool')) {
         view_render_admin_simbrief_description_tool($galleryId);
         return;
@@ -267,11 +270,15 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
     // $pictureGameReady stores this steps working value.
-    $pictureGameReady = picture_game_schema_ready();
+    $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready();
+    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // $flightMapReady stores this steps working value.
-    $flightMapReady = flight_map_schema_ready();
+    $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
+    // $votingReady stores this steps working value.
+    $votingReady = gallery_voting_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    // $lightboxModeReady stores this steps working value.
+    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
     // $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     // $galleryId stores the gallery being edited.
@@ -302,13 +309,13 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // Variable $gpsMapEnabled stores this steps working value.
     $gpsMapEnabled = $gpsMapReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
     // Variable $votingEnabled stores this steps working value.
-    $votingEnabled = gallery_voting_schema_ready() ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault) : 0;
+    $votingEnabled = $votingReady ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault) : (int) ($gallery['voting_enabled'] ?? 0);
     // Variable $showFilenames stores this steps working value.
     $showFilenames = gallery_filename_display_schema_ready() ? admin_gallery_checkbox_input($input, 'show_filenames', $showFilenamesDefault) : 0;
     // $countBadgeVisibility stores the optional gallery-card count badge override for this gallery.
     $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($input['count_badge_visibility'] ?? ($gallery['count_badge_visibility'] ?? 'inherit')) : null;
     // $lightboxBrowsingMode stores the optional gallery-level lightbox browsing-mode override.
-    $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit'))) : null;
+    $lightboxBrowsingMode = $lightboxModeReady ? gallery_lightbox_browsing_mode_storage_value($input['lightbox_browsing_mode'] ?? ($completeForm ? 'inherit' : ($gallery['lightbox_browsing_mode'] ?? 'inherit'))) : null;
     // Variable $nsfwEnabled stores whether this gallery requires the NSFW Guard confirmation.
     $nsfwEnabled = nsfw_guard_schema_ready() ? admin_gallery_checkbox_input($input, 'nsfw_enabled', $nsfwDefault) : 0;
     if ($pictureGameEnabled) {
@@ -520,7 +527,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if ($gpsMapReady) {
         $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
     }
-    if (gallery_voting_schema_ready()) {
+    if ($votingReady) {
         $fields['voting_enabled = ?'] = $votingEnabled;
     }
     if (gallery_filename_display_schema_ready()) {
@@ -532,7 +539,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if (gallery_count_badge_schema_ready()) {
         $fields['count_badge_visibility = ?'] = $countBadgeVisibility;
     }
-    if (gallery_lightbox_browsing_mode_schema_ready()) {
+    if ($lightboxModeReady) {
         $fields['lightbox_browsing_mode = ?'] = $lightboxBrowsingMode;
     }
     if (nsfw_guard_schema_ready()) {
@@ -654,11 +661,27 @@ function cms_admin_edit_gallery(): void
 
     // Variable $pictureGameReady stores this steps working value.
 
-    $pictureGameReady = picture_game_schema_ready();
+    $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready();
+    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // Variable $flightMapReady stores this steps working value.
-    $flightMapReady = flight_map_schema_ready();
+    $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
+    // Variable $votingReady stores this steps working value.
+    $votingReady = gallery_voting_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    // Variable $lightboxModeReady stores this steps working value.
+    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    // $pictureGameFeatureEnabled stores whether picture-game controls should be surfaced at all.
+    $pictureGameFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('picture_game');
+    // $flightMapFeatureEnabled stores whether flight-route map controls should be surfaced at all.
+    $flightMapFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps');
+    // $lightboxModeFeatureEnabled stores whether lightbox browsing controls should be surfaced at all.
+    $lightboxModeFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    // $mediaRenamerFeatureEnabled stores whether the file-renamer tab should be visible.
+    $mediaRenamerFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('media_renamer');
+    // $uploadApiFeatureEnabled stores whether upload-token tools should be visible.
+    $uploadApiFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('upload_api');
+    // $galleryMigrationFeatureEnabled stores whether gallery transfer controls should be visible.
+    $galleryMigrationFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_migration');
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     if (request_method() === 'POST') {
@@ -680,6 +703,10 @@ function cms_admin_edit_gallery(): void
             return;
         }
         if ((string) ($_POST['action'] ?? '') === 'force_ai_reprocess') {
+            if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+                flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.'));
+                redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
+            }
             if (!function_exists('ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
                 flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.'));
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
@@ -695,6 +722,10 @@ function cms_admin_edit_gallery(): void
             redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
         }
         if ((string) ($_POST['action'] ?? '') === 'rename_files') {
+            if (!$mediaRenamerFeatureEnabled) {
+                flash_message('admin_notice', t('admin.media_renamer.feature_disabled', 'Media renamer is disabled in Admin > Features.'));
+                redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-media'));
+            }
             $renamerPattern = media_renamer_normalize_pattern((string) ($_POST['renamer_pattern'] ?? ''));
             $renamerReturnUrl = admin_edit_gallery_tab_url_with_renamer_pattern((int) $gallery['id'], $renamerPattern);
             $renameResult = null;
@@ -829,7 +860,7 @@ function cms_admin_edit_gallery(): void
     } elseif (isset($_GET['saved'])) {
         echo '<div class="notice">' . e(t('admin.gallery_editor.gallery_saved')) . '</div>';
     }
-    if (!$pictureGameReady) {
+    if (!$pictureGameReady && $pictureGameFeatureEnabled && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'))) {
         render_admin_migration_notice(t('admin.gallery_editor.picture_game_migration_hidden'));
     }
     // $imageCount stores the number of images currently attached to this gallery.
@@ -846,8 +877,10 @@ function cms_admin_edit_gallery(): void
         ['id' => 'admin-edit-media', 'label' => t('admin.gallery_editor.tab_media')],
         ['id' => 'admin-edit-api', 'label' => t('admin.gallery_editor.tab_api', 'API')],
         ['id' => 'admin-edit-images', 'label' => t('admin.gallery_editor.tab_images'), 'badge' => $imageCount],
-        ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')],
     ];
+    if ($mediaRenamerFeatureEnabled) {
+        $adminTabs[] = ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')];
+    }
 
     echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
     echo '<div><p class="admin-kicker">' . e(t('admin.gallery_editor.kicker')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">' . e(t('admin.gallery_editor.intro')) . '</p></div>';
@@ -879,7 +912,7 @@ function cms_admin_edit_gallery(): void
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-gallery-description-textarea data-openai-description-textarea>' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
     render_admin_simbrief_description_tool((int) $gallery['id']);
-    if (function_exists('view_render_admin_openai_text_assist_tool')) {
+    if ((!function_exists('feature_flag_enabled') || feature_flag_enabled('openai_text_assist')) && function_exists('view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) $gallery['id'], 0, 'gallery');
     }
     echo '</div>';
@@ -939,7 +972,7 @@ function cms_admin_edit_gallery(): void
     if ($pictureGameReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_picture_game', 'Enable picture game for this gallery branch')) . '</label></div>';
     }
-    if (gallery_voting_schema_ready()) {
+    if ($votingReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="voting_enabled" value="1"' . ((int) ($gallery['voting_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label><p class="muted">' . e(t('admin.gallery_editor.image_voting_help', 'When disabled, existing votes remain stored and visible, but vote arrows and vote submissions are blocked.')) . '</p></div>';
     }
     if (gallery_filename_display_schema_ready()) {
@@ -961,7 +994,7 @@ function cms_admin_edit_gallery(): void
         echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_help', 'For simflying galleries, this gallery stores one resolved route map. The SimBrief generator saves the latest OFP with the gallery and writes OFP coordinates here automatically. Manual routes still support local lookup and NAME@latitude,longitude entries.')) . '</p>';
         echo '<p class="muted">' . e(t('admin.gallery_editor.flight_route_status', 'Resolved points: {points}. Unresolved skipped: {unresolved}.', ['points' => (string) $flightPointCount, 'unresolved' => (string) count($flightUnresolved)])) . '</p>';
         echo '</div>';
-    } else {
+    } elseif ($flightMapFeatureEnabled) {
         echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.')) . '</p></div>';
     }
     if ($gpsMapReady) {
@@ -993,7 +1026,7 @@ function cms_admin_edit_gallery(): void
     } else {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.count_badge_migration_hidden', 'Contained-picture badge overrides will be available after the database migration is applied.')) . '</p></div>';
     }
-    if (gallery_lightbox_browsing_mode_schema_ready()) {
+    if ($lightboxModeReady) {
         // $currentLightboxBrowsingMode stores the optional value saved directly on this gallery.
         $currentLightboxBrowsingMode = gallery_lightbox_browsing_mode_storage_value($gallery['lightbox_browsing_mode'] ?? null) ?? 'inherit';
         // $effectiveLightboxBrowsingMode stores the public mode before any form edits.
@@ -1003,7 +1036,7 @@ function cms_admin_edit_gallery(): void
             echo '<option value="' . e($lightboxModeOption) . '"' . ($currentLightboxBrowsingMode === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
         }
         echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.lightbox_mode_help', 'Current source: {source}. Effective mode: {mode}. Single image keeps the classic viewer, picture strip adds nearby thumbnails below the photo, and 3D carousel places a small set of neighboring photos behind the active image. Fullscreen and slideshow keep their existing behavior.', ['source' => gallery_lightbox_browsing_mode_source_label($gallery), 'mode' => gallery_lightbox_browsing_mode_label($effectiveLightboxBrowsingMode)])) . '</p></div>';
-    } else {
+    } elseif ($lightboxModeFeatureEnabled) {
         echo '<div class="admin-edit-card"><p class="muted">' . e(t('admin.gallery_editor.lightbox_mode_migration_hidden', 'Lightbox browsing-mode overrides will be available after the database migration is applied.')) . '</p></div>';
     }
     if (gallery_grid_schema_ready()) {
@@ -1076,18 +1109,26 @@ function cms_admin_edit_gallery(): void
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');
 
-    ob_start();
-    if (function_exists('render_admin_media_renamer_gallery_panel')) {
-        render_admin_media_renamer_gallery_panel($gallery);
+    if ($mediaRenamerFeatureEnabled) {
+        ob_start();
+        if (function_exists('render_admin_media_renamer_gallery_panel')) {
+            render_admin_media_renamer_gallery_panel($gallery);
+        }
+        render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');
     }
-    render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
-    render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+    if ($uploadApiFeatureEnabled) {
+        render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
+    }
     render_admin_gallery_ai_reprocess_panel($gallery);
-    render_admin_gallery_migration_panel($gallery);
-    echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
+    if ($galleryMigrationFeatureEnabled) {
+        render_admin_gallery_migration_panel($gallery);
+    }
+    if ($uploadApiFeatureEnabled) {
+        echo '<div class="admin-upload-automation-actions"><a class="button secondary" href="' . e(url_for('admin_api_manager')) . '">' . e(t('admin.upload_automation.open_manager', 'Open API manager')) . '</a></div>';
+    }
     render_admin_tab_panel('admin-edit-api', (string) ob_get_clean(), $activeEditTab === 'admin-edit-api');
     render_admin_image_reorder_script();
     render_admin_devmode_panel();
@@ -1108,6 +1149,9 @@ function cms_admin_edit_gallery(): void
  */
 function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+        return;
+    }
     $galleryId = (int) ($gallery['id'] ?? 0);
     echo '<div class="admin-edit-card is-wide admin-ai-reprocess-panel">';
     echo '<h3>' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '</h3>';

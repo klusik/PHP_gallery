@@ -160,6 +160,10 @@ declare(strict_types=1);
 function cms_admin_theme(): void
 {
     require_admin();
+    // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
+    $gpsMapsFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps');
+    // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
+    $lightboxModesFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
 
     if (isset($_GET['download_language_pack'])) {
         // $downloadLanguage stores the normalized language code requested for export.
@@ -340,19 +344,21 @@ function cms_admin_theme(): void
             // $themeBackgroundSource stores an intermediate value used by the surrounding gallery workflow.
             $themeBackgroundSource = (string) ($_POST['theme_background_source'] ?? '');
             set_app_setting('theme_background_source', in_array($themeBackgroundSource, ['upload', 'existing', 'collage'], true) ? $themeBackgroundSource : '');
-            set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
-            set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
-            set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
-            if (!empty($_POST['reset_gps_pin_size'])) {
-                set_app_setting('theme_gps_pin_enabled', '1');
-                set_app_setting('theme_gps_pin_background_enabled', '1');
-                set_app_setting('theme_gps_pin_size', '26');
-                set_app_setting('theme_gps_pin_background_size', '22');
+            if ($gpsMapsFeatureEnabled) {
+                set_app_setting('theme_gps_pin_enabled', !empty($_POST['theme_gps_pin_enabled']) ? '1' : '0');
+                set_app_setting('theme_gps_pin_background_enabled', !empty($_POST['theme_gps_pin_background_enabled']) ? '1' : '0');
+                set_app_setting('theme_gps_pin_size', (string) theme_gps_pin_size_value($_POST['theme_gps_pin_size'] ?? null));
+                set_app_setting('theme_gps_pin_background_size', (string) theme_gps_pin_background_size_value($_POST['theme_gps_pin_background_size'] ?? null));
+                if (!empty($_POST['reset_gps_pin_size'])) {
+                    set_app_setting('theme_gps_pin_enabled', '1');
+                    set_app_setting('theme_gps_pin_background_enabled', '1');
+                    set_app_setting('theme_gps_pin_size', '26');
+                    set_app_setting('theme_gps_pin_background_size', '22');
+                }
+                // The GPS pin controls are part of the theme editor even when no color/font override changed.
+                // Mark the form as changed so the save flow consistently persists the full appearance state.
+                $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             }
-            // The GPS pin controls are part of the theme editor even when no color/font override changed.
-            // Mark the form as changed so the save flow consistently persists the full appearance state.
-            $themeControlsChanged = $themeControlsChanged || isset($_POST['theme_gps_pin_enabled']) || isset($_POST['theme_gps_pin_background_enabled']) || isset($_POST['theme_gps_pin_size']) || isset($_POST['theme_gps_pin_background_size']) || !empty($_POST['reset_gps_pin_size']);
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
             set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
@@ -369,15 +375,17 @@ function cms_admin_theme(): void
                 set_app_setting('theme_public_content_revision', (string) time());
             }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
-            // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
-            $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
-            // $nextLightboxBrowsingMode stores the submitted public lightbox browsing-mode default after validation.
-            $nextLightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single');
-            set_app_setting('theme_lightbox_browsing_mode', $nextLightboxBrowsingMode);
-            if ($nextLightboxBrowsingMode !== $previousLightboxBrowsingMode) {
-                // The lightbox browsing mode changes public data attributes and optional strip rendering behavior.
-                // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
-                set_app_setting('theme_public_content_revision', (string) time());
+            if ($lightboxModesFeatureEnabled) {
+                // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
+                $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
+                // $nextLightboxBrowsingMode stores the submitted public lightbox browsing-mode default after validation.
+                $nextLightboxBrowsingMode = gallery_lightbox_browsing_mode_normalize($_POST['theme_lightbox_browsing_mode'] ?? 'single');
+                set_app_setting('theme_lightbox_browsing_mode', $nextLightboxBrowsingMode);
+                if ($nextLightboxBrowsingMode !== $previousLightboxBrowsingMode) {
+                    // The lightbox browsing mode changes public data attributes and optional strip rendering behavior.
+                    // Bump a content revision so public HTML caches and diagnostics can see the change immediately.
+                    set_app_setting('theme_public_content_revision', (string) time());
+                }
             }
             // Pagination settings are saved independently from color/font overrides so enabling pagination does not force a CSS override state.
             set_app_setting('pagination_enabled', !empty($_POST['pagination_enabled']) ? '1' : '0');
@@ -446,22 +454,24 @@ function cms_admin_theme(): void
     echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.gallery_title_color', 'Gallery title color')) . '<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">' . e(t('admin.theme.appearance.gallery_title_color_hint', 'Open gallery title and hero text.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.appearance.rounded_corners', 'Rounded corners')) . ' <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
     echo '<label>' . e(t('admin.theme.appearance.font_style', 'Font style')) . '<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_serif', 'Classic serif')) . '</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_sans', 'Clean sans-serif')) . '</option></select></label>';
-    // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
-    $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
-    // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
-    $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1';
-    // $gpsPinSize stores the configured pin diameter in pixels.
-    $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
-    // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
-    $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
-    echo '<fieldset class="theme-gps-pin-settings"><legend>' . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin')) . '</legend>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> ' . e(t('admin.theme.appearance.show_gps_pin', 'Show GPS pin on photo cards')) . '</label>';
-    echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> ' . e(t('admin.theme.appearance.show_pin_background', 'Show pin background underlay')) . '</label>';
-    echo '<label>' . e(t('admin.theme.appearance.pin_size', 'Pin size')) . ' <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
-    echo '<label>' . e(t('admin.theme.appearance.pin_background_size', 'Background size')) . ' <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
-    echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="' . e(t('admin.theme.appearance.gps_pin_preview_label', 'GPS pin preview')) . '"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">' . e(t('admin.theme.appearance.gps_pin_preview_hint', 'Live preview of the photo pin.')) . '</span></div>';
-    echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>' . e(t('admin.theme.appearance.reset_pin_size', 'Reset pin size')) . '</button></div>';
-    echo '</fieldset>';
+    if ($gpsMapsFeatureEnabled) {
+        // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
+        $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
+        // $gpsPinBackgroundEnabled stores whether the pin underlay should be visible.
+        $gpsPinBackgroundEnabled = ((string) ($theme['gps_pin_background_enabled'] ?? '1')) === '1';
+        // $gpsPinSize stores the configured pin diameter in pixels.
+        $gpsPinSize = theme_gps_pin_size_value($theme['gps_pin_size'] ?? null);
+        // $gpsPinBackgroundSize stores the configured badge diameter in pixels.
+        $gpsPinBackgroundSize = theme_gps_pin_background_size_value($theme['gps_pin_background_size'] ?? null);
+        echo '<fieldset class="theme-gps-pin-settings"><legend>' . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin')) . '</legend>';
+        echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_enabled" value="1"' . ($gpsPinEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-enabled> ' . e(t('admin.theme.appearance.show_gps_pin', 'Show GPS pin on photo cards')) . '</label>';
+        echo '<label class="checkbox-label"> <input type="checkbox" name="theme_gps_pin_background_enabled" value="1"' . ($gpsPinBackgroundEnabled ? ' checked' : '') . ' data-theme-override-control data-theme-gps-pin-background-enabled> ' . e(t('admin.theme.appearance.show_pin_background', 'Show pin background underlay')) . '</label>';
+        echo '<label>' . e(t('admin.theme.appearance.pin_size', 'Pin size')) . ' <span class="muted" data-theme-gps-pin-size-display>' . $gpsPinSize . 'px</span><input type="range" name="theme_gps_pin_size" min="14" max="48" step="1" value="' . $gpsPinSize . '" data-theme-override-control data-theme-gps-pin-size></label>';
+        echo '<label>' . e(t('admin.theme.appearance.pin_background_size', 'Background size')) . ' <span class="muted" data-theme-gps-pin-background-size-display>' . $gpsPinBackgroundSize . 'px</span><input type="range" name="theme_gps_pin_background_size" min="0" max="48" step="1" value="' . $gpsPinBackgroundSize . '" data-theme-override-control data-theme-gps-pin-background-size></label>';
+        echo '<div class="theme-gps-pin-preview" data-theme-gps-pin-preview aria-label="' . e(t('admin.theme.appearance.gps_pin_preview_label', 'GPS pin preview')) . '"><span class="photo-map-pin" data-theme-gps-pin-sample aria-hidden="true">&#128205;</span><span class="muted">' . e(t('admin.theme.appearance.gps_pin_preview_hint', 'Live preview of the photo pin.')) . '</span></div>';
+        echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_gps_pin_size" value="1" formnovalidate>' . e(t('admin.theme.appearance.reset_pin_size', 'Reset pin size')) . '</button></div>';
+        echo '</fieldset>';
+    }
     // $pageWidthMode stores the normalized layout preset selected for the public page container.
     $pageWidthMode = theme_page_width_mode((string) ($theme['page_width'] ?? 'default'));
     // $customPageWidth stores the saved custom container width in pixels. It is always rendered so switching presets does not discard it.
@@ -624,13 +634,15 @@ function cms_admin_theme(): void
     echo '<p class="muted">' . e(t('admin.theme.layout.items_per_page_preview', 'Items per page preview:')) . ' <span data-pagination-items-preview>' . (int) $paginationSettings['items_per_page'] . '</span></p>';
     echo '<p class="muted">' . e(t('admin.theme.layout.pagination_hint', 'These values remain the fallback for galleries that do not define or inherit a custom grid.')) . '</p>';
     echo '</fieldset>';
-    echo '<fieldset class="form-grid" id="admin-lightbox-mode"><legend>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</legend>';
-    echo '<label>' . e(t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode')) . '<select name="theme_lightbox_browsing_mode">';
-    foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
-        echo '<option value="' . e($lightboxModeOption) . '"' . (($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+    if ($lightboxModesFeatureEnabled) {
+        echo '<fieldset class="form-grid" id="admin-lightbox-mode"><legend>' . e(t('admin.theme.layout.lightbox_mode_legend', 'Public lightbox browsing mode')) . '</legend>';
+        echo '<label>' . e(t('admin.theme.layout.lightbox_mode_label', 'Default browsing mode')) . '<select name="theme_lightbox_browsing_mode">';
+        foreach (gallery_lightbox_browsing_mode_options() as $lightboxModeOption) {
+            echo '<option value="' . e($lightboxModeOption) . '"' . (($theme['lightbox_browsing_mode'] ?? 'single') === $lightboxModeOption ? ' selected' : '') . '>' . e(gallery_lightbox_browsing_mode_label($lightboxModeOption)) . '</option>';
+        }
+        echo '</select><span class="muted">' . e(t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.')) . '</span></label>';
+        echo '</fieldset>';
     }
-    echo '</select><span class="muted">' . e(t('admin.theme.layout.lightbox_mode_hint', 'Single image keeps the classic viewer. Picture strip adds compact nearby thumbnails below the photo. 3D carousel places a few neighboring photos behind the main image with depth and scale. Individual galleries may inherit this value or override it.')) . '</span></label>';
-    echo '</fieldset>';
     echo '<fieldset class="form-grid" id="admin-home-grid"><legend>' . e(t('admin.theme.layout.main_page_grid_legend', 'Main page gallery grid')) . '</legend>';
     echo '<label>' . e(t('admin.theme.layout.main_page_columns', 'Main page columns')) . ' <span class="muted" data-home-grid-columns-display>' . (int) $homeGridSettings['columns'] . '</span><input type="range" name="home_gallery_grid_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $homeGridSettings['columns'] . '" data-home-grid-columns></label>';
     echo '<label>' . e(t('admin.theme.layout.main_page_rows', 'Main page rows')) . ' <span class="muted" data-home-grid-rows-display>' . (int) $homeGridSettings['rows'] . '</span><input type="range" name="home_gallery_grid_rows" min="1" max="' . CMS_PAGINATION_MAX_ROWS . '" value="' . (int) $homeGridSettings['rows'] . '" data-home-grid-rows></label>';

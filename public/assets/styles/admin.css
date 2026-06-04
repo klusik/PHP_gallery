@@ -5010,3 +5010,94 @@ button.gallery-row-action.secondary {
     display: block;
     margin-left: 1.6rem;
 }
+
+/* Feature visibility settings page. */
+.admin-features-hero .muted {
+    max-width: 760px;
+}
+
+.admin-feature-summary-panel .admin-metric-grid {
+    margin-top: 1rem;
+}
+
+.admin-feature-form {
+    display: grid;
+    gap: 1.2rem;
+}
+
+.admin-feature-group .admin-panel-heading {
+    align-items: flex-start;
+}
+
+.admin-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.9rem;
+}
+
+.admin-feature-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.8rem;
+    align-items: start;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+}
+
+.admin-feature-card input[type="checkbox"] {
+    margin-top: 0.2rem;
+}
+
+.admin-feature-card-body {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-feature-card-body small {
+    color: var(--muted-text);
+    line-height: 1.4;
+}
+
+.admin-feature-card-body code {
+    justify-self: start;
+    padding: 0.12rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    font-size: 0.78rem;
+}
+
+.admin-feature-state {
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.admin-feature-card.is-disabled {
+    opacity: 0.74;
+}
+
+.admin-feature-card.is-disabled .admin-feature-state {
+    background: rgba(180, 35, 24, 0.12);
+}
+
+.admin-sticky-actions {
+    position: sticky;
+    bottom: 1rem;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(10px);
+}

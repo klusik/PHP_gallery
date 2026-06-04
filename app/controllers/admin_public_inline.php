@@ -173,6 +173,9 @@ function cms_admin_public_update_image(): void
  */
 function render_admin_image_ai_metadata_panel(array $image): void
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+        return;
+    }
     if (!function_exists('ai_image_analysis_latest_metadata_for_image')) {
         return;
     }

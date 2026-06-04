@@ -58,6 +58,7 @@ require_once __DIR__ . '/controllers/admin_openai_text_assist.php';
 require_once __DIR__ . '/controllers/navigation_data.php';
 require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';
+require_once __DIR__ . '/controllers/admin_features.php';
 require_once __DIR__ . '/controllers/setup.php';
 require_once __DIR__ . '/controllers/downloads.php';
 require_once __DIR__ . '/controllers/admin_logs.php';

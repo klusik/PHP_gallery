@@ -41,6 +41,9 @@ const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
  */
 function public_home_search_enabled(): bool
 {
+    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+        return false;
+    }
     return app_setting(PUBLIC_HOME_SEARCH_SETTING, '0') === '1';
 }
 
