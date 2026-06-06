@@ -170,6 +170,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `gallery_access` | `cms_gallery_access` | Password form and validation for protected galleries. |
 | `share` | `cms_share` | Share-token based access. |
 | `download_gallery` | `cms_download_gallery` | Generates or serves gallery ZIP archive. |
+| `picture_manager_download_selection` | `cms_picture_manager_download_selection` | Generates a transient ZIP archive for selected public-view Picture manager photos when native sharing is unavailable. |
 | `download_all` | `cms_download_all` | Generates or serves full accessible archive. |
 
 ### Admin routes
@@ -308,7 +309,7 @@ Key service families:
 | Settings | `app_settings.php`, `theme.php`, `favorite_galleries.php`, `custom_css.php`, `translations.php` | DB-backed settings, theme defaults, favorite gallery/main-page shortcuts, CSS variables, language packs. |
 | Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, display inheritance and presentation options. |
 | Gallery assets | `gallery_covers.php`, `gallery_backgrounds.php`, `gallery_branding.php`, `favicon.php` | Cover, background, banner, logo, separator and favicon handling. |
-| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, copy/move and DNG helper logic. |
+| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, copy/move, public-view selection sharing and DNG helper logic. |
 | Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php` | Thumbnail pathing, static serving, generation, quality bounds and responsive HTML. |
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |

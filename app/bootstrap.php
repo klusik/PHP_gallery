@@ -177,6 +177,7 @@ function cms_run(): void
         'picture_manager_move' => 'cms_picture_manager_move',
         'picture_manager_copy' => 'cms_picture_manager_copy',
         'picture_manager_create_gallery' => 'cms_picture_manager_create_gallery',
+        'picture_manager_download_selection' => 'cms_picture_manager_download_selection',
         'download_gallery' => 'cms_download_gallery',
         'download_all' => 'cms_download_all',
         'admin' => 'cms_admin',

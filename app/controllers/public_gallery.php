@@ -449,7 +449,7 @@ function cms_gallery(): void
         // Variable $displayTitle stores this steps working value.
         $displayTitle = public_image_display_title($image, $gallery);
         $imageCardClass = 'image-card' . ($publicPhotoReorderEnabled ? ' has-public-reorder-handle' : '') . ($pictureManagerEnabled ? ' has-picture-manager-select' : '');
-        $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '"' : '';
+        $pictureManagerAttributes = $pictureManagerEnabled ? ' data-picture-manager-image data-picture-manager-image-id="' . (int) $image['id'] . '" data-picture-manager-index="' . (int) $displayIndex . '" data-picture-manager-share-url="' . e($previewUrl) . '" data-picture-manager-share-filename="' . e(picture_manager_share_filename($image, $displayTitle)) . '" data-picture-manager-share-title="' . e($displayTitle) . '"' : '';
         $lightboxAttributes = $lightboxFeatureEnabled ? ' ' . lightbox_image_data_attributes($image, $gallery, $mediaUrl, $previewUrl, $imagePageUrl, $displayTitle, (int) $image['score'], $vote, $imageMapPoint, 'data-lightbox-image', $votingAllowed, $lightboxIndex >= 0 ? $lightboxIndex : null) : '';
         echo '<article class="' . e($imageCardClass) . '" data-public-photo-order-item data-public-order-id="' . (int) $image['id'] . '"' . $pictureManagerAttributes . $lightboxAttributes . '>';
         if ($publicPhotoReorderEnabled) {
@@ -569,7 +569,7 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
         ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
         : t('picture_manager.drop_help_hidden', 'No subgallery target is visible on this page. Use the destination list below.');
 
-    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e(csrf_token()) . '" data-move-url="' . e(url_for('picture_manager_move')) . '" data-copy-url="' . e(url_for('picture_manager_copy')) . '" data-create-url="' . e(url_for('picture_manager_create_gallery')) . '">';
+    echo '<section class="picture-manager-toolbar is-picture-manager-collapsed" data-picture-manager data-source-gallery-id="' . $galleryId . '" data-csrf-token="' . e(csrf_token()) . '" data-move-url="' . e(url_for('picture_manager_move')) . '" data-copy-url="' . e(url_for('picture_manager_copy')) . '" data-create-url="' . e(url_for('picture_manager_create_gallery')) . '" data-download-url="' . e(url_for('picture_manager_download_selection')) . '">';
     echo '<div class="picture-manager-summary">';
     echo '<button type="button" class="picture-manager-toggle" data-picture-manager-toggle aria-expanded="false">';
     echo '<span class="picture-manager-toggle-icon" aria-hidden="true">▸</span>';
@@ -584,6 +584,7 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     echo '<div class="picture-manager-actions" aria-label="' . e(t('picture_manager.selection_actions', 'Selection actions')) . '">';
     echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-select-all title="' . e(t('picture_manager.select_all', 'Select all')) . '" aria-label="' . e(t('picture_manager.select_all', 'Select all')) . '"><span class="picture-manager-button-icon" aria-hidden="true">☑</span><span class="picture-manager-button-label">' . e(t('picture_manager.select_all_short', 'All')) . '</span></button>';
     echo '<button type="button" class="button secondary picture-manager-icon-button" data-picture-manager-clear title="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" aria-label="' . e(t('picture_manager.clear_selection', 'Clear selection')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">×</span><span class="picture-manager-button-label">' . e(t('picture_manager.clear_selection_short', 'Clear')) . '</span></button>';
+    echo '<button type="button" class="button secondary picture-manager-icon-button picture-manager-share-button" data-picture-manager-share title="' . e(t('picture_manager.share_selected', 'Share selected')) . '" aria-label="' . e(t('picture_manager.share_selected', 'Share selected')) . '" disabled><span class="picture-manager-button-icon" aria-hidden="true">↗</span><span class="picture-manager-button-label">' . e(t('picture_manager.share_short', 'Share')) . '</span></button>';
     echo '</div>';
     echo '</div>';
 
@@ -617,6 +618,30 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     echo '<p class="picture-manager-status" data-picture-manager-status aria-live="polite">' . e(t('picture_manager.ready', 'Ready.')) . '</p>';
     echo '</div>';
     echo '</section>';
+}
+
+/**
+ * Build a safe browser filename for one selected photo share candidate.
+ *
+ * The native Web Share API receives File objects, so clean names make the
+ * receiving mobile application show meaningful media labels without exposing
+ * internal gallery paths.
+ */
+function picture_manager_share_filename(array $image, string $displayTitle): string
+{
+    // $sourceName stores the most readable source label available for this image.
+    $sourceName = trim($displayTitle) !== '' ? $displayTitle : (string) ($image['filename'] ?? 'photo');
+    // $extension stores the original extension when the source was already browser friendly.
+    $extension = strtolower(pathinfo((string) ($image['filename'] ?? ''), PATHINFO_EXTENSION));
+    if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+        $extension = 'jpg';
+    }
+    // $baseName stores a filesystem-safe stem that still keeps enough context for sharing.
+    $baseName = slugify(pathinfo($sourceName, PATHINFO_FILENAME));
+    if ($baseName === '') {
+        $baseName = 'photo-' . (int) ($image['id'] ?? 0);
+    }
+    return $baseName . '.' . $extension;
 }
 
 function render_public_gallery_preview_toolbar(array $gallery): void

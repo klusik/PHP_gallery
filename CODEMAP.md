@@ -118,7 +118,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |
 | Edit image metadata | `app/controllers/admin_public_inline.php`, handler `cms_admin_edit_image` |
-| Copy/move images between galleries | `app/controllers/picture_manager.php`, `app/services/picture_manager.php` |
+| Copy/move/share selected public-view images | `app/controllers/picture_manager.php`, `app/controllers/downloads.php`, `app/services/picture_manager.php`, `app/services/downloads.php`, `public/assets/gallery-modules/picture-manager.js` |
 | DNG support | `app/services/dng_derivatives.php`, `app/services/uploads.php` |
 | EXIF extraction | `app/services/exif.php`, `app/controllers/exif.php` |
 
@@ -154,7 +154,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Gallery password access | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Share links | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Download signatures | `app/services/download_signatures.php` |
-| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php` |
+| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php`, including gallery, all-gallery and selected-photo fallback archives |
 | Archive cache table | `zip_archives` |
 
 ## AI and Metadata Generation
