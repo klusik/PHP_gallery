@@ -142,7 +142,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `tag` | `cms_tag` | Public tag page and tag-filtered gallery listing. |
 | `public_search` | `cms_public_search` | JSON search endpoint for public gallery search bars. |
 | `gallery_lightbox_data` | `cms_gallery_lightbox_data` | JSON payload for lightbox navigation and metadata. |
-| `gallery_map_data` | `cms_gallery_map_data` | JSON map data from EXIF GPS and flight paths. |
+| `gallery_map_data` | `cms_gallery_map_data` | JSON map data from EXIF GPS and flight paths. EXIF GPS output follows the global default-enabled display setting plus nullable per-gallery overrides. |
 | `picture_game` | `cms_picture_game` | Side-by-side image comparison game. |
 | `vote` | `cms_vote` | Image voting endpoint. |
 
@@ -314,7 +314,7 @@ Key service families:
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |
 | Search | `public_search.php`, `lightbox_metadata.php` | Public search across galleries, images, tags and AI metadata. |
-| Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, flight route maps, waypoint lookup and SimBrief OFP processing. |
+| Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, default-enabled EXIF/GPS display policy with per-gallery overrides, flight route maps, waypoint lookup and SimBrief OFP processing. |
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
 | Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `updates.php`, `github.php`, `gallery_migration.php` | Dashboard model, diagnostics, audit logs, GitHub update checks and API migration. |
@@ -616,6 +616,7 @@ Aviation-related gallery features are intentionally modular.
 | --- | --- | --- |
 | SimBrief descriptions | `simbrief_descriptions.php`, `admin_simbrief.php` | Gallery description and saved OFP artifacts. |
 | Flight route maps | `flight_maps.php`, `exif.php` | `gallery_flight_maps`, `flight_map_nav_points`. |
+| EXIF/GPS public display policy | `exif.php`, `admin_dashboard.php`, `admin_galleries_edit.php` | `app_settings.exif_gps_maps_default_enabled`, nullable `galleries.gps_map_enabled`. |
 | Navigation data | `navigation_data.php`, `navigation_data.php` controller, navdata view | `navigation_data_cache`, `navigation_data_accounts`, bundled CSV data. |
 
 The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.

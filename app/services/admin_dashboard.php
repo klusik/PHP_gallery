@@ -131,6 +131,8 @@ function admin_dashboard_view_model(): array
     $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
+    $gpsMapOverrideReady = $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', static fn (): bool => exif_gps_override_schema_ready());
     // Variable $votingReady stores this steps working value.
     $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // Variable $filenameDisplayReady stores this steps working value.
@@ -149,6 +151,10 @@ function admin_dashboard_view_model(): array
     $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('navigation_data'));
     // $flightNavdataStatus stores maintenance information for the admin navdata card.
     $flightNavdataStatus = $flightNavdataReady ? admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status()) : [];
+    // $exifGpsDefaultEnabled stores the global display default for galleries without explicit overrides.
+    $exifGpsDefaultEnabled = $gpsMapOverrideReady ? exif_gps_default_enabled() : false;
+    // $exifGpsOverrideCount stores the number of gallery rows with explicit EXIF/GPS overrides.
+    $exifGpsOverrideCount = $gpsMapOverrideReady ? admin_render_profile_db('exif_gps_override_count', static fn (): int => exif_gps_gallery_override_count()) : 0;
 
     if ($pictureGameReady && $votingReady && admin_dashboard_self_heal_due('admin_dashboard_voting_game_sync_last', 300)) {
         // Self-heal voting/game state periodically instead of on every admin navigation.
@@ -222,6 +228,9 @@ function admin_dashboard_view_model(): array
     return [
         'picture_game_ready' => $pictureGameReady,
         'gps_map_ready' => $gpsMapReady,
+        'gps_map_override_ready' => $gpsMapOverrideReady,
+        'exif_gps_default_enabled' => $exifGpsDefaultEnabled,
+        'exif_gps_override_count' => $exifGpsOverrideCount,
         'voting_ready' => $votingReady,
         'filename_display_ready' => $filenameDisplayReady,
         'migration_pending' => $migrationPending,

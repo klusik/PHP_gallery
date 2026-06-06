@@ -68,6 +68,7 @@ Current migration sequence:
 | `202605310001_admin_persistent_auth_and_google_login.php` | Durable admin login and linked Google accounts. |
 | `202606010001_gallery_lightbox_browsing_mode.php` | Nullable per-gallery lightbox browsing-mode override. |
 | `202606010002_gallery_lightbox_browsing_mode_carousel.php` | Adds `picture_strip` and `3d_carousel`, and upgrades legacy `strip` values. |
+| `202606060001_exif_gps_default_display.php` | Makes EXIF/GPS display default-enabled globally and converts gallery GPS display into nullable inherit/override state. |
 
 ## Entity Relationship Overview
 
@@ -157,7 +158,7 @@ Important columns:
 | `sort_order` | Admin/public ordering. |
 | `visibility` | `unpublished`, `public`, or `private`. Some compatibility code knows about older `draft`. |
 | `picture_game_enabled` | Enables picture comparison game. |
-| `gps_map_enabled` | Enables map rendering. |
+| `gps_map_enabled` | Nullable EXIF/GPS display override. `NULL` inherits the global `exif_gps_maps_default_enabled` setting, `1` forces map/GPS display on for the branch and `0` forces it off. |
 | `voting_enabled` | Enables image voting. |
 | `show_filenames` | Shows filenames in public UI. |
 | `description_layout` | `vertical` or `horizontal`, nullable for inherited/default behavior. |
@@ -229,7 +230,7 @@ Important columns:
 | `exif_camera_make`, `exif_camera_model` | Camera metadata. |
 | `exif_lens_model` | Lens metadata. |
 | `exif_focal_length`, `exif_aperture`, `exif_exposure_time`, `exif_iso` | Exposure metadata. |
-| `gps_lat`, `gps_lng`, `gps_altitude`, `gps_extracted_at` | GPS metadata. |
+| `gps_lat`, `gps_lng`, `gps_altitude`, `gps_extracted_at` | GPS metadata. Public display is controlled by the global EXIF/GPS default and the nearest non-null gallery `gps_map_enabled` override. |
 | `sort_order` | Order inside gallery. |
 | `visibility` | `draft`, `public`, or `private`. |
 | `nsfw_enabled` | Image-level restricted flag. |

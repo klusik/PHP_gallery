@@ -196,6 +196,7 @@ function cms_run(): void
         'admin_devmode' => 'cms_admin_devmode',
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
+        'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',

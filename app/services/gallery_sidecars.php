@@ -329,6 +329,13 @@ function write_gallery_sidecar(array $gallery): void
             $data['lightbox_browsing_mode'] = $lightboxBrowsingMode;
         }
     }
+    if (function_exists('exif_gps_override_schema_ready') && exif_gps_override_schema_ready()) {
+        // $gpsMapOverride stores a per-gallery EXIF/GPS display override, when this gallery has one.
+        $gpsMapOverride = gallery_gps_map_storage_value($gallery['gps_map_enabled'] ?? null);
+        if ($gpsMapOverride !== null) {
+            $data['gps_map_enabled'] = $gpsMapOverride;
+        }
+    }
     if (gallery_grid_schema_ready() && gallery_grid_has_explicit_override($gallery)) {
         $data['grid_columns'] = (int) $gallery['grid_columns'];
         $data['grid_rows'] = (int) $gallery['grid_rows'];
@@ -396,6 +403,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'description_layout' => gallery_description_layout_storage_value($metadata['description_layout'] ?? null),
         'count_badge_visibility' => gallery_count_badge_storage_value($metadata['count_badge_visibility'] ?? null),
         'lightbox_browsing_mode' => gallery_lightbox_browsing_mode_storage_value($metadata['lightbox_browsing_mode'] ?? null),
+        'gps_map_enabled' => function_exists('gallery_gps_map_storage_value') && array_key_exists('gps_map_enabled', $metadata) ? gallery_gps_map_storage_value($metadata['gps_map_enabled']) : null,
         'grid_columns' => isset($metadata['grid_columns']) ? (int) $metadata['grid_columns'] : null,
         'grid_rows' => isset($metadata['grid_rows']) ? (int) $metadata['grid_rows'] : null,
         'grid_use_for_subgalleries' => array_key_exists('grid_use_for_subgalleries', $metadata) ? (int) $metadata['grid_use_for_subgalleries'] : 1,
@@ -491,6 +499,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_lightbox_browsing_mode_schema_ready()) {
         $columns[] = 'lightbox_browsing_mode';
         $values[] = $lightboxBrowsingMode;
+    }
+    if (function_exists('exif_gps_override_schema_ready') && exif_gps_override_schema_ready()) {
+        $columns[] = 'gps_map_enabled';
+        $values[] = gallery_gps_map_storage_value($candidate['gps_map_enabled'] ?? null);
     }
     if (gallery_date_schema_ready()) {
         $columns[] = 'gallery_date';

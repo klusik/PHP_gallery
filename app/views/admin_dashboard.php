@@ -43,6 +43,9 @@ function view_render_admin_dashboard(array $model): void
 {
     $pictureGameReady = !empty($model['picture_game_ready']);
     $gpsMapReady = !empty($model['gps_map_ready']);
+    $gpsMapOverrideReady = !empty($model['gps_map_override_ready']);
+    $exifGpsDefaultEnabled = !empty($model['exif_gps_default_enabled']);
+    $exifGpsOverrideCount = (int) ($model['exif_gps_override_count'] ?? 0);
     $votingReady = !empty($model['voting_ready']);
     $filenameDisplayReady = !empty($model['filename_display_ready']);
     $migrationPending = !empty($model['migration_pending']);
@@ -127,6 +130,9 @@ function view_render_admin_dashboard(array $model): void
         echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a>';
     }
     echo '</div></form>';
+    if ($gpsMapOverrideReady) {
+        view_render_admin_exif_gps_defaults_card('admin-action-card', $exifGpsDefaultEnabled, $exifGpsOverrideCount);
+    }
     echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.maintenance', 'Maintenance')) . '</strong><span>' . e(t('admin.dashboard.maintenance_hint', 'Review logs, integrity, telemetry, updates, and navigation data.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.logs', 'Logs')) . '</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.integrity', 'Integrity')) . '</a>';
     if ($telemetryFeatureEnabled) {
         echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</a>';
@@ -154,7 +160,7 @@ function view_render_admin_dashboard(array $model): void
     echo '<div class="bulk-row admin-gallery-controls">';
     echo '<label>' . e(t('admin.dashboard.filter', 'Filter')) . '<select data-gallery-visibility-filter><option value="all">' . e(t('admin.dashboard.filter_all_statuses', 'All statuses')) . '</option><option value="unpublished">' . e(t('admin.dashboard.filter_only_unpublished', 'Only unpublished')) . '</option><option value="public">' . e(t('admin.dashboard.filter_only_public', 'Only public')) . '</option><option value="private">' . e(t('admin.dashboard.filter_only_private', 'Only private')) . '</option></select></label>';
     echo '<span class="muted admin-gallery-filter-summary" data-gallery-filter-summary></span>';
-    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Enable GPS maps')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Disable GPS maps')) . '</option><option value="delete">' . e(t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries')) . '</option>';
+    echo '<label class="admin-gallery-select-all"><input type="checkbox" data-select-all="gallery_ids[]"> ' . e(t('admin.dashboard.select_displayed', 'Select displayed')) . '</label><label>' . e(t('admin.dashboard.bulk_action', 'Bulk action')) . '<select name="action"><option value="scan">' . e(t('admin.dashboard.bulk_scan_images', 'Scan/import images')) . '</option><option value="thumbs">' . e(t('admin.dashboard.bulk_create_thumbnails', 'Create thumbnails')) . '</option><option value="public">' . e(t('admin.dashboard.bulk_set_public', 'Set public')) . '</option><option value="unpublished">' . e(t('admin.dashboard.bulk_set_unpublished', 'Set unpublished')) . '</option><option value="private">' . e(t('admin.dashboard.bulk_set_private', 'Set private')) . '</option><option value="maps_on">' . e(t('admin.dashboard.bulk_enable_gps_maps', 'Force GPS maps on')) . '</option><option value="maps_off">' . e(t('admin.dashboard.bulk_disable_gps_maps', 'Force GPS maps off')) . '</option>' . ($gpsMapOverrideReady ? '<option value="maps_inherit">' . e(t('admin.dashboard.bulk_inherit_gps_maps', 'Use GPS map default')) . '</option>' : '') . '<option value="delete">' . e(t('admin.dashboard.bulk_delete_selected', 'Delete selected galleries')) . '</option>';
     if ($filenameDisplayReady) {
         echo '<option value="filenames_on">' . e(t('admin.dashboard.bulk_show_file_names', 'Show file names')) . '</option><option value="filenames_off">' . e(t('admin.dashboard.bulk_hide_file_names', 'Hide file names')) . '</option>';
     }
@@ -191,7 +197,8 @@ function view_render_admin_dashboard(array $model): void
             $accessLabel = (string) ($gallery['access_mode'] ?? 'normal') === 'password' ? (!empty($gallery['access_password_hash']) ? '' . t('admin.dashboard.access_password_locked', 'Password locked') . '' : '' . t('admin.dashboard.access_direct_link_token', 'Direct-link token') . '') : '' . t('admin.dashboard.access_no_password', 'No password') . '';
             echo '<span class="admin-gallery-access-label">' . e($accessLabel) . '</span>';
         }
-        echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_maps', 'Maps')) . '">M ' . view_render_admin_feature_flag($gpsMapReady && (int) ($gallery['gps_map_enabled'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_gps_maps_enabled', 'GPS maps enabled') . '') . '</span>';
+        $galleryGpsMapsEnabled = $gpsMapReady && gallery_effective_gps_map_enabled($gallery);
+        echo '</td><td class="admin-gallery-feature-cell"><span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_maps', 'Maps')) . '">M ' . view_render_admin_feature_flag($galleryGpsMapsEnabled, '&#10003;', '' . t('admin.dashboard.feature_gps_maps_enabled', 'GPS maps enabled') . '') . '</span>';
         echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_background', 'Background')) . '">B ' . view_render_admin_feature_flag($backgroundSourceReady && gallery_background_source($gallery) !== null, '&#10003;', '' . t('admin.dashboard.feature_custom_background_set', 'Custom gallery background set') . '') . '</span>';
         if ($filenameDisplayReady) {
             echo '<span class="admin-gallery-feature" title="' . e(t('admin.dashboard.feature_file_names_shown', 'File names shown')) . '">N ' . view_render_admin_feature_flag((int) ($gallery['show_filenames'] ?? 0) === 1, '&#10003;', '' . t('admin.dashboard.feature_file_names_are_shown', 'File names are shown') . '') . '</span>';
@@ -222,6 +229,9 @@ function view_render_admin_dashboard(array $model): void
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.integrity', 'Integrity')) . '</strong><span>' . e(t('admin.dashboard.integrity_hint', 'Check core files and deployment health.')) . '</span><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.run_integrity_check', 'Run integrity check')) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
+    if ($gpsMapOverrideReady) {
+        view_render_admin_exif_gps_defaults_card('admin-maintenance-card', $exifGpsDefaultEnabled, $exifGpsOverrideCount);
+    }
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
     if ($navigationDataFeatureEnabled) {
@@ -286,6 +296,21 @@ function view_render_admin_url_rewrite_warning(): void
 /**
  * Render the URL rewrite setting and compatibility summary.
  */
+
+/**
+ * Render the shared EXIF/GPS default display settings card.
+ */
+function view_render_admin_exif_gps_defaults_card(string $className, bool $defaultEnabled, int $overrideCount): void
+{
+    echo '<form method="post" action="' . e(url_for('admin_exif_gps_settings')) . '" class="' . e($className) . '">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.exif_gps_defaults', 'EXIF / GPS defaults')) . '</strong>';
+    echo '<span>' . e(t('admin.dashboard.exif_gps_defaults_hint', 'Global default is used by every gallery that has no explicit EXIF / GPS override.')) . '</span>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="exif_gps_default_enabled" value="1"' . ($defaultEnabled ? ' checked' : '') . '> ' . e(t('admin.dashboard.exif_gps_default_enabled_label', 'Show EXIF GPS maps by default for all galleries')) . '</label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="reset_gallery_overrides" value="1"> ' . e(t('admin.dashboard.exif_gps_reset_overrides_label', 'Reset all per-gallery EXIF / GPS display overrides')) . '</label>';
+    echo '<span class="muted">' . e(t('admin.dashboard.exif_gps_override_count', 'Gallery override(s): {count}', ['count' => (string) $overrideCount])) . '</span>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button></form>';
+}
+
 function view_render_admin_url_rewrite_card(string $className): void
 {
     $enabled = url_rewrite_enabled();

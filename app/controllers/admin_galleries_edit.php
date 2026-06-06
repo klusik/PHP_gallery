@@ -273,6 +273,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
+    $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // $flightMapReady stores this steps working value.
     $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // $votingReady stores this steps working value.
@@ -296,8 +298,10 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($input['gallery_date'] ?? ($gallery['gallery_date'] ?? '')) : null;
     // $pictureGameDefault stores the current value for partial update preservation.
     $pictureGameDefault = !$completeForm && (int) ($gallery['picture_game_enabled'] ?? 0) === 1;
-    // $gpsMapDefault stores the current value for partial update preservation.
+    // $gpsMapDefault stores the current value for partial update preservation on legacy boolean installs.
     $gpsMapDefault = !$completeForm && (int) ($gallery['gps_map_enabled'] ?? 0) === 1;
+    // $gpsMapOverride stores the inherited or explicit EXIF/GPS display state for nullable override installs.
+    $gpsMapOverride = $gpsMapOverrideReady ? gallery_gps_map_storage_value($input['gps_map_enabled'] ?? ($completeForm ? 'inherit' : ($gallery['gps_map_enabled'] ?? null))) : null;
     // $votingDefault stores the current value for partial update preservation.
     $votingDefault = !$completeForm && (int) ($gallery['voting_enabled'] ?? 0) === 1;
     // $showFilenamesDefault stores the current value for partial update preservation.
@@ -307,7 +311,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // Variable $pictureGameEnabled stores this steps working value.
     $pictureGameEnabled = $pictureGameReady ? admin_gallery_checkbox_input($input, 'picture_game_enabled', $pictureGameDefault) : 0;
     // Variable $gpsMapEnabled stores this steps working value.
-    $gpsMapEnabled = $gpsMapReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
+    $gpsMapEnabled = $gpsMapReady && !$gpsMapOverrideReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
     // Variable $votingEnabled stores this steps working value.
     $votingEnabled = $votingReady ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault) : (int) ($gallery['voting_enabled'] ?? 0);
     // Variable $showFilenames stores this steps working value.
@@ -524,7 +528,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if ($pictureGameReady) {
         $fields['picture_game_enabled = ?'] = $pictureGameEnabled;
     }
-    if ($gpsMapReady) {
+    if ($gpsMapOverrideReady) {
+        $fields['gps_map_enabled = ?'] = $gpsMapOverride;
+    } elseif ($gpsMapReady) {
         $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
     }
     if ($votingReady) {
@@ -664,6 +670,8 @@ function cms_admin_edit_gallery(): void
     $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
+    $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // Variable $flightMapReady stores this steps working value.
     $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // Variable $votingReady stores this steps working value.
@@ -997,7 +1005,19 @@ function cms_admin_edit_gallery(): void
     } elseif ($flightMapFeatureEnabled) {
         echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.')) . '</p></div>';
     }
-    if ($gpsMapReady) {
+    if ($gpsMapOverrideReady) {
+        // $currentGpsMapOverride stores the explicit override saved on this gallery, or null for inherited behavior.
+        $currentGpsMapOverride = gallery_gps_map_storage_value($gallery['gps_map_enabled'] ?? null);
+        // $currentGpsMapMode stores the selected form value for the gallery override dropdown.
+        $currentGpsMapMode = $currentGpsMapOverride === null ? 'inherit' : ($currentGpsMapOverride === 1 ? 'enabled' : 'disabled');
+        // $effectiveGpsMapEnabled stores the state visitors currently receive after inheritance.
+        $effectiveGpsMapEnabled = gallery_effective_gps_map_enabled($gallery);
+        echo '<div class="admin-edit-card"><h3>' . e(t('admin.gallery_editor.exif_gps_display_title', 'EXIF / GPS display')) . '</h3><label>' . e(t('admin.gallery_editor.exif_gps_display_label', 'Gallery EXIF/GPS display')) . '<select name="gps_map_enabled">';
+        echo '<option value="inherit"' . ($currentGpsMapMode === 'inherit' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_inherit', 'Inherit default')) . '</option>';
+        echo '<option value="enabled"' . ($currentGpsMapMode === 'enabled' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_force_on', 'Force on')) . '</option>';
+        echo '<option value="disabled"' . ($currentGpsMapMode === 'disabled' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_force_off', 'Force off')) . '</option>';
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.exif_gps_display_help', 'Default is on. Use Force off when this gallery branch should hide photo map pins, gallery EXIF maps, and GPS coordinates from public display. Current effective state: {state}.', ['state' => $effectiveGpsMapEnabled ? t('admin.common.on', 'On') : t('admin.common.off', 'Off')])) . '</p></div>';
+    } elseif ($gpsMapReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch')) . '</label><p class="muted">' . e(t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.')) . '</p></div>';
     }
     if (gallery_description_layout_schema_ready()) {

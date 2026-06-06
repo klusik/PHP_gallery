@@ -877,7 +877,10 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
     if ($column === 'visibility') {
         return gallery_visibility_storage_value((string) $value);
     }
-    if (in_array($column, ['voting_enabled', 'show_filenames', 'picture_game_enabled', 'gps_map_enabled', 'grid_use_for_subgalleries', 'nsfw_enabled'], true)) {
+    if ($column === 'gps_map_enabled') {
+        return function_exists('gallery_gps_map_storage_value') ? gallery_gps_map_storage_value($value) : (!empty($value) ? 1 : 0);
+    }
+    if (in_array($column, ['voting_enabled', 'show_filenames', 'picture_game_enabled', 'grid_use_for_subgalleries', 'nsfw_enabled'], true)) {
         return !empty($value) ? 1 : 0;
     }
     if (in_array($column, ['sort_order', 'grid_columns', 'grid_rows', 'thumbnail_min_size', 'thumbnail_max_size'], true)) {

@@ -23,8 +23,8 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Automatic scanning** - Detect newly added files on the filesystem
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
-- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages
-- **GPS maps** - Render interactive maps when images have location data
+- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages; enabled globally by default with per-gallery overrides
+- **GPS maps** - Render interactive maps when images have location data, using the EXIF / GPS display default unless a gallery branch forces it on or off
 
 ### Thumbnails & Performance
 - **Automatic generation** - Create optimized thumbnails during import or on-demand
@@ -125,7 +125,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Inline image editing with side panel
 - Drag-and-drop image reordering
 - Image caption and metadata editing
-- EXIF preview and GPS display
+- EXIF preview and GPS display, with a global default-enabled public display setting and optional per-gallery force on/off override
 
 #### Tag Management
 - Create, edit, rename, or delete tags

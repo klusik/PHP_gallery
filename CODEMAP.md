@@ -121,7 +121,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Edit image metadata | `app/controllers/admin_public_inline.php`, handler `cms_admin_edit_image` |
 | Copy/move/share selected public-view images | `app/controllers/picture_manager.php`, `app/controllers/downloads.php`, `app/services/picture_manager.php`, `app/services/downloads.php`, `public/assets/gallery-modules/picture-manager.js` |
 | DNG support | `app/services/dng_derivatives.php`, `app/services/uploads.php` |
-| EXIF extraction | `app/services/exif.php`, `app/controllers/exif.php` |
+| EXIF extraction and display policy | `app/services/exif.php`, `app/controllers/exif.php`, `app/controllers/admin_dashboard.php`, `app/controllers/admin_galleries_edit.php` |
 
 ## Tags
 
@@ -178,7 +178,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | SimBrief admin endpoint | `app/controllers/admin_simbrief.php` |
 | SimBrief UI | `app/views/simbrief_descriptions.php` |
 | Flight map persistence | `app/services/flight_maps.php`, table `gallery_flight_maps` |
-| EXIF and map data endpoint | `app/controllers/exif.php`, `app/services/exif.php` |
+| EXIF and map data endpoint | `app/controllers/exif.php`, `app/services/exif.php` (honors the default-enabled EXIF/GPS display setting and nullable gallery overrides) |
 | Navigation lookup | `app/services/navigation_data.php`, `app/controllers/navigation_data.php` |
 | Navigation admin UI | `app/views/navigation_data.php` |
 | Bundled navdata | `data/navdata/local_nav_points.csv` |
