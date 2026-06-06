@@ -19,6 +19,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 
 ### Image Management
 - **Upload interface** - Upload multiple images to a gallery via browser
+- **Upload-time renaming** - Optionally rename new uploads immediately with the same default template used by the media renamer
 - **Automatic scanning** - Detect newly added files on the filesystem
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
@@ -107,6 +108,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Multi-file upload to existing or new gallery
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
+- Default-enabled upload-time filename normalization using the media-renamer pattern
 - Validation of file types and sizes
 
 #### Gallery Management
@@ -283,7 +285,7 @@ Then open `http://localhost:8000/` in your browser.
 1. Select a gallery and click **Upload photos**
 2. Drag-and-drop files or click to browse
 3. With JavaScript enabled, see transfer and thumbnail progress
-4. After upload, images are scanned and thumbnails created
+4. After upload, images are scanned, optionally renamed with the default media-renamer template, and thumbnails are created
 
 **Option B: Via FTP**
 1. Upload image files to the gallery folder via FTP

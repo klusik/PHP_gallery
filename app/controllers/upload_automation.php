@@ -469,6 +469,8 @@ function cms_upload_automation_upload(): void
             'sim_camera_metadata_attached' => (int) ($simCameraResult['attached'] ?? 0),
             'sim_camera_metadata_skipped' => (int) ($simCameraResult['skipped'] ?? 0),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
+            'renamed' => (int) ($stored['renamed'] ?? 0),
+            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
         ]);
 
         upload_automation_json([
@@ -481,6 +483,9 @@ function cms_upload_automation_upload(): void
             'scanned' => (int) ($stored['scanned'] ?? 0),
             'image_ids' => array_map('intval', (array) ($stored['image_ids'] ?? [])),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
+            'renamed' => (int) ($stored['renamed'] ?? 0),
+            'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
+            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
             'thumbnails' => $thumbnails,
             'thumbnail_failed' => $thumbnailFailed,
             'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),

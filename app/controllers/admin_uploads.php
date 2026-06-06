@@ -104,6 +104,9 @@ function cms_admin_upload(): void
                 // $clientFormatMode stores the safe browser-side upload picker policy.
                 $clientFormatMode = admin_upload_client_format_mode_normalize($_POST['admin_upload_client_format_mode'] ?? 'server_supported');
                 set_app_setting('admin_upload_client_format_mode', $clientFormatMode);
+                // $autoRenameEnabled stores whether fresh uploads should use the media-renamer naming scheme.
+                $autoRenameEnabled = !empty($_POST['admin_upload_auto_rename_enabled']);
+                set_admin_upload_auto_rename_enabled($autoRenameEnabled);
                 redirect_to(url_for('admin_upload', ['saved' => 'upload_preferences']));
             }
             // $mode stores an intermediate value used by the surrounding gallery workflow.
@@ -162,6 +165,8 @@ function cms_admin_upload(): void
                 'thumbnail_failed' => $thumbnailFailed,
                 'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
                 'scan_failed_filenames' => $scanFailedFilenames,
+                'renamed' => (int) ($stored['renamed'] ?? 0),
+                'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
             ]);
             if ($scanFailedFilenames) {
                 admin_log_event('warning', 'gallery.upload_scan_incomplete', 'One or more uploaded files were stored on disk but not imported into image records.', [
@@ -210,6 +215,9 @@ function cms_admin_upload(): void
                 'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
                 'scan_failed' => count($scanFailedFilenames),
                 'scan_failed_filenames' => $scanFailedFilenames,
+                'renamed' => (int) ($stored['renamed'] ?? 0),
+                'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
+                'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
                 'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
             ];
             if ($wantsJson) {
@@ -328,6 +336,8 @@ function render_admin_upload_support_panel(): void
     $rawSupported = raw_conversion_supported();
     // $clientFormatMode stores the selected browser-side upload picker preference.
     $clientFormatMode = admin_upload_client_format_mode();
+    // $autoRenameEnabled stores the selected upload-time file renaming preference.
+    $autoRenameEnabled = admin_upload_auto_rename_enabled();
     echo '<section class="panel compact-support"><h2>' . e(t('admin.upload.support_title', 'Upload support')) . '</h2><table class="support-matrix"><thead><tr><th>' . e(t('admin.upload.type', 'Type')) . '</th><th>JPG</th><th>PNG</th><th>GIF</th><th>WebP</th><th>HEIC</th><th>DNG</th></tr></thead><tbody><tr>';
     echo '<th scope="row">' . e(t('admin.upload.available', 'Available')) . '</th>';
     echo '<td class="support-yes">✓</td>';
@@ -340,6 +350,7 @@ function render_admin_upload_support_panel(): void
     echo '<form method="post" action="' . e(url_for('admin_upload')) . '" class="form-grid">' . csrf_field();
     echo '<input type="hidden" name="update_upload_preferences" value="1">';
     echo '<label>' . e(t('admin.upload.client_format_mode', 'Phone upload format')) . '<select name="admin_upload_client_format_mode"><option value="server_supported"' . ($clientFormatMode === 'server_supported' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_server_supported', 'Allow all server-supported formats')) . '</option><option value="phone_jpeg"' . ($clientFormatMode === 'phone_jpeg' ? ' selected' : '') . '>' . e(t('admin.upload.client_format_phone_jpeg', 'Prefer phone-rendered JPG/PNG/WebP, no RAW/DNG')) . '</option></select><span class="muted">' . e(t('admin.upload.client_format_help', 'Use the phone-rendered mode when iPhone ProRAW/DNG uploads produce poor color. Browsers treat this as a picker request, not an absolute conversion guarantee.')) . '</span></label>';
+    echo '<label class="checkbox-label"><input type="checkbox" name="admin_upload_auto_rename_enabled" value="1"' . ($autoRenameEnabled ? ' checked' : '') . '> <span>' . e(t('admin.upload.auto_rename_enabled', 'Rename uploaded photos automatically')) . '</span><span class="muted">' . e(t('admin.upload.auto_rename_help', 'When enabled, browser, API, and WebDAV uploads are renamed after scan with the same default media-renamer template: {pattern}.', ['pattern' => media_renamer_default_pattern()])) . '</span></label>';
     echo '<button type="submit" class="secondary">' . e(t('admin.upload.save_preferences', 'Save upload preferences')) . '</button>';
     echo '</form></section>';
 }

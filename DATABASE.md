@@ -294,6 +294,8 @@ Key-value storage for mutable runtime settings.
 
 Use `app/services/app_settings.php` to access this table.
 
+`admin_upload_auto_rename_enabled` stores whether newly uploaded images are automatically renamed after scan with the default media-renamer template. Missing values default to enabled (`1`) for browser, upload API, and mobile WebDAV upload paths.
+
 `theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a JSON array of up to three entries. Numeric entries are gallery IDs, and the `home` token represents the main gallery page. The value is resolved by `app/services/favorite_galleries.php`; duplicate entries, missing galleries and unavailable public rows are ignored defensively.
 
 ## Voting and Game Tables

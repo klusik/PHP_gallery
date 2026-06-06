@@ -193,7 +193,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `admin_bulk_galleries` | `cms_admin_bulk_galleries` | Bulk gallery actions. |
 | `admin_reorder_galleries` | `cms_admin_reorder_galleries` | Admin hierarchy/order changes. |
 | `admin_reorder_public_galleries` | `cms_admin_reorder_public_galleries` | Public ordering changes. |
-| `admin_upload` | `cms_admin_upload` | Upload images into existing or new galleries. |
+| `admin_upload` | `cms_admin_upload` | Upload images into existing or new galleries, including the upload preference for automatic media-renamer naming. |
 | `admin_bulk_images` | `cms_admin_bulk_images` | Bulk image operations. |
 | `admin_reorder_images` | `cms_admin_reorder_images` | Image sort order changes. |
 | `admin_edit_image` | `cms_admin_edit_image` | Image metadata, tags, AI metadata panel. |
@@ -309,7 +309,7 @@ Key service families:
 | Settings | `app_settings.php`, `theme.php`, `favorite_galleries.php`, `custom_css.php`, `translations.php` | DB-backed settings, theme defaults, favorite gallery/main-page shortcuts, CSS variables, language packs. |
 | Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, display inheritance and presentation options. |
 | Gallery assets | `gallery_covers.php`, `gallery_backgrounds.php`, `gallery_branding.php`, `favicon.php` | Cover, background, banner, logo, separator and favicon handling. |
-| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, copy/move, public-view selection sharing and DNG helper logic. |
+| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, optional upload-time media-renamer naming, copy/move, public-view selection sharing and DNG helper logic. |
 | Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php` | Thumbnail pathing, static serving, generation, quality bounds and responsive HTML. |
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |
@@ -643,7 +643,7 @@ winapp/gallery_watch_upload.pyw
 winapp/requirements.txt
 ```
 
-`gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies.
+`gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies. The upload API reuses the central upload pipeline, so the default-enabled upload-time media-renamer naming preference also applies before server-side thumbnail generation or client thumbnail installation.
 
 ## Telemetry Model
 

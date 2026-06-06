@@ -114,6 +114,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Task | Files |
 | --- | --- |
 | Upload images | `app/controllers/admin_uploads.php`, `app/services/uploads.php` |
+| Upload-time media renaming | `app/services/uploads.php`, `app/services/media_renamer.php`, `app/services/mobile_webdav.php`, `app/controllers/upload_automation.php` | Uses the default media-renamer pattern after upload scan and before thumbnail generation. |
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |
@@ -203,6 +204,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | --- | --- |
 | Admin token management | `app/controllers/upload_automation.php`, handler `cms_admin_upload_automation_token` |
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
+| Upload API filename normalization | `app/controllers/upload_automation.php`, `app/services/uploads.php`, `app/services/media_renamer.php` | Returns final filenames after optional upload-time renaming. |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
