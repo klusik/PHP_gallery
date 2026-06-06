@@ -68,7 +68,8 @@ Current migration sequence:
 | `202605310001_admin_persistent_auth_and_google_login.php` | Durable admin login and linked Google accounts. |
 | `202606010001_gallery_lightbox_browsing_mode.php` | Nullable per-gallery lightbox browsing-mode override. |
 | `202606010002_gallery_lightbox_browsing_mode_carousel.php` | Adds `picture_strip` and `3d_carousel`, and upgrades legacy `strip` values. |
-| `202606060001_exif_gps_default_display.php` | Makes EXIF/GPS display default-enabled globally and converts gallery GPS display into nullable inherit/override state. |
+| `202606060001_exif_gps_default_display.php` | Makes EXIF/GPS display enabled by default globally and changes `galleries.gps_map_enabled` to nullable inherit/override storage. |
+| `202606070001_gallery_date_ranges.php` | Adds optional gallery date range end values. |
 
 ## Entity Relationship Overview
 
@@ -152,13 +153,14 @@ Important columns:
 | `url_path_hash` | Hash for unique clean path lookup. |
 | `title` | Display title. |
 | `description` | Public description. |
-| `gallery_date` | Optional manual gallery date. |
+| `gallery_date` | Optional manual gallery date or date range start. |
+| `gallery_date_end` | Optional manual gallery date range end. `NULL` means the gallery has a single date or no manual range end. |
 | `cover_image_id` | Optional linked image used as cover. |
 | `cover_image_path` | Optional path-based cover override. |
 | `sort_order` | Admin/public ordering. |
 | `visibility` | `unpublished`, `public`, or `private`. Some compatibility code knows about older `draft`. |
 | `picture_game_enabled` | Enables picture comparison game. |
-| `gps_map_enabled` | Nullable EXIF/GPS display override. `NULL` inherits the global `exif_gps_maps_default_enabled` setting, `1` forces map/GPS display on for the branch and `0` forces it off. |
+| `gps_map_enabled` | Nullable EXIF/GPS display override. `NULL` inherits `app_settings.exif_gps_maps_default_enabled`, `1` forces EXIF/GPS map and coordinate display on for the gallery branch, and `0` forces it off. |
 | `voting_enabled` | Enables image voting. |
 | `show_filenames` | Shows filenames in public UI. |
 | `description_layout` | `vertical` or `horizontal`, nullable for inherited/default behavior. |
@@ -179,6 +181,20 @@ Important columns:
 | `logo_image_path` | Gallery logo asset path. |
 | `separator_image_path` | Gallery separator asset path. |
 | `created_at`, `updated_at` | Audit timestamps. |
+
+### EXIF/GPS Display Defaults
+
+The global default is stored in `app_settings.exif_gps_maps_default_enabled`. Missing values are treated as enabled (`1`), so scanned EXIF/GPS data is visible unless a gallery branch explicitly opts out.
+
+The per-gallery value is stored in `galleries.gps_map_enabled` after migration `202606060001_exif_gps_default_display.php`:
+
+| Value | Meaning |
+| --- | --- |
+| `NULL` | Inherit from the closest parent override or the global default. |
+| `1` | Force EXIF/GPS map and coordinate display on for this gallery branch. |
+| `0` | Force EXIF/GPS map and coordinate display off for this gallery branch. |
+
+Admin dashboard settings use `cms_admin_exif_gps_settings()` to change the global default and optionally reset all gallery overrides to `NULL`. Gallery editing uses the same storage normalization through `gallery_gps_map_storage_value()`, so full-page editing and side-panel editing resolve the same effective state through `gallery_effective_gps_map_enabled()`.
 
 ### Lightbox Browsing Mode Settings
 
@@ -226,7 +242,7 @@ Important columns:
 | `file_size` | Source file size. |
 | `modified_at` | Source file modification timestamp. |
 | `checksum_sha256` | Source checksum when known. |
-| `exif_taken_at` | EXIF capture datetime. |
+| `exif_taken_at` | EXIF capture datetime. Admin gallery-date suggestions aggregate the minimum and maximum value across a gallery and all descendant galleries, either globally or scoped to a selected gallery branch. |
 | `exif_camera_make`, `exif_camera_model` | Camera metadata. |
 | `exif_lens_model` | Lens metadata. |
 | `exif_focal_length`, `exif_aperture`, `exif_exposure_time`, `exif_iso` | Exposure metadata. |
@@ -294,8 +310,6 @@ Key-value storage for mutable runtime settings.
 | `updated_at` | Last update timestamp. |
 
 Use `app/services/app_settings.php` to access this table.
-
-`admin_upload_auto_rename_enabled` stores whether newly uploaded images are automatically renamed after scan with the default media-renamer template. Missing values default to enabled (`1`) for browser, upload API, and mobile WebDAV upload paths.
 
 `theme_favorite_gallery_ids` stores the optional top-navigation shortcuts as a JSON array of up to three entries. Numeric entries are gallery IDs, and the `home` token represents the main gallery page. The value is resolved by `app/services/favorite_galleries.php`; duplicate entries, missing galleries and unavailable public rows are ignored defensively.
 
@@ -642,7 +656,7 @@ Uses `galleries` filtered by parent, visibility, access listing and sort order. 
 
 ### Gallery detail page
 
-Loads one gallery by clean path or slug, then loads child galleries, image rows, tags, thumbnail metadata, vote state and optional map/lightbox data.
+Loads one gallery by clean path or slug, then loads child galleries, image rows, tags, thumbnail metadata, vote state, manual date range and optional map/lightbox data.
 
 ### Public search
 
@@ -677,5 +691,6 @@ Rules:
 2. Do not edit old migrations unless fixing a syntax error before release.
 3. Keep statements independent when possible.
 4. Include indexes in the same migration when the new query pattern needs them.
-5. Do not insert environment-specific data.
-6. For sensitive values, store hashes or encrypted ciphers, never raw tokens.
+5. Manual gallery date ranges use `gallery_date` plus nullable `gallery_date_end`; do not replace the start column because older installs and sidecars depend on it. EXIF suggestions only read `images.exif_taken_at` and then persist approved values back to these gallery date columns through the shared `gallery_date_save_range()` writer. Date-range labels must use an en dash (`–`) when rendered for visitors, editor suggestions or admin review.
+6. Do not insert environment-specific data.
+7. For sensitive values, store hashes or encrypted ciphers, never raw tokens.

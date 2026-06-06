@@ -47,6 +47,93 @@ function view_render_gallery_description_formatting_hint(): void
     echo '</ul></div></details>';
 }
 
+/**
+ * Render the EXIF-derived date suggestion controls for one existing gallery.
+ *
+ * @param array<string, mixed> $gallery Existing gallery row.
+ */
+function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
+{
+    // $galleryId stores the branch root whose own images and descendants form the suggestion.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    if ($galleryId <= 0 || !gallery_date_exif_suggestions_schema_ready()) {
+        return;
+    }
+
+    // $suggestion stores the recursive EXIF date range for this gallery branch.
+    $suggestion = gallery_date_exif_suggestion_for_gallery($galleryId);
+    echo '<div class="admin-date-range-suggestion" data-admin-gallery-date-suggestion data-admin-gallery-date-endpoint="' . e(url_for('admin_gallery_date_suggestion')) . '" data-admin-gallery-date-gallery-id="' . $galleryId . '" data-admin-gallery-date-csrf="' . e(csrf_token()) . '">';
+    echo '<div><strong>' . e(t('admin.gallery_editor.exif_date_suggestion_title', 'EXIF date suggestion')) . '</strong>';
+    if (!$suggestion) {
+        echo '<p class="muted">' . e(t('admin.gallery_editor.exif_date_suggestion_empty', 'No scanned EXIF capture dates were found in this gallery branch yet. Scan/import images first if the files were imported before EXIF extraction existed.')) . '</p></div>';
+        echo '<div class="admin-date-range-suggestion-actions"><a class="button secondary" href="' . e(url_for('admin_gallery_dates', ['gallery_id' => $galleryId])) . '">' . e(t('admin.gallery_editor.exif_date_review_branch', 'Review branch suggestions')) . '</a></div>';
+        echo '</div>';
+        return;
+    }
+
+    // $suggestedLabel stores the visible From/To range suggested for this gallery branch.
+    $suggestedLabel = gallery_date_range_storage_label($suggestion['suggested_start'] ?? null, $suggestion['suggested_end'] ?? null);
+    echo '<p>' . e(t('admin.gallery_editor.exif_date_suggestion_value', 'Suggested range: {range}', ['range' => $suggestedLabel])) . '</p>';
+    echo '<p class="muted">' . e(t('admin.gallery_editor.exif_date_suggestion_help', 'Computed from {images} EXIF photo(s) in this gallery and all subgalleries. Applying it updates this gallery date range only; branch review can also update daily subgalleries.', [
+        'images' => (string) (int) ($suggestion['exif_image_count'] ?? 0),
+    ])) . '</p></div>';
+    echo '<div class="admin-date-range-suggestion-actions">';
+    if (empty($suggestion['matches_current'])) {
+        echo '<button type="submit" name="action" value="apply_exif_date_suggestion" class="button secondary" formaction="' . e(url_for('admin_gallery_date_suggestion')) . '" formmethod="post" data-admin-gallery-date-apply>' . e(t('admin.gallery_editor.exif_date_apply_current', 'Apply to this gallery')) . '</button>';
+    } else {
+        echo '<span class="admin-date-range-current">' . e(t('admin.gallery_dates.status_current', 'current')) . '</span>';
+    }
+    echo '<a class="button secondary" href="' . e(url_for('admin_gallery_dates', ['gallery_id' => $galleryId])) . '">' . e(t('admin.gallery_editor.exif_date_review_branch', 'Review branch suggestions')) . '</a>';
+    echo '</div></div>';
+}
+
+
+
+/**
+ * Render gallery date or date-range fields for admin forms.
+ *
+ * @param array<string, mixed> $gallery Existing gallery row or empty array for new galleries.
+ */
+function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false): void
+{
+    if (!gallery_date_schema_ready()) {
+        if ($panelMode) {
+            echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date_range', 'Date range')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
+            return;
+        }
+        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
+        return;
+    }
+
+    // $startValue stores the current range start for the native date input.
+    $startValue = gallery_date_input_value($gallery['gallery_date'] ?? null);
+    // $endValue stores the current range end for the native date input when the migration is available.
+    $endValue = gallery_date_range_schema_ready() ? gallery_date_input_value($gallery['gallery_date_end'] ?? null) : '';
+
+    if (!gallery_date_range_schema_ready()) {
+        if ($panelMode) {
+            echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date" value="' . e($startValue) . '"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
+            return;
+        }
+        echo '<label class="admin-date-picker-field">' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date" value="' . e($startValue) . '"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
+        return;
+    }
+
+    if ($panelMode) {
+        echo '<div class="admin-side-panel-field admin-side-panel-field-wide admin-date-range-field"><span>' . e(t('admin.gallery_editor.gallery_date_range', 'Date range')) . '</span><div class="admin-date-range-inputs">';
+        echo '<label><small>' . e(t('admin.gallery_editor.gallery_date_from', 'From')) . '</small><input name="gallery_date" type="date" value="' . e($startValue) . '"></label>';
+        echo '<label><small>' . e(t('admin.gallery_editor.gallery_date_to', 'To')) . '</small><input name="gallery_date_end" type="date" value="' . e($endValue) . '"></label>';
+        echo '</div><small>' . e(t('admin.gallery_editor.gallery_date_range_help', 'Optional manual date range for an event, trip, or photo series. Leave To empty for a single date.')) . '</small></div>';
+        return;
+    }
+
+    echo '<fieldset class="admin-date-range-field"><legend>' . e(t('admin.gallery_editor.gallery_date_range', 'Date range')) . '</legend><div class="admin-date-range-inputs">';
+    echo '<label>' . e(t('admin.gallery_editor.gallery_date_from', 'From')) . '<input name="gallery_date" type="date" value="' . e($startValue) . '"></label>';
+    echo '<label>' . e(t('admin.gallery_editor.gallery_date_to', 'To')) . '<input name="gallery_date_end" type="date" value="' . e($endValue) . '"></label>';
+    echo '</div><span class="muted">' . e(t('admin.gallery_editor.gallery_date_range_help', 'Optional manual date range for an event, trip, or photo series. Leave To empty for a single date.')) . '</span></fieldset>';
+    view_render_admin_gallery_date_exif_suggestion($gallery);
+}
+
 function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
     if ($panelMode) {
@@ -58,11 +145,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        if (gallery_date_schema_ready()) {
-            echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
-        } else {
-            echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
-        }
+        view_render_admin_gallery_date_range_fields([], true);
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '</span><select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.description', 'Description')) . '</span><textarea name="description" rows="4"></textarea></label>';
         view_render_gallery_description_formatting_hint();
@@ -84,11 +167,7 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    if (gallery_date_schema_ready()) {
-        echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
-    } else {
-        echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
-    }
+    view_render_admin_gallery_date_range_fields([], false);
     echo '<label><input type="checkbox" name="voting_enabled" value="1"> ' . e(t('admin.gallery_editor.enable_image_voting', 'Enable image voting for this gallery')) . '</label>';
     echo '<label><input type="checkbox" name="show_filenames" value="1"> ' . e(t('admin.gallery_editor.show_file_names', 'Show file names')) . '</label>';
     if (gallery_count_badge_schema_ready()) {

@@ -48,6 +48,7 @@ function view_render_admin_dashboard(array $model): void
     $exifGpsOverrideCount = (int) ($model['exif_gps_override_count'] ?? 0);
     $votingReady = !empty($model['voting_ready']);
     $filenameDisplayReady = !empty($model['filename_display_ready']);
+    $galleryDateRangeReady = !empty($model['gallery_date_range_ready']);
     $migrationPending = !empty($model['migration_pending']);
     $accessReady = !empty($model['access_ready']);
     $backgroundSourceReady = !empty($model['background_source_ready']);
@@ -122,6 +123,9 @@ function view_render_admin_dashboard(array $model): void
     echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form>' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button></form>';
     echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.gallery_tools', 'Gallery tools')) . '</strong><span>' . e(t('admin.dashboard.gallery_tools_hint', 'Create galleries or upload photos using the existing workflows.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_empty_gallery', 'Create empty gallery')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a></div></div>';
+    if ($galleryDateRangeReady) {
+        view_render_admin_gallery_dates_card('admin-action-card');
+    }
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-action-card" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.media_tools', 'Media tools')) . '</strong><span>' . e(t('admin.dashboard.media_tools_hint', 'Generate thumbnails, delete generated thumbnail cache files, or download the complete gallery archive.')) . '</span>';
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
@@ -232,6 +236,9 @@ function view_render_admin_dashboard(array $model): void
     if ($gpsMapOverrideReady) {
         view_render_admin_exif_gps_defaults_card('admin-maintenance-card', $exifGpsDefaultEnabled, $exifGpsOverrideCount);
     }
+    if ($galleryDateRangeReady) {
+        view_render_admin_gallery_dates_card('admin-maintenance-card');
+    }
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
     if ($navigationDataFeatureEnabled) {
@@ -293,9 +300,6 @@ function view_render_admin_url_rewrite_warning(): void
     echo '</div>';
 }
 
-/**
- * Render the URL rewrite setting and compatibility summary.
- */
 
 /**
  * Render the shared EXIF/GPS default display settings card.
@@ -311,6 +315,17 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
     echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_exif_gps_defaults', 'Save EXIF / GPS defaults')) . '</button></form>';
 }
 
+/**
+ * Render a dashboard card linking to the gallery date suggestion workflow.
+ */
+function view_render_admin_gallery_dates_card(string $className): void
+{
+    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_dates', 'Gallery dates')) . '</strong><span>' . e(t('admin.dashboard.gallery_dates_hint', 'Approve editable date ranges suggested from scanned EXIF capture dates, including subgalleries.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_dates')) . '">' . e(t('admin.dashboard.open_gallery_dates', 'Open gallery dates')) . '</a></article>';
+}
+
+/**
+ * Render the URL rewrite setting and compatibility summary.
+ */
 function view_render_admin_url_rewrite_card(string $className): void
 {
     $enabled = url_rewrite_enabled();

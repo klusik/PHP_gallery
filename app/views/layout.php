@@ -290,6 +290,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-side-panel.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-date-picker.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
     ];
     $scriptVersion = 0;

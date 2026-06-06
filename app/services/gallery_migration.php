@@ -246,6 +246,7 @@ function gallery_migration_gallery_metadata(array $gallery): array
         'voting_enabled',
         'show_filenames',
         'gallery_date',
+        'gallery_date_end',
         'description_layout',
         'count_badge_visibility',
         'picture_game_enabled',
@@ -829,6 +830,7 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
         'voting_enabled',
         'show_filenames',
         'gallery_date',
+        'gallery_date_end',
         'description_layout',
         'count_badge_visibility',
         'picture_game_enabled',
@@ -877,14 +879,14 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
     if ($column === 'visibility') {
         return gallery_visibility_storage_value((string) $value);
     }
-    if ($column === 'gps_map_enabled') {
-        return function_exists('gallery_gps_map_storage_value') ? gallery_gps_map_storage_value($value) : (!empty($value) ? 1 : 0);
-    }
-    if (in_array($column, ['voting_enabled', 'show_filenames', 'picture_game_enabled', 'grid_use_for_subgalleries', 'nsfw_enabled'], true)) {
+    if (in_array($column, ['voting_enabled', 'show_filenames', 'picture_game_enabled', 'gps_map_enabled', 'grid_use_for_subgalleries', 'nsfw_enabled'], true)) {
         return !empty($value) ? 1 : 0;
     }
     if (in_array($column, ['sort_order', 'grid_columns', 'grid_rows', 'thumbnail_min_size', 'thumbnail_max_size'], true)) {
         return $value === null || $value === '' ? null : (int) $value;
+    }
+    if (in_array($column, ['gallery_date', 'gallery_date_end'], true)) {
+        return gallery_date_sidecar_value($value);
     }
 
     return $value;

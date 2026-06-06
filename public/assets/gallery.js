@@ -64,6 +64,7 @@ import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-p
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20260529-openai-text-assist-v2';
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
+import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260601-3d-carousel-v2';
@@ -115,6 +116,7 @@ function runWhenDomReady(callback) {
  */
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
+    setupAdminGalleryDateSuggestions();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();
     setupGallerySearchPickers();

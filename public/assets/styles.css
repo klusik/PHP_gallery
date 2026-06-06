@@ -145,3 +145,76 @@
         min-width: 0;
     }
 }
+
+.admin-date-range-field {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.admin-date-range-field legend {
+    font-weight: 700;
+}
+
+.admin-date-range-inputs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-date-range-inputs label {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.admin-date-suggestion-inputs {
+    min-width: 16rem;
+}
+
+.admin-date-range-suggestion {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) - 6px);
+    background: color-mix(in srgb, var(--panel) 92%, var(--accent) 8%);
+}
+
+.admin-date-range-suggestion p {
+    margin: 0.25rem 0 0;
+}
+
+.admin-date-range-suggestion-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.admin-date-range-current {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--success, #2f8f46) 14%, transparent);
+    color: var(--text);
+    font-weight: 700;
+}
+
+.admin-gallery-date-suggestions .admin-table td small {
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.admin-gallery-date-suggestions .is-muted-row {
+    opacity: 0.72;
+}
+
+@media (max-width: 760px) {
+    .admin-date-range-inputs {
+        grid-template-columns: 1fr;
+    }
+}

@@ -189,11 +189,13 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `admin_discover` | `cms_admin_discover` | Filesystem gallery discovery. |
 | `admin_import` | `cms_admin_import` | Imports discovered galleries into DB. |
 | `admin_new_gallery` | `cms_admin_new_gallery` | Creates a new gallery folder and record. |
-| `admin_edit_gallery` | `cms_admin_edit_gallery` | Edits gallery metadata and advanced settings. |
+| `admin_edit_gallery` | `cms_admin_edit_gallery` | Edits gallery metadata and advanced settings, including manual date ranges and the embedded per-gallery EXIF date suggestion component. |
+| `admin_gallery_dates` | `cms_admin_gallery_dates` | Reviews and applies editable EXIF-derived date-range suggestions globally or scoped to one gallery branch. |
+| `admin_gallery_date_suggestion` | `cms_admin_gallery_date_suggestion` | Focused POST endpoint used by the reusable per-gallery EXIF suggestion component for AJAX and no-JavaScript fallback apply actions. |
 | `admin_bulk_galleries` | `cms_admin_bulk_galleries` | Bulk gallery actions. |
 | `admin_reorder_galleries` | `cms_admin_reorder_galleries` | Admin hierarchy/order changes. |
 | `admin_reorder_public_galleries` | `cms_admin_reorder_public_galleries` | Public ordering changes. |
-| `admin_upload` | `cms_admin_upload` | Upload images into existing or new galleries, including the upload preference for automatic media-renamer naming. |
+| `admin_upload` | `cms_admin_upload` | Upload images into existing or new galleries. |
 | `admin_bulk_images` | `cms_admin_bulk_images` | Bulk image operations. |
 | `admin_reorder_images` | `cms_admin_reorder_images` | Image sort order changes. |
 | `admin_edit_image` | `cms_admin_edit_image` | Image metadata, tags, AI metadata panel. |
@@ -205,6 +207,7 @@ The definitive route table is in `cms_run()` inside `app/bootstrap.php`. Importa
 | `admin_update` | `cms_admin_update` | Update checks and patch notes. |
 | `admin_run_migrations` | `cms_admin_run_migrations` | Browser-triggered migration runner. |
 | `admin_devmode` | `cms_admin_devmode` | Development diagnostics. |
+| `admin_exif_gps_settings` | `cms_admin_exif_gps_settings` | Saves the global EXIF/GPS display default and can reset all per-gallery overrides. |
 
 ### Integration and automation routes
 
@@ -282,9 +285,10 @@ Important controller files:
 | `app/controllers/exif.php` | Map data endpoint. |
 | `app/controllers/public_tags.php` | Public tag pages and tag list rendering. |
 | `app/controllers/admin_auth.php` | Login, logout, password reset, Google login start/callback and account management. |
-| `app/controllers/admin_dashboard.php` | Dashboard, dev mode, migrations, rewrite/public search settings and navdata maintenance card. |
+| `app/controllers/admin_dashboard.php` | Dashboard, dev mode, migrations, rewrite/public search settings, EXIF/GPS defaults, gallery date suggestion entry point and navdata maintenance card. |
 | `app/controllers/admin_theme.php` | Theme and branding settings form. |
 | `app/controllers/admin_galleries*.php` | Gallery discovery, creation, edit, reorder, bulk actions and scan actions. |
+| `app/controllers/admin_gallery_dates.php` | EXIF-derived gallery date-range suggestion review and apply workflow. |
 | `app/controllers/admin_images*.php` | Bulk image operations and reorder actions. |
 | `app/controllers/admin_public_inline.php` | Inline public-page editing for logged-in admins. |
 | `app/controllers/admin_uploads.php` | Upload UI and upload processing. |
@@ -307,9 +311,9 @@ Key service families:
 | Family | Files | Responsibility |
 | --- | --- | --- |
 | Settings | `app_settings.php`, `theme.php`, `favorite_galleries.php`, `custom_css.php`, `translations.php` | DB-backed settings, theme defaults, favorite gallery/main-page shortcuts, CSS variables, language packs. |
-| Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, display inheritance and presentation options. |
+| Gallery model | `gallery_lookup.php`, `gallery_mutations.php`, `gallery_paths.php`, `gallery_display.php`, `gallery_grid.php`, `gallery_dates.php`, `gallery_count_badges.php`, `gallery_description_layout.php` | Gallery queries, edits, URLs, manual date ranges, EXIF-derived date suggestions, display inheritance and presentation options. |
 | Gallery assets | `gallery_covers.php`, `gallery_backgrounds.php`, `gallery_branding.php`, `favicon.php` | Cover, background, banner, logo, separator and favicon handling. |
-| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, optional upload-time media-renamer naming, copy/move, public-view selection sharing and DNG helper logic. |
+| Images | `image_scanning.php`, `uploads.php`, `dng_derivatives.php`, `picture_manager.php` | Image discovery, metadata scan, upload, copy/move, public-view selection sharing and DNG helper logic. |
 | Thumbnails | `thumbnails.php`, `thumbnail_sources.php`, `thumbnail_generation.php`, `thumbnail_bundles.php`, `thumbnail_formats.php`, `thumbnail_html.php`, `thumbnail_bounds.php`, `thumbnail_maintenance.php` | Thumbnail pathing, static serving, generation, quality bounds and responsive HTML. |
 | Access | `gallery_access.php`, `auth_persistence.php`, `auth_throttle.php`, `google_auth.php`, `download_signatures.php` | Protected gallery access, admin sessions, durable login, Google linking, download signatures. |
 | Tags | `tags.php`, `tag_metadata.php` | Tag CRUD, slugs, entity linking and weighted suggestions. |
@@ -616,10 +620,23 @@ Aviation-related gallery features are intentionally modular.
 | --- | --- | --- |
 | SimBrief descriptions | `simbrief_descriptions.php`, `admin_simbrief.php` | Gallery description and saved OFP artifacts. |
 | Flight route maps | `flight_maps.php`, `exif.php` | `gallery_flight_maps`, `flight_map_nav_points`. |
-| EXIF/GPS public display policy | `exif.php`, `admin_dashboard.php`, `admin_galleries_edit.php` | `app_settings.exif_gps_maps_default_enabled`, nullable `galleries.gps_map_enabled`. |
 | Navigation data | `navigation_data.php`, `navigation_data.php` controller, navdata view | `navigation_data_cache`, `navigation_data_accounts`, bundled CSV data. |
 
 The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
+
+## EXIF/GPS Public Display Policy
+
+EXIF/GPS display is default-enabled globally through `app_settings.exif_gps_maps_default_enabled`. The nullable `galleries.gps_map_enabled` column stores only branch-level overrides: `NULL` inherits, `1` forces display on, and `0` forces display off. The effective state is resolved by `gallery_effective_gps_map_enabled()` in `app/services/exif.php`, which walks from the current gallery to its parents and falls back to the global default when no explicit override exists.
+
+The Admin dashboard renders a shared EXIF/GPS defaults card through `view_render_admin_exif_gps_defaults_card()`. That card posts to `cms_admin_exif_gps_settings()`, where the admin can change the global default and reset all gallery overrides to inherited behavior. The gallery editor uses the same storage rules with a tri-state select, so the full editor and side-panel editor do not need separate GPS-display logic. Bulk gallery actions use the same nullable model for force on, force off and inherit-default operations. Public map endpoints and GPS-coordinate renderers must call `gallery_allows_gps_maps()` or `gallery_effective_gps_map_enabled()` instead of reading `gps_map_enabled` directly.
+
+## Gallery Date Ranges and EXIF Suggestions
+
+Manual gallery dates use `galleries.gallery_date` as the start date and `galleries.gallery_date_end` as the optional end date. The public renderer keeps single-date galleries compact and only renders a range when both endpoints differ; visible ranges use an en dash (`–`) between endpoints. Gallery sidecars persist both values when present, so filesystem imports and migration transfer preserve the date range.
+
+The Admin gallery dates tool builds suggestions from `images.exif_taken_at`. For each gallery, it aggregates the minimum and maximum EXIF capture date from images directly inside that gallery and all descendant galleries. Suggestions are only advisory: the admin can apply, edit, or ignore each row. Existing manual date ranges are shown and are not selected by default, which prevents accidental overwrite of curated dates.
+
+The gallery editor surfaces the same recursive branch suggestion directly beside the date range fields. The **Apply to this gallery** action persists the suggested range for the current gallery only, using all images in that gallery and descendants. Both the full admin editor and side-panel editor use the same rendered suggestion component and the same `admin_gallery_date_suggestion` POST endpoint. JavaScript enhances this action through `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, reads gallery id, CSRF token and endpoint URL from component data attributes, updates the From/To inputs and refreshed suggestion panel in place, and preserves the normal POST/redirect fallback for browsers without JavaScript. The **Review branch suggestions** link opens `admin_gallery_dates` with `gallery_id`, limiting the review table to that gallery branch so a parent trip gallery and its daily subgalleries can be approved from one focused screen.
 
 ## Gallery Migration and API Transfer
 
@@ -644,7 +661,7 @@ winapp/gallery_watch_upload.pyw
 winapp/requirements.txt
 ```
 
-`gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies. The upload API reuses the central upload pipeline, so the default-enabled upload-time media-renamer naming preference also applies before server-side thumbnail generation or client thumbnail installation.
+`gallery_upload_tokens` stores hashed tokens scoped to galleries. External tools should authenticate with those tokens and should not require admin session cookies.
 
 ## Telemetry Model
 
@@ -681,6 +698,7 @@ Logs support category, severity, status, subject, request id, route, method, AJA
 | --- | --- |
 | `public/assets/styles.css` | Main public and admin styling. |
 | `public/assets/gallery.js` | Gallery UI behavior, search, maps, inline admin behavior and related browser interactions. |
+| `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | In-place apply workflow for the reusable per-gallery EXIF date suggestion component in full editor and side-panel contexts. |
 | `public/assets/telemetry.js` | Telemetry event capture. |
 | `public/assets/usage.js` | Usage collection helper. |
 | `public/assets/custom.css` | Public custom CSS entry. |
@@ -695,6 +713,7 @@ Examples:
 
 ```text
 tests/gallery_branding_model_test.php
+tests/gallery_dates_model_test.php
 tests/gallery_migration_model_test.php
 tests/gallery_visibility_model_test.php
 tests/openai_text_assist_model_test.php

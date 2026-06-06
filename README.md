@@ -14,17 +14,18 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Gallery discovery** - Automatically detect and import new folders
 - **Manual creation** - Create empty gallery folders from the admin interface
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
-- **Gallery metadata** - Title, description, optional date, cover image, custom slug
+- **Gallery metadata** - Title, description, optional date range, cover image, custom slug
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
 
 ### Image Management
 - **Upload interface** - Upload multiple images to a gallery via browser
-- **Upload-time renaming** - Optionally rename new uploads immediately with the same default template used by the media renamer
 - **Automatic scanning** - Detect newly added files on the filesystem
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
-- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages; enabled globally by default with per-gallery overrides
-- **GPS maps** - Render interactive maps when images have location data, using the EXIF / GPS display default unless a gallery branch forces it on or off
+- **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages
+- **EXIF/GPS defaults** - GPS maps and coordinates are enabled globally by default, with per-gallery inherit, force on and force off controls plus a dashboard reset for all overrides
+- **EXIF date suggestions** - Suggest gallery date ranges from original photo capture dates, including subgalleries, with one reusable editor component for full admin pages and side panels plus editable admin approval
+- **GPS maps** - Render interactive maps when images have location data and the effective EXIF/GPS policy allows display
 
 ### Thumbnails & Performance
 - **Automatic generation** - Create optimized thumbnails during import or on-demand
@@ -108,7 +109,6 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Multi-file upload to existing or new gallery
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
-- Default-enabled upload-time filename normalization using the media-renamer pattern
 - Validation of file types and sizes
 
 #### Gallery Management
@@ -118,6 +118,8 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Reorder galleries within parent hierarchy
 - Inline gallery editing with side panel
 - Cover image selection and upload
+- Manual gallery date ranges with From and To fields
+- EXIF-derived date range suggestions that can be applied directly from a gallery editor without a full page reload, or reviewed, edited and ignored per gallery branch
 
 #### Image Management
 - Per-gallery image grid
@@ -125,7 +127,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Inline image editing with side panel
 - Drag-and-drop image reordering
 - Image caption and metadata editing
-- EXIF preview and GPS display, with a global default-enabled public display setting and optional per-gallery force on/off override
+- EXIF preview and GPS display
 
 #### Tag Management
 - Create, edit, rename, or delete tags
@@ -285,7 +287,7 @@ Then open `http://localhost:8000/` in your browser.
 1. Select a gallery and click **Upload photos**
 2. Drag-and-drop files or click to browse
 3. With JavaScript enabled, see transfer and thumbnail progress
-4. After upload, images are scanned, optionally renamed with the default media-renamer template, and thumbnails are created
+4. After upload, images are scanned and thumbnails created
 
 **Option B: Via FTP**
 1. Upload image files to the gallery folder via FTP
@@ -297,7 +299,9 @@ Then open `http://localhost:8000/` in your browser.
 1. Use **Gallery list** to view the hierarchy
 2. **Bulk actions** to rename, move, or change visibility of multiple galleries at once
 3. **Drag-and-drop reordering** to change display order (JavaScript enabled)
-4. **Edit gallery** to change metadata, cover image, tags, description layout, or lightbox browsing-mode override
+4. **Edit gallery** to change metadata, date range, cover image, tags, description layout, or lightbox browsing-mode override
+5. Use the EXIF date suggestion beside the gallery date range to apply a range computed from that gallery and all subgalleries; the same component is used in the full editor and side-panel editor, JavaScript updates the fields in place, and the normal POST fallback still works
+6. Use **Review branch suggestions** or **Gallery dates** in Admin maintenance to approve, edit or ignore EXIF-derived ranges for a parent trip gallery and its subgalleries
 
 #### Editing Images
 

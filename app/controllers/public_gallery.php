@@ -969,7 +969,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
     }
     echo '</a>';
     echo '<div class="gallery-card-body"><h2><a class="gallery-card-title-link" href="' . e(gallery_public_url($gallery)) . '">' . e($gallery['title']) . '</a></h2>';
-    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && ($galleryCardTags || gallery_date_display_value($gallery['gallery_date'] ?? null) !== '')) {
+    if ($descriptionLayout === 'horizontal' && !$isProtectedPublicCard && ($galleryCardTags || gallery_date_range_display_value($gallery['gallery_date'] ?? null, $gallery['gallery_date_end'] ?? null) !== '')) {
         echo '<div class="gallery-card-meta-row">';
         render_gallery_date($gallery, 'gallery-card-date');
         render_compact_tag_list($galleryCardTags);

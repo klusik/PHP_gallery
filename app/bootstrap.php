@@ -214,6 +214,8 @@ function cms_run(): void
         'gallery_migration_receive_status' => 'cms_gallery_migration_receive_status',
         'admin_gallery_migration' => 'cms_admin_gallery_migration',
         'admin_media_renamer' => 'cms_admin_media_renamer',
+        'admin_gallery_dates' => 'cms_admin_gallery_dates',
+        'admin_gallery_date_suggestion' => 'cms_admin_gallery_date_suggestion',
         'admin_bulk_galleries' => 'cms_admin_bulk_galleries',
         'admin_tags' => 'cms_admin_tags',
         'admin_run_migrations' => 'cms_admin_run_migrations',

@@ -137,6 +137,8 @@ function admin_dashboard_view_model(): array
     $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // Variable $filenameDisplayReady stores this steps working value.
     $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
+    // $galleryDateRangeReady stores whether gallery rows can store range end dates.
+    $galleryDateRangeReady = admin_render_profile_schema('schema_gallery_date_ranges', static fn (): bool => gallery_date_range_schema_ready());
     // Variable $migrationPending stores this steps working value.
     $migrationPending = admin_render_profile_schema('schema_pending_migrations', static fn (): bool => pending_migrations_exist());
     // Variable $accessReady stores this steps working value.
@@ -233,6 +235,7 @@ function admin_dashboard_view_model(): array
         'exif_gps_override_count' => $exifGpsOverrideCount,
         'voting_ready' => $votingReady,
         'filename_display_ready' => $filenameDisplayReady,
+        'gallery_date_range_ready' => $galleryDateRangeReady,
         'migration_pending' => $migrationPending,
         'access_ready' => $accessReady,
         'background_source_ready' => $backgroundSourceReady,
