@@ -146,6 +146,9 @@ function cms_run(): void
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    if (function_exists('seo_request_guard_enforce')) {
+        seo_request_guard_enforce($page);
+    }
     translation_bootstrap_request($page);
     send_security_headers();
     application_autoupdate_maybe_run();
@@ -197,6 +200,7 @@ function cms_run(): void
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
         'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
+        'admin_seo_guard_settings' => 'cms_admin_seo_guard_settings',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',
@@ -384,5 +388,5 @@ function cms_route_from_request(): array
         return ['page' => 'admin', 'params' => []];
     }
 
-    return ['page' => 'home', 'params' => []];
+    return ['page' => 'not_found', 'params' => []];
 }

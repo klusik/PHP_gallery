@@ -136,6 +136,29 @@ function cms_admin_exif_gps_settings(): void
 }
 
 /**
+ * Persist SEO request guard settings.
+ */
+function cms_admin_seo_guard_settings(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+
+    set_seo_request_guard_enabled(!empty($_POST['seo_request_guard_enabled']));
+    set_seo_request_guard_logging_enabled(!empty($_POST['seo_request_guard_logging_enabled']));
+    admin_log_event('info', 'settings.seo_request_guard_updated', 'Admin updated SEO request guard settings.', [
+        'enabled' => seo_request_guard_enabled(),
+        'logging_enabled' => seo_request_guard_logging_enabled(),
+    ], ['category' => 'security', 'severity' => 'info']);
+
+    flash_message('admin_notice', t('admin.dashboard.notice_seo_guard_saved', 'SEO request guard setting saved.'));
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+}
+
+/**
  * Backward-compatible wrapper for older controller/view code.
  */
 function render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void

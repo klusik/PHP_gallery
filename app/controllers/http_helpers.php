@@ -78,6 +78,9 @@ function render_back_to_top_button(): void
 function cms_not_found(): void
 {
     http_response_code(404);
+    if (!headers_sent()) {
+        header('X-Robots-Tag: noindex, nofollow');
+    }
     render_header(t('public.not_found_title', 'Not found'));
     echo '<section class="panel"><h1>' . e(t('public.not_found_title', 'Not found')) . '</h1><p>' . e(t('public.not_found_message', 'The requested page was not found.')) . '</p></section>';
     render_footer();

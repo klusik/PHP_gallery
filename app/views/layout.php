@@ -141,7 +141,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     if (is_file($mobileGalleryStylePath)) {
         echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
     }
-    echo cms_head_extras_html();
+    $headExtras = cms_head_extras_html();
+    if ($bodyClass === 'public-page' && function_exists('seo_request_guard_canonical_head_html')) {
+        echo seo_request_guard_canonical_head_html($page, $currentGallery, $headExtras);
+    }
+    echo $headExtras;
     $devModeActive = $user && dev_mode_enabled();
     echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {

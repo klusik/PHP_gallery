@@ -359,6 +359,10 @@ function cms_robots_txt(): void
     echo "Disallow: /index.php?page=admin\n";
     echo "Disallow: /index.php?page=admin_\n";
     echo "Disallow: /admin/\n";
+    foreach (['l', 'mod', 'uri', 'name'] as $spamParameter) {
+        echo "Disallow: /*?" . $spamParameter . "=\n";
+        echo "Disallow: /*&" . $spamParameter . "=\n";
+    }
     echo "Sitemap: " . public_base_url() . "/sitemap.xml\n";
 }
 

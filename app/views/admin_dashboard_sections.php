@@ -222,6 +222,7 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
         view_render_admin_gallery_dates_card('admin-maintenance-card');
     }
     view_render_admin_dashboard_public_paths_card('admin-maintenance-card');
+    view_render_admin_dashboard_seo_guard_card('admin-maintenance-card');
     view_render_admin_url_rewrite_card('admin-maintenance-card');
     echo '</div>';
 }
@@ -311,6 +312,34 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
 {
     echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="' . e($className) . '" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
     echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
+}
+
+/**
+ * Render public crawler safety settings.
+ */
+function view_render_admin_dashboard_seo_guard_card(string $className): void
+{
+    $status = function_exists('seo_request_guard_status') ? seo_request_guard_status() : [
+        'enabled' => true,
+        'logging_enabled' => true,
+        'log_day' => '',
+        'log_count' => 0,
+        'log_limit' => 25,
+    ];
+    $logDay = trim((string) ($status['log_day'] ?? ''));
+    $logCount = max(0, (int) ($status['log_count'] ?? 0));
+    $logLimit = max(1, (int) ($status['log_limit'] ?? 25));
+    $logStatus = $logDay !== ''
+        ? t('admin.dashboard.seo_guard_log_status', 'Today logged {count}/{limit} sampled rejection event(s).', ['count' => (string) min($logCount, $logLimit), 'limit' => (string) $logLimit])
+        : t('admin.dashboard.seo_guard_log_status_empty', 'No sampled rejection event has been logged today.');
+
+    echo '<form method="post" action="' . e(url_for('admin_seo_guard_settings')) . '" class="' . e($className) . ' admin-seo-guard-settings">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.seo_guard_title', 'Crawler safety')) . '</strong>';
+    echo '<span>' . e(t('admin.dashboard.seo_guard_hint', 'Reject public URLs with unknown query parameters before they render as duplicate gallery pages. Suspicious requests return 404 with X-Robots-Tag: noindex, nofollow.')) . '</span>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"' . (!empty($status['enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_enable', 'Reject suspicious public query strings')) . '</span></label>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"' . (!empty($status['logging_enabled']) ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.seo_guard_logging_enable', 'Log sampled rejected requests')) . '</span></label>';
+    echo '<small class="muted">' . e($logStatus) . '</small>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_seo_guard', 'Save crawler safety')) . '</button></form>';
 }
 
 /**
