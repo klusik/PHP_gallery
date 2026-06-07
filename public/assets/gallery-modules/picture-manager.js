@@ -15,6 +15,7 @@
  *   - Copy selected photos through the shared server-side copy endpoint
  *   - Create a child gallery from selected photos through the copy endpoint
  *   - Keep desktop drag-and-drop progressive, with toolbar actions as the fallback
+ *   - Share selected browser-displayable photos through the native share sheet when available
  *
  * Author:
  *   Rudolf Klusal
@@ -30,10 +31,11 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-19
+ *   2026-06-06
  */
 
 import { PUBLIC_PHOTO_MOVE_EVENT, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoDropTargets, publicPhotoImageIdsFromDataTransfer, setPublicPhotoDropTargetsActive, writePublicPhotoImageIdsToDataTransfer } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 // activePictureManager stores the currently bound toolbar instance so fragment
 // refreshes can safely replace the toolbar and bind a fresh one.
@@ -111,6 +113,8 @@ export function setupPictureManager() {
     const copyUrl = toolbar.dataset.copyUrl || '';
     // createUrl stores the JSON endpoint used for creating a child gallery copy.
     const createUrl = toolbar.dataset.createUrl || '';
+    // downloadUrl stores the fallback endpoint that returns a ZIP of selected share candidates.
+    const downloadUrl = toolbar.dataset.downloadUrl || '';
 
     // toggleButton stores the visible collapse and expand control.
     const toggleButton = toolbar.querySelector('[data-picture-manager-toggle]');
@@ -124,6 +128,8 @@ export function setupPictureManager() {
     const selectAllButton = toolbar.querySelector('[data-picture-manager-select-all]');
     // clearButton stores the visible selection reset action.
     const clearButton = toolbar.querySelector('[data-picture-manager-clear]');
+    // shareButton stores the native device share-sheet action.
+    const shareButton = toolbar.querySelector('[data-picture-manager-share]');
     // destinationInput stores the shared searchable gallery picker submitted value.
     const destinationInput = toolbar.querySelector('[data-picture-manager-destination]');
     // moveButton stores the explicit move action.
@@ -219,6 +225,15 @@ export function setupPictureManager() {
     }
 
     /**
+     * Returns selected cards in the same order as the visible gallery page.
+     *
+     * @returns {HTMLElement[]} Selected visible image cards.
+     */
+    function selectedCardsInPageOrder() {
+        return cards.filter((card) => selectedIds.has(cardImageId(card)));
+    }
+
+    /**
      * Applies visual selected state to one card and its check button.
      *
      * @param {HTMLElement} card Visible image card.
@@ -235,7 +250,7 @@ export function setupPictureManager() {
         card.draggable = true;
         if (button instanceof HTMLButtonElement) {
             button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-            button.title = isSelected ? 'Deselect photo' : 'Select photo';
+            button.title = isSelected ? i18n('picture_manager.deselect_photo', 'Deselect photo') : i18n('picture_manager.select_photo', 'Select photo');
         }
     }
 
@@ -248,7 +263,7 @@ export function setupPictureManager() {
         cards.forEach(syncCardState);
         const count = selectedIds.size;
         if (countLabel instanceof HTMLElement) {
-            countLabel.textContent = count === 0 ? 'No photos selected.' : `${count} photo${count === 1 ? '' : 's'} selected.`;
+            countLabel.textContent = count === 0 ? i18n('picture_manager.no_photos_selected', 'No photos selected.') : (count === 1 ? i18n('picture_manager.one_photo_selected', '1 photo selected.') : i18n('picture_manager.many_photos_selected', '{count} photos selected.', {count}));
         }
         if (clearButton instanceof HTMLButtonElement) {
             clearButton.disabled = count === 0;
@@ -274,6 +289,9 @@ export function setupPictureManager() {
         }
         if (createButton instanceof HTMLButtonElement) {
             createButton.disabled = activeRequest || !hasSelection || !hasTitle;
+        }
+        if (shareButton instanceof HTMLButtonElement) {
+            shareButton.disabled = activeRequest || !hasSelection;
         }
         if (selectAllButton instanceof HTMLButtonElement) {
             selectAllButton.disabled = activeRequest;
@@ -301,6 +319,183 @@ export function setupPictureManager() {
             clearButton.disabled = isActive || selectedIds.size === 0;
         }
         updateActionButtons();
+    }
+
+    /**
+     * Return a conservative file extension for a fetched share Blob MIME type.
+     *
+     * @param {string} mimeType Response Blob MIME type.
+     * @returns {string} Extension without dot.
+     */
+    function extensionForMimeType(mimeType) {
+        const normalized = String(mimeType || '').toLowerCase();
+        if (normalized.includes('jpeg') || normalized.includes('jpg')) {
+            return 'jpg';
+        }
+        if (normalized.includes('png')) {
+            return 'png';
+        }
+        if (normalized.includes('gif')) {
+            return 'gif';
+        }
+        if (normalized.includes('webp')) {
+            return 'webp';
+        }
+        return 'jpg';
+    }
+
+    /**
+     * Return a filesystem-safe name suitable for a File object sent to mobile apps.
+     *
+     * @param {string} requestedName Name rendered by PHP for the selected card.
+     * @param {string} mimeType Response Blob MIME type.
+     * @param {number} index One-based fallback sequence number.
+     * @returns {string} Safe filename with extension.
+     */
+    function shareFilename(requestedName, mimeType, index) {
+        const fallback = `photo-${index}`;
+        const cleaned = String(requestedName || '')
+            .trim()
+            .replace(/[\\/:*?"<>|]+/g, '-')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^[-.]+|[-.]+$/g, '');
+        const candidate = cleaned || fallback;
+        if (/\.[a-z0-9]{2,5}$/i.test(candidate)) {
+            return candidate;
+        }
+        return `${candidate}.${extensionForMimeType(mimeType)}`;
+    }
+
+    /**
+     * Fetch one selected image as a File for the native Web Share API.
+     *
+     * @param {HTMLElement} card Selected image card.
+     * @param {number} index One-based selected photo number.
+     * @returns {Promise<File>} Browser File object ready for navigator.share().
+     */
+    async function fetchShareFile(card, index) {
+        const shareUrl = card.dataset.pictureManagerShareUrl || card.dataset.previewSrc || card.dataset.fullSrc || '';
+        if (shareUrl === '') {
+            throw new Error(i18n('picture_manager.share_url_missing', 'A selected photo does not have a shareable media URL.'));
+        }
+        const response = await fetch(shareUrl, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        if (!response.ok) {
+            throw new Error(`Photo ${index} could not be loaded for sharing.`);
+        }
+        const blob = await response.blob();
+        const mimeType = blob.type || response.headers.get('content-type') || 'image/jpeg';
+        if (!String(mimeType).toLowerCase().startsWith('image/')) {
+            throw new Error(`Photo ${index} is not a browser-shareable image.`);
+        }
+        return new File([blob], shareFilename(card.dataset.pictureManagerShareFilename || card.dataset.pictureManagerShareTitle || '', mimeType, index), {
+            type: mimeType,
+            lastModified: Date.now(),
+        });
+    }
+
+    /**
+     * Submit the selected photo IDs to the ZIP fallback endpoint without leaving the page.
+     *
+     * @param {string[]} imageIds Selected image IDs.
+     * @returns {void}
+     */
+    function downloadSelectionFallback(imageIds) {
+        if (!downloadUrl) {
+            setStatus('Native sharing is not available and the ZIP fallback is not configured.', 'error');
+            return;
+        }
+        if (imageIds.length === 0) {
+            setStatus('Select at least one photo first.', 'error');
+            return;
+        }
+        const frameName = 'picture-manager-download-frame';
+        let frame = document.querySelector(`iframe[name="${frameName}"]`);
+        if (!(frame instanceof HTMLIFrameElement)) {
+            frame = document.createElement('iframe');
+            frame.name = frameName;
+            frame.hidden = true;
+            frame.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(frame);
+        }
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = downloadUrl;
+        form.target = frameName;
+        form.hidden = true;
+
+        const addField = (name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = String(value);
+            form.appendChild(input);
+        };
+        addField('csrf_token', csrfToken);
+        addField('source_gallery_id', sourceGalleryId);
+        imageIds.forEach((imageId) => addField('image_ids[]', imageId));
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
+        setStatus('Native sharing is not available here. A ZIP download was started with the selected photos.', 'ok');
+    }
+
+    /**
+     * Shares selected photos through the native device share sheet when possible.
+     *
+     * Browser code cannot force Instagram Story or Reel as the target. The share
+     * sheet decides which installed apps can receive multiple images.
+     *
+     * @returns {Promise<void>}
+     */
+    async function shareSelectedPhotos() {
+        const imageIds = selectedIdsInPageOrder();
+        const selectedCards = selectedCardsInPageOrder();
+        if (activeRequest) {
+            return;
+        }
+        if (selectedCards.length === 0 || imageIds.length === 0) {
+            setStatus('Select at least one photo first.', 'error');
+            return;
+        }
+        if (typeof File !== 'function' || !navigator.share) {
+            downloadSelectionFallback(imageIds);
+            return;
+        }
+
+        setRequestActive(true);
+        setStatus(`Preparing ${selectedCards.length} selected photo${selectedCards.length === 1 ? '' : 's'} for sharing...`, 'working');
+        try {
+            const files = [];
+            for (let index = 0; index < selectedCards.length; index += 1) {
+                files.push(await fetchShareFile(selectedCards[index], index + 1));
+            }
+            const payload = {files};
+            if (navigator.canShare && !navigator.canShare(payload)) {
+                setRequestActive(false);
+                downloadSelectionFallback(imageIds);
+                return;
+            }
+            await navigator.share(payload);
+            setStatus('Share sheet opened. Finish the Instagram Story, Reel, or another share target in the receiving app.', 'ok');
+            setRequestActive(false);
+        } catch (error) {
+            setRequestActive(false);
+            const name = typeof DOMException !== 'undefined' && error instanceof DOMException ? error.name : '';
+            if (name === 'AbortError') {
+                setStatus('Sharing was cancelled.', 'idle');
+                return;
+            }
+            setStatus(error instanceof Error ? `${error.message} Downloading ZIP fallback.` : 'Sharing failed. Downloading ZIP fallback.', 'error');
+            downloadSelectionFallback(imageIds);
+        }
     }
 
     /**
@@ -496,7 +691,7 @@ export function setupPictureManager() {
         });
         const contentType = response.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
-            throw new Error('The server returned HTML instead of JSON. Check the admin logs or PHP error log.');
+            throw new Error(i18n('picture_manager.html_instead_json', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'));
         }
         const payload = await response.json();
         if (!response.ok || payload.ok === false) {
@@ -901,6 +1096,11 @@ export function setupPictureManager() {
     }
     if (clearButton instanceof HTMLButtonElement) {
         clearButton.addEventListener('click', clearSelection, signalOptions);
+    }
+    if (shareButton instanceof HTMLButtonElement) {
+        shareButton.addEventListener('click', () => {
+            shareSelectedPhotos();
+        }, signalOptions);
     }
     if (destinationInput instanceof HTMLInputElement) {
         destinationInput.addEventListener('change', updateActionButtons, signalOptions);

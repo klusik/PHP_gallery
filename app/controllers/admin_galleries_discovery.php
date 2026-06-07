@@ -182,6 +182,7 @@ function admin_new_gallery_input_from_array(array $input): array
         'folder_name' => $input['folder_name'] ?? '',
         'description' => $input['description'] ?? '',
         'gallery_date' => $input['gallery_date'] ?? '',
+        'gallery_date_end' => $input['gallery_date_end'] ?? '',
         'visibility' => gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished')),
         'parent_id' => $input['parent_id'] ?? 0,
         'voting_enabled' => $input['voting_enabled'] ?? 0,
@@ -283,7 +284,9 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        if (gallery_date_schema_ready()) {
+        if (function_exists('view_render_admin_gallery_date_range_fields')) {
+            view_render_admin_gallery_date_range_fields([], true);
+        } elseif (gallery_date_schema_ready()) {
             echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
         } else {
             echo '<div class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><small>' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</small></div>';
@@ -308,7 +311,9 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    if (gallery_date_schema_ready()) {
+    if (function_exists('view_render_admin_gallery_date_range_fields')) {
+        view_render_admin_gallery_date_range_fields([], false);
+    } elseif (gallery_date_schema_ready()) {
         echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
     } else {
         echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';

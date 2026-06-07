@@ -146,6 +146,77 @@ function view_render_admin_tab_panel(string $id, string $contentHtml, bool $acti
     echo '</section>';
 }
 
+
+
+/**
+ * Render one reusable admin subtab control row.
+ *
+ * Subtabs are intentionally separate from the top-level Admin tabs. They do not
+ * own the browser URL hash and can therefore be nested inside normal tab panels
+ * without fighting the parent tab state. Callers should keep ids unique inside
+ * the page and render matching panels with view_render_admin_subtab_panel().
+ *
+ * @param array<int, array<string, mixed>> $tabs Subtab definitions.
+ * @param string $activeId Preferred active subtab id. The first subtab is used when empty.
+ * @param string $ariaLabel Accessible label for this subtab group.
+ * @return void
+ */
+function view_render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
+{
+    $resolvedActiveId = $activeId;
+    if ($resolvedActiveId === '') {
+        foreach ($tabs as $tab) {
+            if (!empty($tab['active']) && !empty($tab['id'])) {
+                $resolvedActiveId = (string) $tab['id'];
+                break;
+            }
+        }
+    }
+    if ($resolvedActiveId === '' && isset($tabs[0]['id'])) {
+        $resolvedActiveId = (string) $tabs[0]['id'];
+    }
+
+    $resolvedAriaLabel = $ariaLabel !== '' ? $ariaLabel : t('admin.subtabs.aria_sections', 'Admin subsection tabs');
+    echo '<nav class="admin-subtabs" data-admin-subtabs aria-label="' . e($resolvedAriaLabel) . '">';
+    echo '<div class="admin-subtab-list" role="tablist">';
+    foreach ($tabs as $tab) {
+        $tabId = trim((string) ($tab['id'] ?? ''));
+        if ($tabId === '') {
+            continue;
+        }
+        $tabLabel = (string) ($tab['label'] ?? $tabId);
+        $isActive = $tabId === $resolvedActiveId;
+        $controlId = $tabId . '-control';
+        echo '<button type="button" class="admin-subtab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-subtab-target="' . e($tabId) . '">';
+        echo '<span>' . e($tabLabel) . '</span>';
+        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
+            echo '<span class="admin-subtab-badge">' . e((string) $tab['badge']) . '</span>';
+        }
+        echo '</button>';
+    }
+    echo '</div></nav>';
+}
+
+/**
+ * Render one reusable admin subtab panel.
+ *
+ * Panels are left visible in the server-rendered response. The browser module
+ * hides inactive panels after binding, preserving full form usability when
+ * JavaScript is unavailable or a future admin screen opts out of scripting.
+ *
+ * @param string $id Panel id referenced by the matching subtab.
+ * @param string $contentHtml Trusted admin HTML rendered by the caller.
+ * @param bool $active Whether the panel should start selected.
+ * @return void
+ */
+function view_render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
+{
+    $controlId = $id . '-control';
+    echo '<section class="admin-subtab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-subtab-panel>';
+    echo $contentHtml;
+    echo '</section>';
+}
+
 function view_render_admin_feature_flag(bool $enabled, string $symbolHtml, string $label): string
 {
     if (!$enabled) {

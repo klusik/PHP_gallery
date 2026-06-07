@@ -102,6 +102,39 @@ function cms_admin_public_search_settings(): void
     redirect_to(url_for('admin'));
 }
 
+
+/**
+ * Persist global EXIF/GPS display defaults and optionally clear gallery overrides.
+ */
+function cms_admin_exif_gps_settings(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+    if (!exif_gps_override_schema_ready()) {
+        flash_message('admin_notice', t('admin.dashboard.exif_gps_requires_migration', 'EXIF/GPS default controls will be available after the database migration is applied.'));
+        redirect_to(url_for('admin'));
+    }
+
+    set_exif_gps_default_enabled(!empty($_POST['exif_gps_default_enabled']));
+    // $resetCount stores how many explicit gallery overrides were removed.
+    $resetCount = !empty($_POST['reset_gallery_overrides']) ? reset_all_gallery_gps_map_overrides() : 0;
+    admin_log_event('info', 'settings.exif_gps_updated', 'Admin updated EXIF/GPS display defaults.', [
+        'default_enabled' => exif_gps_default_enabled(),
+        'reset_gallery_overrides' => $resetCount,
+    ]);
+
+    if ($resetCount > 0) {
+        flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved_with_reset', 'EXIF/GPS defaults saved. Reset {count} gallery override(s).', ['count' => (string) $resetCount]));
+    } else {
+        flash_message('admin_notice', t('admin.dashboard.notice_exif_gps_saved', 'EXIF/GPS defaults saved.'));
+    }
+    redirect_to(url_for('admin'));
+}
+
 /**
  * Backward-compatible wrapper for older controller/view code.
  */

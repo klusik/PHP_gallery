@@ -1,0 +1,118 @@
+/*
+ * admin-subtabs.css
+ * Reusable nested Admin subtab component.
+ * Added on 2026-06-04 so large Admin tab panels can be split without creating
+ * feature-specific tab implementations.
+ */
+
+.admin-subtab-scope {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.admin-subtabs {
+    margin: 0;
+    padding: 0.4rem;
+    border: 1px solid var(--admin-border, #c3c4c7);
+    border-radius: 12px;
+    background: #f6f7f7;
+}
+
+.admin-subtab-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.admin-subtab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: #1d2327;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.25;
+    cursor: pointer;
+}
+
+.admin-subtab:hover,
+.admin-subtab:focus,
+.admin-subtab.is-active {
+    border-color: var(--admin-accent, #2271b1);
+    background: #ffffff;
+    color: #0f4f80;
+}
+
+.admin-subtab:focus-visible {
+    outline: 2px solid var(--admin-accent, #2271b1);
+    outline-offset: 2px;
+}
+
+.admin-subtab[aria-selected="true"] {
+    border-color: var(--admin-accent, #2271b1);
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.admin-subtab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.2rem;
+    min-height: 1.2rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: #e8f2fa;
+    color: #0f4f80;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.admin-subtab-panel {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.admin-subtab-panel[hidden] {
+    display: none;
+}
+
+.admin-subtab-panel > fieldset,
+.admin-subtab-panel > .theme-tab-card-grid > fieldset {
+    margin: 0;
+}
+
+.admin-theme-subtab-scope .theme-tab-card-grid {
+    margin: 0;
+}
+
+.admin-theme-appearance-controls-panel .theme-appearance-controls {
+    padding-right: 0;
+    border-right: 0;
+}
+
+.admin-theme-appearance-preview-panel .theme-live-preview {
+    max-width: 860px;
+}
+
+@media (max-width: 680px) {
+    .admin-subtabs {
+        padding: 0.35rem;
+    }
+
+    .admin-subtab-list {
+        gap: 0.3rem;
+    }
+
+    .admin-subtab {
+        flex: 1 1 auto;
+        justify-content: center;
+        padding: 0.35rem 0.5rem;
+    }
+}

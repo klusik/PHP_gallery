@@ -439,7 +439,7 @@ function cms_admin_update(): void
     echo '<label>' . e(t('admin.updates.confirm_reinstall_label')) . '<input name="clean_reinstall_confirm" autocomplete="off" placeholder="REINSTALL"></label>';
     echo '<button type="submit" class="button danger">' . e(t('admin.updates.clean_reinstall_button')) . '</button>';
     echo '</form></article>';
-    echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e('Runtime diagnostics') . '</strong><span>' . e('Inspect PHP, GD, Imagick, and image format support on this host.') . '</span><a class="button secondary" href="' . e(url_for('admin_diagnostics')) . '">' . e('Open diagnostics') . '</a></article>';
+    echo '<article class="admin-maintenance-card admin-update-tool-card"><strong>' . e(t('admin.updates.runtime_diagnostics_card_title', 'Runtime diagnostics')) . '</strong><span>' . e(t('admin.updates.runtime_diagnostics_card_help', 'Inspect PHP, GD, Imagick, and image format support on this host.')) . '</span><a class="button secondary" href="' . e(url_for('admin_diagnostics')) . '">' . e(t('admin.updates.open_diagnostics', 'Open diagnostics')) . '</a></article>';
     echo '</div>';
     $advancedHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-update-tab-advanced', $advancedHtml, false);

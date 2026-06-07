@@ -109,7 +109,7 @@ Watch-folder mode marks a file as uploaded only after the gallery returns a succ
 
 - The API key decides the target gallery.
 - The Python app does not create a second authentication flow.
-- The PHP endpoint still stores originals through the existing gallery upload pipeline.
+- The PHP endpoint still stores originals through the existing gallery upload pipeline. When the server-side upload rename preference is enabled, the API response contains the final media-renamer filenames.
 - Client-generated thumbnails are accepted only after the corresponding original image is accepted by the gallery.
 - Partially copied watched-folder files are ignored until their size and modification time remain stable.
 - `gallery_watch_upload.pyw` starts without a console window.

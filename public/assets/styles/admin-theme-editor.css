@@ -314,3 +314,21 @@
         grid-template-columns: 1fr;
     }
 }
+
+.admin-theme-favorite-gallery-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-theme-favorite-gallery-slot {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.admin-theme-favorite-gallery-slot > strong {
+    color: var(--ink, #0f172a);
+}
+
+.admin-theme-favorite-gallery-slot .gallery-search-picker {
+    min-width: 100%;
+}

@@ -273,6 +273,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
+    $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // $flightMapReady stores this steps working value.
     $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // $votingReady stores this steps working value.
@@ -292,12 +294,23 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     $slug = trim((string) ($input['slug'] ?? $gallery['slug'] ?? $title));
     // $visibility stores the normalized gallery visibility value.
     $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? $gallery['visibility'] ?? 'unpublished'));
-    // $galleryDate stores the optional manual date selected by an admin.
-    $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($input['gallery_date'] ?? ($gallery['gallery_date'] ?? '')) : null;
+    // $galleryDateRange stores the optional manual date range selected by an admin.
+    $galleryDateRange = gallery_date_schema_ready()
+        ? gallery_date_range_storage_values(
+            $input['gallery_date'] ?? ($gallery['gallery_date'] ?? ''),
+            $input['gallery_date_end'] ?? ($gallery['gallery_date_end'] ?? '')
+        )
+        : ['start' => null, 'end' => null];
+    // $galleryDate stores the optional manual date or range start selected by an admin.
+    $galleryDate = $galleryDateRange['start'];
+    // $galleryDateEnd stores the optional manual range end selected by an admin.
+    $galleryDateEnd = $galleryDateRange['end'];
     // $pictureGameDefault stores the current value for partial update preservation.
     $pictureGameDefault = !$completeForm && (int) ($gallery['picture_game_enabled'] ?? 0) === 1;
     // $gpsMapDefault stores the current value for partial update preservation.
     $gpsMapDefault = !$completeForm && (int) ($gallery['gps_map_enabled'] ?? 0) === 1;
+    // $gpsMapOverride stores the inherited or explicit EXIF/GPS display state for nullable override installs.
+    $gpsMapOverride = $gpsMapOverrideReady ? gallery_gps_map_storage_value($input['gps_map_enabled'] ?? ($completeForm ? 'inherit' : ($gallery['gps_map_enabled'] ?? null))) : null;
     // $votingDefault stores the current value for partial update preservation.
     $votingDefault = !$completeForm && (int) ($gallery['voting_enabled'] ?? 0) === 1;
     // $showFilenamesDefault stores the current value for partial update preservation.
@@ -307,7 +320,7 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // Variable $pictureGameEnabled stores this steps working value.
     $pictureGameEnabled = $pictureGameReady ? admin_gallery_checkbox_input($input, 'picture_game_enabled', $pictureGameDefault) : 0;
     // Variable $gpsMapEnabled stores this steps working value.
-    $gpsMapEnabled = $gpsMapReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
+    $gpsMapEnabled = $gpsMapReady && !$gpsMapOverrideReady ? admin_gallery_checkbox_input($input, 'gps_map_enabled', $gpsMapDefault) : 0;
     // Variable $votingEnabled stores this steps working value.
     $votingEnabled = $votingReady ? admin_gallery_checkbox_input($input, 'voting_enabled', $votingDefault) : (int) ($gallery['voting_enabled'] ?? 0);
     // Variable $showFilenames stores this steps working value.
@@ -521,10 +534,15 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     if (gallery_date_schema_ready()) {
         $fields['gallery_date = ?'] = $galleryDate;
     }
+    if (gallery_date_range_schema_ready()) {
+        $fields['gallery_date_end = ?'] = $galleryDateEnd;
+    }
     if ($pictureGameReady) {
         $fields['picture_game_enabled = ?'] = $pictureGameEnabled;
     }
-    if ($gpsMapReady) {
+    if ($gpsMapOverrideReady) {
+        $fields['gps_map_enabled = ?'] = $gpsMapOverride;
+    } elseif ($gpsMapReady) {
         $fields['gps_map_enabled = ?'] = $gpsMapEnabled;
     }
     if ($votingReady) {
@@ -636,6 +654,16 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
 }
 
 /**
+ * Apply the current gallery branch EXIF date suggestion directly from the gallery editor.
+ */
+function admin_apply_gallery_date_exif_suggestion(array $gallery): void
+{
+    // $galleryId stores the gallery whose own images and descendants drive the suggestion.
+    $galleryId = (int) ($gallery['id'] ?? 0);
+    admin_gallery_date_suggestion_handle_apply($galleryId, admin_edit_gallery_tab_url($galleryId, 'admin-edit-identity'));
+}
+
+/**
  * Handles cms admin edit gallery logic for the gallery application.
  * @return mixed Result produced by this operation.
  */
@@ -664,6 +692,8 @@ function cms_admin_edit_gallery(): void
     $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
     $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
+    $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // Variable $flightMapReady stores this steps working value.
     $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // Variable $votingReady stores this steps working value.
@@ -698,6 +728,10 @@ function cms_admin_edit_gallery(): void
         }
         // $returnTab stores the tab fragment used after saving the gallery editor form.
         $returnTab = admin_return_tab_from_post('admin-edit-identity');
+        if ((string) ($_POST['action'] ?? '') === 'apply_exif_date_suggestion') {
+            admin_apply_gallery_date_exif_suggestion($gallery);
+            return;
+        }
         if ((string) ($_POST['action'] ?? '') === 'cover' && isset($_POST['image_ids'])) {
             admin_save_gallery_title_picture($gallery, array_map('intval', $_POST['image_ids'] ?? []), $returnTab);
             return;
@@ -904,7 +938,9 @@ function cms_admin_edit_gallery(): void
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.identity_kicker', 'Identity')) . '</p><h2>' . e(t('admin.gallery_editor.names_and_placement', 'Names and placement')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.')) . '</p></div>';
     echo '<div class="admin-edit-card-grid">';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
-    if (gallery_date_schema_ready()) {
+    if (function_exists('view_render_admin_gallery_date_range_fields')) {
+        view_render_admin_gallery_date_range_fields($gallery, false);
+    } elseif (gallery_date_schema_ready()) {
         echo '<label class="admin-date-picker-field">' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date" value="' . e(gallery_date_input_value($gallery['gallery_date'] ?? null)) . '"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
     } else {
         echo '<p class="muted">' . e(t('admin.gallery_editor.gallery_date_migration_hidden', 'Gallery date will be available after the database migration is applied.')) . '</p>';
@@ -997,7 +1033,19 @@ function cms_admin_edit_gallery(): void
     } elseif ($flightMapFeatureEnabled) {
         echo '<div class="admin-edit-card is-wide"><p class="muted">' . e(t('admin.gallery_editor.flight_route_migration_hidden', 'Flight route map controls will be available after the database migration is applied.')) . '</p></div>';
     }
-    if ($gpsMapReady) {
+    if ($gpsMapOverrideReady) {
+        // $currentGpsMapOverride stores the explicit override saved on this gallery, or null for inherited behavior.
+        $currentGpsMapOverride = gallery_gps_map_storage_value($gallery['gps_map_enabled'] ?? null);
+        // $currentGpsMapMode stores the selected form value for the gallery override dropdown.
+        $currentGpsMapMode = $currentGpsMapOverride === null ? 'inherit' : ($currentGpsMapOverride === 1 ? 'enabled' : 'disabled');
+        // $effectiveGpsMapEnabled stores the state visitors currently receive after inheritance.
+        $effectiveGpsMapEnabled = gallery_effective_gps_map_enabled($gallery);
+        echo '<div class="admin-edit-card"><h3>' . e(t('admin.gallery_editor.exif_gps_display_title', 'EXIF / GPS display')) . '</h3><label>' . e(t('admin.gallery_editor.exif_gps_display_label', 'EXIF / GPS display mode')) . '<select name="gps_map_enabled">';
+        echo '<option value="inherit"' . ($currentGpsMapMode === 'inherit' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_inherit', 'Use global default')) . '</option>';
+        echo '<option value="enabled"' . ($currentGpsMapMode === 'enabled' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_force_on', 'Force on')) . '</option>';
+        echo '<option value="disabled"' . ($currentGpsMapMode === 'disabled' ? ' selected' : '') . '>' . e(t('admin.gallery_editor.exif_gps_force_off', 'Force off')) . '</option>';
+        echo '</select></label><p class="muted">' . e(t('admin.gallery_editor.exif_gps_display_help', 'Default is on. Use Force off when this gallery branch should hide photo map pins, gallery EXIF maps, and GPS coordinates from public display. Current effective state: {state}.', ['state' => $effectiveGpsMapEnabled ? t('admin.common.on', 'On') : t('admin.common.off', 'Off')])) . '</p></div>';
+    } elseif ($gpsMapReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="gps_map_enabled" value="1"' . ((int) ($gallery['gps_map_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_gps_maps', 'Enable EXIF GPS maps for this gallery branch')) . '</label><p class="muted">' . e(t('admin.gallery_editor.enable_gps_maps_help', 'When enabled here, this gallery and its subgalleries may show photo map pins and gallery maps for images with GPS EXIF coordinates.')) . '</p></div>';
     }
     if (gallery_description_layout_schema_ready()) {
@@ -1102,9 +1150,9 @@ function cms_admin_edit_gallery(): void
     foreach ($images as $image) {
         // Variable $isCover stores this steps working value.
         $isCover = (int) ($gallery['cover_image_id'] ?? 0) === (int) $image['id'];
-        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="Move ' . e((string) $image['relative_path']) . '" title="Drag to reorder">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
+        echo '<tr data-admin-image-order-row data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="' . e(t('admin.image_order.move_aria', 'Move {file}', ['file' => (string) $image['relative_path']])) . '" title="' . e(t('admin.image_order.drag_title', 'Drag to reorder')) . '">↕</span></td><td><input type="checkbox" name="image_ids[]" value="' . (int) $image['id'] . '"></td>';
         echo '<td><img class="admin-thumb" decoding="async" loading="lazy" src="' . e(thumbnail_url($image, 300)) . '" alt=""></td>';
-        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', 'File names are shown for this gallery') . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? t('admin.gallery_editor.title_picture_current', 'Title picture') : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.edit', 'Edit')) . '</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">' . e(t('admin.gallery_editor.delete', 'Delete')) . '</button></td></tr>';
+        echo '<td data-admin-image-name-cell>' . e($image['relative_path']) . '</td><td>' . render_admin_feature_flag(gallery_shows_filenames($gallery), '✓', t('admin.gallery_editor.file_names_shown_for_gallery', 'File names are shown for this gallery')) . '</td><td>' . e($image['visibility']) . '</td><td data-admin-image-cover-cell>' . ($isCover ? t('admin.gallery_editor.title_picture_current', 'Title picture') : '') . '</td><td><a href="' . e(url_for('admin_edit_image', ['id' => $image['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="image-edit" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.photo_editor', 'Photo editor')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.edit_photo', 'Edit photo')) . '" data-gallery-side-panel-url="' . e(url_for('admin_edit_image', ['id' => $image['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.edit', 'Edit')) . '</a> <button type="submit" class="secondary danger inline-admin-action" name="action" value="delete:' . (int) $image['id'] . '" data-admin-image-delete-single data-image-id="' . (int) $image['id'] . '" data-image-name="' . e((string) $image['relative_path']) . '">' . e(t('admin.gallery_editor.delete', 'Delete')) . '</button></td></tr>';
     }
     echo '</tbody></table></form>';
     render_admin_tab_panel('admin-edit-images', (string) ob_get_clean(), $activeEditTab === 'admin-edit-images');

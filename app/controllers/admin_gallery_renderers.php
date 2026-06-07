@@ -152,7 +152,7 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * @param string $fieldName Submitted hidden input name. Use an empty string for JSON-only widgets.
  * @param int $selectedGalleryId Initial committed gallery ID, usually zero for safe bulk actions.
  * @param int $excludedGalleryId Gallery that must not be selected as a destination.
- * @param array<string, mixed> $options Rendering options: id, placeholder, label, hidden_attributes, prefill_gallery_id.
+ * @param array<string, mixed> $options Rendering options: id, placeholder, label, hidden_attributes, prefill_gallery_id, disable_prefill.
  * @return string Complete HTML for the picker.
  */
 function render_gallery_search_picker(string $fieldName, int $selectedGalleryId = 0, int $excludedGalleryId = 0, array $options = []): string
@@ -163,6 +163,8 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
     $rows = gallery_search_picker_rows($selectedGalleryId, $excludedGalleryId);
     // $prefillGalleryId stores a non-committed likely target shown in the text box.
     $prefillGalleryId = (int) ($options['prefill_gallery_id'] ?? 0);
+    // $prefillEnabled stores whether an empty picker may show a suggested first gallery.
+    $prefillEnabled = empty($options['disable_prefill']);
     // $placeholder stores the visible search hint before any prefill is applied.
     $placeholder = (string) ($options['placeholder'] ?? t('gallery_picker.placeholder', 'Search gallery by name or path'));
     // $hiddenAttributes stores custom data hooks used by public and admin JavaScript.
@@ -179,7 +181,7 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
             $prefillRow = $row;
         }
     }
-    if ($prefillRow === null && $selectedRow === null && $rows !== []) {
+    if ($prefillEnabled && $prefillRow === null && $selectedRow === null && $rows !== []) {
         $prefillRow = $rows[0];
     }
     // $inputValue stores either the committed label or the suggested uncommitted label.

@@ -389,7 +389,7 @@ async function openAdminGallerySidePanel(link) {
         }
     } catch (error) {
         writeAdminGallerySidePanelStatus(panel, error.message || workflow.loadErrorMessage, true);
-        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} Use the normal admin page instead: <a href="${escapeHtmlAttribute(link.href)}">open directly</a>.</div>`;
+        body.innerHTML = `<div class="notice is-alert">${escapeHtmlText(workflow.loadErrorMessage)} ${escapeHtmlText(i18n('admin.side_panel.use_normal_page_prefix', 'Use the normal admin page instead:'))} <a href="${escapeHtmlAttribute(link.href)}">${escapeHtmlText(i18n('admin.side_panel.open_directly', 'open directly'))}</a>.</div>`;
     }
 }
 
@@ -845,7 +845,7 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
     buttons.forEach((button) => {
         button.disabled = true;
     });
-    writeAdminGallerySidePanelStatus(panel, 'Updating API key...', false);
+    writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.updating_api_key', 'Updating API key...'), false);
     try {
         const body = new FormData(form);
         body.set('ajax', '1');
@@ -860,7 +860,7 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
 
         const requestUrl = uploadAutomationTokenRequestUrl(form);
         if (requestUrl === '') {
-            throw new Error('API key update failed. Missing API key endpoint.');
+            throw new Error(i18n('admin.side_panel.api_key_endpoint_missing', 'API key update failed. Missing API key endpoint.'));
         }
         const response = await fetch(requestUrl, {
             method: 'POST',
@@ -871,17 +871,17 @@ async function submitAdminPanelUploadAutomationTokenForm(form) {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const result = await readJsonResponseSafely(response, 'API key update failed.');
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.api_key_failed', 'API key update failed.'));
         if (!response.ok || !result.ok) {
-            throw new Error(result.error || result.message || 'API key update failed.');
+            throw new Error(result.error || result.message || i18n('admin.side_panel.api_key_failed', 'API key update failed.'));
         }
         if (String(result.action || 'create') === 'create' && Number(result.token_id || 0) <= 0) {
-            throw new Error('API key update failed. The server did not report a created API key.');
+            throw new Error(i18n('admin.side_panel.api_key_created_missing', 'API key update failed. The server did not report a created API key.'));
         }
         const refreshed = await refreshAdminSidePanelFromServer(String(result.refresh_url || refreshUrl || ''));
-        writeAdminGallerySidePanelStatus(panel, String(result.message || 'API key updated.'), !refreshed);
+        writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.side_panel.api_key_updated', 'API key updated.')), !refreshed);
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || 'API key update failed.', true);
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.api_key_failed', 'API key update failed.'), true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
@@ -929,7 +929,7 @@ async function submitAdminPanelEditForm(form) {
     buttons.forEach((button) => {
         button.disabled = true;
     });
-    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? 'Saving photo...' : (workflowName === 'tag-edit' ? 'Saving tag...' : 'Saving gallery...'), false);
+    writeAdminGallerySidePanelStatus(panel, workflowName === 'image-edit' ? i18n('admin.side_panel.saving_photo', 'Saving photo...') : (workflowName === 'tag-edit' ? i18n('admin.side_panel.saving_tag', 'Saving tag...') : i18n('admin.side_panel.saving_gallery', 'Saving gallery...')), false);
     try {
         const body = new FormData(form);
         body.set('ajax', '1');
@@ -943,9 +943,9 @@ async function submitAdminPanelEditForm(form) {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? 'Photo save failed.' : (workflowName === 'tag-edit' ? 'Tag save failed.' : 'Gallery save failed.'));
+        const result = await readJsonResponseSafely(response, workflowName === 'image-edit' ? i18n('admin.side_panel.photo_save_failed', 'Photo save failed.') : (workflowName === 'tag-edit' ? i18n('admin.side_panel.tag_save_failed', 'Tag save failed.') : i18n('admin.side_panel.gallery_save_failed', 'Gallery save failed.')));
         if (!response.ok || !result.ok) {
-            throw new Error(result.error || result.message || 'Save failed.');
+            throw new Error(result.error || result.message || i18n('admin.side_panel.save_failed', 'Save failed.'));
         }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
@@ -955,7 +955,7 @@ async function submitAdminPanelEditForm(form) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || 'Save failed.', true);
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.save_failed', 'Save failed.'), true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
@@ -983,11 +983,11 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
         action = submitter.value;
     }
     if (selectedInputs.length === 0) {
-        writeAdminGallerySidePanelStatus(panel, 'Select at least one photo first.', true);
+        writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.select_photo_first', 'Select at least one photo first.'), true);
         return;
     }
     if (action === '') {
-        writeAdminGallerySidePanelStatus(panel, 'Choose a photo action first.', true);
+        writeAdminGallerySidePanelStatus(panel, i18n('admin.side_panel.choose_photo_action', 'Choose a photo action first.'), true);
         return;
     }
 
@@ -995,7 +995,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
     buttons.forEach((button) => {
         button.disabled = true;
     });
-    writeAdminGallerySidePanelStatus(panel, action === 'cover' ? 'Saving title picture...' : 'Applying photo action...', false);
+    writeAdminGallerySidePanelStatus(panel, action === 'cover' ? i18n('admin.side_panel.saving_title_picture', 'Saving title picture...') : i18n('admin.side_panel.applying_photo_action', 'Applying photo action...'), false);
     try {
         const body = new FormData();
         const csrfInput = form.querySelector('input[name="csrf_token"]');
@@ -1049,9 +1049,9 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
                 'X-Requested-With': 'XMLHttpRequest',
             },
         });
-        const result = await readJsonResponseSafely(response, 'Photo action failed.');
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
         if (!response.ok || !result.ok) {
-            throw new Error(result.error || result.message || 'Photo action failed.');
+            throw new Error(result.error || result.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'));
         }
         form.dispatchEvent(new CustomEvent('php-gallery:side-panel-success', {
             bubbles: true,
@@ -1061,7 +1061,7 @@ async function submitAdminPanelImageBulkForm(form, submitter) {
             },
         }));
     } catch (error) {
-        writeAdminGallerySidePanelStatus(panel, error.message || 'Photo action failed.', true);
+        writeAdminGallerySidePanelStatus(panel, error.message || i18n('admin.side_panel.photo_action_failed', 'Photo action failed.'), true);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
@@ -1099,7 +1099,7 @@ async function reflectGalleryImageBulkInCurrentView(result) {
         await refreshAdminSidePanelFromServer(String(result.edit_url || ''));
         await refreshCurrentGalleryContextFromServer(refreshUrl);
         const noticeTarget = action === 'delete' ? String(result.gallery_url || '') : String(result.destination_gallery_url || result.gallery_url || '');
-        showAdminGallerySidePanelResultNotice(String(result.message || (action === 'delete' ? 'Photo deleted.' : 'Photo move completed.')), noticeTarget);
+        showAdminGallerySidePanelResultNotice(String(result.message || (action === 'delete' ? i18n('admin.side_panel.photo_deleted', 'Photo deleted.') : i18n('admin.side_panel.photo_move_completed', 'Photo move completed.'))), noticeTarget);
         return;
     }
         if (action === 'cover' && coverImageId !== '') {
@@ -1109,13 +1109,13 @@ async function reflectGalleryImageBulkInCurrentView(result) {
                 }
             const coverCell = row.querySelector('[data-admin-image-cover-cell]');
             if (coverCell instanceof HTMLElement) {
-                coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? 'Title picture' : '';
+                coverCell.textContent = String(row.dataset.imageId || '') === coverImageId ? i18n('admin.side_panel.title_picture', 'Title picture') : '';
             }
         });
         await refreshAdminSidePanelFromServer();
         await refreshCurrentGalleryContextFromServer(String(result.refresh_url || result.gallery_url || ''));
     }
-    showAdminGallerySidePanelResultNotice(String(result.message || 'Photo action completed.'), String(result.gallery_url || ''));
+    showAdminGallerySidePanelResultNotice(String(result.message || i18n('admin.side_panel.photo_action_completed', 'Photo action completed.')), String(result.gallery_url || ''));
 }
 
 /**
@@ -1210,7 +1210,7 @@ function currentVisiblePageRefreshUrl() {
  * @returns {void}
  */
 async function reflectUploadedGalleryInCurrentView(result) {
-    const message = String(result.message || 'Upload complete.');
+    const message = String(result.message || i18n('admin.side_panel.upload_complete', 'Upload complete.'));
     const targetUrl = String(result.gallery_url || '');
     const refreshUrl = String(result.refresh_url || result.parent_gallery_url || result.gallery_url || '');
     showAdminGallerySidePanelResultNotice(message, targetUrl);
@@ -1778,7 +1778,7 @@ function createPublicSubgallerySection() {
     const section = document.createElement('section');
     section.className = 'panel';
     section.dataset.publicSubgallerySection = 'true';
-    section.innerHTML = '<h2>Subgalleries</h2><div class="grid" data-public-subgallery-grid></div>';
+    section.innerHTML = `<h2>${escapeHtmlText(i18n('admin.side_panel.subgalleries', 'Subgalleries'))}</h2><div class="grid" data-public-subgallery-grid></div>`;
 
     const insertionPoint = main.querySelector('.gallery-list-frame, [data-gallery-image-list], [data-lightbox]');
     if (insertionPoint instanceof HTMLElement) {
@@ -1879,13 +1879,13 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
     const files = selectedGalleryUploadFiles(form);
     const allowEmptyPanelGallery = form.dataset.galleryPanelCloseOnSuccess === '1' && String(form.querySelector('input[name="upload_mode"]')?.value || '') === 'new';
     if (files.length === 0 && !allowEmptyPanelGallery) {
-        throw new Error('Choose at least one image to upload.');
+        throw new Error(i18n('admin.side_panel.choose_image_upload', 'Choose at least one image to upload.'));
     }
 
     if (files.length === 0 && allowEmptyPanelGallery) {
-        updateBasicProgress(progress, 20, 'Creating gallery...');
+        updateBasicProgress(progress, 20, i18n('admin.side_panel.creating_gallery', 'Creating gallery...'));
         const emptyResult = await sendGalleryUploadChunk(form, galleryUploadBaseBody(form), () => {});
-        updateBasicProgress(progress, 100, 'Gallery created.');
+        updateBasicProgress(progress, 100, i18n('admin.side_panel.gallery_created', 'Gallery created.'));
         return {
             ok: true,
             gallery_id: Number(emptyResult.gallery_id || 0),
@@ -2048,10 +2048,10 @@ async function readJsonResponseSafely(response, fallbackMessage) {
         // snippet stores state or configuration for the gallery front-end flow.
         const snippet = responseText.trim().slice(0, 180).replace(/\s+/g, ' ');
         if (!contentType.includes('application/json') && snippet.includes('Maximum number of allowable file uploads exceeded')) {
-            throw new Error('The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.');
+            throw new Error(i18n('admin.side_panel.php_upload_limit', 'The server refused too many files in one request. Upload batching is enabled, but this server returned the PHP upload-limit warning before processing the request.'));
         }
         if (snippet.startsWith('<')) {
-            throw new Error(`${fallbackMessage} The server returned HTML instead of JSON. Check the admin logs or PHP error log for the exact warning.`);
+            throw new Error(i18n('admin.side_panel.html_instead_json', '{message} The server returned HTML instead of JSON. Check the admin logs or PHP error log for the exact warning.', {message: fallbackMessage}));
         }
         throw new Error(snippet || fallbackMessage);
     }
@@ -2079,9 +2079,9 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
                     headers: {'Content-Type': xhr.getResponseHeader('Content-Type') || ''},
                 });
                 // result stores state or configuration for the gallery front-end flow.
-                const result = await readJsonResponseSafely(response, 'Upload failed.');
+                const result = await readJsonResponseSafely(response, i18n('admin.side_panel.upload_failed', 'Upload failed.'));
                 if (xhr.status < 200 || xhr.status >= 300 || !result.ok) {
-                    throw new Error(result.error || 'Upload failed.');
+                    throw new Error(result.error || i18n('admin.side_panel.upload_failed', 'Upload failed.'));
                 }
                 resolve(result);
             } catch (error) {
@@ -2089,7 +2089,7 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
             }
         });
         xhr.addEventListener('error', () => {
-            reject(new Error('Upload failed.'));
+            reject(new Error(i18n('admin.side_panel.upload_failed', 'Upload failed.')));
         });
         xhr.send(body);
     });
@@ -2109,7 +2109,7 @@ function sendGalleryUploadChunk(form, body, progressHandler) {
  */
 async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex, totalFiles, filename, createdBefore, skippedBefore) {
     if (!imageIds.length) {
-        updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore, skippedBefore, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. No database image record was returned for thumbnails.`);
+        updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore, skippedBefore, i18n('admin.side_panel.upload_no_image_record', 'Uploaded {current} of {total}: {filename}. No database image record was returned for thumbnails.', {current: fileIndex, total: totalFiles, filename}));
         return {created: 0, skipped: 0, failed: 0, errors: []};
     }
 
@@ -2143,11 +2143,11 @@ async function runUploadedImageThumbnailJob(form, progress, imageIds, fileIndex,
             headers: {'Accept': 'application/json'},
         });
         // result stores state or configuration for the gallery front-end flow.
-        const result = await readJsonResponseSafely(response, 'Thumbnail request failed.');
+        const result = await readJsonResponseSafely(response, i18n('admin.side_panel.thumbnail_request_failed', 'Thumbnail request failed.'));
         if (!response.ok || result.ok === false) {
             // message stores state or configuration for the gallery front-end flow.
-            const message = result.error || 'Thumbnail request failed.';
-            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, `Uploaded ${fileIndex} of ${totalFiles}: ${filename}. ${message}`);
+            const message = result.error || i18n('admin.side_panel.thumbnail_request_failed', 'Thumbnail request failed.');
+            updateThumbnailProgress(progress, fileIndex, totalFiles, createdBefore + created, skippedBefore + skipped, i18n('admin.side_panel.upload_with_message', 'Uploaded {current} of {total}: {filename}. {message}', {current: fileIndex, total: totalFiles, filename, message}));
             return {
                 created,
                 skipped,

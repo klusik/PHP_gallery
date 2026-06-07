@@ -215,6 +215,13 @@ function mobile_webdav_store_put(array $token, string $filename, string $sourceP
         @unlink($sourcePath);
     }
     $changed = scan_gallery_images((int) $gallery['id']);
+    $imageIds = uploaded_gallery_image_ids((int) $gallery['id'], [$storedFilename]);
+    $renameResult = null;
+    if (admin_upload_auto_rename_enabled() && $imageIds) {
+        $renameResult = gallery_upload_auto_rename_image_ids((int) $gallery['id'], $imageIds);
+        $finalNames = uploaded_gallery_filenames_for_image_ids((int) $gallery['id'], $imageIds);
+        $storedFilename = (string) ($finalNames[0] ?? $storedFilename);
+    }
     $stmt = db()->prepare('UPDATE mobile_webdav_upload_tokens SET last_used_at = ?, updated_at = ? WHERE id = ?');
     $now = now_sql();
     $stmt->execute([$now, $now, (int) $token['id']]);
@@ -222,6 +229,15 @@ function mobile_webdav_store_put(array $token, string $filename, string $sourceP
         'token_id' => (int) $token['id'],
         'gallery_id' => (int) $gallery['id'],
         'filename' => $storedFilename,
+        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
+        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
     ]);
-    return ['filename' => $storedFilename, 'scanned' => $changed];
+    return [
+        'filename' => $storedFilename,
+        'scanned' => $changed,
+        'image_ids' => array_map('intval', $imageIds),
+        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
+        'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
+        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+    ];
 }

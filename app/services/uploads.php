@@ -200,6 +200,25 @@ function admin_upload_client_format_mode(): string
 }
 
 /**
+ * Return whether newly uploaded gallery images should be renamed immediately after scan.
+ *
+ * The default is intentionally enabled so fresh uploads follow the same deterministic
+ * filename policy as the manual media renamer without requiring extra admin action.
+ */
+function admin_upload_auto_rename_enabled(): bool
+{
+    return app_setting('admin_upload_auto_rename_enabled', '1') !== '0';
+}
+
+/**
+ * Persist the upload-time auto-rename preference.
+ */
+function set_admin_upload_auto_rename_enabled(bool $enabled): void
+{
+    set_app_setting('admin_upload_auto_rename_enabled', $enabled ? '1' : '0');
+}
+
+/**
  * Build the upload accept attribute for the selected browser-side format policy.
  */
 function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, bool $rawSupported): string
@@ -683,7 +702,7 @@ function unique_gallery_upload_target(array $gallery, string $filename): array
  * @param mixed $entries Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function store_uploaded_gallery_images(int $galleryId, array $entries): array
+function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
 {
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
@@ -696,7 +715,7 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
         throw new RuntimeException(t('gallery.error.folder_not_writable', 'Gallery folder is not writable.'));
     }
 
-    // $stored stores an intermediate value used by the surrounding gallery workflow.
+    // $stored stores the temporary safe filenames first used to accept the uploaded originals.
     $stored = [];
     foreach ($entries as $entry) {
         [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
@@ -705,12 +724,152 @@ function store_uploaded_gallery_images(int $galleryId, array $entries): array
         }
         $stored[] = $filename;
     }
+    // $uploadedCount stores the number of files accepted on disk before optional renaming changes filenames.
+    $uploadedCount = count($stored);
 
     // $changed stores an intermediate value used by the surrounding gallery workflow.
     $changed = scan_gallery_images($galleryId);
-    // $imageIds stores an intermediate value used by the surrounding gallery workflow.
+    // $imageIds stores image records created or refreshed for the files accepted in this request.
     $imageIds = uploaded_gallery_image_ids($galleryId, $stored);
-    return ['uploaded' => count($stored), 'filenames' => $stored, 'image_ids' => $imageIds, 'scanned' => $changed];
+    // $scanFailedFilenames stores files that reached disk but were not imported as gallery image rows.
+    $scanFailedFilenames = gallery_upload_scan_failed_filenames($galleryId, $stored);
+    // $renameResult stores the optional media-renamer execution summary for this upload batch.
+    $renameResult = null;
+
+    if (($renameOnUpload ?? admin_upload_auto_rename_enabled()) && $imageIds) {
+        $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
+        $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
+        $stored = uploaded_gallery_filenames_for_image_ids($galleryId, $imageIds);
+    }
+
+    return [
+        'uploaded' => $uploadedCount,
+        'filenames' => $stored,
+        'image_ids' => $imageIds,
+        'scanned' => $changed,
+        'scan_failed_filenames' => $scanFailedFilenames,
+        'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
+        'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
+        'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+    ];
+}
+
+/**
+ * Return uploaded filenames that could not be resolved to indexed image rows after scanning.
+ *
+ * @param array<int,string> $filenames
+ * @return array<int,string>
+ */
+function gallery_upload_scan_failed_filenames(int $galleryId, array $filenames): array
+{
+    $failed = [];
+    foreach ($filenames as $filename) {
+        $relativePath = normalize_relative_path((string) $filename);
+        if ($relativePath === '') {
+            continue;
+        }
+        if (!uploaded_gallery_image_row_by_path($galleryId, $relativePath)) {
+            $failed[] = $relativePath;
+        }
+    }
+    return $failed;
+}
+
+/**
+ * Return one image row without using request-local finder caches.
+ */
+function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath): ?array
+{
+    $relativePath = normalize_relative_path($relativePath);
+    if ($galleryId <= 0 || $relativePath === '') {
+        return null;
+    }
+
+    $stmt = db()->prepare('SELECT * FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
+    $stmt->execute([$galleryId, hash('sha256', $relativePath)]);
+    $row = $stmt->fetch();
+    return is_array($row) ? $row : null;
+}
+
+/**
+ * Rename uploaded image rows with the same deterministic template used by the media renamer.
+ *
+ * @param array<int,int|string> $imageIds
+ * @return array<string,mixed>|null
+ */
+function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): ?array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    if (!$ids || !function_exists('media_renamer_execute_gallery_image_batch')) {
+        return null;
+    }
+
+    try {
+        return media_renamer_execute_gallery_image_batch($galleryId, $ids, media_renamer_default_pattern());
+    } catch (Throwable $exception) {
+        if (function_exists('admin_log_event')) {
+            admin_log_event('warning', 'gallery.upload_auto_rename_failed', 'Upload-time media renaming failed after images were stored.', [
+                'gallery_id' => $galleryId,
+                'image_ids' => $ids,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+        return [
+            'renamed' => 0,
+            'warnings' => [],
+            'failures' => [$exception->getMessage()],
+        ];
+    }
+}
+
+/**
+ * Keep only submitted image ids that still exist in the target gallery.
+ *
+ * @param array<int,int|string> $imageIds
+ * @return array<int,int>
+ */
+function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    if (!$ids) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
+    $stmt->execute(array_merge([$galleryId], $ids));
+    $existingMap = array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
+    return array_values(array_filter($ids, static fn (int $id): bool => isset($existingMap[$id])));
+}
+
+/**
+ * Return final relative filenames for uploaded image ids after optional auto-renaming.
+ *
+ * @param array<int,int|string> $imageIds
+ * @return array<int,string>
+ */
+function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageIds): array
+{
+    $ids = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
+    if (!$ids) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ? AND id IN (' . $placeholders . ')');
+    $stmt->execute(array_merge([$galleryId], $ids));
+    $pathMap = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $pathMap[(int) ($row['id'] ?? 0)] = normalize_relative_path((string) ($row['relative_path'] ?? ''));
+    }
+
+    $paths = [];
+    foreach ($ids as $id) {
+        if (isset($pathMap[$id]) && $pathMap[$id] !== '') {
+            $paths[] = $pathMap[$id];
+        }
+    }
+    return $paths;
 }
 
 /**
@@ -725,23 +884,15 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
         return [];
     }
 
-    // Variable $hashes stores this steps working value.
-    $hashes = [];
+    $imageIds = [];
     foreach ($filenames as $filename) {
-        $hashes[] = hash('sha256', normalize_relative_path((string) $filename));
-    }
-    // $hashes stores an intermediate value used by the surrounding gallery workflow.
-    $hashes = array_values(array_unique($hashes));
-    if (!$hashes) {
-        return [];
+        $row = uploaded_gallery_image_row_by_path($galleryId, normalize_relative_path((string) $filename));
+        if (is_array($row)) {
+            $imageIds[] = (int) ($row['id'] ?? 0);
+        }
     }
 
-    // Variable $placeholders stores this steps working value.
-    $placeholders = implode(',', array_fill(0, count($hashes), '?'));
-    // Variable $stmt stores this steps working value.
-    $stmt = db()->prepare("SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash IN ($placeholders) ORDER BY id");
-    $stmt->execute(array_merge([$galleryId], $hashes));
-    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    return array_values(array_filter($imageIds, static fn (int $id): bool => $id > 0));
 }
 
 /**

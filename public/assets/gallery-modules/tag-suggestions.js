@@ -31,6 +31,8 @@
  *   2026-05-28
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 /**
  * Attach enhanced tag editors to all server-rendered tag inputs in a DOM scope.
  *
@@ -86,7 +88,7 @@ function createTagEditor(input) {
     input.removeAttribute('list');
     input.value = '';
     input.autocomplete = 'off';
-    input.placeholder = input.dataset.tagPlaceholder || 'Type a tag, then press comma or Enter';
+    input.placeholder = input.dataset.tagPlaceholder || i18n('tag_suggestions.placeholder', 'Type a tag, then press comma or Enter');
 
     /**
      * Sync the hidden comma-separated payload and redraw the visible controls.
@@ -422,7 +424,7 @@ function renderSuggestions(container, input, selected, knownNames, weightedSugge
             button.type = 'button';
             button.textContent = entry.name;
             button.setAttribute('role', 'option');
-            button.title = entry.contextScore > 0 ? `Context score: ${entry.contextScore}` : 'Known tag';
+            button.title = entry.contextScore > 0 ? i18n('tag_suggestions.context_score', 'Context score: {score}', {score: entry.contextScore}) : i18n('tag_suggestions.known_tag', 'Known tag');
             button.addEventListener('mousedown', (event) => event.preventDefault());
             button.addEventListener('click', () => chooseTag(entry.name));
             container.append(button);

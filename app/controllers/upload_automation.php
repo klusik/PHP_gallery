@@ -469,6 +469,8 @@ function cms_upload_automation_upload(): void
             'sim_camera_metadata_attached' => (int) ($simCameraResult['attached'] ?? 0),
             'sim_camera_metadata_skipped' => (int) ($simCameraResult['skipped'] ?? 0),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
+            'renamed' => (int) ($stored['renamed'] ?? 0),
+            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
         ]);
 
         upload_automation_json([
@@ -481,6 +483,9 @@ function cms_upload_automation_upload(): void
             'scanned' => (int) ($stored['scanned'] ?? 0),
             'image_ids' => array_map('intval', (array) ($stored['image_ids'] ?? [])),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
+            'renamed' => (int) ($stored['renamed'] ?? 0),
+            'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
+            'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
             'thumbnails' => $thumbnails,
             'thumbnail_failed' => $thumbnailFailed,
             'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
@@ -773,7 +778,7 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
     echo '<input type="hidden" name="return_tab" value="' . e($returnTab) . '">';
     echo '<input type="hidden" name="return_url" value="' . e(admin_edit_gallery_tab_url($galleryId, $returnTab)) . '">';
     echo '<input type="hidden" name="action" value="create">';
-    echo '<label><span>' . e(t('upload_automation.label', 'Label')) . '</span><input type="text" name="label" value="Folder watcher" maxlength="190"></label>';
+    echo '<label><span>' . e(t('upload_automation.label', 'Label')) . '</span><input type="text" name="label" value="' . e(t('upload_automation.folder_watcher', 'Folder watcher')) . '" maxlength="190"></label>';
     echo '<button type="submit" class="button secondary">' . e(t('upload_automation.generate_key', 'Generate API key')) . '</button>';
     echo '</form>';
     echo '</div>';
@@ -788,7 +793,7 @@ function render_admin_gallery_upload_automation_panel(array $gallery, string $re
         echo '<table><thead><tr><th>' . e(t('upload_automation.label', 'Label')) . '</th><th>' . e(t('upload_automation.created', 'Created')) . '</th><th>' . e(t('upload_automation.last_used', 'Last used')) . '</th><th>' . e(t('upload_automation.action', 'Action')) . '</th></tr></thead><tbody>';
         foreach ($tokens as $token) {
             echo '<tr>';
-            echo '<td>' . e((string) ($token['label'] ?? 'Folder watcher')) . '</td>';
+            echo '<td>' . e((string) ($token['label'] ?? t('upload_automation.folder_watcher', 'Folder watcher'))) . '</td>';
             echo '<td>' . e((string) ($token['created_at'] ?? '')) . '</td>';
             echo '<td>' . e((string) ($token['last_used_at'] ?? t('upload_automation.never', 'Never'))) . '</td>';
             echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form" data-admin-upload-automation-token-form="1">' . csrf_field();
@@ -846,7 +851,7 @@ function cms_admin_api_manager(): void
             $galleryTitle = (string) ($token['gallery_title'] ?? '');
             echo '<tr>';
             echo '<td><a href="' . e(admin_edit_gallery_tab_url($galleryId, 'admin-edit-api')) . '">' . e($galleryTitle !== '' ? $galleryTitle : ('#' . $galleryId)) . '</a></td>';
-            echo '<td>' . e((string) ($token['label'] ?? 'Folder watcher')) . '</td>';
+            echo '<td>' . e((string) ($token['label'] ?? t('upload_automation.folder_watcher', 'Folder watcher'))) . '</td>';
             echo '<td>' . e((string) ($token['created_at'] ?? '')) . '</td>';
             echo '<td>' . e((string) ($token['last_used_at'] ?? t('upload_automation.never', 'Never'))) . '</td>';
             echo '<td><form method="post" action="' . e(url_for('admin_upload_automation_token')) . '" class="inline-admin-form" data-admin-upload-automation-token-form="1">' . csrf_field();

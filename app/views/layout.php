@@ -58,6 +58,30 @@ function view_public_header_branding_model(string $siteName, ?array $currentGall
     return $model;
 }
 
+
+/**
+ * Render configured favorite gallery shortcut links for the top navigation.
+ *
+ * @param array<int, array<string, mixed>> $items Resolved favorite gallery navigation items.
+ * @return string Favorite gallery anchor markup, or an empty string when none are configured.
+ */
+function view_favorite_gallery_nav_html(array $items): string
+{
+    // $html stores the compact anchor list inserted into the shared header nav.
+    $html = '';
+    foreach ($items as $item) {
+        // $url stores the final public gallery URL for one configured shortcut.
+        $url = trim((string) ($item['url'] ?? ''));
+        // $title stores the button label, normally the gallery title.
+        $title = trim((string) ($item['title'] ?? ''));
+        if ($url === '' || $title === '') {
+            continue;
+        }
+        $html .= '<a class="nav-favorite-gallery" href="' . e($url) . '">' . e($title) . '</a>';
+    }
+    return $html;
+}
+
 function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     $user = current_user();
@@ -87,6 +111,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         'assets/styles/admin.css',
         'assets/styles/admin-layout.css',
         'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css',
         'assets/styles/admin-reordering.css',
         'assets/styles/admin-media-tools.css',
@@ -137,7 +162,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
-    echo '<a href="' . e(url_for('home')) . '">' . e(t('nav.galleries', 'Galleries')) . '</a>';
+    // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
+    $favoritePublicOnly = !$user || $anonymousPreview;
+    // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
+    $favoriteGalleryItems = function_exists('theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
+    echo view_favorite_gallery_nav_html($favoriteGalleryItems);
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             $updatePending = application_update_pending();
@@ -166,7 +195,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
 
 function view_cms_browser_i18n_strings(): array
 {
-    return [
+    $activeStrings = translation_load_language(translation_active_language());
+    $defaultStrings = translation_load_language(translation_default_language());
+    $strings = array_merge($defaultStrings, $activeStrings);
+
+    return array_merge($strings, [
         'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
         'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
         'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
@@ -226,7 +259,7 @@ function view_cms_browser_i18n_strings(): array
         'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
         'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
-    ];
+    ]);
 }
 
 function view_render_browser_i18n_script(): void
@@ -258,8 +291,10 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-operations.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-side-panel.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-date-picker.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
     ];
     $scriptVersion = 0;

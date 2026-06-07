@@ -30,6 +30,8 @@
  *   2026-05-27
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 /**
  * Attach navigation-data page helpers.
  *
@@ -138,7 +140,7 @@ async function copyNavigationDataText(value) {
 function showNavigationDataButtonFeedback(button, copied) {
     const originalText = button.dataset.originalText || button.textContent || '';
     button.dataset.originalText = originalText;
-    button.textContent = copied ? 'Copied' : 'Copy failed';
+    button.textContent = copied ? i18n('admin.navdata.copy_copied', 'Copied') : i18n('admin.navdata.copy_failed', 'Copy failed');
     window.setTimeout(() => {
         button.textContent = originalText;
     }, 1600);
@@ -178,20 +180,20 @@ async function runNavigationDataLookup(form) {
 
     const ident = input.value.trim();
     if (ident.length < 2) {
-        result.textContent = 'Enter at least two characters.';
+        result.textContent = i18n('admin.navdata.lookup_min_chars', 'Enter at least two characters.');
         result.classList.add('is-error');
         return;
     }
 
     const baseUrl = String(form.dataset.navdataLookupUrl || '').trim();
     if (baseUrl === '') {
-        result.textContent = 'Lookup URL is missing.';
+        result.textContent = i18n('admin.navdata.lookup_url_missing', 'Lookup URL is missing.');
         result.classList.add('is-error');
         return;
     }
 
     result.classList.remove('is-error', 'is-ok');
-    result.textContent = 'Looking up ' + ident.toUpperCase() + '...';
+    result.textContent = i18n('admin.navdata.looking_up', 'Looking up {ident}...', {ident: ident.toUpperCase()});
 
     const separator = baseUrl.includes('?') ? '&' : '?';
     const url = baseUrl + separator + 'ident=' + encodeURIComponent(ident);
@@ -203,14 +205,14 @@ async function runNavigationDataLookup(form) {
         const payload = await response.json();
         if (!response.ok || !payload.ok) {
             result.classList.add('is-error');
-            result.textContent = String(payload.error || 'Lookup failed.');
+            result.textContent = String(payload.error || i18n('admin.navdata.lookup_failed', 'Lookup failed.'));
             return;
         }
         result.classList.add('is-ok');
         result.innerHTML = renderNavigationDataPoint(payload.point);
     } catch (error) {
         result.classList.add('is-error');
-        result.textContent = 'Lookup failed: ' + String(error && error.message ? error.message : error);
+        result.textContent = i18n('admin.navdata.lookup_failed_with_error', 'Lookup failed: {error}', {error: String(error && error.message ? error.message : error)});
     }
 }
 

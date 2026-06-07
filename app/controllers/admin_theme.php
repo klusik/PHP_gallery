@@ -361,6 +361,11 @@ function cms_admin_theme(): void
             }
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
+            if (function_exists('save_theme_favorite_gallery_slots')) {
+                save_theme_favorite_gallery_slots($_POST['theme_favorite_gallery_types'] ?? [], $_POST['theme_favorite_gallery_ids'] ?? []);
+            } elseif (function_exists('save_theme_favorite_gallery_ids')) {
+                save_theme_favorite_gallery_ids($_POST['theme_favorite_gallery_ids'] ?? []);
+            }
             set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
             set_app_setting('theme_branding_separator_height', (string) theme_branding_separator_height_value($_POST['theme_branding_separator_height'] ?? null));
             set_app_setting('theme_branding_separator_stretch', !empty($_POST['theme_branding_separator_stretch']) ? '1' : '0');
@@ -441,8 +446,14 @@ function cms_admin_theme(): void
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.appearance.kicker', 'Appearance')) . '</p><h2>' . e(t('admin.theme.appearance.title', 'Visual appearance')) . '</h2></div><p class="muted">' . e(t('admin.theme.appearance.description', 'Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.')) . '</p></div>';
-    echo '<fieldset class="theme-appearance-editor" data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
-    echo '<legend>' . e(t('admin.theme.appearance.legend', 'Visual appearance')) . '</legend>';
+    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
+    render_admin_subtabs([
+        ['id' => 'admin-theme-appearance-subtab-colors', 'label' => t('admin.theme.subtab_colors_identity', 'Colors & identity')],
+        ['id' => 'admin-theme-appearance-subtab-width-map', 'label' => t('admin.theme.subtab_width_map', 'Width & map pin')],
+        ['id' => 'admin-theme-appearance-subtab-preview', 'label' => t('admin.theme.subtab_preview', 'Live preview')],
+    ], 'admin-theme-appearance-subtab-colors', t('admin.theme.appearance.subtabs_label', 'Appearance subsections'));
+    ob_start();
+    echo '<fieldset class="form-grid admin-theme-appearance-controls-panel"><legend>' . e(t('admin.theme.appearance.legend', 'Visual appearance')) . '</legend>';
     echo '<div class="theme-appearance-controls">';
     echo '<label>' . e(t('admin.theme.appearance.site_name', 'Site name')) . '<input name="site_name" value="' . e(site_name()) . '" maxlength="120" required data-theme-preview-site-name></label>';
     echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.accent_color', 'Accent color')) . '<input type="color" name="theme_accent" value="' . e((string) $theme['accent']) . '" data-theme-override-control data-theme-preview-color="accent"><span class="muted">' . e(t('admin.theme.appearance.accent_color_hint', 'Buttons, selected pagination, and important links.')) . '</span></label>';
@@ -454,6 +465,12 @@ function cms_admin_theme(): void
     echo '<label class="theme-color-control">' . e(t('admin.theme.appearance.gallery_title_color', 'Gallery title color')) . '<input type="color" name="theme_hero_text" value="' . e((string) $theme['hero_text']) . '" data-theme-override-control data-theme-preview-color="hero_text"><span class="muted">' . e(t('admin.theme.appearance.gallery_title_color_hint', 'Open gallery title and hero text.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.appearance.rounded_corners', 'Rounded corners')) . ' <span class="muted" data-theme-radius-display>' . (int) $theme['radius'] . 'px</span><input type="range" name="theme_radius" min="0" max="32" value="' . (int) $theme['radius'] . '" data-theme-override-control data-theme-preview-radius></label>';
     echo '<label>' . e(t('admin.theme.appearance.font_style', 'Font style')) . '<select name="theme_font" data-theme-override-control data-theme-preview-font><option value="serif"' . ($theme['font'] === 'serif' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_serif', 'Classic serif')) . '</option><option value="sans"' . ($theme['font'] === 'sans' ? ' selected' : '') . '>' . e(t('admin.theme.appearance.font_sans', 'Clean sans-serif')) . '</option></select></label>';
+    echo '</div></fieldset>';
+    $appearanceColorsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-colors', $appearanceColorsHtml, true);
+
+    ob_start();
+    echo '<fieldset class="form-grid admin-theme-width-map-panel"><legend>' . e(t('admin.theme.appearance.width_map_legend', 'Width and map pin')) . '</legend>';
     if ($gpsMapsFeatureEnabled) {
         // $gpsPinEnabled stores the current visibility state for the EXIF GPS pin overlay.
         $gpsPinEnabled = ((string) ($theme['gps_pin_enabled'] ?? '1')) === '1';
@@ -481,7 +498,11 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.appearance.custom_page_width', 'Custom page width')) . ' <span class="muted" data-theme-custom-width-display>' . $customPageWidth . 'px</span><input type="range" name="theme_page_width_custom_slider" min="1024" max="2048" step="1" value="' . $customPageWidth . '" data-theme-custom-width-slider></label>';
     echo '<label>' . e(t('admin.theme.appearance.custom_width_pixels', 'Custom width in pixels')) . '<input type="number" name="theme_page_width_custom" min="1024" max="2048" step="1" value="' . $customPageWidth . '" inputmode="numeric" data-theme-preview-custom-width data-theme-custom-width-number><span class="muted">' . e(t('admin.theme.appearance.custom_width_pixels_hint', 'Allowed range: 1024 to 2048 px.')) . '</span></label>';
     echo '</div>';
-    echo '</div>';
+    echo '</fieldset>';
+    $appearanceWidthMapHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-width-map', $appearanceWidthMapHtml, false);
+
+    ob_start();
     echo '<aside class="theme-live-preview" aria-label="' . e(t('admin.theme.appearance.live_preview_label', 'Live theme preview')) . '" data-theme-live-preview>';
     // The preview starts from the saved page-width mode and custom pixel value before JavaScript runs.
     echo '<div class="theme-preview-page" data-theme-preview-page data-preview-width="' . e($pageWidthMode) . '" style="--preview-custom-width-scale: ' . number_format(($customPageWidth - 1024) / 1024, 4, '.', '') . ';">';
@@ -493,12 +514,21 @@ function cms_admin_theme(): void
     echo '</div>';
     echo '<p class="muted">' . e(t('admin.theme.appearance.preview_hint', 'Preview updates while editing. It is intentionally small, but uses the same colors, font mode, corner radius, and background transparency controls as the public theme.')) . '</p>';
     echo '</aside>';
-    echo '</fieldset>';
+    $appearancePreviewHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-appearance-subtab-preview', $appearancePreviewHtml, false);
+    echo '</div>';
     $appearanceHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Branding & media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.')) . '</p></div>';
+    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
+    render_admin_subtabs([
+        ['id' => 'admin-theme-media-subtab-header', 'label' => t('admin.theme.subtab_header_images', 'Header images')],
+        ['id' => 'admin-theme-media-subtab-favicon', 'label' => t('admin.theme.subtab_browser_icon', 'Browser icon')],
+        ['id' => 'admin-theme-media-subtab-background', 'label' => t('admin.theme.subtab_background', 'Background')],
+    ], 'admin-theme-media-subtab-header', t('admin.theme.media.subtabs_label', 'Branding and media subsections'));
+    ob_start();
     echo '<div class="theme-tab-card-grid">';
     $themeBrandingDefinitions = theme_branding_asset_types();
     $themeBannerDefinition = $themeBrandingDefinitions['banner'] ?? null;
@@ -544,7 +574,11 @@ function cms_admin_theme(): void
         echo '</div>';
         echo '</fieldset>';
     }
+    echo '</div>';
+    $mediaHeaderHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-media-subtab-header', $mediaHeaderHtml, true);
 
+    ob_start();
     echo '<fieldset class="form-grid" id="admin-favicon"><legend>' . e(t('admin.theme.media.favicon_legend', 'Favicon')) . '</legend>';
     // $faviconUrl stores an intermediate value used by the surrounding gallery workflow.
     $faviconUrl = favicon_asset_url();
@@ -559,6 +593,10 @@ function cms_admin_theme(): void
     echo '<input type="hidden" name="favicon_cropped_png" value="" data-favicon-cropped>';
     echo '<div class="favicon-cropper" data-favicon-cropper hidden><div class="favicon-crop-stage"><canvas width="256" height="256" data-favicon-canvas></canvas></div><label>' . e(t('admin.theme.media.zoom', 'Zoom')) . '<input type="range" min="1" max="3" step="0.01" value="1" data-favicon-zoom></label><div class="favicon-preview-row"><canvas width="48" height="48" data-favicon-preview></canvas><span class="muted">' . e(t('admin.theme.media.favicon_crop_hint', 'Drag the image to place the square crop. The small preview shows the browser icon scale.')) . '</span></div></div>';
     echo '</fieldset>';
+    $mediaFaviconHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-media-subtab-favicon', $mediaFaviconHtml, false);
+
+    ob_start();
     echo '<fieldset class="form-grid admin-theme-background-card" id="admin-backgrounds"><legend>' . e(t('admin.theme.media.background_legend', 'Background')) . '</legend>';
     $backgroundMaxSide = theme_background_optimized_max_side_value($theme['background_optimized_max_side'] ?? null);
     $themeOriginalUrl = theme_background_original_path() !== null ? url_for('theme_background_asset') . '&variant=original' : '';
@@ -595,12 +633,59 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.media.gallery_background_fallback', 'Gallery background fallback')) . '<select name="theme_background_source" data-theme-override-control><option value=""' . (theme_background_source() === null ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_none', 'No fallback set')) . '</option><option value="upload"' . (theme_background_source() === 'upload' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_upload', 'Upload new image')) . '</option><option value="existing"' . (theme_background_source() === 'existing' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_existing', 'Pick from existing gallery images')) . '</option><option value="collage"' . (theme_background_source() === 'collage' ? ' selected' : '') . '>' . e(t('admin.theme.media.background_fallback_collage', 'Generate collage from public galleries')) . '</option></select><span class="muted">' . e(t('admin.theme.media.gallery_background_fallback_hint', 'Used when a gallery does not set its own background source.')) . '</span></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_backgrounds" value="1" formnovalidate>' . e(t('admin.theme.media.reset_all_gallery_backgrounds', 'Reset all gallery backgrounds')) . '</button><button type="submit" class="secondary" name="reset_theme_background" value="1" formnovalidate>' . e(t('admin.theme.media.remove_theme_background', 'Remove theme background')) . '</button><button type="submit" class="secondary" name="reset_favicon" value="1" formnovalidate>' . e(t('admin.theme.media.remove_favicon', 'Remove favicon')) . '</button></div>';
     echo '</fieldset>';
+    $mediaBackgroundHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-media-subtab-background', $mediaBackgroundHtml, false);
     echo '</div>';
     $mediaHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-media', $mediaHtml, false);
 
     ob_start();
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
+    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
+    render_admin_subtabs([
+        ['id' => 'admin-theme-layout-subtab-shortcuts', 'label' => t('admin.theme.subtab_shortcuts', 'Header shortcuts')],
+        ['id' => 'admin-theme-layout-subtab-cards', 'label' => t('admin.theme.subtab_cards_badges', 'Cards & badges')],
+        ['id' => 'admin-theme-layout-subtab-grids', 'label' => t('admin.theme.subtab_grids_lightbox', 'Grids & lightbox')],
+    ], 'admin-theme-layout-subtab-shortcuts', t('admin.theme.layout.subtabs_label', 'Layout subsections'));
+    ob_start();
+    echo '<div class="theme-tab-card-grid">';
+    $favoriteGalleryIds = function_exists('theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
+    echo '<fieldset class="form-grid admin-theme-favorite-galleries" id="admin-theme-favorite-galleries"><legend>' . e(t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.')) . '</p>';
+    echo '<div class="admin-theme-favorite-gallery-list">';
+    for ($favoriteIndex = 0; $favoriteIndex < THEME_FAVORITE_GALLERIES_MAX; $favoriteIndex++) {
+        // $selectedFavoriteShortcut stores the configured shortcut for one visible slot.
+        $selectedFavoriteShortcut = $favoriteGalleryIds[$favoriteIndex] ?? '';
+        // $selectedFavoriteType stores whether this slot targets nothing, the main page, or a gallery.
+        $selectedFavoriteType = $selectedFavoriteShortcut === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? THEME_FAVORITE_GALLERIES_HOME_TOKEN : ((int) $selectedFavoriteShortcut > 0 ? 'gallery' : '');
+        // $selectedFavoriteGalleryId stores the configured gallery ID when this slot targets a gallery.
+        $selectedFavoriteGalleryId = $selectedFavoriteType === 'gallery' ? (int) $selectedFavoriteShortcut : 0;
+        echo '<div class="admin-theme-favorite-gallery-slot"><strong>' . e(t('admin.theme.layout.favorite_gallery_slot', 'Shortcut {number}', ['number' => $favoriteIndex + 1])) . '</strong>';
+        echo '<label>' . e(t('admin.theme.layout.favorite_gallery_type', 'Shortcut target')) . '<select name="theme_favorite_gallery_types[]">';
+        echo '<option value=""' . ($selectedFavoriteType === '' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>';
+        echo '<option value="' . e(THEME_FAVORITE_GALLERIES_HOME_TOKEN) . '"' . ($selectedFavoriteType === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_home', 'Main page')) . '</option>';
+        echo '<option value="gallery"' . ($selectedFavoriteType === 'gallery' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_gallery', 'Gallery')) . '</option>';
+        echo '</select></label>';
+        if (function_exists('render_gallery_search_picker')) {
+            echo render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
+                'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
+                'placeholder' => t('admin.theme.layout.favorite_gallery_placeholder', 'Search gallery by name or path'),
+                'disable_prefill' => true,
+            ]);
+        } else {
+            echo '<select name="theme_favorite_gallery_ids[]"><option value="">' . e(t('admin.theme.layout.favorite_gallery_empty', 'No shortcut')) . '</option>' . gallery_options_for_select($selectedFavoriteGalleryId) . '</select>';
+        }
+        echo '<small class="muted">' . e(t('admin.theme.layout.favorite_gallery_gallery_hint', 'Gallery picker is used only when the shortcut target is Gallery.')) . '</small>';
+        echo '</div>';
+    }
+    echo '</div>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_visibility_hint', 'Deleted galleries and duplicate selections are ignored on save. Anonymous visitors only see configured favorites that remain public and listed. Main page shortcuts stay visible to all visitors.')) . '</p>';
+    echo '</fieldset>';
+    echo '</div>';
+    $layoutShortcutsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-layout-subtab-shortcuts', $layoutShortcutsHtml, true);
+
+    ob_start();
     echo '<div class="theme-tab-card-grid">';
     echo '<fieldset class="form-grid admin-theme-description-layout" id="admin-gallery-description-layout"><legend>' . e(t('admin.theme.layout.description_layout_legend', 'Gallery description format')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.layout.description_layout_hint', 'Choose how gallery intro cards should feel on public pages. The preview uses your current Theme colors, corners, and typography.')) . '</p>';
@@ -627,6 +712,12 @@ function cms_admin_theme(): void
     echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture icon and image count on gallery cards')) . '</label>';
     echo '<p class="muted">' . e(t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.')) . '</p>';
     echo '</fieldset>';
+    echo '</div>';
+    $layoutCardsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-layout-subtab-cards', $layoutCardsHtml, false);
+
+    ob_start();
+    echo '<div class="theme-tab-card-grid">';
     echo '<fieldset class="form-grid" id="admin-pagination"><legend>' . e(t('admin.theme.layout.pagination_legend', 'Pagination')) . '</legend>';
     echo '<label class="checkbox-label"><input type="checkbox" name="pagination_enabled" value="1"' . (!empty($paginationSettings['enabled']) ? ' checked' : '') . '> ' . e(t('admin.theme.layout.enable_pagination', 'Enable pagination')) . '</label>';
     echo '<label>' . e(t('admin.theme.layout.columns_per_page', 'Columns per page')) . ' <span class="muted" data-pagination-columns-display>' . (int) $paginationSettings['columns'] . '</span><input type="range" name="pagination_columns" min="1" max="' . CMS_PAGINATION_MAX_COLUMNS . '" value="' . (int) $paginationSettings['columns'] . '" data-pagination-columns></label>';
@@ -650,6 +741,9 @@ function cms_admin_theme(): void
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_all_gallery_grid_overrides" value="1" formnovalidate onclick="return confirm(&quot;' . e(t('admin.theme.layout.reset_gallery_grids_confirm', 'Reset all custom per-gallery grid settings? The global Theme grid and main page grid will stay unchanged.')) . '&quot;);">' . e(t('admin.theme.layout.reset_all_gallery_grids', 'Reset all custom gallery grids')) . '</button></div>';
     echo '<p class="muted">' . e(t('admin.theme.layout.reset_gallery_grids_hint', 'This clears every per-gallery custom grid and resets subgallery inheritance flags to default. It also removes matching grid keys from gallery.json files, so future scans cannot re-import stale custom grid settings.')) . '</p>';
     echo '</fieldset>';
+    echo '</div>';
+    $layoutGridsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-layout-subtab-grids', $layoutGridsHtml, false);
     echo '</div>';
     $layoutHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-layout', $layoutHtml, false);
@@ -695,6 +789,13 @@ function cms_admin_theme(): void
         }
         echo '</ul></section>';
     }
+    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
+    render_admin_subtabs([
+        ['id' => 'admin-theme-language-subtab-settings', 'label' => t('admin.theme.subtab_language_settings', 'Settings & packs')],
+        ['id' => 'admin-theme-language-subtab-editor', 'label' => t('admin.theme.subtab_language_editor', 'Pack editor')],
+        ['id' => 'admin-theme-language-subtab-diagnostics', 'label' => t('admin.theme.subtab_language_diagnostics', 'Diagnostics')],
+    ], 'admin-theme-language-subtab-settings', t('admin.theme.language.subtabs_label', 'Language subsections'));
+    ob_start();
     echo '<div class="theme-tab-card-grid admin-language-tab-grid">';
     echo '<fieldset class="form-grid admin-language-settings"><legend>' . e(t('admin.theme.language.settings_legend', 'Language settings')) . '</legend>';
     echo '<label>' . e(t('admin.theme.language.admin_label', 'Admin interface language')) . '<select name="cms_language">';
@@ -754,7 +855,10 @@ function cms_admin_theme(): void
     echo '<li><code>telemetry.*</code> ' . e(t('admin.theme.language.convention_telemetry', 'anonymous telemetry pages and reports')) . '</li>';
     echo '<li><code>logs.*</code> ' . e(t('admin.theme.language.convention_logs', 'operational logs and log export')) . '</li>';
     echo '</ul></fieldset>';
+    $languageSettingsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-language-subtab-settings', $languageSettingsHtml, true);
 
+    ob_start();
     echo '<fieldset class="form-grid admin-language-editor"><legend>' . e(t('admin.theme.language.editor_legend', 'Language pack editor')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.language.editor_hint', 'Edit the JSON language pack directly. The save action validates JSON and accepts only string values.')) . '</p>';
     echo '<label>' . e(t('admin.theme.language.editor_select', 'Language pack to edit')) . '<select name="language_pack_code" onchange="if (this.value) window.location.href=\'' . e(url_for('admin_theme')) . '?edit_language=\' + encodeURIComponent(this.value) + \'#admin-theme-tab-language\';">';
@@ -789,7 +893,10 @@ function cms_admin_theme(): void
     echo '<label>' . e(t('admin.theme.language.import_label', 'Import replacement JSON')) . '<input type="file" name="language_pack_file" accept="application/json,.json"></label>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="import_language_pack" value="1" formnovalidate onclick="return confirm(&quot;' . e(t('admin.theme.language.import_confirm', 'Replace this language pack with the uploaded JSON file?')) . '&quot;);">' . e(t('admin.theme.language.import_pack', 'Import JSON')) . '</button></div>';
     echo '</fieldset>';
+    $languageEditorHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-language-subtab-editor', $languageEditorHtml, false);
 
+    ob_start();
     echo '<fieldset class="form-grid admin-language-diagnostics"><legend>' . e(t('admin.theme.language.diagnostics_legend', 'Missing translation diagnostics')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.language.diagnostics_hint', 'These diagnostics are visible only to admins and help find strings that still need language keys.')) . '</p>';
     if (!$missingTranslations) {
@@ -803,6 +910,9 @@ function cms_admin_theme(): void
         echo '<div class="bulk-row"><button type="submit" class="secondary" name="clear_translation_diagnostics" value="1" formnovalidate>' . e(t('admin.theme.language.clear_diagnostics', 'Clear diagnostics')) . '</button></div>';
     }
     echo '</fieldset>';
+    $languageDiagnosticsHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-language-subtab-diagnostics', $languageDiagnosticsHtml, false);
+    echo '</div>';
     $languageHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-language', $languageHtml, false);
 
@@ -810,6 +920,12 @@ function cms_admin_theme(): void
     echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.custom_css.kicker', 'Custom CSS')) . '</p><h2>' . e(t('admin.theme.custom_css.title', 'Skins and manual CSS')) . '</h2></div><p class="muted">' . e(t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.')) . '</p></div>';
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
+    echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
+    render_admin_subtabs([
+        ['id' => 'admin-theme-css-subtab-source', 'label' => t('admin.theme.subtab_css_source', 'CSS source')],
+        ['id' => 'admin-theme-css-subtab-reset', 'label' => t('admin.theme.subtab_css_reset', 'Reset actions')],
+    ], 'admin-theme-css-subtab-source', t('admin.theme.custom_css.subtabs_label', 'Custom CSS subsections'));
+    ob_start();
     echo '<div id="admin-custom-css"></div><fieldset class="form-grid"><legend>' . e(t('admin.theme.custom_css.legend', 'Custom CSS')) . '</legend><label>' . e(t('admin.theme.custom_css.skin_label', 'Custom CSS skin')) . '<select name="custom_css_preset"><option value="">' . e(t('admin.theme.custom_css.keep_current', 'Keep current custom CSS')) . '</option>';
     foreach (custom_css_presets() as $filename => $path) {
         // Variable $label stores this steps working value.
@@ -819,7 +935,17 @@ function cms_admin_theme(): void
     echo '</select><span class="muted">' . e(t('admin.theme.custom_css.skin_hint', 'Selecting a skin copies it from custom_css/ into the active custom stylesheet.')) . '</span></label>';
     echo '<label>' . e(t('admin.theme.custom_css.file_label', 'Custom CSS file')) . '<input type="file" name="custom_css" accept=".css,text/css"></label>';
     echo '<p class="muted">' . e(t('admin.theme.custom_css.file_hint', 'Uploaded CSS is saved as public/assets/custom.css and loaded after the built-in stylesheet and theme controls.')) . '</p>';
+    echo '</fieldset>';
+    $customCssSourceHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-css-subtab-source', $customCssSourceHtml, true);
+
+    ob_start();
+    echo '<fieldset class="form-grid"><legend>' . e(t('admin.theme.custom_css.reset_legend', 'Reset actions')) . '</legend>';
+    echo '<p class="muted">' . e(t('admin.theme.custom_css.reset_hint', 'Reset saved color overrides or remove the uploaded custom stylesheet without changing other Theme form values.')) . '</p>';
     echo '<div class="bulk-row"><button type="submit" class="secondary" name="reset_theme_overrides" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_to_css', 'Reset to CSS')) . '</button><button type="submit" class="secondary" name="reset_custom_css" value="1" formnovalidate>' . e(t('admin.theme.custom_css.reset_custom_css', 'Reset custom CSS')) . '</button></div></fieldset>';
+    $customCssResetHtml = ob_get_clean();
+    render_admin_subtab_panel('admin-theme-css-subtab-reset', $customCssResetHtml, false);
+    echo '</div>';
     $customCssHtml = ob_get_clean();
     render_admin_tab_panel('admin-theme-tab-custom-css', $customCssHtml, false);
 

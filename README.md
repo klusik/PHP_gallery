@@ -14,7 +14,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Gallery discovery** - Automatically detect and import new folders
 - **Manual creation** - Create empty gallery folders from the admin interface
 - **Bulk operations** - Rename, delete, move, reorder, or change visibility for multiple galleries at once
-- **Gallery metadata** - Title, description, optional date, cover image, custom slug
+- **Gallery metadata** - Title, description, optional date range, cover image, custom slug
 - **Folder management** - Moving galleries physically relocates the folder tree on disk
 
 ### Image Management
@@ -23,7 +23,9 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Image editing** - Edit title, caption, tags, visibility, sort order per image
 - **Bulk image operations** - Reorder, tag, or delete multiple images
 - **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages
-- **GPS maps** - Render interactive maps when images have location data
+- **EXIF/GPS defaults** - GPS maps and coordinates are enabled globally by default, with per-gallery inherit, force on and force off controls plus a dashboard reset for all overrides
+- **EXIF date suggestions** - Suggest gallery date ranges from original photo capture dates, including subgalleries, with one reusable editor component for full admin pages and side panels plus editable admin approval
+- **GPS maps** - Render interactive maps when images have location data and the effective EXIF/GPS policy allows display
 
 ### Thumbnails & Performance
 - **Automatic generation** - Create optimized thumbnails during import or on-demand
@@ -58,6 +60,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Togglable voting** - Enable/disable voting per gallery
 
 ### Gallery Navigation
+- **Top navigation shortcuts** - Optionally show up to three admin-selected favorite galleries or the main gallery page as direct header buttons
 - **Breadcrumbs** - Navigate hierarchy on public pages
 - **Gallery cards** - Display subgalleries with cover images and metadata
 - **Pagination** - Handle large galleries without overwhelming the browser
@@ -77,7 +80,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Gallery branding** - Per-gallery logo, background, cover image
 - **Site branding** - Site-wide logo and background
 - **Custom CSS** - Direct CSS editing for advanced customization
-- **Layout control** - Choose gallery card layout (vertical/horizontal)
+- **Layout control** - Choose gallery card layout (vertical/horizontal) and favorite gallery/main-page shortcuts
 
 ### Updates & Maintenance
 - **One-click updates** - Check GitHub and install newer versions from admin dashboard
@@ -115,6 +118,8 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Reorder galleries within parent hierarchy
 - Inline gallery editing with side panel
 - Cover image selection and upload
+- Manual gallery date ranges with From and To fields
+- EXIF-derived date range suggestions that can be applied directly from a gallery editor without a full page reload, or reviewed, edited and ignored per gallery branch
 
 #### Image Management
 - Per-gallery image grid
@@ -294,7 +299,9 @@ Then open `http://localhost:8000/` in your browser.
 1. Use **Gallery list** to view the hierarchy
 2. **Bulk actions** to rename, move, or change visibility of multiple galleries at once
 3. **Drag-and-drop reordering** to change display order (JavaScript enabled)
-4. **Edit gallery** to change metadata, cover image, tags, description layout, or lightbox browsing-mode override
+4. **Edit gallery** to change metadata, date range, cover image, tags, description layout, or lightbox browsing-mode override
+5. Use the EXIF date suggestion beside the gallery date range to apply a range computed from that gallery and all subgalleries; the same component is used in the full editor and side-panel editor, JavaScript updates the fields in place, and the normal POST fallback still works
+6. Use **Review branch suggestions** or **Gallery dates** in Admin maintenance to approve, edit or ignore EXIF-derived ranges for a parent trip gallery and its subgalleries
 
 #### Editing Images
 

@@ -31,6 +31,7 @@
  */
 
 export { setupAdminTabs } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
+export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260604-admin-subtabs-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260512-modular-admin-v1';
 export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260528-image-tag-pagination-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260512-modular-admin-v1';

@@ -98,8 +98,8 @@ function cms_admin_bulk_galleries(): void
         flash_message('admin_notice', 'Updated ' . count($galleryIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));
     }
-    if (in_array($action, ['maps_on', 'maps_off'], true) && $galleryIds) {
-        if (!exif_gps_schema_ready()) {
+    if (in_array($action, ['maps_on', 'maps_off', 'maps_inherit'], true) && $galleryIds) {
+        if (!exif_gps_schema_ready() || ($action === 'maps_inherit' && !exif_gps_override_schema_ready())) {
             admin_log_event('warning', 'gps_maps.schema_missing', t('admin.galleries.log_gps_maps_schema_missing'), [
                 'gallery_ids' => $galleryIds,
                 'action' => $action,
@@ -118,9 +118,18 @@ function cms_admin_bulk_galleries(): void
         if ($expandedIds) {
             // Variable $placeholders stores this steps working value.
             $placeholders = implode(',', array_fill(0, count($expandedIds), '?'));
+            // $gpsMapValue stores the explicit or inherited GPS display value for the selected gallery branches.
+            $gpsMapValue = $action === 'maps_inherit' ? null : ($action === 'maps_on' ? 1 : 0);
             // Variable $stmt stores this steps working value.
             $stmt = db()->prepare('UPDATE galleries SET gps_map_enabled = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
-            $stmt->execute(array_merge([$action === 'maps_on' ? 1 : 0, now_sql()], $expandedIds));
+            $stmt->execute(array_merge([$gpsMapValue, now_sql()], $expandedIds));
+            foreach ($expandedIds as $expandedId) {
+                // Variable $gallery stores this steps working value.
+                $gallery = find_gallery((int) $expandedId, true);
+                if ($gallery) {
+                    write_gallery_sidecar($gallery);
+                }
+            }
         }
         flash_message('admin_notice', 'Updated ' . count($expandedIds) . ' gallery folder(s).');
         redirect_to(url_for('admin'));

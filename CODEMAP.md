@@ -32,6 +32,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Gallery detail page | `app/controllers/public_gallery.php` | `app/views/layout.php`, `app/views/gallery_descriptions.php`, `app/services/gallery_display.php` |
 | Breadcrumbs | `app/controllers/public_gallery.php` | `app/services/gallery_lookup.php`, `app/services/public_paths.php` |
 | Gallery cards | `app/controllers/public_gallery.php` | `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/gallery_grid.php` |
+| Gallery date ranges | `app/services/gallery_dates.php` | Manual start/end validation, public date formatting and EXIF-derived suggestion aggregation. |
 | Image grid | `app/controllers/public_gallery.php` | `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php` |
 | Lightbox JSON | `app/controllers/gallery_lightbox.php` | `app/services/lightbox_metadata.php` |
 | Lightbox browsing modes | `app/services/gallery_lightbox_mode.php` | Theme default plus per-gallery override resolution for single-image, picture-strip, and 3D-carousel modes. |
@@ -85,8 +86,11 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Dashboard model | `app/services/admin_dashboard.php` |
 | Admin shell/chrome | `app/views/admin_chrome.php` |
 | Dashboard view helpers | `app/views/admin_dashboard.php` |
+| Gallery date suggestions entry | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php` | Global and scoped branch review plus the focused `admin_gallery_date_suggestion` apply endpoint. |
 | URL rewrite settings | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
 | Public search settings card | `app/controllers/admin_dashboard.php`, `app/services/public_search.php` |
+| EXIF/GPS display defaults | `app/controllers/admin_dashboard.php`, `app/services/admin_dashboard.php`, `app/views/admin_dashboard.php`, `app/services/exif.php` | Global default-enabled policy, reset-all override action and dashboard cards reused across admin dashboard tabs. |
+| Favorite gallery and main-page shortcuts | `app/controllers/admin_theme.php`, `app/services/favorite_galleries.php`, `app/views/layout.php` |
 | Dev mode | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
 | Migrations from admin | `app/controllers/admin_dashboard.php`, `app/migrations.php` |
 | Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` |
@@ -98,15 +102,16 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Discover filesystem galleries | `app/controllers/admin_galleries_discovery.php` | Uses scanning and gallery mutation services. |
 | Import discovered galleries | `app/controllers/admin_galleries_discovery.php` | Creates DB records from folders. |
 | Create gallery | `app/controllers/admin_galleries_discovery.php` | Includes side-panel handling. |
-| Edit gallery | `app/controllers/admin_galleries_edit.php` | Large feature surface. |
-| Gallery form rendering | `app/views/admin_gallery_forms.php`, `app/controllers/admin_gallery_renderers.php` | Shared form fragments and select lists. |
-| Bulk gallery operations | `app/controllers/admin_galleries_bulk.php` | Bulk delete/rename/move/regenerate paths. |
+| Edit gallery | `app/controllers/admin_galleries_edit.php` | Large feature surface, including manual date ranges and the embedded reusable EXIF suggestion component. |
+| Gallery form rendering | `app/views/admin_gallery_forms.php`, `app/controllers/admin_gallery_renderers.php` | Shared form fragments, manual date range inputs, per-gallery EXIF suggestion controls and select lists. The suggestion component carries endpoint, gallery id and CSRF data so it works in full-page and side-panel admin contexts. |
+| Bulk gallery operations | `app/controllers/admin_galleries_bulk.php` | Bulk delete/rename/move/regenerate paths plus EXIF/GPS force on, force off and inherit-default actions. |
 | Reorder hierarchy | `app/controllers/admin_galleries_reorder.php` | Admin and public order. |
 | Gallery mutations | `app/services/gallery_mutations.php` | Create/update/delete/move service logic. |
 | Gallery lookup | `app/services/gallery_lookup.php` | Read model and tree queries. |
 | Gallery paths and slugs | `app/services/gallery_paths.php`, `app/services/public_paths.php` | Clean URLs and filesystem path helpers. |
 | Gallery sidecars | `app/services/gallery_sidecars.php` | Metadata sidecar persistence. |
-| Gallery display settings | `app/services/gallery_display.php`, `app/services/gallery_grid.php`, `app/services/gallery_description_layout.php`, `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php` | Public rendering behavior. |
+| Gallery display settings | `app/services/gallery_display.php`, `app/services/gallery_grid.php`, `app/services/gallery_description_layout.php`, `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/exif.php` | Public rendering behavior, including date range display and effective EXIF/GPS display inheritance. |
+| EXIF-derived gallery date suggestions | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php`, `app/views/admin_gallery_forms.php`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | Aggregates `images.exif_taken_at` across each gallery branch, supports scoped branch reviews through `gallery_id`, lets admins approve, edit, or ignore suggested ranges, and applies the current gallery suggestion through the shared focused endpoint with AJAX or POST fallback. |
 
 ## Image Administration
 
@@ -117,9 +122,10 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |
 | Edit image metadata | `app/controllers/admin_public_inline.php`, handler `cms_admin_edit_image` |
-| Copy/move images between galleries | `app/controllers/picture_manager.php`, `app/services/picture_manager.php` |
+| Copy/move/share selected public-view images | `app/controllers/picture_manager.php`, `app/controllers/downloads.php`, `app/services/picture_manager.php`, `app/services/downloads.php`, `public/assets/gallery-modules/picture-manager.js` |
 | DNG support | `app/services/dng_derivatives.php`, `app/services/uploads.php` |
-| EXIF extraction | `app/services/exif.php`, `app/controllers/exif.php` |
+| EXIF extraction and GPS display policy | `app/services/exif.php`, `app/controllers/exif.php`, `app/controllers/admin_dashboard.php`, `app/controllers/admin_galleries_edit.php` | Default-enabled public GPS display with nullable per-gallery inherit, force on and force off overrides. |
+| EXIF capture-date reuse | `app/services/gallery_dates.php`, `app/controllers/admin_gallery_dates.php` | Uses scanned original image EXIF dates to suggest gallery date ranges. |
 
 ## Tags
 
@@ -144,7 +150,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |
 | Picture-strip and 3D-carousel lightbox UI | `public/assets/gallery-modules/lightbox.js`, `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css` |
 | Public/admin styling | `public/assets/styles.css`, `public/assets/custom.css` |
-| Browser UI behavior | `public/assets/gallery.js` |
+| Browser UI behavior | `public/assets/gallery.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js` |
 
 ## Access, Sharing and Downloads
 
@@ -153,7 +159,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Gallery password access | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Share links | `app/services/gallery_access.php`, `app/controllers/public_gallery.php` |
 | Download signatures | `app/services/download_signatures.php` |
-| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php` |
+| ZIP generation | `app/services/downloads.php`, `app/controllers/downloads.php`, including gallery, all-gallery and selected-photo fallback archives |
 | Archive cache table | `zip_archives` |
 
 ## AI and Metadata Generation
@@ -277,6 +283,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | --- | --- |
 | `tests/admin_log_severity_filter_test.php` | Log filtering behavior. |
 | `tests/gallery_branding_model_test.php` | Gallery branding model. |
+| `tests/gallery_dates_model_test.php` | Gallery date range normalization and renderer behavior. |
 | `tests/gallery_migration_model_test.php` | Migration model behavior. |
 | `tests/gallery_visibility_model_test.php` | Gallery visibility compatibility. |
 | `tests/openai_text_assist_model_test.php` | OpenAI settings/model behavior. |

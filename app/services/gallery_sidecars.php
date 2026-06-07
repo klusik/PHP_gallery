@@ -308,6 +308,9 @@ function write_gallery_sidecar(array $gallery): void
     if (gallery_date_schema_ready() && !empty($gallery['gallery_date'])) {
         $data['gallery_date'] = gallery_date_storage_value($gallery['gallery_date']);
     }
+    if (gallery_date_range_schema_ready() && !empty($gallery['gallery_date_end'])) {
+        $data['gallery_date_end'] = gallery_date_storage_value($gallery['gallery_date_end']);
+    }
     if (gallery_description_layout_schema_ready()) {
         // $descriptionLayout stores a per-gallery card layout override, when this gallery has one.
         $descriptionLayout = gallery_description_layout_storage_value($gallery['description_layout'] ?? null);
@@ -390,6 +393,7 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         'title' => $metadata['title'] ?? basename($folderPath),
         'description' => $metadata['description'] ?? '',
         'gallery_date' => gallery_date_schema_ready() ? gallery_date_sidecar_value($metadata['gallery_date'] ?? '') : null,
+        'gallery_date_end' => gallery_date_range_schema_ready() ? gallery_date_sidecar_range_values($metadata['gallery_date'] ?? '', $metadata['gallery_date_end'] ?? '')['end'] : null,
         'visibility' => gallery_visibility_storage_value((string) ($metadata['visibility'] ?? 'unpublished')),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
@@ -448,8 +452,12 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     $countBadgeVisibility = gallery_count_badge_schema_ready() ? gallery_count_badge_storage_value($candidate['count_badge_visibility'] ?? null) : null;
     // $lightboxBrowsingMode stores a per-gallery lightbox mode override read from gallery.json.
     $lightboxBrowsingMode = gallery_lightbox_browsing_mode_schema_ready() ? gallery_lightbox_browsing_mode_storage_value($candidate['lightbox_browsing_mode'] ?? null) : null;
-    // $galleryDate stores the optional manual gallery date read from gallery.json.
-    $galleryDate = gallery_date_schema_ready() ? gallery_date_sidecar_value($candidate['gallery_date'] ?? '') : null;
+    // $galleryDateRange stores the optional manual gallery date range read from gallery.json.
+    $galleryDateRange = gallery_date_schema_ready() ? gallery_date_sidecar_range_values($candidate['gallery_date'] ?? '', $candidate['gallery_date_end'] ?? '') : ['start' => null, 'end' => null];
+    // $galleryDate stores the optional manual gallery date or range start read from gallery.json.
+    $galleryDate = $galleryDateRange['start'];
+    // $galleryDateEnd stores the optional manual gallery date range end read from gallery.json.
+    $galleryDateEnd = $galleryDateRange['end'];
     // $accessMode stores an intermediate value used by the surrounding gallery workflow.
     $accessMode = gallery_access_schema_ready() && ($candidate['access_mode'] ?? '') === 'password' ? 'password' : 'normal';
     // $candidateHasGrid stores whether gallery.json defines a complete custom display grid.
@@ -495,6 +503,10 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     if (gallery_date_schema_ready()) {
         $columns[] = 'gallery_date';
         $values[] = $galleryDate;
+    }
+    if (gallery_date_range_schema_ready()) {
+        $columns[] = 'gallery_date_end';
+        $values[] = $galleryDateEnd;
     }
     if (gallery_grid_schema_ready()) {
         $columns[] = 'grid_columns';
@@ -574,8 +586,14 @@ function create_empty_gallery(array $input): array
     }
     // $description stores an intermediate value used by the surrounding gallery workflow.
     $description = (string) ($input['description'] ?? '');
-    // $galleryDate stores the optional manual date for this gallery, independent from upload dates.
-    $galleryDate = gallery_date_schema_ready() ? gallery_date_storage_value($input['gallery_date'] ?? '') : null;
+    // $galleryDateRange stores the optional manual date range for this gallery, independent from upload dates.
+    $galleryDateRange = gallery_date_schema_ready()
+        ? gallery_date_range_storage_values($input['gallery_date'] ?? '', $input['gallery_date_end'] ?? '')
+        : ['start' => null, 'end' => null];
+    // $galleryDate stores the optional manual date or range start for this gallery.
+    $galleryDate = $galleryDateRange['start'];
+    // $galleryDateEnd stores the optional manual date range end for this gallery.
+    $galleryDateEnd = $galleryDateRange['end'];
     // $visibility stores an intermediate value used by the surrounding gallery workflow.
     $visibility = gallery_visibility_storage_value((string) ($input['visibility'] ?? 'unpublished'));
     // $votingEnabled stores an intermediate value used by the surrounding gallery workflow.
@@ -617,6 +635,7 @@ function create_empty_gallery(array $input): array
         'title' => $title,
         'description' => $description,
         'gallery_date' => $galleryDate,
+        'gallery_date_end' => gallery_date_range_schema_ready() ? $galleryDateEnd : null,
         'visibility' => $visibility,
         'sort_order' => $sortOrder,
         'voting_enabled' => $votingEnabled,

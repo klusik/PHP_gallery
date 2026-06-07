@@ -1116,6 +1116,87 @@ function render_admin_tab_panel(string $id, string $contentHtml, bool $active = 
     echo '</section>';
 }
 
+
+
+/**
+ * Render one reusable admin subtab control row.
+ *
+ * Subtabs are a lower-level navigation primitive for long admin panels. They are
+ * designed to live inside a normal admin tab panel and are intentionally local
+ * to their containing area instead of controlling the browser URL hash.
+ *
+ * @param array<int, array<string, mixed>> $tabs Subtab definitions.
+ * @param string $activeId Preferred active subtab id. The first subtab is used when empty.
+ * @param string $ariaLabel Accessible label for this subtab group.
+ * @return void
+ */
+function render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
+{
+    if (function_exists('view_render_admin_subtabs')) {
+        view_render_admin_subtabs($tabs, $activeId, $ariaLabel);
+        return;
+    }
+
+    // $resolvedActiveId stores the selected subtab id for the server-rendered state.
+    $resolvedActiveId = $activeId;
+    if ($resolvedActiveId === '') {
+        foreach ($tabs as $tab) {
+            if (!empty($tab['active']) && !empty($tab['id'])) {
+                $resolvedActiveId = (string) $tab['id'];
+                break;
+            }
+        }
+    }
+    if ($resolvedActiveId === '' && isset($tabs[0]['id'])) {
+        $resolvedActiveId = (string) $tabs[0]['id'];
+    }
+
+    $resolvedAriaLabel = $ariaLabel !== '' ? $ariaLabel : t('admin.subtabs.aria_sections', 'Admin subsection tabs');
+    echo '<nav class="admin-subtabs" data-admin-subtabs aria-label="' . e($resolvedAriaLabel) . '">';
+    echo '<div class="admin-subtab-list" role="tablist">';
+    foreach ($tabs as $tab) {
+        // $tabId stores the panel id controlled by this subtab.
+        $tabId = trim((string) ($tab['id'] ?? ''));
+        if ($tabId === '') {
+            continue;
+        }
+        // $tabLabel stores the visible subtab label.
+        $tabLabel = (string) ($tab['label'] ?? $tabId);
+        // $isActive stores whether this subtab is selected in server-rendered markup.
+        $isActive = $tabId === $resolvedActiveId;
+        // $controlId stores the accessible id for the subtab control.
+        $controlId = $tabId . '-control';
+        echo '<button type="button" class="admin-subtab' . ($isActive ? ' is-active' : '') . '" id="' . e($controlId) . '" role="tab" aria-controls="' . e($tabId) . '" aria-selected="' . ($isActive ? 'true' : 'false') . '" tabindex="' . ($isActive ? '0' : '-1') . '" data-admin-subtab-target="' . e($tabId) . '">';
+        echo '<span>' . e($tabLabel) . '</span>';
+        if (array_key_exists('badge', $tab) && $tab['badge'] !== null && $tab['badge'] !== '') {
+            echo '<span class="admin-subtab-badge">' . e((string) $tab['badge']) . '</span>';
+        }
+        echo '</button>';
+    }
+    echo '</div></nav>';
+}
+
+/**
+ * Render one reusable admin subtab panel.
+ *
+ * @param string $id Panel id referenced by the matching subtab.
+ * @param string $contentHtml Trusted admin HTML rendered by the caller.
+ * @param bool $active Whether the panel should start selected.
+ * @return void
+ */
+function render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
+{
+    if (function_exists('view_render_admin_subtab_panel')) {
+        view_render_admin_subtab_panel($id, $contentHtml, $active);
+        return;
+    }
+    // $controlId stores the generated subtab id used by aria-labelledby.
+    $controlId = $id . '-control';
+    echo '<section class="admin-subtab-panel' . ($active ? ' is-active' : '') . '" id="' . e($id) . '" role="tabpanel" aria-labelledby="' . e($controlId) . '" data-admin-subtab-panel>';
+    echo $contentHtml;
+    echo '</section>';
+}
+
 /**
  * Render the persistent admin sidebar used by all authenticated admin pages.
  */
@@ -1206,6 +1287,29 @@ function public_header_branding_model(string $siteName, ?array $currentGallery =
 }
 
 /**
+ * Render configured favorite gallery shortcut links for fallback header rendering.
+ *
+ * @param array<int, array<string, mixed>> $items Resolved favorite gallery navigation items.
+ * @return string Favorite gallery anchor markup, or an empty string when none are configured.
+ */
+function favorite_gallery_nav_html(array $items): string
+{
+    // $html stores the compact anchor list inserted into the shared header nav.
+    $html = '';
+    foreach ($items as $item) {
+        // $url stores the final public gallery URL for one configured shortcut.
+        $url = trim((string) ($item['url'] ?? ''));
+        // $title stores the button label, normally the gallery title.
+        $title = trim((string) ($item['title'] ?? ''));
+        if ($url === '' || $title === '') {
+            continue;
+        }
+        $html .= '<a class="nav-favorite-gallery" href="' . e($url) . '">' . e($title) . '</a>';
+    }
+    return $html;
+}
+
+/**
  * Render the shared document header, navigation, theme variables, and CSS links.
  */
 function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
@@ -1253,6 +1357,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         'assets/styles/admin.css',
         'assets/styles/admin-layout.css',
         'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-subtabs.css',
         'assets/styles/admin-theme-preview.css',
         'assets/styles/admin-reordering.css',
         'assets/styles/admin-media-tools.css',
@@ -1306,7 +1411,11 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         echo e($siteName);
     }
     echo '</a><nav class="nav">';
-    echo '<a href="' . e(url_for('home')) . '">' . e(t('nav.galleries', 'Galleries')) . '</a>';
+    // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
+    $favoritePublicOnly = !$user || $anonymousPreview;
+    // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
+    $favoriteGalleryItems = function_exists('theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
+    echo favorite_gallery_nav_html($favoriteGalleryItems);
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
             // $updatePending stores an intermediate value used by the surrounding gallery workflow.
@@ -1436,7 +1545,12 @@ function cms_browser_i18n_strings(): array
     if (function_exists('view_cms_browser_i18n_strings')) {
         return view_cms_browser_i18n_strings();
     }
-    return [
+
+    $activeStrings = translation_load_language(translation_active_language());
+    $defaultStrings = translation_load_language(translation_default_language());
+    $strings = array_merge($defaultStrings, $activeStrings);
+
+    return array_merge($strings, [
         'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
         'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
         'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
@@ -1516,7 +1630,7 @@ function cms_browser_i18n_strings(): array
         'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
         'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
-    ];
+    ]);
 }
 
 /**
@@ -1565,8 +1679,10 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-operations.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-nested-tabs.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
     ];
     $scriptVersion = 0;

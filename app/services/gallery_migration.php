@@ -246,6 +246,7 @@ function gallery_migration_gallery_metadata(array $gallery): array
         'voting_enabled',
         'show_filenames',
         'gallery_date',
+        'gallery_date_end',
         'description_layout',
         'count_badge_visibility',
         'picture_game_enabled',
@@ -829,6 +830,7 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
         'voting_enabled',
         'show_filenames',
         'gallery_date',
+        'gallery_date_end',
         'description_layout',
         'count_badge_visibility',
         'picture_game_enabled',
@@ -882,6 +884,9 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
     }
     if (in_array($column, ['sort_order', 'grid_columns', 'grid_rows', 'thumbnail_min_size', 'thumbnail_max_size'], true)) {
         return $value === null || $value === '' ? null : (int) $value;
+    }
+    if (in_array($column, ['gallery_date', 'gallery_date_end'], true)) {
+        return gallery_date_sidecar_value($value);
     }
 
     return $value;
