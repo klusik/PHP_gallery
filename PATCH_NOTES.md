@@ -1,5 +1,184 @@
 # Patch notes
 
+## Version 0.75
+
+Version 0.75 expands gallery editing, administration, and navigation with several connected workflows: administrators
+  can now store gallery date ranges, review EXIF-derived date suggestions across gallery branches, use a refreshed theme
+  editor with sub-tabs, configure favorite gallery shortcuts in the top navigation, and benefit from broader admin-side
+  polish across uploads, downloads, mobile WebDAV, and gallery maintenance. The release also includes supporting
+  database migrations, frontend interaction updates, translation refreshes, and test coverage for the new date and
+  favorite-gallery behavior.
+
+  ### Highlights
+
+  #### Added editable gallery date ranges and EXIF-driven date suggestions
+
+  - Added support for storing a manual gallery date range instead of only a single date.
+  - Added a new gallery_date_end value so a gallery can represent a range such as 2026-05-01 to 2026-05-03.
+  - Preserved the old single-date workflow by allowing the end date to remain empty.
+  - Added EXIF-based date suggestions built from scanned photo metadata, so existing imports can be used to propose
+    likely gallery date ranges.
+
+  - Added an admin review page for gallery dates that can show suggestions for a single gallery branch or the full
+    gallery tree.
+
+  - Added a focused “Apply to this gallery” action inside the gallery editor so admins can accept the suggested range
+    without leaving the current edit workflow.
+
+  - Added branch-aware aggregation so a parent gallery can collect EXIF capture dates from all of its descendants.
+  - Added editable suggestion rows so admins can fine-tune a proposed range before saving it.
+  - Added public display support for ranges and end-only dates, with readable visitor-facing formatting.
+
+  #### Added configurable favorite gallery shortcuts in the top navigation
+
+  - Added theme-managed favorite gallery shortcuts to the header navigation.
+  - Allowed shortcuts to be resolved from configured gallery IDs and/or shortcut slots in the theme settings.
+  - Added support for displaying those shortcuts in the public header only when appropriate for the current visitor
+    context.
+
+  - Kept the existing “Galleries” navigation experience intact while adding the new shortcut row ahead of it.
+  - Added support for badge-aware and preview-friendly rendering in the navigation templates.
+
+  #### Added nested admin subtabs and theme editor organization
+
+  - Reworked the Admin Theme page into clearer sub-sections instead of one long form.
+  - Added nested sub-tabs for appearance, branding/media, and layout-related settings.
+  - Split preview content and controls into smaller panels so theme editing is easier to scan.
+  - Preserved the live preview behavior while making the form layout more maintainable.
+  - Added shared subtab styles so similar admin screens can reuse the same interaction pattern.
+
+  #### Improved EXIF/GPS admin controls and gallery maintenance workflows
+
+  - Added a global EXIF/GPS default display settings card on the admin dashboard.
+  - Added support for a per-gallery EXIF/GPS override reset workflow.
+  - Updated bulk gallery actions to support an “inherit GPS map default” option where the schema allows it.
+  - Updated gallery feature indicators so the dashboard reflects effective GPS display behavior instead of only raw
+    stored flags.
+
+  - Added dedicated dashboard cards linking to the gallery date maintenance page and the EXIF/GPS settings workflow.
+  - Added clearer admin-side feedback for successful and failed EXIF-derived date application.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added the admin_gallery_dates route and controller in app/controllers/admin_gallery_dates.php.
+  - Added the admin_gallery_date_suggestion route for focused AJAX and form submissions.
+  - Added reusable date-range helpers in app/services/gallery_dates.php.
+  - Added schema checks for gallery_date_end and EXIF-suggestion readiness.
+  - Added range normalization and validation so the end date cannot be earlier than the start date.
+  - Added gallery_date_save_range() to persist date ranges and refresh sidecar metadata.
+  - Added EXIF suggestion aggregation helpers to compute branch-level min/max capture dates from scanned images.
+  - Added branch membership helpers so the review page can scope suggestions to one gallery tree.
+  - Added admin_apply_gallery_date_exif_suggestion() in app/controllers/admin_galleries_edit.php to support direct
+    application from the gallery editor.
+
+  - Updated admin_save_gallery_from_input() to persist both gallery_date and gallery_date_end.
+  - Updated gallery discovery and creation paths to carry gallery_date_end from input and sidecar metadata.
+  - Updated write_gallery_sidecar() and folder candidate metadata handling so the date-range end value survives
+    filesystem sync.
+
+  - Updated gallery_migration helpers so migration metadata includes gallery_date_end.
+  - Updated gallery_migration_gallery_column_value() so date-range fields are normalized consistently during migration
+    imports.
+
+  - Added global EXIF/GPS settings handling in app/controllers/admin_dashboard.php.
+  - Updated admin_galleries_bulk.php to support the new GPS inheritance action and to refresh sidecar state after bulk
+    updates.
+
+  - Updated app/views/layout.php so the new admin browser module is loaded on every page where it is needed.
+  - Updated app/bootstrap.php and app/controllers.php to register the new route and controller.
+
+  #### Database
+
+  - Added migration 202606070001_gallery_date_ranges.php.
+  - Added nullable galleries.gallery_date_end beside the existing gallery_date column.
+  - Added an index on gallery_date_end for future filtering and maintenance use.
+  - Added migration 202606060001_exif_gps_default_display.php.
+  - Added support for storing a global EXIF/GPS default display state and per-gallery override cleanup behavior.
+  - Kept both migrations backwards-compatible so older installations can continue operating while they are being
+    upgraded.
+
+  #### Frontend
+
+  - Added public/assets/gallery-modules/admin-gallery-date-suggestion.js for in-place EXIF suggestion application.
+  - Updated the gallery editor to show editable date-range fields instead of a single date-only control when the schema
+    supports it.
+
+  - Added AJAX handling so the gallery editor can apply EXIF suggestions without a full page reload.
+  - Added refreshed notice handling so the admin sees immediate feedback after a suggestion is applied.
+  - Updated public/assets/gallery.js so the new admin gallery-date suggestion module boots with the rest of the browser
+    features.
+
+  - Updated public/assets/styles.css and public/assets/styles/admin.css for date-range inputs, suggestion rows, and the
+    maintenance page layout.
+
+  - Added public/assets/styles/admin-subtabs.css for the new nested admin sub-tab interface.
+  - Updated public/assets/gallery-modules/admin-side-panel.js, admin-nested-tabs.js, admin-gallery-list.js, admin-
+    navdata-panel.js, admin-gallery-migration.js, lightbox.js, and related modules as part of the broader admin UI
+    refresh.
+
+  - Updated the public gallery render path so date ranges show up correctly in gallery cards and metadata rows.
+  - Updated translation loading and browser i18n handling so the new UI text is available in both admin and public-side
+    scripts.
+
+  #### Tests
+
+  - Added tests/gallery_dates_model_test.php.
+  - Added tests/favorite_galleries_model_test.php.
+  - Covered date-range normalization, range validation, and storage formatting.
+  - Covered public date rendering for single dates, ranges, and end-only labels.
+  - Covered branch membership logic used by EXIF suggestion aggregation.
+  - Covered machine-readable public markup attributes for rendered gallery dates.
+  - Covered favorite-gallery navigation data and theme shortcut behavior.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Gallery cards and gallery headers can now show a full date range instead of only a single day when the gallery
+    metadata contains one.
+
+  - Public navigation can now surface directly configured favorite galleries as shortcut links.
+  - The top navigation can feel more tailored to the site’s most important galleries without changing the underlying
+    gallery structure.
+
+  - Public gallery metadata and date display remain readable even when the underlying data comes from a range rather
+    than a single date.
+
+  #### For administrators
+
+  - Gallery editing is more flexible because a gallery can now represent a one-day event, a multi-day trip, or a broader
+    time span.
+
+  - EXIF capture dates can be reviewed as suggested ranges instead of requiring manual entry from scratch.
+  - Parent galleries can inherit date evidence from child galleries, which is useful for trip hierarchies and multi-day
+    albums.
+
+  - The gallery editor now provides a direct “Apply to this gallery” action for suggested ranges.
+  - The admin dashboard now exposes dedicated cards for date maintenance and EXIF/GPS defaults, making the new workflows
+    easier to find.
+
+  - The theme editor is easier to manage because settings are split into smaller, labeled sub-sections.
+  - Gallery maintenance flows are more consistent because sidecar metadata, migration logic, and admin forms all carry
+    the same range data.
+
+  - Bulk gallery management now has more complete GPS inheritance behavior where the schema supports it.
+
+  ### Notes
+
+  - Date ranges are stored as gallery_date plus gallery_date_end, so older single-date galleries remain valid without
+    any extra setup.
+
+  - The EXIF suggestion workflow depends on scanned image rows with exif_taken_at data already present.
+  - Suggestions are branch-based, so a parent gallery may collect dates from subgalleries as well as from its own
+    images.
+
+  - The new theme and navigation features are additive and keep existing layouts available unless the admin opts into
+    the new settings.
+
+  - The new admin workflows rely on the database migrations being applied before the related UI can be used fully.
+
 ## Version 0.74
 
 Version 0.74 prepares PHP Gallery for a broader shared-hosting release by adding durable admin sessions, linked Google login, global feature switches, mobile WebDAV upload support, runtime diagnostics for RAW conversion, a context-aware media renamer, improved sitemap metadata, refreshed release documentation, and the new lightbox browsing modes.
