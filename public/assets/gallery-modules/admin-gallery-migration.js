@@ -31,6 +31,8 @@
  *   2026-05-27
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 const DEFAULT_RECONNECT_SECONDS = 30;
 const MIN_RECONNECT_SECONDS = 5;
 const MAX_RECONNECT_SECONDS = 300;
@@ -107,41 +109,41 @@ async function runGalleryMigration(form) {
     clearMigrationLog(form);
 
     try {
-        updateMigrationProgress(form, 0, 'Preparing migration...');
-        appendMigrationLog(form, `Connection refresh interval: ${reconnectSeconds} seconds.`);
+        updateMigrationProgress(form, 0, i18n('admin.gallery_migration.preparing', 'Preparing migration...'));
+        appendMigrationLog(form, i18n('admin.gallery_migration.connection_interval', 'Connection refresh interval: {seconds} seconds.', {seconds: reconnectSeconds}));
 
         const manifestAction = mode === 'source_push' ? 'push_manifest' : 'pull_manifest';
         const manifestResult = await postMigrationStep(form, manifestAction, {}, {timeoutSeconds: reconnectSeconds});
         const assets = Array.isArray(manifestResult.assets) ? manifestResult.assets : [];
         const jobId = String(manifestResult.job_id || '');
         if (jobId === '') {
-            throw new Error('The migration job id was not returned.');
+            throw new Error(i18n('admin.gallery_migration.job_id_missing', 'The migration job id was not returned.'));
         }
 
-        appendMigrationLog(form, manifestResult.message || 'Manifest accepted.');
-        appendMigrationLog(form, `Version check: ${versionMessage(manifestResult.compatibility)}.`);
-        appendMigrationLog(form, `Assets queued: ${assets.length}.`);
+        appendMigrationLog(form, manifestResult.message || i18n('admin.gallery_migration.manifest_accepted', 'Manifest accepted.'));
+        appendMigrationLog(form, i18n('admin.gallery_migration.version_check', 'Version check: {message}.', {message: versionMessage(manifestResult.compatibility)}));
+        appendMigrationLog(form, i18n('admin.gallery_migration.assets_queued', 'Assets queued: {count}.', {count: assets.length}));
 
         const receivedAssetKeys = await loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, reconnectSeconds);
         if (receivedAssetKeys.size > 0) {
-            appendMigrationLog(form, `Remote status reports ${receivedAssetKeys.size} already received asset(s). They will be skipped.`);
+            appendMigrationLog(form, i18n('admin.gallery_migration.remote_received', 'Remote status reports {count} already received asset(s). They will be skipped.', {count: receivedAssetKeys.size}));
         }
 
         for (let index = 0; index < assets.length; index += 1) {
             if (form.dataset.galleryMigrationCancelled === '1') {
-                throw new Error('Migration cancelled by user.');
+                throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
             }
 
             const asset = assets[index] || {};
             const assetKey = String(asset.asset_key || '');
             if (assetKey !== '' && receivedAssetKeys.has(assetKey)) {
-                updateMigrationProgress(form, Math.round(((index + 1) / Math.max(assets.length, 1)) * 95), `Skipping already received ${assetLabel(asset)} (${index + 1}/${assets.length})...`);
-                appendMigrationLog(form, `Skipped already received asset: ${assetLabel(asset)}.`);
+                updateMigrationProgress(form, Math.round(((index + 1) / Math.max(assets.length, 1)) * 95), i18n('admin.gallery_migration.skipping_asset', 'Skipping already received {asset} ({current}/{total})...', {asset: assetLabel(asset), current: index + 1, total: assets.length}));
+                appendMigrationLog(form, i18n('admin.gallery_migration.skipped_asset', 'Skipped already received asset: {asset}.', {asset: assetLabel(asset)}));
                 continue;
             }
 
             const action = mode === 'source_push' ? 'push_asset' : 'pull_asset';
-            updateMigrationProgress(form, Math.round((index / Math.max(assets.length, 1)) * 95), `Transferring ${assetLabel(asset)} (${index + 1}/${assets.length})...`);
+            updateMigrationProgress(form, Math.round((index / Math.max(assets.length, 1)) * 95), i18n('admin.gallery_migration.transferring_asset', 'Transferring {asset} ({current}/{total})...', {asset: assetLabel(asset), current: index + 1, total: assets.length}));
             const transferResult = await transferAssetWithReconnect(form, mode, action, asset, jobId, index, assets.length, reconnectSeconds);
             const confirmedKey = String(transferResult.asset_key || assetKey || '');
             if (confirmedKey !== '') {
@@ -150,17 +152,17 @@ async function runGalleryMigration(form) {
         }
 
         if (form.dataset.galleryMigrationCancelled === '1') {
-            throw new Error('Migration cancelled by user.');
+            throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
         }
         const completeAction = mode === 'source_push' ? 'push_complete' : 'pull_complete';
         const completeResult = await postMigrationStep(form, completeAction, {job_id: jobId}, {timeoutSeconds: reconnectSeconds});
-        updateMigrationProgress(form, 100, `Migration complete. ${completeResult.assets_received || assets.length}/${completeResult.total_assets || assets.length} assets received.`);
-        appendMigrationLog(form, 'Migration completed successfully.');
+        updateMigrationProgress(form, 100, i18n('admin.gallery_migration.complete', 'Migration complete. {received}/{total} assets received.', {received: completeResult.assets_received || assets.length, total: completeResult.total_assets || assets.length}));
+        appendMigrationLog(form, i18n('admin.gallery_migration.completed_successfully', 'Migration completed successfully.'));
         if (completeResult.edit_url) {
-            appendMigrationLog(form, `Target editor: ${completeResult.edit_url}`);
+            appendMigrationLog(form, i18n('admin.gallery_migration.target_editor', 'Target editor: {url}', {url: completeResult.edit_url}));
         }
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Migration failed.';
+        const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.failed', 'Migration failed.');
         updateMigrationProgress(form, 100, message);
         appendMigrationLog(form, message);
     } finally {
@@ -191,19 +193,19 @@ async function transferAssetWithReconnect(form, mode, action, asset, jobId, inde
     let lastError = null;
     for (let attempt = 1; attempt <= MAX_ASSET_RETRIES; attempt += 1) {
         if (form.dataset.galleryMigrationCancelled === '1') {
-            throw new Error('Migration cancelled by user.');
+            throw new Error(i18n('admin.gallery_migration.cancelled', 'Migration cancelled by user.'));
         }
 
         try {
             return await postMigrationStep(form, action, assetFields(asset, jobId), {timeoutSeconds: reconnectSeconds});
         } catch (error) {
             lastError = error;
-            const message = error instanceof Error ? error.message : 'Connection interrupted during asset transfer.';
-            appendMigrationLog(form, `${message} Checking target gallery status before retry.`);
+            const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.connection_interrupted', 'Connection interrupted during asset transfer.');
+            appendMigrationLog(form, i18n('admin.gallery_migration.checking_status', '{message} Checking target gallery status before retry.', {message}));
 
             const status = await confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSeconds);
             if (status.asset_received) {
-                appendMigrationLog(form, `Target gallery already has ${assetLabel(asset)}. Continuing without resending it.`);
+                appendMigrationLog(form, i18n('admin.gallery_migration.target_already_has', 'Target gallery already has {asset}. Continuing without resending it.', {asset: assetLabel(asset)}));
                 return status;
             }
 
@@ -211,12 +213,12 @@ async function transferAssetWithReconnect(form, mode, action, asset, jobId, inde
                 break;
             }
 
-            updateMigrationProgress(form, Math.round((index / Math.max(total, 1)) * 95), `Reconnecting for ${assetLabel(asset)} (${attempt + 1}/${MAX_ASSET_RETRIES})...`);
-            appendMigrationLog(form, `Target gallery does not report this asset yet. Reconnecting and retrying ${attempt + 1}/${MAX_ASSET_RETRIES}.`);
+            updateMigrationProgress(form, Math.round((index / Math.max(total, 1)) * 95), i18n('admin.gallery_migration.reconnecting_asset', 'Reconnecting for {asset} ({attempt}/{max})...', {asset: assetLabel(asset), attempt: attempt + 1, max: MAX_ASSET_RETRIES}));
+            appendMigrationLog(form, i18n('admin.gallery_migration.target_missing_retry', 'Target gallery does not report this asset yet. Reconnecting and retrying {attempt}/{max}.', {attempt: attempt + 1, max: MAX_ASSET_RETRIES}));
         }
     }
 
-    throw lastError instanceof Error ? lastError : new Error('Migration asset transfer failed after reconnect retries.');
+    throw lastError instanceof Error ? lastError : new Error(i18n('admin.gallery_migration.transfer_failed_retries', 'Migration asset transfer failed after reconnect retries.'));
 }
 
 /**
@@ -237,8 +239,8 @@ async function loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, r
         const status = await requestMigrationStatus(form, mode, jobId, null, reconnectSeconds);
         collectReceivedAssetKeys(status, keys);
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Could not read target status.';
-        appendMigrationLog(form, `Initial target status check failed: ${message}`);
+        const message = error instanceof Error ? error.message : i18n('admin.gallery_migration.target_status_missing', 'Could not read target status.');
+        appendMigrationLog(form, i18n('admin.gallery_migration.initial_status_failed', 'Initial target status check failed: {message}', {message}));
     }
 
     return keys;
@@ -277,7 +279,7 @@ async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSecond
         return lastStatus;
     }
 
-    const message = lastError instanceof Error ? lastError.message : 'Target status check failed.';
+    const message = lastError instanceof Error ? lastError.message : i18n('admin.gallery_migration.target_status_failed', 'Target status check failed.');
     throw new Error(message);
 }
 
@@ -310,7 +312,7 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
     const root = form.closest('[data-gallery-migration]');
     const endpoint = root instanceof HTMLElement ? root.dataset.galleryMigrationEndpoint || '' : '';
     if (endpoint === '') {
-        throw new Error('Migration endpoint is missing.');
+        throw new Error(i18n('admin.gallery_migration.endpoint_missing', 'Migration endpoint is missing.'));
     }
 
     const body = new FormData(form);
@@ -335,7 +337,7 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
         });
     } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
-            throw new GalleryMigrationTimeoutError(`Connection refresh reached ${timeoutSeconds} seconds during ${action}.`);
+            throw new GalleryMigrationTimeoutError(i18n('admin.gallery_migration.connection_refresh_reached', 'Connection refresh reached {seconds} seconds during {action}.', {seconds: timeoutSeconds, action}));
         }
         throw error;
     } finally {
@@ -344,7 +346,7 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
 
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload || payload.ok === false) {
-        throw new Error((payload && (payload.error || payload.message)) || `Migration request failed with HTTP ${response.status}.`);
+        throw new Error((payload && (payload.error || payload.message)) || i18n('admin.gallery_migration.request_failed_http', 'Migration request failed with HTTP {status}.', {status: response.status}));
     }
 
     return payload;
@@ -395,12 +397,12 @@ function collectReceivedAssetKeys(status, keys) {
  * @returns {string} Label.
  */
 function assetLabel(asset) {
-    const label = String(asset.label || asset.relative_path || asset.filename || asset.kind || 'asset');
+    const label = String(asset.label || asset.relative_path || asset.filename || asset.kind || i18n('admin.gallery_migration.asset_fallback', 'asset'));
     if (asset.kind === 'thumbnail') {
-        return `${label} thumbnail ${asset.size || ''} ${asset.format || ''}`.trim();
+        return i18n('admin.gallery_migration.thumbnail_suffix', '{label} thumbnail {size} {format}', {label, size: asset.size || '', format: asset.format || ''}).trim();
     }
     if (asset.scope === 'gallery') {
-        return `${label} gallery asset`;
+        return i18n('admin.gallery_migration.gallery_asset_suffix', '{label} gallery asset', {label});
     }
     return label;
 }
@@ -413,7 +415,7 @@ function assetLabel(asset) {
  */
 function versionMessage(compatibility) {
     if (!compatibility || typeof compatibility !== 'object') {
-        return 'not reported';
+        return i18n('admin.gallery_migration.version_not_reported', 'not reported');
     }
     return String(compatibility.message || `${compatibility.source_version || '?'} to ${compatibility.target_version || '?'}`);
 }

@@ -30,7 +30,7 @@
  *   2026-05-19
  */
 
-import { setGalleryRowHiddenReason } from './admin-core.js?v=20260512-modular-admin-v1';
+import { i18n, setGalleryRowHiddenReason } from './admin-core.js?v=20260512-modular-admin-v1';
 import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY } from './admin-table-drag-ghost.js?v=20260519-drag-ghost-v1';
 import { dispatchPublicPhotoMove, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoImageIdsFromItems, setPublicPhotoDropTargetsActive } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
 
@@ -69,7 +69,7 @@ export function setupAdminGalleryFilters() {
             }
         });
         if (summary) {
-            summary.textContent = `${displayed} / ${total} galleries displayed`;
+            summary.textContent = i18n('admin.gallery_list.displayed_summary', '{displayed} / {total} galleries displayed', {displayed, total});
         }
     }
 
@@ -378,9 +378,9 @@ export function setupAdminGalleryReordering() {
             .replace(/\s+/g, ' ')
             .trim();
         if (plainText) {
-            return `Gallery order was saved, but the server returned a diagnostic message instead of clean JSON: ${plainText.slice(0, 240)}`;
+            return i18n('admin.gallery_list.saved_with_diagnostic', 'Gallery order was saved, but the server returned a diagnostic message instead of clean JSON: {message}', {message: plainText.slice(0, 240)});
         }
-        return 'Gallery order was saved, but the server returned an empty response. Refresh the page to verify the current order.';
+        return i18n('admin.gallery_list.saved_empty_response', 'Gallery order was saved, but the server returned an empty response. Refresh the page to verify the current order.');
     }
 
     /**
@@ -745,7 +745,7 @@ export function setupAdminGalleryReordering() {
         const pathsById = new Map();
         const urlPathsById = new Map();
         galleryRows().forEach((row) => {
-            titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || 'Gallery');
+            titlesById.set(row.dataset.galleryId || '', row.dataset.galleryTitle || row.querySelector('.admin-gallery-title-link')?.textContent?.trim() || i18n('admin.gallery_list.gallery_fallback', 'Gallery'));
         });
         galleryRows().forEach((row) => {
             const id = row.dataset.galleryId || '';
@@ -771,7 +771,7 @@ export function setupAdminGalleryReordering() {
             refreshGalleryLink(row, nextUrlPath);
             if (parentLabel) {
                 if (parentId !== '0') {
-                    parentLabel.textContent = `Parent: ${titlesById.get(parentId) || 'Gallery'}`;
+                    parentLabel.textContent = i18n('admin.gallery_list.parent_label', 'Parent: {gallery}', {gallery: titlesById.get(parentId) || i18n('admin.gallery_list.gallery_fallback', 'Gallery')});
                     parentLabel.hidden = false;
                 } else {
                     parentLabel.textContent = '';
@@ -1375,7 +1375,7 @@ export function setupPublicGalleryPageReordering() {
             placeholder.className = `public-reorder-placeholder ${kind === 'gallery' ? 'gallery-card' : 'image-card'}`;
             placeholder.setAttribute('aria-hidden', 'true');
             placeholder.style.minHeight = `${Math.max(96, box.height)}px`;
-            placeholder.innerHTML = `<span>${kind === 'gallery' ? 'Drop gallery here' : (draggedItems.length > 1 ? `Drop ${draggedItems.length} photos here` : 'Drop photo here')}</span>`;
+            placeholder.innerHTML = `<span>${kind === 'gallery' ? i18n('admin.gallery_list.drop_gallery_here', 'Drop gallery here') : (draggedItems.length > 1 ? i18n('admin.gallery_list.drop_photos_here', 'Drop {count} photos here', {count: draggedItems.length}) : i18n('admin.gallery_list.drop_photo_here', 'Drop photo here'))}</span>`;
             return placeholder;
         }
 
@@ -1614,7 +1614,7 @@ export function setupPublicGalleryPageReordering() {
                 try {
                     result = JSON.parse(text);
                 } catch (parseError) {
-                    throw new Error('The server returned HTML or text instead of JSON. Check the admin logs or PHP error log.');
+                    throw new Error(i18n('admin.gallery_list.json_html_text_response', 'The server returned HTML or text instead of JSON. Check the admin logs or PHP error log.'));
                 }
                 if (!response.ok || !result.ok) {
                     throw new Error(result.message || 'Visible page order could not be saved.');

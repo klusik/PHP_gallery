@@ -87,7 +87,7 @@ function cms_picture_manager_download_selection(): void
         ], ['category' => 'other', 'severity' => 'error']);
         http_response_code(422);
         header('Content-Type: text/plain; charset=utf-8');
-        echo 'Selected-photo download failed: ' . $exception->getMessage();
+        echo t('download.selected_failed', 'Selected-photo download failed: {error}', ['error' => $exception->getMessage()]);
     }
 }
 

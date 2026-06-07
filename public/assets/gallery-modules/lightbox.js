@@ -1173,7 +1173,7 @@ export function setupGalleryLightbox() {
     function loadFreshDecodedLightboxImage(src) {
         return new Promise((resolve, reject) => {
             if (!src) {
-                reject(new Error('Missing lightbox image source.'));
+                reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
                 return;
             }
             galleryDevModeState.loadStarted += galleryDevModeEnabled ? 1 : 0;
@@ -1191,7 +1191,7 @@ export function setupGalleryLightbox() {
             loadedImage.onerror = () => {
                 galleryDevModeState.decodeErrors += galleryDevModeEnabled ? 1 : 0;
                 devMarkSource(src, 'error', 'load');
-                reject(new Error('Lightbox image load failed.'));
+                reject(new Error(i18n('lightbox.image_load_failed', 'Lightbox image load failed.')));
             };
             loadedImage.src = src;
         });
@@ -1264,7 +1264,7 @@ export function setupGalleryLightbox() {
      */
     function loadDecodedLightboxImage(src) {
         if (!src) {
-            return Promise.reject(new Error('Missing lightbox image source.'));
+            return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
         }
         if (decodedLightboxImages.has(src)) {
             galleryDevModeState.cacheHits += galleryDevModeEnabled ? 1 : 0;
@@ -1999,11 +1999,11 @@ export function setupGalleryLightbox() {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
                 closeLightboxMapSplit();
             } else if (mapPoint) {
-                openLightboxPhotoMapSplit(mapPoint, card.dataset.title || title.textContent || 'Map');
+                openLightboxPhotoMapSplit(mapPoint, card.dataset.title || title.textContent || i18n('lightbox.map', 'Map'));
             } else if (hasLightboxGalleryMapPayload()) {
-                openLightboxGalleryMapSplit(card.dataset.title || title.textContent || currentLightboxGalleryMapTitle('Map'));
+                openLightboxGalleryMapSplit(card.dataset.title || title.textContent || currentLightboxGalleryMapTitle(i18n('lightbox.map', 'Map')));
             } else {
-                openLightboxMapUnavailable(card.dataset.title || title.textContent || 'Map');
+                openLightboxMapUnavailable(card.dataset.title || title.textContent || i18n('lightbox.map', 'Map'));
             }
         }
         preloadAdjacentImages(normalizedIndex);
@@ -3061,7 +3061,7 @@ export function setupGalleryLightbox() {
             // payload stores the marker or map payload read from a data attribute.
             const payload = JSON.parse(json);
             const mapPayload = await photoMapPayloadWithGalleryRoute(normalizeMapPayload(payload));
-            openMapOverlay(mapPayload.title || 'Photo location', mapPayload.points, mapPayload);
+            openMapOverlay(mapPayload.title || i18n('lightbox.photo_location', 'Photo location'), mapPayload.points, mapPayload);
         } catch {
             // Invalid rendered JSON should not break the gallery UI.
         }
@@ -3094,7 +3094,7 @@ export function setupGalleryLightbox() {
      * @param {string} fallback Title used when no rendered title exists.
      * @returns {string} Human-readable map title.
      */
-    function currentLightboxGalleryMapTitle(fallback = 'Gallery map') {
+    function currentLightboxGalleryMapTitle(fallback = i18n('lightbox.gallery_map', 'Gallery map')) {
         const configTitle = String(document.querySelector('[data-lightbox-config]')?.dataset.lightboxGalleryMapTitle || '').trim();
         if (configTitle !== '') {
             return configTitle;
@@ -3141,7 +3141,7 @@ export function setupGalleryLightbox() {
             const mapPayload = normalizeMapPayload(payload);
             mapPayload.endpointUrl = endpointUrl;
             if (!mapPayload.title) {
-                mapPayload.title = title || currentLightboxGalleryMapTitle('Gallery map');
+                mapPayload.title = title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map'));
             }
             return mapPayload;
         }).catch(() => null);
@@ -3151,11 +3151,11 @@ export function setupGalleryLightbox() {
 
     // Function `openGalleryMap` executes this focused behavior.
     async function openGalleryMap(url = '', title = '') {
-        const payload = await fetchGalleryMapPayload(url, title || currentLightboxGalleryMapTitle('Gallery map'));
+        const payload = await fetchGalleryMapPayload(url, title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
         if (!payload || !payload.points.length) {
             return;
         }
-        openMapOverlay(payload.title || title || currentLightboxGalleryMapTitle('Gallery map'), payload.points, payload);
+        openMapOverlay(payload.title || title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')), payload.points, payload);
     }
 
     // Function `ensureLeaflet` executes this focused behavior.
@@ -3442,7 +3442,7 @@ export function setupGalleryLightbox() {
             options: {position: 'topleft'},
             onAdd() {
                 const container = L.DomUtil.create('div', 'leaflet-bar gallery-map-viewport-control');
-                const resetButton = createMapControlButton('Reset', 'Reset map zoom', () => {
+                const resetButton = createMapControlButton(i18n('lightbox.reset', 'Reset'), i18n('lightbox.reset_map_zoom', 'Reset map zoom'), () => {
                     if (!isUsableLeafletMap(map, isCurrent) || bounds.length === 0) {
                         return;
                     }
@@ -3451,10 +3451,10 @@ export function setupGalleryLightbox() {
                     map.invalidateSize(false);
                     setMapViewportSilently(map, () => applyMapViewport(map, bounds, options, viewKey, currentLocationPoint));
                 });
-                const zoomInButton = createMapControlButton('+', 'Zoom in', () => map.zoomIn());
-                const zoomOutButton = createMapControlButton('-', 'Zoom out', () => map.zoomOut());
+                const zoomInButton = createMapControlButton('+', i18n('lightbox.zoom_in', 'Zoom in'), () => map.zoomIn());
+                const zoomOutButton = createMapControlButton('-', i18n('lightbox.zoom_out', 'Zoom out'), () => map.zoomOut());
                 const followControl = createMapCheckboxControl(
-                    'Keep current centered',
+                    i18n('lightbox.keep_current_centered', 'Keep current centered'),
                     galleryLeafletFollowCurrentLocationState.enabled,
                     (checked) => {
                         galleryLeafletFollowCurrentLocationState.enabled = checked;
@@ -3533,7 +3533,7 @@ export function setupGalleryLightbox() {
             const existingScript = document.querySelector('script[data-gallery-leaflet-js]');
             if (existingScript) {
                 existingScript.addEventListener('load', () => resolve(), {once: true});
-                existingScript.addEventListener('error', () => reject(new Error('Leaflet failed to load.')), {once: true});
+                existingScript.addEventListener('error', () => reject(new Error(i18n('lightbox.leaflet_failed', 'Leaflet failed to load.'))), {once: true});
                 return;
             }
 
@@ -3544,7 +3544,7 @@ export function setupGalleryLightbox() {
             script.crossOrigin = '';
             script.dataset.galleryLeafletJs = 'true';
             script.onload = () => resolve();
-            script.onerror = () => reject(new Error('Leaflet failed to load.'));
+            script.onerror = () => reject(new Error(i18n('lightbox.leaflet_failed', 'Leaflet failed to load.')));
             document.head.append(script);
         });
     }
@@ -3570,7 +3570,7 @@ export function setupGalleryLightbox() {
             overlay = document.createElement('div');
             overlay.className = 'map-overlay';
             overlay.dataset.mapOverlay = 'true';
-            overlay.innerHTML = '<div class="map-dialog"><button type="button" class="map-close" data-map-close>Close</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.</p></div>';
+            overlay.innerHTML = `<div class="map-dialog"><button type="button" class="map-close" data-map-close>${escapeHtml(i18n('lightbox.close', 'Close'))}</button><h2 data-map-title></h2><div class="map-canvas" data-map-canvas></div><p class="muted map-attribution-note">${escapeHtml(i18n('lightbox.map_attribution_note', 'Map tiles by OpenStreetMap contributors. Heavy production traffic should use a dedicated tile provider.'))}</p></div>`;
             document.body.append(overlay);
         }
         bindMapOverlayClose(overlay);
@@ -3824,7 +3824,7 @@ export function setupGalleryLightbox() {
         if (!photoPayload?.points?.length || !hasLightboxGalleryMapPayload()) {
             return photoPayload;
         }
-        const galleryPayload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
+        const galleryPayload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
         if (!galleryPayload || !shouldRenderPathForPayload(galleryPayload, galleryPayload.points || [])) {
             return photoPayload;
         }
@@ -3963,7 +3963,7 @@ export function setupGalleryLightbox() {
         lightboxMapSplit.setAttribute('aria-disabled', 'true');
         overlay.classList.add('is-map-split', 'is-map-split-disabled');
         if (lightboxMapSplitTitle) {
-            lightboxMapSplitTitle.textContent = title || 'Map';
+            lightboxMapSplitTitle.textContent = title || i18n('lightbox.map', 'Map');
         }
         lightboxMapSplitCanvas.innerHTML = `<div class="lightbox-map-unavailable" role="status"><strong>${escapeHtml(i18n('lightbox.no_gps_title', 'No GPS EXIF data'))}</strong><span>${escapeHtml(i18n('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'))}</span></div>`;
         requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
@@ -3986,11 +3986,11 @@ export function setupGalleryLightbox() {
         const mapPoint = (json || lightboxMapPointForCard(card) || lightboxMapButton?.dataset.mapPoint || '').trim();
         if (isLightboxFullscreen()) {
             if (mapPoint) {
-                await toggleLightboxPhotoMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+                await toggleLightboxPhotoMapSplit(mapPoint, card?.dataset.title || overlay.dataset.currentTitle || i18n('lightbox.map', 'Map'));
             } else if (hasLightboxGalleryMapPayload()) {
-                await toggleLightboxGalleryMapSplit(card?.dataset.title || overlay.dataset.currentTitle || currentLightboxGalleryMapTitle('Map'));
+                await toggleLightboxGalleryMapSplit(card?.dataset.title || overlay.dataset.currentTitle || currentLightboxGalleryMapTitle(i18n('lightbox.map', 'Map')));
             } else {
-                toggleLightboxMapSplit('', card?.dataset.title || overlay.dataset.currentTitle || 'Map');
+                toggleLightboxMapSplit('', card?.dataset.title || overlay.dataset.currentTitle || i18n('lightbox.map', 'Map'));
             }
             showLightboxHud();
             return;
@@ -4006,7 +4006,7 @@ export function setupGalleryLightbox() {
             return;
         }
         if (hasLightboxGalleryMapPayload()) {
-            await openGalleryMap(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle('Gallery map'));
+            await openGalleryMap(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
         }
     }
 
@@ -4089,12 +4089,12 @@ export function setupGalleryLightbox() {
      * @returns {Promise<void>}
      */
     async function openLightboxGalleryMapSplit(title) {
-        const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || 'Gallery map'));
+        const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || i18n('lightbox.gallery_map', 'Gallery map')));
         if (!payload || !payload.points.length) {
-            openLightboxMapUnavailable(title || 'Map');
+            openLightboxMapUnavailable(title || i18n('lightbox.map', 'Map'));
             return;
         }
-        await openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle('Gallery map'));
+        await openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
     }
 
     /**
@@ -4118,7 +4118,7 @@ export function setupGalleryLightbox() {
         lightboxMapSplit.hidden = false;
         lightboxMapSplit.classList.remove('is-map-unavailable');
         lightboxMapSplit.removeAttribute('aria-disabled');
-        lightboxMapSplitTitle.textContent = title || 'Map';
+        lightboxMapSplitTitle.textContent = title || i18n('lightbox.map', 'Map');
         overlay.classList.add('is-map-split');
         overlay.classList.remove('is-map-split-disabled');
         requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
@@ -4269,13 +4269,13 @@ export function setupGalleryLightbox() {
     // Function `mapPopupHtml` executes this focused behavior.
     function mapPopupHtml(point) {
         // Variable `title` stores this steps working value.
-        const title = escapeHtml(point.title || point.name || 'Map point');
+        const title = escapeHtml(point.title || point.name || i18n('lightbox.map_point', 'Map point'));
         // Variable `description` stores this steps working value.
         const description = point.description ? `<p>${escapeHtml(point.description)}</p>` : '';
         // Variable `thumb` stores this steps working value.
         const thumb = point.thumb ? `<img decoding="async" loading="lazy" src="${escapeAttribute(point.thumb)}" alt="">` : '';
         // Variable `image` stores this steps working value.
-        const image = point.image ? `<p><a href="${escapeAttribute(point.image)}">Open photo</a></p>` : '';
+        const image = point.image ? `<p><a href="${escapeAttribute(point.image)}">${escapeHtml(i18n('lightbox.open_photo', 'Open photo'))}</a></p>` : '';
         return `<div class="map-popup">${thumb}<h3>${title}</h3>${description}${image}</div>`;
     }
 

@@ -32,6 +32,8 @@
  *   2026-05-10
  */
 
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
+
 const lightboxModuleUrl = './lightbox.js?v=20260601-3d-carousel-v2';
 
 const deferredLightboxState = {
@@ -139,7 +141,7 @@ function showDeferredLightboxLoader(target) {
         loaderFill.style.setProperty('--lightbox-initial-loader-progress', `${Math.round(progress)}%`);
     }
     if (loaderCount instanceof HTMLElement) {
-        const template = loader.dataset.lightboxLoadingCountTemplate || 'Preparing photo {current} of {total}';
+        const template = loader.dataset.lightboxLoadingCountTemplate || i18n('lightbox.preparing_photo', 'Preparing photo {current} of {total}');
         loaderCount.textContent = total > 0
             ? template.split('{current}').join(String(index + 1)).split('{total}').join(String(total))
             : '';

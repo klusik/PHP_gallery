@@ -35,6 +35,7 @@
  */
 
 import { PUBLIC_PHOTO_MOVE_EVENT, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoDropTargets, publicPhotoImageIdsFromDataTransfer, setPublicPhotoDropTargetsActive, writePublicPhotoImageIdsToDataTransfer } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
+import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 // activePictureManager stores the currently bound toolbar instance so fragment
 // refreshes can safely replace the toolbar and bind a fresh one.
@@ -249,7 +250,7 @@ export function setupPictureManager() {
         card.draggable = true;
         if (button instanceof HTMLButtonElement) {
             button.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
-            button.title = isSelected ? 'Deselect photo' : 'Select photo';
+            button.title = isSelected ? i18n('picture_manager.deselect_photo', 'Deselect photo') : i18n('picture_manager.select_photo', 'Select photo');
         }
     }
 
@@ -262,7 +263,7 @@ export function setupPictureManager() {
         cards.forEach(syncCardState);
         const count = selectedIds.size;
         if (countLabel instanceof HTMLElement) {
-            countLabel.textContent = count === 0 ? 'No photos selected.' : `${count} photo${count === 1 ? '' : 's'} selected.`;
+            countLabel.textContent = count === 0 ? i18n('picture_manager.no_photos_selected', 'No photos selected.') : (count === 1 ? i18n('picture_manager.one_photo_selected', '1 photo selected.') : i18n('picture_manager.many_photos_selected', '{count} photos selected.', {count}));
         }
         if (clearButton instanceof HTMLButtonElement) {
             clearButton.disabled = count === 0;
@@ -376,7 +377,7 @@ export function setupPictureManager() {
     async function fetchShareFile(card, index) {
         const shareUrl = card.dataset.pictureManagerShareUrl || card.dataset.previewSrc || card.dataset.fullSrc || '';
         if (shareUrl === '') {
-            throw new Error('A selected photo does not have a shareable media URL.');
+            throw new Error(i18n('picture_manager.share_url_missing', 'A selected photo does not have a shareable media URL.'));
         }
         const response = await fetch(shareUrl, {
             method: 'GET',
@@ -690,7 +691,7 @@ export function setupPictureManager() {
         });
         const contentType = response.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
-            throw new Error('The server returned HTML instead of JSON. Check the admin logs or PHP error log.');
+            throw new Error(i18n('picture_manager.html_instead_json', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'));
         }
         const payload = await response.json();
         if (!response.ok || payload.ok === false) {

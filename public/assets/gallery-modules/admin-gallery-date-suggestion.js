@@ -48,8 +48,8 @@ async function readJsonResponse(response) {
         return JSON.parse(text);
     } catch (error) {
         throw new Error(text.trim().startsWith('<')
-            ? 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'
-            : 'The server returned an invalid JSON response.');
+            ? i18n('admin.gallery_dates.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.')
+            : i18n('admin.gallery_dates.js_invalid_json', 'The server returned an invalid JSON response.'));
     }
 }
 
@@ -226,7 +226,7 @@ async function applyGalleryDateSuggestion(form, button) {
         });
         const result = await readJsonResponse(response);
         if (!response.ok || !result.ok) {
-            throw new Error(result.message || result.error || 'EXIF date suggestion could not be applied.');
+            throw new Error(result.message || result.error || i18n('admin.gallery_dates.js_apply_failed', 'EXIF date suggestion could not be applied.'));
         }
 
         if (form instanceof HTMLFormElement) {
@@ -234,7 +234,7 @@ async function applyGalleryDateSuggestion(form, button) {
             updateDateInput(form, 'gallery_date_end', result.gallery_date_end || '');
         }
         replaceSuggestionPanel(button, result.suggestion_html || '');
-        showAdminNotice(result.message || 'EXIF date suggestion applied.');
+        showAdminNotice(result.message || i18n('admin.gallery_dates.js_applied', 'EXIF date suggestion applied.'));
     } catch (error) {
         showAdminNotice(error instanceof Error ? error.message : String(error));
         button.disabled = false;

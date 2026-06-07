@@ -195,7 +195,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
 
 function view_cms_browser_i18n_strings(): array
 {
-    return [
+    $activeStrings = translation_load_language(translation_active_language());
+    $defaultStrings = translation_load_language(translation_default_language());
+    $strings = array_merge($defaultStrings, $activeStrings);
+
+    return array_merge($strings, [
         'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
         'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
         'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
@@ -255,7 +259,7 @@ function view_cms_browser_i18n_strings(): array
         'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
         'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
         'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
-    ];
+    ]);
 }
 
 function view_render_browser_i18n_script(): void

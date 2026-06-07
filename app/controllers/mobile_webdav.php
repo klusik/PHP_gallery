@@ -148,7 +148,7 @@ function cms_mobile_webdav(): void
     if (!$token) {
         header('WWW-Authenticate: Basic realm="PHP Gallery Mobile Upload"');
         http_response_code(401);
-        echo 'Authentication required.';
+        echo t('mobile_webdav.auth_required', 'Authentication required.');
         return;
     }
 
@@ -169,7 +169,7 @@ function cms_mobile_webdav(): void
     $tmpPath = tempnam(sys_get_temp_dir(), 'pg-webdav-');
     if (!is_string($tmpPath)) {
         http_response_code(500);
-        echo 'Could not create temporary upload file.';
+        echo t('mobile_webdav.error_temp_file', 'Could not create temporary upload file.');
         return;
     }
     $input = fopen('php://input', 'rb');
@@ -177,7 +177,7 @@ function cms_mobile_webdav(): void
     if (!is_resource($input) || !is_resource($output)) {
         @unlink($tmpPath);
         http_response_code(500);
-        echo 'Could not read upload body.';
+        echo t('mobile_webdav.error_read_body', 'Could not read upload body.');
         return;
     }
     stream_copy_to_stream($input, $output);
