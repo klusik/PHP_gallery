@@ -37,6 +37,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/views/seo.php';
 require_once __DIR__ . '/views/admin_chrome.php';
+require_once __DIR__ . '/views/admin_dashboard_sections.php';
 require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/navigation_data.php';
 require_once __DIR__ . '/views/admin_gallery_forms.php';
