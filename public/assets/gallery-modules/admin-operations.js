@@ -27,13 +27,13 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-28
+ *   2026-06-08
  */
 
-export { setupAdminTabs } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
-export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260604-admin-subtabs-v1';
+export { setupAdminTabs } from './admin-tabs.js?v=20260608-admin-cinematic-v1';
+export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260512-modular-admin-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260528-image-tag-pagination-v1';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260608-admin-cinematic-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260608-thumbnail-compatibility-v1';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20260521-navdata-feedback-v2';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';

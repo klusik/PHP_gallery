@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-12
+ *   2026-06-08
  */
 
 const legacyAdminTabHashes = new Map([
@@ -45,6 +45,26 @@ function normalizedAdminTabHash(hash) {
         return '';
     }
     return legacyAdminTabHashes.get(hash) || hash;
+}
+
+
+function setAdminPanelVisibility(panel, isVisible) {
+    panel.classList.remove('is-admin-panel-entering');
+    if (!isVisible) {
+        panel.hidden = true;
+        panel.classList.remove('is-active');
+        return;
+    }
+
+    const wasHidden = panel.hidden;
+    panel.hidden = false;
+    panel.classList.add('is-active');
+    if (wasHidden && typeof window.requestAnimationFrame === 'function') {
+        panel.classList.add('is-admin-panel-entering');
+        window.requestAnimationFrame(() => {
+            panel.classList.remove('is-admin-panel-entering');
+        });
+    }
 }
 
 
@@ -156,8 +176,7 @@ export function setupAdminTabsInRoot(root) {
             panels.forEach((panel) => {
                 // isSelected stores whether this panel should be visible.
                 const isSelected = panel.id === targetPanel.id;
-                panel.hidden = !isSelected;
-                panel.classList.toggle('is-active', isSelected);
+                setAdminPanelVisibility(panel, isSelected);
             });
             if (options.focusTab) {
                 tabs.find((tab) => tab.dataset.adminTabTarget === targetPanel.id)?.focus();

@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-07
+ *   2026-06-08
  */
 
 declare(strict_types=1);
@@ -83,7 +83,11 @@ function view_render_admin_dashboard_overview_panel(array $model): void
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
 
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.overview_kicker', 'Overview')) . '</p><h2>' . e(t('admin.dashboard.overview_title', 'Admin at a glance')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.overview_description', 'Status and primary entry points only. Detailed tools are grouped under Maintenance.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.overview_kicker', 'Overview'),
+        'title' => t('admin.dashboard.overview_title', 'Admin at a glance'),
+        'description' => t('admin.dashboard.overview_description', 'Status and primary entry points only. Detailed tools are grouped under Maintenance.'),
+    ]);
     view_render_admin_dashboard_metric_grid($model);
 
     if ($migrationPending) {
@@ -93,12 +97,20 @@ function view_render_admin_dashboard_overview_panel(array $model): void
         view_render_admin_thumbnail_maintenance_notice($thumbnailSummary);
     }
 
-    echo '<section class="admin-quick-panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.primary_work_kicker', 'Start')) . '</p><h2>' . e(t('admin.dashboard.primary_work_title', 'Primary work')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.primary_work_hint', 'Use these shortcuts for normal gallery work. Settings and repair tools stay in Maintenance.')) . '</p></div><div class="admin-action-grid">';
+    echo '<section class="admin-quick-panel">';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.primary_work_kicker', 'Start'),
+        'title' => t('admin.dashboard.primary_work_title', 'Primary work'),
+        'description' => t('admin.dashboard.primary_work_hint', 'Use these shortcuts for normal gallery work. Settings and repair tools stay in Maintenance.'),
+        'class' => 'admin-panel-heading',
+    ]);
+    echo '<div class="admin-action-grid">';
     view_render_admin_dashboard_manage_galleries_card();
     view_render_admin_dashboard_upload_card();
     view_render_admin_dashboard_discover_card();
     view_render_admin_dashboard_open_maintenance_card();
     echo '</div></section>';
+    view_render_admin_design_spec_panel();
 }
 
 /**
@@ -118,16 +130,36 @@ function view_render_admin_dashboard_metric_grid(array $model): void
     $originalStorageLabel = (string) ($model['original_storage_label'] ?? '');
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
 
-    echo '<section class="admin-metric-grid" aria-label="' . e(t('admin.dashboard.admin_summary', 'Admin summary')) . '">';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a></small></article>';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_top_level_images', 'Top-level images')) . '</span><strong>' . (int) $totalImages . '</strong><small>' . e(t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists')) . '</small></article>';
-    if (!empty($thumbnailSummary['deferred'])) {
-        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . e(t('admin.dashboard.metric_not_checked', 'Not checked')) . '</strong><small>' . e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')) . '</small></article>';
-    } else {
-        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . e(t('admin.dashboard.metric_images_sampled', 'images sampled')) . '</small></article>';
-    }
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_system_state', 'System state')) . '</span><strong>' . ($migrationPending ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready')) . '</strong><small>' . ($migrationPending ? t('admin.dashboard.state_migration_pending', 'Database migration pending') : t('admin.dashboard.state_no_migration_warning', 'No migration warning')) . '</small></article>';
-    echo '</section>';
+    $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
+    $thumbnailHelp = !empty($thumbnailSummary['deferred'])
+        ? t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')
+        : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . t('admin.dashboard.metric_images_sampled', 'images sampled');
+    view_render_admin_metric_grid([
+        [
+            'label' => t('admin.dashboard.metric_galleries', 'Galleries'),
+            'value' => (string) $totalGalleries,
+            'help_html' => e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>',
+            'state' => $privateGalleries > 0 || $unpublishedGalleries > 0 ? 'care' : 'ready',
+        ],
+        [
+            'label' => t('admin.dashboard.metric_top_level_images', 'Top-level images'),
+            'value' => (string) $totalImages,
+            'help' => t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists'),
+            'state' => 'neutral',
+        ],
+        [
+            'label' => t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps'),
+            'value' => $thumbnailValue,
+            'help' => $thumbnailHelp,
+            'state' => $missingThumbnailVariants > 0 ? 'care' : 'ready',
+        ],
+        [
+            'label' => t('admin.dashboard.metric_system_state', 'System state'),
+            'value' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready'),
+            'help' => $migrationPending ? t('admin.dashboard.state_migration_pending', 'Database migration pending') : t('admin.dashboard.state_no_migration_warning', 'No migration warning'),
+            'state' => $migrationPending ? 'care' : 'ready',
+        ],
+    ], 'admin-metric-grid', t('admin.dashboard.admin_summary', 'Admin summary'));
 }
 
 /**
@@ -180,7 +212,11 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         ['id' => 'admin-maintenance-system', 'label' => t('admin.dashboard.maintenance_system_health_tab', 'System health'), 'badge' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : null],
     ];
 
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.maintenance_kicker', 'Maintenance')) . '</p><h2>' . e(t('admin.dashboard.system_tools', 'System tools')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.system_tools_hint', 'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.maintenance_kicker', 'Maintenance'),
+        'title' => t('admin.dashboard.system_tools', 'System tools'),
+        'description' => t('admin.dashboard.system_tools_hint', 'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.'),
+    ]);
     echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
     view_render_admin_subtabs($maintenanceSubtabs, 'admin-maintenance-content', t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
 
@@ -210,7 +246,12 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
  */
 function view_render_admin_dashboard_content_display_tools(array $model): void
 {
-    echo '<div class="admin-dashboard-subtab-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.content_display_kicker', 'Content policy')) . '</p><h3>' . e(t('admin.dashboard.content_display_title', 'Display, dates, and public URLs')) . '</h3></div><p class="muted">' . e(t('admin.dashboard.content_display_hint', 'Controls that change what visitors see or how galleries resolve public metadata.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.content_display_kicker', 'Content policy'),
+        'title' => t('admin.dashboard.content_display_title', 'Display, dates, and public URLs'),
+        'description' => t('admin.dashboard.content_display_hint', 'Controls that change what visitors see or how galleries resolve public metadata.'),
+        'class' => 'admin-dashboard-subtab-heading',
+    ]);
     echo '<div class="admin-maintenance-grid">';
     if (view_admin_dashboard_feature_enabled('public_search')) {
         view_render_admin_dashboard_public_search_card('admin-maintenance-card');
@@ -234,7 +275,12 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
  */
 function view_render_admin_dashboard_media_tools(array $model): void
 {
-    echo '<div class="admin-dashboard-subtab-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.media_cache_kicker', 'Media')) . '</p><h3>' . e(t('admin.dashboard.media_cache_title', 'Generated files and archives')) . '</h3></div><p class="muted">' . e(t('admin.dashboard.media_cache_hint', 'Thumbnail cache, archive downloads, and physical filename maintenance.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.media_cache_kicker', 'Media'),
+        'title' => t('admin.dashboard.media_cache_title', 'Generated files and archives'),
+        'description' => t('admin.dashboard.media_cache_hint', 'Thumbnail cache, archive downloads, and physical filename maintenance.'),
+        'class' => 'admin-dashboard-subtab-heading',
+    ]);
     echo '<div class="admin-maintenance-grid">';
     view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
     if (view_admin_dashboard_feature_enabled('downloads')) {
@@ -253,7 +299,12 @@ function view_render_admin_dashboard_media_tools(array $model): void
  */
 function view_render_admin_dashboard_navigation_tools(array $model): void
 {
-    echo '<div class="admin-dashboard-subtab-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.navigation_kicker', 'Maps')) . '</p><h3>' . e(t('admin.dashboard.navigation_title', 'GPS maps and navdata')) . '</h3></div><p class="muted">' . e(t('admin.dashboard.navigation_hint', 'Flight-map lookup data lives here. Per-gallery EXIF map defaults are grouped under Content and display.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.navigation_kicker', 'Maps'),
+        'title' => t('admin.dashboard.navigation_title', 'GPS maps and navdata'),
+        'description' => t('admin.dashboard.navigation_hint', 'Flight-map lookup data lives here. Per-gallery EXIF map defaults are grouped under Content and display.'),
+        'class' => 'admin-dashboard-subtab-heading',
+    ]);
     echo '<div class="admin-maintenance-grid">';
     if (view_admin_dashboard_feature_enabled('navigation_data')) {
         view_render_admin_navdata_maintenance_card(view_admin_dashboard_bool($model, 'flight_navdata_ready'), view_admin_dashboard_array($model, 'flight_navdata_status'));
@@ -275,7 +326,12 @@ function view_render_admin_dashboard_system_tools(array $model): void
     $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
 
-    echo '<div class="admin-dashboard-subtab-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.system_health_kicker', 'System')) . '</p><h3>' . e(t('admin.dashboard.system_health_title', 'Logs, updates, and diagnostics')) . '</h3></div><p class="muted">' . e(t('admin.dashboard.system_health_hint', 'Operational status, deployment checks, feature visibility, and developer diagnostics.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.system_health_kicker', 'System'),
+        'title' => t('admin.dashboard.system_health_title', 'Logs, updates, and diagnostics'),
+        'description' => t('admin.dashboard.system_health_hint', 'Operational status, deployment checks, feature visibility, and developer diagnostics.'),
+        'class' => 'admin-dashboard-subtab-heading',
+    ]);
     echo '<div class="admin-maintenance-grid">';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
     if (view_admin_dashboard_feature_enabled('telemetry')) {

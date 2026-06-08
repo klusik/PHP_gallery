@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-04
+ *   2026-06-08
  */
 
 /**
@@ -41,6 +41,25 @@
  */
 function adminSubtabScope(tabsRoot) {
     return tabsRoot.closest('[data-admin-subtab-scope]') || tabsRoot.parentElement || document;
+}
+
+function setAdminSubtabPanelVisibility(panel, isVisible) {
+    panel.classList.remove('is-admin-panel-entering');
+    if (!isVisible) {
+        panel.hidden = true;
+        panel.classList.remove('is-active');
+        return;
+    }
+
+    const wasHidden = panel.hidden;
+    panel.hidden = false;
+    panel.classList.add('is-active');
+    if (wasHidden && typeof window.requestAnimationFrame === 'function') {
+        panel.classList.add('is-admin-panel-entering');
+        window.requestAnimationFrame(() => {
+            panel.classList.remove('is-admin-panel-entering');
+        });
+    }
 }
 
 /**
@@ -96,8 +115,7 @@ function setupAdminNestedTabGroup(tabsRoot) {
         panels.forEach((panel) => {
             // isSelected stores whether this panel should be visible.
             const isSelected = panel.id === targetPanel.id;
-            panel.hidden = !isSelected;
-            panel.classList.toggle('is-active', isSelected);
+            setAdminSubtabPanelVisibility(panel, isSelected);
         });
 
         if (options.focusTab) {

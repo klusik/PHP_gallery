@@ -56,6 +56,7 @@ function view_render_admin_dashboard(array $model): void
     $updateButtonClass = (string) ($model['update_button_class'] ?? 'button secondary');
     $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
     $totalGalleries = (int) ($model['total_galleries'] ?? count($galleries));
+    $totalImages = (int) ($model['total_images'] ?? 0);
     $missingThumbnailVariants = (int) ($model['missing_thumbnail_variants'] ?? 0);
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
     $maintenanceBadge = $migrationPending ? t('admin.dashboard.badge_action', 'Action') : ($missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null);
@@ -67,14 +68,24 @@ function view_render_admin_dashboard(array $model): void
     ];
 
     admin_render_profile_span('render_header', static function (): void { render_header(t('admin.dashboard.page_title', 'Admin dashboard')); });
-    echo '<section class="hero admin-dashboard-hero"><div><p class="admin-kicker">' . e(t('admin.dashboard.kicker', 'Admin')) . '</p><h1>' . e(t('admin.dashboard.title', 'Dashboard')) . '</h1><p class="muted">' . e(t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.')) . '</p></div>';
-    echo '<div class="admin-hero-actions">';
-    echo '<a class="button" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_gallery', 'Create gallery')) . '</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a>';
+    $heroActions = [
+        ['label' => t('admin.dashboard.create_gallery', 'Create gallery'), 'url' => url_for('admin_new_gallery'), 'class' => 'button'],
+        ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
+    ];
     if ($updatePending) {
-        echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        $heroActions[] = ['label' => $updateLabel, 'url' => url_for('admin_update'), 'class' => $updateButtonClass];
     }
-    echo '</div></section>';
+    view_render_admin_hero([
+        'kicker' => t('admin.dashboard.kicker', 'Admin'),
+        'title' => t('admin.dashboard.title', 'Dashboard'),
+        'description' => t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.'),
+        'actions' => $heroActions,
+        'actions_aria_label' => t('admin.dashboard.hero_actions_label', 'Dashboard actions'),
+        'meta' => [
+            ['value' => (string) $totalGalleries, 'label' => t('admin.dashboard.metric_galleries', 'Galleries')],
+            ['value' => (string) $totalImages, 'label' => t('admin.dashboard.metric_top_level_images', 'Top-level images')],
+        ],
+    ]);
 
     view_render_admin_dashboard_notices($notices);
     view_render_admin_url_rewrite_warning();
@@ -88,7 +99,13 @@ function view_render_admin_dashboard(array $model): void
     render_admin_tab_panel('admin-tab-overview', $overviewHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.galleries_kicker', 'Galleries')) . '</p><h2>' . e(t('admin.dashboard.all_galleries', 'All galleries')) . '</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.galleries_kicker', 'Galleries'),
+        'title' => t('admin.dashboard.all_galleries', 'All galleries'),
+        'actions' => [
+            ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
+        ],
+    ]);
     echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<section class="admin-gallery-workspace" aria-label="' . e(t('admin.dashboard.gallery_management', 'Gallery management')) . '">';
     echo '<div class="admin-gallery-command-panel">';

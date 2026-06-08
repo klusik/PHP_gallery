@@ -430,7 +430,12 @@ function cms_admin_theme(): void
     }
     // $themeBackgroundUrl stores the current global background asset so the live preview can mirror the public page before saving.
     $themeBackgroundUrl = theme_background_asset_url();
-    echo '<section class="panel admin-theme-hero" id="admin-theme"><div><h1>' . e(t('admin.theme.title', 'Theme')) . '</h1><p class="muted">' . e(t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.')) . '</p></div><div class="bulk-row"><button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button></div></section>';
+    view_render_admin_hero([
+        'title' => t('admin.theme.title', 'Theme'),
+        'description' => t('admin.theme.description', 'Control the public gallery appearance, media identity, layout, and custom stylesheet from one focused workspace.'),
+        'class' => 'admin-theme-hero',
+        'actions_html' => '<button type="submit" form="admin-theme-form">' . e(t('admin.theme.save_theme', 'Save theme')) . '</button>',
+    ]);
 
     $themeTabs = [
         ['id' => 'admin-theme-tab-appearance', 'label' => t('admin.theme.tab_appearance', 'Appearance')],
@@ -445,7 +450,11 @@ function cms_admin_theme(): void
     echo '<input type="hidden" name="theme_controls_changed" value="0" data-theme-controls-changed>';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.appearance.kicker', 'Appearance')) . '</p><h2>' . e(t('admin.theme.appearance.title', 'Visual appearance')) . '</h2></div><p class="muted">' . e(t('admin.theme.appearance.description', 'Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.theme.appearance.kicker', 'Appearance'),
+        'title' => t('admin.theme.appearance.title', 'Visual appearance'),
+        'description' => t('admin.theme.appearance.description', 'Edit the core visual language. The preview mirrors colors, typography, radius, page width, and background transparency.'),
+    ]);
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope data-theme-preview-root data-theme-preview-background-url="' . e($themeBackgroundUrl) . '">';
     render_admin_subtabs([
         ['id' => 'admin-theme-appearance-subtab-colors', 'label' => t('admin.theme.subtab_colors_identity', 'Colors & identity')],
@@ -521,7 +530,11 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-appearance', $appearanceHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.media.kicker', 'Branding & media')) . '</p><h2>' . e(t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds')) . '</h2></div><p class="muted">' . e(t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.theme.media.kicker', 'Branding & media'),
+        'title' => t('admin.theme.media.title', 'Header branding, separator, favicon, and backgrounds'),
+        'description' => t('admin.theme.media.description', 'Manage the public header images first, then browser identity and the global gallery background fallback.'),
+    ]);
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
     render_admin_subtabs([
         ['id' => 'admin-theme-media-subtab-header', 'label' => t('admin.theme.subtab_header_images', 'Header images')],
@@ -640,7 +653,11 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-media', $mediaHtml, false);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.layout.kicker', 'Layout')) . '</p><h2>' . e(t('admin.theme.layout.title', 'Pagination and gallery grids')) . '</h2></div><p class="muted">' . e(t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.theme.layout.kicker', 'Layout'),
+        'title' => t('admin.theme.layout.title', 'Pagination and gallery grids'),
+        'description' => t('admin.theme.layout.description', 'Tune the default public grid while keeping per-gallery overrides available from gallery editing.'),
+    ]);
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';
     render_admin_subtabs([
         ['id' => 'admin-theme-layout-subtab-shortcuts', 'label' => t('admin.theme.subtab_shortcuts', 'Header shortcuts')],
@@ -775,7 +792,11 @@ function cms_admin_theme(): void
     // $languageCoverage stores the key coverage comparison against the default language.
     $languageCoverage = translation_language_coverage($languageEditCode);
 
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.language.kicker', 'Language')) . '</p><h2>' . e(t('admin.theme.language.title', 'Language and translation packs')) . '</h2></div><p class="muted">' . e(t('admin.theme.language.description', 'Choose the admin interface language, choose the public visitor language, and inspect installed language packs before translating more areas.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.theme.language.kicker', 'Language'),
+        'title' => t('admin.theme.language.title', 'Language and translation packs'),
+        'description' => t('admin.theme.language.description', 'Choose the admin interface language, choose the public visitor language, and inspect installed language packs before translating more areas.'),
+    ]);
     if (!empty($_GET['language_saved'])) {
         echo '<section class="panel notice"><p>' . e(t('admin.theme.language.saved_notice', 'Language pack saved.')) . '</p></section>';
     }
@@ -917,7 +938,11 @@ function cms_admin_theme(): void
     render_admin_tab_panel('admin-theme-tab-language', $languageHtml, false);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.theme.custom_css.kicker', 'Custom CSS')) . '</p><h2>' . e(t('admin.theme.custom_css.title', 'Skins and manual CSS')) . '</h2></div><p class="muted">' . e(t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.theme.custom_css.kicker', 'Custom CSS'),
+        'title' => t('admin.theme.custom_css.title', 'Skins and manual CSS'),
+        'description' => t('admin.theme.custom_css.description', 'Use a preset skin or upload a stylesheet that loads after built-in CSS and saved theme controls.'),
+    ]);
     // Variable $selectedPreset stores this steps working value.
     $selectedPreset = (string) app_setting('custom_css_preset', '');
     echo '<div class="admin-subtab-scope admin-theme-subtab-scope" data-admin-subtab-scope>';

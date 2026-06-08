@@ -86,7 +86,7 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260604-admin-subtabs-v1';
+} from './gallery-modules/admin-operations.js?v=20260608-admin-cinematic-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
