@@ -187,6 +187,17 @@
     cursor: zoom-in;
 }
 
+/*
+ * Keep lightbox letterbox space dark while decoded images are swapped or while
+ * EXIF-oriented photos correct their final display ratio. Without an explicit
+ * dark media surface, the replaced <img> element can briefly expose the
+ * browser/theme default white canvas above and below the actual pixels.
+ */
+.lightbox-stage-link > img,
+.lightbox-transition-image {
+    background: rgba(5, 5, 5, 0.82);
+}
+
 .lightbox-stage-link:hover,
 .lightbox-stage-link:focus,
 .lightbox-stage-link:focus-visible,

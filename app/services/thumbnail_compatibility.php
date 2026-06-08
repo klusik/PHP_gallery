@@ -231,6 +231,9 @@ function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): a
         if (!@unlink($path)) {
             throw new RuntimeException('Could not delete legacy JPEG thumbnail: ' . $path);
         }
+        if (function_exists('thumbnail_metadata_delete_variant')) {
+            thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
+        }
         $filesDeleted++;
         $bytesDeleted += $bytes === false ? 0 : max(0, (int) $bytes);
     }

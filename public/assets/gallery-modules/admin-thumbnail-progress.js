@@ -55,6 +55,23 @@ export function setupThumbnailProgress() {
         // Variable `button` stores this steps working value.
         const button = event.target.closest('[data-create-all-thumbnails]');
         if (!button) {
+            // Variable `metadataButton` stores the thumbnail database refresh action.
+            const metadataButton = event.target.closest('[data-refresh-thumbnail-metadata]');
+            if (metadataButton) {
+                // Variable `metadataForm` stores the refresh form posted to the thumbnail endpoint.
+                const metadataForm = metadataButton.closest('form');
+                if (!(metadataForm instanceof HTMLFormElement)) {
+                    return;
+                }
+                event.preventDefault();
+                metadataButton.disabled = true;
+                try {
+                    await runThumbnailJob(metadataForm, null, {scope: 'metadata'});
+                } finally {
+                    metadataButton.disabled = false;
+                }
+                return;
+            }
             // Variable `missingButton` stores this steps working value.
             const missingButton = event.target.closest('[data-create-missing-thumbnails]');
             if (!missingButton) {
@@ -321,7 +338,8 @@ async function runThumbnailJob(form, submitter, options = {}) {
     let created = 0;
     // Variable `skipped` stores this steps working value.
     let skipped = 0;
-    updateThumbnailProgress(progress, 0, 0, created, skipped, 'Preparing thumbnails...');
+    const initialLabel = options.scope === 'metadata' ? 'Preparing thumbnail database refresh...' : 'Preparing thumbnails...';
+    updateThumbnailProgress(progress, 0, 0, created, skipped, initialLabel);
     try {
         while (true) {
             // Variable `body` stores this steps working value.
@@ -350,13 +368,16 @@ async function runThumbnailJob(form, submitter, options = {}) {
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
-            const scopeLabel = options.scope === 'missing' ? 'missing thumbnails' : 'thumbnails';
-            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Creating ${scopeLabel}...`);
+            const scopeLabel = options.scope === 'missing'
+                ? 'missing thumbnails'
+                : (options.scope === 'metadata' ? 'thumbnail database' : 'thumbnails');
+            const activeLabel = options.scope === 'metadata' ? `Refreshing ${scopeLabel}...` : `Creating ${scopeLabel}...`;
+            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, activeLabel);
             if (result.done) {
-                // finalLabel keeps an empty targeted maintenance run readable instead of showing only 0/0 counters.
+                // finalLabel keeps empty targeted jobs readable instead of showing only 0/0 counters.
                 const finalLabel = options.scope === 'missing' && total === 0
                     ? 'No missing or stale thumbnails found.'
-                    : 'Thumbnail job complete.';
+                    : (options.scope === 'metadata' ? 'Thumbnail database refresh complete.' : 'Thumbnail job complete.');
                 updateThumbnailProgress(progress, total, total, created, skipped, finalLabel);
                 if (options.scope === 'missing' && result.maintenance_after && (result.maintenance_after.images_with_missing || 0) <= 0) {
                     const notice = form.closest('.admin-thumbnail-maintenance-notice');
@@ -368,7 +389,8 @@ async function runThumbnailJob(form, submitter, options = {}) {
             }
         }
     } catch (error) {
-        updateThumbnailProgress(progress, offset, total, created, skipped, 'Thumbnail job failed.');
+        const failedLabel = options.scope === 'metadata' ? 'Thumbnail database refresh failed.' : 'Thumbnail job failed.';
+        updateThumbnailProgress(progress, offset, total, created, skipped, failedLabel);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;

@@ -430,6 +430,10 @@ function thumbnail_warmup_process_items(array $items): array
         $failed = 0;
         // $errors stores compact error strings for the JSON response.
         $errors = [];
+        // $invalidGeometryDeleted stores stale thumbnail files removed before regeneration.
+        $invalidGeometryDeleted = 0;
+        // $invalidGeometryFiles stores a capped list of stale thumbnail filenames removed in this batch.
+        $invalidGeometryFiles = [];
         // $details stores per-image decisions for the admin log context.
         $details = [];
         // $stoppedReason stores why the batch loop stopped before all submitted candidates were inspected.
@@ -473,6 +477,29 @@ function thumbnail_warmup_process_items(array $items): array
                 continue;
             }
 
+            // $sizes stores the exact public-rendering sizes that are missing for this browser context.
+            $sizes = thumbnail_warmup_normalize_sizes($item['sizes']);
+            if (!$sizes) {
+                $sizes = [300];
+            }
+
+            if (function_exists('thumbnail_metadata_bundle_data') && thumbnail_metadata_schema_ready()) {
+                // $metadata stores the DB-only renderability state so repeated warmup calls do not touch files.
+                $metadata = thumbnail_metadata_bundle_data($image, $gallery, $sizes);
+                $metadataWarmupSizes = array_values(array_map('intval', (array) ($metadata['warmup_sizes'] ?? [])));
+                if (!$metadataWarmupSizes) {
+                    $skipped++;
+                    $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'db_already_renderable', [
+                        'sizes' => $sizes,
+                        'required' => 0,
+                        'missing_before' => 0,
+                        'metadata_known' => true,
+                    ]);
+                    continue;
+                }
+                $sizes = $metadataWarmupSizes;
+            }
+
             // $imageId stores the integer id used for cooldown bookkeeping.
             $imageId = (int) $image['id'];
             if (thumbnail_warmup_image_is_cooling_down($imageId)) {
@@ -482,14 +509,10 @@ function thumbnail_warmup_process_items(array $items): array
             }
             thumbnail_warmup_touch_cooldown($imageId);
 
-            // $sizes stores the exact public-rendering sizes that are missing for this browser context.
-            $sizes = thumbnail_warmup_normalize_sizes($item['sizes']);
-            if (!$sizes) {
-                $sizes = [300];
-            }
-
             // $status stores the preflight maintenance state, allowing already-healed items to skip decoding originals.
             $status = thumbnail_maintenance_status_for_sizes($image, $gallery, $sizes);
+            $invalidGeometryDeleted += (int) ($status['invalid_geometry_deleted'] ?? 0);
+            $invalidGeometryFiles = array_merge($invalidGeometryFiles, (array) ($status['invalid_geometry_files'] ?? []));
             if (empty($status['target_formats'])) {
                 $skipped++;
                 $details[] = thumbnail_warmup_log_image_detail($item, $image, $gallery, 'skipped', 'thumbnail_policy_no_writable_formats', [
@@ -499,6 +522,8 @@ function thumbnail_warmup_process_items(array $items): array
                     'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
                     'target_formats' => [],
                     'thumbnail_policy' => is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null,
+                    'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0),
+                    'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($status['invalid_geometry_files'] ?? []))))), 0, 24),
                 ]);
                 continue;
             }
@@ -511,6 +536,8 @@ function thumbnail_warmup_process_items(array $items): array
                     'webp_skipped' => (int) ($status['webp_skipped'] ?? 0),
                     'target_formats' => array_values(array_map('strval', (array) ($status['target_formats'] ?? []))),
                     'thumbnail_policy' => is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null,
+                    'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0),
+                    'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($status['invalid_geometry_files'] ?? []))))), 0, 24),
                 ]);
                 continue;
             }
@@ -521,6 +548,8 @@ function thumbnail_warmup_process_items(array $items): array
             $created += (int) ($result['created'] ?? 0);
             $skipped += (int) ($result['skipped'] ?? 0);
             $failed += (int) ($result['failed'] ?? 0);
+            $invalidGeometryDeleted += (int) ($result['invalid_geometry_deleted'] ?? 0);
+            $invalidGeometryFiles = array_merge($invalidGeometryFiles, (array) ($result['invalid_geometry_files'] ?? []));
             foreach ((array) ($result['errors'] ?? []) as $error) {
                 $errors[] = (string) $error;
             }
@@ -533,13 +562,15 @@ function thumbnail_warmup_process_items(array $items): array
                 'thumbnail_policy' => is_array($result['thumbnail_policy'] ?? null) ? $result['thumbnail_policy'] : (is_array($status['thumbnail_policy'] ?? null) ? $status['thumbnail_policy'] : null),
                 'created' => (int) ($result['created'] ?? 0),
                 'created_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($result['created_files'] ?? []))))), 0, 24),
+                'invalid_geometry_deleted' => (int) ($status['invalid_geometry_deleted'] ?? 0) + (int) ($result['invalid_geometry_deleted'] ?? 0),
+                'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', array_merge((array) ($status['invalid_geometry_files'] ?? []), (array) ($result['invalid_geometry_files'] ?? [])))))), 0, 24),
                 'generator_skipped' => (int) ($result['skipped'] ?? 0),
                 'generator_failed' => (int) ($result['failed'] ?? 0),
                 'errors' => array_slice(array_values(array_unique(array_filter(array_map('strval', (array) ($result['errors'] ?? []))))), 0, 6),
             ]);
         }
 
-        if ($created > 0) {
+        if ($created > 0 || $invalidGeometryDeleted > 0) {
             thumbnail_maintenance_summary_cache_clear();
         }
 
@@ -551,79 +582,33 @@ function thumbnail_warmup_process_items(array $items): array
             'created' => $created,
             'skipped' => $skipped,
             'failed' => $failed,
+            'invalid_geometry_deleted' => $invalidGeometryDeleted,
+            'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter(array_map('strval', $invalidGeometryFiles)))), 0, 24),
             'busy' => false,
             'remaining' => max(0, count($items) - $processed - $skipped),
             'errors' => array_values(array_unique(array_filter($errors))),
         ];
 
-        $severity = $failed > 0 ? 'warning' : ($created > 0 ? 'notice' : 'info');
-        thumbnail_warmup_log_event(
-            $failed > 0 ? 'warning' : 'info',
-            'thumbnail_warmup.batch',
-            'Background thumbnail warmup processed a public media-fallback batch.',
-            array_merge($baseContext, $response, [
-                'max_images' => $maxImages,
-                'deadline_seconds' => $deadlineSeconds,
-                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
-                'stopped_reason' => $stoppedReason,
-                'details' => $details,
-            ]),
-            ['severity' => $severity]
-        );
+        if ($failed > 0 || $created > 0 || $invalidGeometryDeleted > 0) {
+            $severity = $failed > 0 ? 'warning' : 'notice';
+            thumbnail_warmup_log_event(
+                $failed > 0 ? 'warning' : 'info',
+                'thumbnail_warmup.batch',
+                'Background thumbnail warmup processed a public media-fallback batch.',
+                array_merge($baseContext, $response, [
+                    'max_images' => $maxImages,
+                    'deadline_seconds' => $deadlineSeconds,
+                    'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                    'stopped_reason' => $stoppedReason,
+                    'details' => $details,
+                ]),
+                ['severity' => $severity]
+            );
+        }
 
         return $response;
     } finally {
         @flock($lockHandle, LOCK_UN);
         @fclose($lockHandle);
     }
-}
-
-/**
- * Return maintenance status for a limited set of thumbnail sizes.
- *
- * @param array<int, int> $sizes Thumbnail sizes to check.
- * @return array<string, mixed>
- */
-function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, array $sizes): array
-{
-    // $sourcePath stores the original image path inspected before any decoding is attempted.
-    $sourcePath = image_abs_path($image, $gallery);
-    if (!is_file($sourcePath)) {
-        return ['required' => 0, 'missing' => 0, 'webp_skipped' => 0, 'target_formats' => [], 'thumbnail_policy' => null];
-    }
-
-    // $sourceMtime stores the modification time that generated variants must match.
-    $sourceMtime = filemtime($sourcePath) ?: 0;
-    // $mime stores the source MIME value used for format selection.
-    $mime = image_source_mime_for_derivatives($sourcePath, $image);
-    // $formats stores the formats this installation can keep current for this source file.
-    $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
-    // $thumbnailPolicy stores the exact source-specific policy for warmup diagnostics.
-    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
-    // $webpSkipped stores intentionally missing WebP variants when metadata preservation is not available.
-    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
-    // $sizes stores only supported sizes.
-    $sizes = thumbnail_warmup_normalize_sizes($sizes);
-    // $required stores the number of expected variant files.
-    $required = 0;
-    // $missing stores the number of expected variant files missing or stale.
-    $missing = 0;
-
-    foreach ($sizes as $size) {
-        foreach ($formats as $format) {
-            $required++;
-            try {
-                // $targetPath stores one generated thumbnail path to inspect.
-                $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
-            } catch (RuntimeException) {
-                $missing++;
-                continue;
-            }
-            if (!is_file($targetPath) || filemtime($targetPath) < $sourceMtime) {
-                $missing++;
-            }
-        }
-    }
-
-    return ['required' => $required, 'missing' => $missing, 'webp_skipped' => $webpSkipped, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
 }

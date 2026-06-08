@@ -35,6 +35,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/thumbnail_sources.php';
+require_once __DIR__ . '/thumbnail_metadata.php';
 require_once __DIR__ . '/thumbnail_bundles.php';
 require_once __DIR__ . '/dng_derivatives.php';
 require_once __DIR__ . '/thumbnail_compatibility.php';

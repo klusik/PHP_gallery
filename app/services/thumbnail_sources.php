@@ -91,6 +91,32 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     if (function_exists('thumbnail_bound_filter_sizes')) {
         $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
     }
+    if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+        // $metadataRows stores renderable variants known from DB without touching thumbnail files.
+        $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
+        foreach ($sizes as $size) {
+            $size = (int) $size;
+            if (isset($metadataRows[$format][$size])) {
+                $entries[] = thumbnail_serving_url($image, $gallery, $size, $format) . ' ' . $size . 'w';
+            }
+        }
+        return implode(', ', $entries);
+    }
+
+    // $sourceGeometry stores source dimensions used to reject wrong-ratio legacy candidates.
+    $sourceGeometry = null;
+    if (function_exists('thumbnail_source_geometry_dimensions')) {
+        try {
+            // $sourcePath stores the original file path used only for geometry validation.
+            $sourcePath = image_abs_path($image, $gallery);
+            if (is_file($sourcePath)) {
+                $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+            }
+        } catch (Throwable) {
+            $sourceGeometry = null;
+        }
+    }
+
     foreach ($sizes as $size) {
         // $size stores an intermediate value used by the surrounding gallery workflow.
         $size = (int) $size;
@@ -98,8 +124,17 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
             continue;
         }
         try {
-            if (!is_file(thumbnail_abs_path($image, $gallery, $size, $format))) {
+            // $targetPath stores one concrete generated thumbnail candidate.
+            $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+            if (!is_file($targetPath)) {
                 continue;
+            }
+            if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                // $geometryStatus stores whether this candidate preserves the source aspect ratio.
+                $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
+                if (empty($geometryStatus['valid'])) {
+                    continue;
+                }
             }
         } catch (RuntimeException) {
             continue;
@@ -301,12 +336,51 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
         if (function_exists('thumbnail_bound_fallback_size')) {
             $size = thumbnail_bound_fallback_size($image, $size, $gallery);
         }
+        if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+            // $metadataRows stores renderable variants known from DB without checking thumbnail files.
+            $metadataRows = thumbnail_metadata_renderable_rows($image, thumbnail_sizes());
+            if (isset($metadataRows[$format][$size])) {
+                public_render_profile_count('thumbnail_direct_hits');
+                return thumbnail_serving_url($image, $gallery, $size, $format);
+            }
+            // $fallback stores the closest DB-known valid thumbnail for this request.
+            $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
+            if ($fallback !== null) {
+                return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
+            }
+            public_render_profile_count('thumbnail_media_fallbacks');
+            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        }
+        // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
+        $sourceGeometry = null;
+        if (function_exists('thumbnail_source_geometry_dimensions')) {
+            try {
+                // $sourcePath stores the original file path used only for geometry validation.
+                $sourcePath = image_abs_path($image, $gallery);
+                if (is_file($sourcePath)) {
+                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+                }
+            } catch (Throwable) {
+                $sourceGeometry = null;
+            }
+        }
         try {
             // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = thumbnail_abs_path($image, $gallery, $size, $format);
             if (public_render_profile_is_file($path)) {
-                public_render_profile_count('thumbnail_direct_hits');
-                return thumbnail_serving_url($image, $gallery, $size, $format);
+                if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                    // $geometryStatus stores whether this cache file still matches the source aspect ratio.
+                    $geometryStatus = thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
+                    if (empty($geometryStatus['valid'])) {
+                        public_render_profile_count('thumbnail_invalid_geometry_provisional_hits');
+                    } else {
+                        public_render_profile_count('thumbnail_direct_hits');
+                        return thumbnail_serving_url($image, $gallery, $size, $format);
+                    }
+                } else {
+                    public_render_profile_count('thumbnail_direct_hits');
+                    return thumbnail_serving_url($image, $gallery, $size, $format);
+                }
             }
             // $fallback stores an intermediate value used by the surrounding gallery workflow.
             $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
@@ -358,28 +432,75 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
 {
     public_render_profile_count('thumbnail_fallback_searches');
     return public_render_profile_span('thumbnail_fallback_search', static function () use ($image, $gallery, $preferredSize, $preferredFormat): ?array {
-    // Variable $sizes stores this steps working value.
-    $sizes = thumbnail_sizes();
-    if (function_exists('thumbnail_bound_filter_sizes')) {
-        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
-    }
-    usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
-        return abs($left - $preferredSize) <=> abs($right - $preferredSize);
-    });
-    // Variable $formats stores this steps working value.
-    $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
-    foreach ($sizes as $size) {
-        foreach ($formats as $format) {
-            if (!in_array($format, ['jpg', 'webp'], true)) {
-                continue;
+        // Variable $sizes stores this steps working value.
+        $sizes = thumbnail_sizes();
+        if (function_exists('thumbnail_bound_filter_sizes')) {
+            $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+        }
+        usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
+            return abs($left - $preferredSize) <=> abs($right - $preferredSize);
+        });
+        // Variable $formats stores this steps working value.
+        $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
+
+        if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+            // $metadataRows stores renderable fallback candidates known from DB.
+            $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
+            foreach ($sizes as $size) {
+                foreach ($formats as $format) {
+                    if (!in_array($format, ['jpg', 'webp'], true)) {
+                        continue;
+                    }
+                    public_render_profile_count('thumbnail_fallback_checks');
+                    if (isset($metadataRows[$format][(int) $size])) {
+                        public_render_profile_count('thumbnail_fallback_hits');
+                        return ['size' => (int) $size, 'format' => $format];
+                    }
+                }
             }
-            public_render_profile_count('thumbnail_fallback_checks');
-            if (public_render_profile_is_file(thumbnail_abs_path($image, $gallery, (int) $size, $format))) {
-                public_render_profile_count('thumbnail_fallback_hits');
-                return ['size' => (int) $size, 'format' => $format];
+            return null;
+        }
+
+        // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
+        $sourceGeometry = null;
+        if (function_exists('thumbnail_source_geometry_dimensions')) {
+            try {
+                // $sourcePath stores the original file path used only for geometry validation.
+                $sourcePath = image_abs_path($image, $gallery);
+                if (is_file($sourcePath)) {
+                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+                }
+            } catch (Throwable) {
+                $sourceGeometry = null;
             }
         }
-    }
-    return null;
+
+        foreach ($sizes as $size) {
+            foreach ($formats as $format) {
+                if (!in_array($format, ['jpg', 'webp'], true)) {
+                    continue;
+                }
+                public_render_profile_count('thumbnail_fallback_checks');
+                try {
+                    // $targetPath stores one existing generated thumbnail candidate.
+                    $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+                } catch (RuntimeException) {
+                    continue;
+                }
+                if (public_render_profile_is_file($targetPath)) {
+                    if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                        // $geometryStatus stores whether this fallback candidate keeps the source aspect ratio.
+                        $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                        if (empty($geometryStatus['valid'])) {
+                            public_render_profile_count('thumbnail_fallback_invalid_geometry_provisional_hits');
+                            continue;
+                        }
+                    }
+                    public_render_profile_count('thumbnail_fallback_hits');
+                    return ['size' => (int) $size, 'format' => $format];
+                }
+            }
+        }
+        return null;
     });
 }

@@ -1313,13 +1313,32 @@ export function setupGalleryLightbox() {
      * @returns {*} Result of the UI operation, when a value is produced.
      */
     function updateNormalLightboxStageSize(card) {
-        if (!stageLink || !card || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
+        if (!card) {
             return;
         }
         // naturalWidth stores state or configuration for the gallery front-end flow.
         const naturalWidth = Number.parseInt(card.dataset.imageWidth || '0', 10);
         // naturalHeight stores state or configuration for the gallery front-end flow.
         const naturalHeight = Number.parseInt(card.dataset.imageHeight || '0', 10);
+        updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight);
+    }
+
+    /**
+     * Resize the normal lightbox stage from trusted intrinsic dimensions.
+     *
+     * Database dimensions can be wrong for EXIF-oriented JPEGs until the
+     * browser decodes the actual display image. This shared helper lets the
+     * normal card metadata path and the decoded-image correction path use the
+     * same viewport fitting math.
+     *
+     * @param {number} naturalWidth Intrinsic browser display width.
+     * @param {number} naturalHeight Intrinsic browser display height.
+     * @returns {void}
+     */
+    function updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight) {
+        if (!stageLink || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
+            return;
+        }
         if (!naturalWidth || !naturalHeight) {
             stageLink.style.removeProperty('--lightbox-stage-width');
             stageLink.style.removeProperty('--lightbox-stage-height');
@@ -1347,6 +1366,22 @@ export function setupGalleryLightbox() {
         }
         stageLink.style.setProperty('--lightbox-stage-width', `${Math.round(stageWidth)}px`);
         stageLink.style.setProperty('--lightbox-stage-height', `${Math.round(stageHeight)}px`);
+    }
+
+    /**
+     * Correct the normal stage size after the browser has decoded an image.
+     *
+     * This prevents a temporary white letterbox caused by stale scan dimensions
+     * or EXIF orientation differences between PHP metadata and browser display.
+     *
+     * @param {HTMLImageElement|null} loadedImage Decoded image used by the lightbox.
+     * @returns {void}
+     */
+    function updateNormalLightboxStageSizeFromLoadedImage(loadedImage) {
+        if (!(loadedImage instanceof HTMLImageElement)) {
+            return;
+        }
+        updateNormalLightboxStageSizeFromDimensions(loadedImage.naturalWidth || 0, loadedImage.naturalHeight || 0);
     }
 
     /**
@@ -1380,9 +1415,12 @@ export function setupGalleryLightbox() {
      * @param {*} immediate Value supplied by the caller or event context.
      * @returns {*} Result of the UI operation, when a value is produced.
      */
-    function showLightboxImageSource(index, token, src, altText, immediate) {
+    function showLightboxImageSource(index, token, src, altText, immediate, decodedImage = null) {
         if (!src) {
             return Promise.resolve(false);
+        }
+        if (decodedImage) {
+            updateNormalLightboxStageSizeFromLoadedImage(decodedImage);
         }
         if (immediate || !stageLink || !image.getAttribute('src')) {
             activeLightboxTransitionToken += 1;
@@ -1395,6 +1433,7 @@ export function setupGalleryLightbox() {
                 resolve(false);
                 return;
             }
+            updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
             if (image.getAttribute('src') === src) {
                 image.alt = altText;
                 resolve(true);
@@ -1472,11 +1511,12 @@ export function setupGalleryLightbox() {
         return new Promise((resolve) => {
             pendingFullImageSwapTimer = window.setTimeout(() => {
                 pendingFullImageSwapTimer = null;
-                loadDecodedLightboxImage(fullSrc).then(() => {
+                loadDecodedLightboxImage(fullSrc).then((loadedImage) => {
                     if (currentIndex !== index || activeLightboxImageToken !== token) {
                         resolve(false);
                         return;
                     }
+                    updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
                     applyLightboxImageSource(fullSrc, altText);
                     resolve(true);
                 }).catch(() => resolve(false));
@@ -1982,10 +2022,10 @@ export function setupGalleryLightbox() {
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
-        const showInitialPreview = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        const showInitialPreview = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately, loadedImage);
         const initialPreviewPromise = isInitialPhotoOpen && previewSrc
-            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(showInitialPreview)
-            : showInitialPreview();
+            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(() => showInitialPreview(null))
+            : showInitialPreview(null);
         initialPreviewPromise.then((wasDisplayed) => {
             if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;

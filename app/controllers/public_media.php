@@ -40,6 +40,51 @@ declare(strict_types=1);
  * This module streams thumbnails, media files, cover assets, robots.txt, and sitemap XML. Theme CSS, theme background assets, and favicon assets intentionally remain in the legacy controller file for now.
  */
 
+/**
+ * Return generated thumbnail geometry status for response headers and cache policy.
+ *
+ * Invalid geometry is handled by the response resolver before streaming.
+ *
+ * @return array<string, mixed>
+ */
+function cms_thumbnail_file_geometry_status_for_response(array $image, array $gallery, int $size, string $path): array
+{
+    if (function_exists('thumbnail_response_file_geometry_status')) {
+        return thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
+    }
+
+    return ['valid' => true, 'reason' => 'geometry_validation_unavailable'];
+}
+
+/**
+ * Return true when a generated thumbnail has valid geometry.
+ */
+function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int $size, string $path): bool
+{
+    // $status stores the reusable geometry decision for callers that still need a boolean.
+    $status = cms_thumbnail_file_geometry_status_for_response($image, $gallery, $size, $path);
+    return !empty($status['valid']);
+}
+
+
+/**
+ * Resolve a thumbnail response file and repair invalid geometry before streaming.
+ *
+ * Public thumbnail URLs may touch the filesystem because the browser is asking
+ * for a specific derivative. Invalid aspect-ratio variants are deleted and are
+ * never streamed back to the client.
+ *
+ * @return array{path:string,geometry_status:array<string,mixed>}|null
+ */
+function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $size, string $format): ?array
+{
+    if (function_exists('thumbnail_ensure_image_thumbnail_variant_file')) {
+        return thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, $size, $format);
+    }
+
+    return null;
+}
+
 function cms_thumb(): void
 {
     // Variable $image stores this steps working value.
@@ -58,22 +103,24 @@ function cms_thumb(): void
         cms_not_found();
         return;
     }
-    try {
-        // Variable $path stores this steps working value.
-        $path = thumbnail_abs_path($image, $gallery, $size, $format);
-    } catch (RuntimeException) {
+    // $responseFile stores the valid derivative selected for this response.
+    $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
+    if ($responseFile === null) {
         cms_not_found();
         return;
     }
-    if (!is_file($path)) {
-        cms_not_found();
-        return;
-    }
+    // $path stores this steps working value.
+    $path = $responseFile['path'];
+    // $geometryStatus stores whether this response is a clean derivative.
+    $geometryStatus = $responseFile['geometry_status'];
     header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
     header('X-Content-Type-Options: nosniff');
+    header('X-Gallery-Thumbnail-Geometry: ' . (!empty($geometryStatus['valid']) ? 'valid' : 'invalid'));
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
-    $cacheControl = public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    $cacheControl = !empty($geometryStatus['valid'])
+        ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
+        : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
@@ -108,23 +155,25 @@ function cms_public_thumb(): void
         return;
     }
 
-    try {
-        // $path stores an intermediate value used by the surrounding gallery workflow.
-        $path = thumbnail_abs_path($image, $gallery, $size, $format);
-    } catch (RuntimeException) {
+    // $responseFile stores the valid derivative selected for this response.
+    $responseFile = cms_resolve_thumbnail_response_file($image, $gallery, $size, $format);
+    if ($responseFile === null) {
         cms_not_found();
         return;
     }
-    if (!is_file($path)) {
-        cms_not_found();
-        return;
-    }
+    // $path stores an intermediate value used by the surrounding gallery workflow.
+    $path = $responseFile['path'];
 
+    // $geometryStatus stores whether this response is a clean derivative.
+    $geometryStatus = $responseFile['geometry_status'];
     header('Content-Type: ' . ($format === 'webp' ? 'image/webp' : 'image/jpeg'));
     header('X-Content-Type-Options: nosniff');
+    header('X-Gallery-Thumbnail-Geometry: ' . (!empty($geometryStatus['valid']) ? 'valid' : 'invalid'));
     header('Content-Disposition: inline; filename="' . basename($path) . '"');
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
-    $cacheControl = public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
+    $cacheControl = !empty($geometryStatus['valid'])
+        ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
+        : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);

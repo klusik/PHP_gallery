@@ -69,6 +69,31 @@ thumbnail_warmup_test_assert($modernModeLabel === 'webp_only', 'Modern thumbnail
 thumbnail_warmup_test_assert(thumbnail_policy_requested_formats(THUMBNAIL_COMPATIBILITY_MODERN) === ['webp'], 'Modern thumbnail compatibility mode must request only WebP.');
 thumbnail_warmup_test_assert(thumbnail_policy_requested_formats(THUMBNAIL_COMPATIBILITY_LEGACY) === ['jpg', 'webp'], 'Legacy thumbnail compatibility mode must request JPEG plus WebP.');
 
+
+$expectedDimensions = thumbnail_expected_dimensions(4032, 3024, 1600);
+thumbnail_warmup_test_assert($expectedDimensions === ['width' => 1600, 'height' => 1200], 'Thumbnail expected dimension calculation failed.');
+
+if (extension_loaded('gd')) {
+    $invalidPath = tempnam(sys_get_temp_dir(), 'thumb-invalid-');
+    $validPath = tempnam(sys_get_temp_dir(), 'thumb-valid-');
+
+    $invalidImage = imagecreatetruecolor(1600, 1600);
+    imagejpeg($invalidImage, $invalidPath, 80);
+    imagedestroy($invalidImage);
+
+    $validImage = imagecreatetruecolor(1600, 1200);
+    imagejpeg($validImage, $validPath, 80);
+    imagedestroy($validImage);
+
+    $invalidStatus = thumbnail_file_geometry_status($invalidPath, 4032, 3024, 1600);
+    $validStatus = thumbnail_file_geometry_status($validPath, 4032, 3024, 1600);
+    thumbnail_warmup_test_assert(empty($invalidStatus['valid']) && $invalidStatus['reason'] === 'aspect_ratio_mismatch', 'Square-canvas thumbnail geometry should be rejected.');
+    thumbnail_warmup_test_assert(!empty($validStatus['valid']), 'Aspect-ratio-preserving thumbnail geometry should be accepted.');
+
+    @unlink($invalidPath);
+    @unlink($validPath);
+}
+
 $policySummary = thumbnail_warmup_request_policy_summary($items);
 thumbnail_warmup_test_assert(isset($policySummary['formats_requested']) && is_array($policySummary['formats_requested']), 'Warmup policy summary must include requested formats.');
 thumbnail_warmup_test_assert(isset($policySummary['enabled_sizes']) && in_array(300, $policySummary['enabled_sizes'], true), 'Warmup policy summary must include enabled sizes.');

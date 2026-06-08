@@ -937,6 +937,15 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
                 throw new RuntimeException(t('upload_automation.error.thumbnail_store_failed', 'Could not store a client-generated thumbnail.'));
             }
             @touch($targetPath, time());
+            if (function_exists('thumbnail_metadata_record_file')) {
+                // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
+                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], (string) $entry['format'], $targetPath, image_abs_path($image, $gallery), true);
+                if (empty($metadataResult['valid'])) {
+                    $result['failed']++;
+                    $result['errors'][] = 'Client-generated thumbnail geometry did not match the original image.';
+                    continue;
+                }
+            }
             $result['installed']++;
         } catch (Throwable $exception) {
             $result['failed']++;

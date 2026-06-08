@@ -63,9 +63,11 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
     $fullWebpSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'webp');
     // $fullJpegSrcset stores larger JPEG candidates that JavaScript applies after the first paint.
     $fullJpegSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'jpg');
-    // $warmupAttributes stores self-healing thumbnail metadata only when the rendered image still had to use /media.
-    $warmupAttributes = (!empty($selectedFallback['is_media_fallback']) && is_array($thumbnailBundle['gallery'] ?? null))
-        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], array_merge([$fallbackSize], $srcsetSizes))
+    // $warmupSizes stores missing or invalid derivatives that should be repaired after the page has rendered.
+    $warmupSizes = array_merge([$fallbackSize], $srcsetSizes, (array) ($thumbnailBundle['warmup_sizes'] ?? []));
+    // $warmupAttributes stores self-healing thumbnail metadata when the rendered image used /media or stale derivatives were removed.
+    $warmupAttributes = ((!empty($selectedFallback['is_media_fallback']) || !empty($thumbnailBundle['warmup_sizes'])) && is_array($thumbnailBundle['gallery'] ?? null))
+        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], $warmupSizes)
         : '';
     // $attributes stores caller-provided attributes plus the progressive marker used by the browser module.
     $attributes = trim($extraAttributes . ' data-progressive-thumbnail ' . $warmupAttributes);
@@ -113,9 +115,11 @@ function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSi
     $webpSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'webp');
     // $jpegSrcset stores an intermediate value used by the surrounding gallery workflow.
     $jpegSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'jpg');
-    // $warmupAttributes stores self-healing thumbnail metadata only when the rendered image still had to use /media.
-    $warmupAttributes = (!empty($selectedFallback['is_media_fallback']) && is_array($thumbnailBundle['gallery'] ?? null))
-        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], array_merge([$fallbackSize], $srcsetSizes))
+    // $warmupSizes stores missing or invalid derivatives that should be repaired after the page has rendered.
+    $warmupSizes = array_merge([$fallbackSize], $srcsetSizes, (array) ($thumbnailBundle['warmup_sizes'] ?? []));
+    // $warmupAttributes stores self-healing thumbnail metadata when the rendered image used /media or stale derivatives were removed.
+    $warmupAttributes = ((!empty($selectedFallback['is_media_fallback']) || !empty($thumbnailBundle['warmup_sizes'])) && is_array($thumbnailBundle['gallery'] ?? null))
+        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], $warmupSizes)
         : '';
     // $attributes stores an intermediate value used by the surrounding gallery workflow.
     $attributes = trim($extraAttributes . ' ' . $warmupAttributes);

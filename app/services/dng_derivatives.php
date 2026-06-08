@@ -360,7 +360,7 @@ function write_dng_imagick_derivative(string $sourcePath, string $targetPath, st
             $image->autoOrientImage();
         }
         if ($maxSide !== null) {
-            $image->thumbnailImage($maxSide, $maxSide, true, true);
+            $image->thumbnailImage($maxSide, $maxSide, true, false);
         }
         dng_apply_imagick_color_policy($image);
         if ($format === 'jpg') {
@@ -410,7 +410,7 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
         } elseif (method_exists($image, 'autoOrientImage')) {
             $image->autoOrientImage();
         }
-        $image->thumbnailImage($maxSide, $maxSide, true, true);
+        $image->thumbnailImage($maxSide, $maxSide, true, false);
         dng_apply_imagick_color_policy($image);
         if ($format === 'jpg') {
             $image->setImageBackgroundColor('white');
@@ -567,6 +567,12 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     $errors = [];
     // $createdFiles stores generated derivative basenames for detailed warmup logging.
     $createdFiles = [];
+    // $invalidGeometryDeleted stores thumbnail cache files removed because their dimensions no longer match the source ratio.
+    $invalidGeometryDeleted = 0;
+    // $invalidGeometryFiles stores removed cache filenames for diagnostics.
+    $invalidGeometryFiles = [];
+    // $sourceGeometry stores source dimensions used by derivative metadata validation.
+    $sourceGeometry = function_exists('thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
 
     // $masterPath stores the browser-displayable full-size WebP master.
     $masterPath = dng_display_master_abs_path($image, $gallery, true);
@@ -593,15 +599,41 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
             // $targetPath stores the derivative path for this size and format.
             $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
             if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {
-                $skipped++;
-                continue;
+                $geometryStatus = ['valid' => true, 'reason' => 'geometry_validation_unavailable'];
+                if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                    // $geometryStatus stores whether a fresh DNG thumbnail derivative has valid dimensions.
+                    $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                }
+                if (!empty($geometryStatus['valid'])) {
+                    if (function_exists('thumbnail_metadata_record_file')) {
+                        thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+                    }
+                    $skipped++;
+                    continue;
+                }
+                $invalidGeometryDeleted++;
+                $invalidGeometryFiles[] = basename($targetPath);
+                if (function_exists('thumbnail_delete_invalid_geometry_file')) {
+                    thumbnail_delete_invalid_geometry_file($targetPath);
+                } elseif (is_file($targetPath)) {
+                    @unlink($targetPath);
+                }
+                if (function_exists('thumbnail_metadata_delete_variant')) {
+                    thumbnail_metadata_delete_variant($image, (int) $size, $format);
+                }
             }
             // $written stores whether the DNG derivative was created successfully.
             $written = write_dng_derivative($sourcePath, $targetPath, $format, (int) $size);
             if ($written) {
+                if (function_exists('thumbnail_metadata_record_file')) {
+                    thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, true);
+                }
                 $created++;
                 $createdFiles[] = basename($targetPath);
             } else {
+                if (function_exists('thumbnail_metadata_delete_variant')) {
+                    thumbnail_metadata_delete_variant($image, (int) $size, $format);
+                }
                 $failed++;
                 if ($format === 'webp') {
                     $webpSkipped++;
@@ -618,5 +650,5 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
         $errors[] = t('thumbnails.dng.error_derivatives_failed');
     }
 
-    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors)), 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
+    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors)), 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
 }
