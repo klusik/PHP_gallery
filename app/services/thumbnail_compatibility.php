@@ -96,6 +96,30 @@ function thumbnail_preferred_browser_format(): string
 }
 
 /**
+ * Return a stable machine-readable label for the active thumbnail output policy.
+ */
+function thumbnail_compatibility_mode_log_value(?string $mode = null): string
+{
+    $mode = thumbnail_compatibility_mode_normalize($mode ?? thumbnail_compatibility_mode());
+    return $mode === THUMBNAIL_COMPATIBILITY_LEGACY ? 'jpg_plus_webp' : 'webp_only';
+}
+
+/**
+ * Return the formats requested by the configured thumbnail output policy.
+ *
+ * This is the user-facing intent. Runtime capability checks can still reduce
+ * the concrete target formats for one source image, but modern mode must never
+ * silently ask the generator to create JPEG thumbnails.
+ *
+ * @return array<int, string>
+ */
+function thumbnail_policy_requested_formats(?string $mode = null): array
+{
+    $mode = thumbnail_compatibility_mode_normalize($mode ?? thumbnail_compatibility_mode());
+    return $mode === THUMBNAIL_COMPATIBILITY_LEGACY ? ['jpg', 'webp'] : ['webp'];
+}
+
+/**
  * Return a readable label for one compatibility mode.
  */
 function thumbnail_compatibility_mode_label(string $mode): string
@@ -118,10 +142,9 @@ function thumbnail_source_webp_available_for_policy(string $sourcePath, string $
 /**
  * Return target thumbnail formats after applying compatibility mode and runtime capability.
  *
- * Modern mode prefers WebP-only output, but it deliberately falls back to JPEG
- * for sources that the current server cannot write as WebP. That keeps shared
- * hosting installations functional even when GD or Imagick capabilities are
- * incomplete.
+ * Modern mode is strict WebP-only output. If the current server cannot write
+ * WebP safely for one source, the caller receives no writable target format
+ * instead of silently creating legacy JPEG thumbnails.
  *
  * @return array<int, string>
  */
@@ -135,7 +158,7 @@ function thumbnail_formats_for_compatibility_policy(string $sourcePath, string $
     }
 
     if (thumbnail_compatibility_modern_enabled()) {
-        return $webpAvailable ? ['webp'] : ['jpg'];
+        return $webpAvailable ? ['webp'] : [];
     }
 
     $formats = ['jpg'];
@@ -207,6 +230,9 @@ function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): a
         $bytes = @filesize($path);
         if (!@unlink($path)) {
             throw new RuntimeException('Could not delete legacy JPEG thumbnail: ' . $path);
+        }
+        if (function_exists('thumbnail_metadata_delete_variant')) {
+            thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
         }
         $filesDeleted++;
         $bytesDeleted += $bytes === false ? 0 : max(0, (int) $bytes);

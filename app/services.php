@@ -49,6 +49,8 @@ require_once __DIR__ . '/services/database_helpers.php';
 require_once __DIR__ . '/services/public_render_profiler.php';
 // Load admin render profiling helpers before admin controllers can record dashboard timings.
 require_once __DIR__ . '/services/admin_render_profiler.php';
+// Load database usage helpers before dashboard and storage pages need capacity metrics.
+require_once __DIR__ . '/services/admin_database_usage.php';
 // Load Admin dashboard data helpers before the dashboard controller is registered.
 require_once __DIR__ . '/services/admin_dashboard.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.
@@ -103,6 +105,8 @@ require_once __DIR__ . '/services/downloads.php';
 // Load media renaming after downloads so stale ZIP archives can be invalidated.
 require_once __DIR__ . '/services/media_renamer.php';
 require_once __DIR__ . '/services/logs.php';
+// Load scheduled site maintenance after logs, thumbnails, downloads, and cleanup helpers are available.
+require_once __DIR__ . '/services/site_maintenance.php';
 // Load durable login helpers before authentication controllers restore expired PHP sessions.
 require_once __DIR__ . '/services/auth_persistence.php';
 // Load Google login helpers after logs and before auth controllers render account linking controls.

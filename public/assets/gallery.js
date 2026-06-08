@@ -54,6 +54,7 @@
 
 import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=20260511-i18n-js-v1';
 import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
+import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20260510-lifecycle-v3';
 import { setupGallerySearchPickers } from './gallery-modules/searchable-gallery-picker.js?v=20260519-gallery-picker-v1';
@@ -68,7 +69,7 @@ import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-galler
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260601-3d-carousel-v2';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260608-lightbox-letterbox-v1';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -153,6 +154,7 @@ function bootGalleryBrowserFeatures() {
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupAdminNavigationDataPanel);
     runWhenDomReady(setupResponsiveThumbnailSizes);
+    runWhenDomReady(setupThumbnailWarmup);
     runWhenDomReady(setupAdminImageReordering);
     runWhenDomReady(setupPublicGalleryPageReordering);
 }

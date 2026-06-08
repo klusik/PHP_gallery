@@ -35,6 +35,88 @@
 declare(strict_types=1);
 
 /**
+ * Return maintenance status for a limited set of thumbnail sizes.
+ *
+ * @param array<int, int> $sizes Thumbnail sizes to check.
+ * @return array<string, mixed>
+ */
+function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, array $sizes): array
+{
+    // $sourcePath stores the original image path inspected before any decoding is attempted.
+    $sourcePath = image_abs_path($image, $gallery);
+    if (!is_file($sourcePath)) {
+        return ['required' => 0, 'missing' => 0, 'webp_skipped' => 0, 'target_formats' => [], 'thumbnail_policy' => null];
+    }
+
+    // $sourceMtime stores the modification time that generated variants must match.
+    $sourceMtime = filemtime($sourcePath) ?: 0;
+    // $mime stores the source MIME value used for format selection.
+    $mime = image_source_mime_for_derivatives($sourcePath, $image);
+    // $formats stores the formats this installation can keep current for this source file.
+    $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
+    // $thumbnailPolicy stores the exact source-specific policy for warmup diagnostics.
+    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
+    // $webpSkipped stores intentionally missing WebP variants when metadata preservation is not available.
+    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
+    // $sourceGeometry stores dimensions used to detect stale square-canvas thumbnail artifacts.
+    $sourceGeometry = function_exists('thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
+    // $invalidGeometryDeleted stores cache files scheduled for replacement because they did not preserve the source ratio.
+    $invalidGeometryDeleted = 0;
+    // $invalidGeometryFiles stores stale cache filenames scheduled for detailed warmup repair logs.
+    $invalidGeometryFiles = [];
+    // $sizes stores only supported sizes.
+    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    // $required stores the number of expected variant files.
+    $required = 0;
+    // $missing stores the number of expected variant files missing or stale.
+    $missing = 0;
+
+    foreach ($sizes as $size) {
+        foreach ($formats as $format) {
+            $required++;
+            try {
+                // $targetPath stores one generated thumbnail path to inspect.
+                $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
+            } catch (RuntimeException) {
+                $missing++;
+                continue;
+            }
+            if (!is_file($targetPath) || filemtime($targetPath) < $sourceMtime) {
+                $missing++;
+                continue;
+            }
+            if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                // $geometryStatus stores whether a fresh thumbnail cache file has valid dimensions.
+                $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                if (empty($geometryStatus['valid'])) {
+                    $invalidGeometryDeleted++;
+                    $invalidGeometryFiles[] = basename($targetPath);
+                    thumbnail_delete_invalid_geometry_file($targetPath);
+                    if (function_exists('thumbnail_metadata_delete_variant')) {
+                        thumbnail_metadata_delete_variant($image, (int) $size, $format);
+                    }
+                    $missing++;
+                    continue;
+                }
+            }
+            if (function_exists('thumbnail_metadata_record_file')) {
+                thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+            }
+        }
+    }
+
+    return [
+        'required' => $required,
+        'missing' => $missing,
+        'webp_skipped' => $webpSkipped,
+        'target_formats' => $formats,
+        'thumbnail_policy' => $thumbnailPolicy,
+        'invalid_geometry_deleted' => $invalidGeometryDeleted,
+        'invalid_geometry_files' => $invalidGeometryFiles,
+    ];
+}
+
+/**
  * Handles thumbnail maintenance status logic for the gallery application.
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
@@ -42,51 +124,28 @@ declare(strict_types=1);
  */
 function thumbnail_maintenance_status(array $image, array $gallery): array
 {
-    // Variable $sourcePath stores this steps working value.
-    $sourcePath = image_abs_path($image, $gallery);
-    if (!is_file($sourcePath)) {
-        return ['required' => 0, 'missing' => 0, 'webp_skipped' => 0];
-    }
-    // Variable $sourceMtime stores this steps working value.
-    $sourceMtime = filemtime($sourcePath) ?: 0;
-    // $mime stores an intermediate value used by the surrounding gallery workflow.
-    $mime = image_source_mime_for_derivatives($sourcePath, $image);
-    // $formats stores the variants that should exist for this source on this server.
-    $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
-    // $webpSkipped stores variants intentionally excluded because this server cannot preserve EXIF in WebP.
-    $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
-    // Variable $required stores this steps working value.
-    $required = 0;
-    // Variable $missing stores this steps working value.
-    $missing = 0;
-    foreach (thumbnail_sizes() as $size) {
-        foreach ($formats as $format) {
-            $required++;
-            try {
-                // $targetPath stores an intermediate value used by the surrounding gallery workflow.
-                $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
-            } catch (RuntimeException) {
-                $missing++;
-                continue;
-            }
-            if (!is_file($targetPath) || filemtime($targetPath) < $sourceMtime) {
-                $missing++;
-            }
-        }
-    }
+    // $status stores the shared thumbnail variant status used by admin and warmup repair.
+    $status = thumbnail_maintenance_status_for_sizes($image, $gallery, thumbnail_sizes());
+
     if (image_uses_dng_display_derivatives($image) && dng_derivative_generation_supported()) {
-        $required++;
         try {
+            // $sourcePath stores the original image path inspected before DNG master checks.
+            $sourcePath = image_abs_path($image, $gallery);
+            // $sourceMtime stores the original DNG timestamp used to detect stale generated files.
+            $sourceMtime = is_file($sourcePath) ? (filemtime($sourcePath) ?: 0) : 0;
             // $masterPath stores the generated full-size WebP display master.
             $masterPath = dng_display_master_abs_path($image, $gallery, false);
-            if (!is_file($masterPath) || filemtime($masterPath) < $sourceMtime) {
-                $missing++;
+            $status['required'] = (int) ($status['required'] ?? 0) + 1;
+            if (!is_file($masterPath) || ($sourceMtime > 0 && filemtime($masterPath) < $sourceMtime)) {
+                $status['missing'] = (int) ($status['missing'] ?? 0) + 1;
             }
         } catch (RuntimeException) {
-            $missing++;
+            $status['required'] = (int) ($status['required'] ?? 0) + 1;
+            $status['missing'] = (int) ($status['missing'] ?? 0) + 1;
         }
     }
-    return ['required' => $required, 'missing' => $missing, 'webp_skipped' => $webpSkipped];
+
+    return $status;
 }
 
 /**
@@ -470,6 +529,10 @@ function delete_all_thumbnail_files(): array
     $directoriesScanned = 0;
     // $galleryRoot stores the configured root boundary for all filesystem checks.
     $galleryRoot = galleries_root();
+
+    if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+        db()->exec('DELETE FROM image_thumbnail_variants');
+    }
 
     foreach (db()->query('SELECT folder_path FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $folderPath) {
         // $gallery stores the minimum shape required by gallery_thumbs_dir().

@@ -293,6 +293,7 @@ Important controller files:
 | `app/controllers/admin_public_inline.php` | Inline public-page editing for logged-in admins. |
 | `app/controllers/admin_uploads.php` | Upload UI and upload processing. |
 | `app/controllers/admin_thumbnails.php` | Thumbnail creation, deletion, maintenance and notices. |
+| `app/controllers/site_maintenance.php` | Token-protected web cron endpoint and Admin settings for resumable scheduled maintenance. |
 | `app/controllers/admin_tags.php` | Admin tag management. |
 | `app/controllers/admin_logs.php` | Audit log list, filters, updates and exports. |
 | `app/controllers/admin_telemetry.php` | Telemetry dashboard, settings, exports and maintenance. |
@@ -321,7 +322,7 @@ Key service families:
 | Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, default-enabled EXIF/GPS display policy with per-gallery overrides, flight route maps, waypoint lookup and SimBrief OFP processing. |
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
-| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `updates.php`, `github.php`, `gallery_migration.php` | Dashboard model, diagnostics, audit logs, GitHub update checks and API migration. |
+| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, audit logs, GitHub update checks, API migration and resumable scheduled maintenance. |
 
 ## View Layer
 
@@ -569,7 +570,8 @@ Important concepts:
 3. Generated thumbnails can be JPEG and sometimes WebP depending on source and PHP imaging support.
 4. Thumbnail bounds can be configured globally, per gallery and per image.
 5. Admin maintenance screens can generate or delete thumbnails.
-6. Public pages use responsive picture helpers to select suitable variants.
+6. Scheduled site maintenance calls the same thumbnail generation service in bounded cron-safe batches, records progress after each image, reuses valid existing thumbnails and only repairs missing, stale or invalid-ratio variants. Automatic maintenance runs only inside the configured UTC window and can chain safe web slices until the cycle completes or the window ends.
+7. Public pages use responsive picture helpers to select suitable variants.
 
 Use the service family instead of hardcoding thumbnail paths:
 
@@ -581,6 +583,23 @@ thumbnail_html.php
 thumbnail_maintenance.php
 thumbnail_bounds.php
 ```
+
+
+## Scheduled Site Maintenance
+
+Scheduled site maintenance is configured from Admin > Maintenance > Media. It is enabled by default and starts a daily cycle at the configured UTC time, with 00:00 UTC as the default. The default overall maintenance window is three hours. Normal public or Admin page requests can opportunistically trigger maintenance after the page response when the current UTC time is inside that window. The triggered slice can then queue the next hidden safe slice directly, so one visitor request can keep the daily cycle moving until the gallery is finished or the window ends. This request-triggered mode does not require a visible cron URL or browser JavaScript, but a completely idle site still needs hosting cron or CLI cron.
+
+The service `app/services/site_maintenance.php` owns the persisted state, non-waiting filesystem lock, daily completion marker, hidden public cron token, thumbnail batch cursor, UTC maintenance window, chained-slice queueing, request-trigger throttle and cleanup phase. It intentionally reuses `create_image_thumbnails_result()` so upload-time thumbnails, Admin thumbnail generation, public warmup and scheduled maintenance all use the same thumbnail code path. Maintenance mode disables the heavier Imagick WebP metadata writer and saves the cursor before each source image so one hazardous file cannot keep the cycle repeating the same earlier images.
+
+Available runners:
+
+```text
+normal GET request to home, gallery, tag, share or Admin pages after the UTC schedule
+?page=site_maintenance_cron&token=<admin-generated-token>
+scripts/site_maintenance.php --quiet
+```
+
+The hidden cron endpoint must never be called without its generated token. The CLI runner is preferable when hosting exposes PHP CLI and completely unattended execution is required on a site with no traffic. The web endpoint remains available for shared hosting control panels and for the internal request-triggered runner.
 
 ## AI Metadata and OpenAI Text Assist
 

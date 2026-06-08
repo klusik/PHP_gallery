@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.76';
+const CMS_VERSION = '0.77';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -152,6 +152,9 @@ function cms_run(): void
     translation_bootstrap_request($page);
     send_security_headers();
     application_autoupdate_maybe_run();
+    if (function_exists('site_maintenance_register_request_trigger')) {
+        site_maintenance_register_request_trigger($page);
+    }
     // Variable $routes stores this steps working value.
     $routes = [
         'home' => 'cms_home',
@@ -166,6 +169,8 @@ function cms_run(): void
         'thumb' => 'cms_thumb',
         'public_media' => 'cms_public_media',
         'public_thumb' => 'cms_public_thumb',
+        'thumbnail_warmup' => 'cms_thumbnail_warmup',
+        'site_maintenance_cron' => 'cms_site_maintenance_cron',
         'gallery_cover_asset' => 'cms_gallery_cover_asset',
         'gallery_branding_asset' => 'cms_gallery_branding_asset',
         'theme_background_asset' => 'cms_theme_background_asset',
@@ -203,6 +208,7 @@ function cms_run(): void
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
         'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
         'admin_seo_guard_settings' => 'cms_admin_seo_guard_settings',
+        'admin_site_maintenance_settings' => 'cms_admin_site_maintenance_settings',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',

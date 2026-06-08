@@ -156,6 +156,36 @@ function cms_admin_create_thumbnails(): void
     }
     // Variable $count stores this steps working value.
     $count = 0;
+    if (($_POST['scope'] ?? '') === 'metadata') {
+        // $imageIds stores every image that should have its physical thumbnails inventoried.
+        $imageIds = all_image_ids();
+        // $deleted stores invalid thumbnail files removed during the metadata scan.
+        $deleted = 0;
+        // $galleryCache stores galleries only once per refresh pass.
+        $galleryCache = [];
+        foreach ($imageIds as $imageId) {
+            // $image stores the current source image row.
+            $image = find_image((int) $imageId);
+            if (!$image) {
+                continue;
+            }
+            // $galleryId stores the current image gallery identifier.
+            $galleryId = (int) $image['gallery_id'];
+            if (!array_key_exists($galleryId, $galleryCache)) {
+                $galleryCache[$galleryId] = find_gallery($galleryId);
+            }
+            if (!$galleryCache[$galleryId]) {
+                continue;
+            }
+            // $result stores refreshed metadata counters for this image.
+            $result = thumbnail_metadata_refresh_image($image, $galleryCache[$galleryId], null, true);
+            $count += (int) ($result['valid'] ?? 0);
+            $deleted += (int) ($result['invalid_deleted'] ?? 0);
+        }
+        thumbnail_maintenance_summary_cache_clear();
+        flash_message('admin_notice', t('admin.thumbnails.metadata_refreshed_count', 'Thumbnail database refreshed for {count} valid thumbnail file(s). Deleted {deleted} invalid thumbnail file(s).', ['count' => (string) $count, 'deleted' => (string) $deleted]));
+        redirect_to(url_for('admin') . '#admin-tab-maintenance');
+    }
     if (($_POST['scope'] ?? '') === 'all') {
         // Variable $count stores this steps working value.
         $count = create_all_thumbnails();
@@ -259,6 +289,10 @@ function cms_admin_create_thumbnails_batch(): void
     $webpSkipped = 0;
     // $failed stores required thumbnail or DNG display derivatives that could not be generated.
     $failed = 0;
+    // $invalidGeometryDeleted stores wrong-ratio derivative files removed by metadata refresh.
+    $invalidGeometryDeleted = 0;
+    // $invalidGeometryFiles stores a small diagnostic sample of deleted invalid derivatives.
+    $invalidGeometryFiles = [];
     // $errors stores concise thumbnail generation diagnostics for the JSON response.
     $errors = [];
     // Variable $galleryCache stores this steps working value.
@@ -277,6 +311,17 @@ function cms_admin_create_thumbnails_batch(): void
         if (!$galleryCache[$galleryId]) {
             continue;
         }
+        if ($scope === 'metadata') {
+            // $result stores refreshed thumbnail metadata counters for this image.
+            $result = thumbnail_metadata_refresh_image($image, $galleryCache[$galleryId], null, true);
+            $created += (int) ($result['valid'] ?? 0);
+            $skipped += (int) ($result['missing'] ?? 0) + (int) ($result['invalid_deleted'] ?? 0);
+            $invalidGeometryDeleted += (int) ($result['invalid_deleted'] ?? 0);
+            foreach ((array) ($result['invalid_files'] ?? []) as $invalidFile) {
+                $invalidGeometryFiles[] = (string) $invalidFile;
+            }
+            continue;
+        }
         // Variable $result stores this steps working value.
         $result = create_image_thumbnails_result($image, $galleryCache[$galleryId]);
         $created += (int) $result['created'];
@@ -287,7 +332,7 @@ function cms_admin_create_thumbnails_batch(): void
             $errors[] = (string) $error;
         }
     }
-    if ($created > 0 || $scope === 'missing') {
+    if ($created > 0 || $scope === 'missing' || $scope === 'metadata' || $invalidGeometryDeleted > 0) {
         thumbnail_maintenance_summary_cache_clear();
     }
     if ($failed > 0) {
@@ -311,6 +356,19 @@ function cms_admin_create_thumbnails_batch(): void
     $maintenanceAfter = null;
     // $remainingImageIds stores any images still considered affected after a targeted repair finishes.
     $remainingImageIds = [];
+    if ($scope === 'metadata' && $done) {
+        admin_log_event('info', 'thumbnail.metadata_refreshed', 'Thumbnail database metadata refresh completed.', [
+            'scope' => $scope,
+            'selected_image_count' => $total,
+            'selected_image_ids' => array_slice($imageIds, 0, 50),
+            'selected_image_ids_truncated' => count($imageIds) > 50,
+            'processed' => $processed,
+            'valid_variants' => $created,
+            'missing_or_invalid_variants' => $skipped,
+            'invalid_geometry_deleted' => $invalidGeometryDeleted,
+            'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter($invalidGeometryFiles))), 0, 50),
+        ]);
+    }
     if ($scope === 'missing' && $done) {
         $maintenanceAfter = thumbnail_maintenance_summary(null, 1000);
         $remainingImageIds = thumbnail_maintenance_image_ids(null, 1000);
@@ -342,6 +400,8 @@ function cms_admin_create_thumbnails_batch(): void
             'next_offset' => $processed,
             'webp_skipped' => $webpSkipped,
             'failed' => $failed,
+            'invalid_geometry_deleted' => $invalidGeometryDeleted,
+            'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter($invalidGeometryFiles))), 0, 50),
             'errors' => array_values(array_unique(array_filter($errors))),
             'created' => $created,
             'skipped' => $skipped,
@@ -483,7 +543,7 @@ function thumbnail_request_image_ids(array $post): array
 {
     // $scope stores the requested thumbnail job scope shared by normal forms and AJAX batch jobs.
     $scope = (string) ($post['scope'] ?? '');
-    if ($scope === 'all') {
+    if ($scope === 'all' || $scope === 'metadata') {
         return all_image_ids();
     }
     if ($scope === 'missing') {

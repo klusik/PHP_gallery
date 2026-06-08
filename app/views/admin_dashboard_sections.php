@@ -128,17 +128,28 @@ function view_render_admin_dashboard_metric_grid(array $model): void
     $privateGalleries = view_admin_dashboard_int($model, 'private_galleries');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
     $originalStorageLabel = (string) ($model['original_storage_label'] ?? '');
+    $galleryDatabaseUsageLabel = (string) ($model['gallery_database_usage_label'] ?? '');
+    $databaseUsageLabel = (string) ($model['database_usage_label'] ?? '');
+    $databaseUsageAvailable = view_admin_dashboard_bool($model, 'database_usage_available');
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
 
     $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
         ? t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')
         : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . t('admin.dashboard.metric_images_sampled', 'images sampled');
+    $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
+    if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
+        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_gallery_database_storage', 'Gallery DB: {size}', ['size' => $galleryDatabaseUsageLabel]));
+    }
+    if ($databaseUsageAvailable && $databaseUsageLabel !== '' && $databaseUsageLabel !== $galleryDatabaseUsageLabel) {
+        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_total_database_storage', 'Total DB: {size}', ['size' => $databaseUsageLabel]));
+    }
+    $galleryStorageHelp .= '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>';
     view_render_admin_metric_grid([
         [
             'label' => t('admin.dashboard.metric_galleries', 'Galleries'),
             'value' => (string) $totalGalleries,
-            'help_html' => e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>',
+            'help_html' => $galleryStorageHelp,
             'state' => $privateGalleries > 0 || $unpublishedGalleries > 0 ? 'care' : 'ready',
         ],
         [
@@ -283,6 +294,7 @@ function view_render_admin_dashboard_media_tools(array $model): void
     ]);
     echo '<div class="admin-maintenance-grid">';
     view_render_admin_dashboard_thumbnail_card($model, 'admin-maintenance-card');
+    view_render_admin_dashboard_site_maintenance_card($model, 'admin-maintenance-card');
     if (view_admin_dashboard_feature_enabled('downloads')) {
         view_render_admin_dashboard_archive_card('admin-maintenance-card');
     }
@@ -428,11 +440,125 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary danger" data-delete-legacy-jpg-thumbnails data-confirm-message="' . e(t('admin.thumbnails.legacy_cleanup_confirm', 'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.')) . '">' . e(t('admin.thumbnails.delete_legacy_jpg_thumbnails', 'Remove legacy JPG thumbnails')) . '</button>';
     echo '</form>';
 
+    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-metadata-actions-form" data-refresh-thumbnail-metadata-form>' . csrf_field();
+    echo '<span>' . e(t('admin.thumbnails.metadata_refresh_hint', 'Refresh the thumbnail database from existing thumbnail files. Wrong-ratio files are deleted and are not displayed.')) . '</span>';
+    echo '<button type="button" class="secondary" data-refresh-thumbnail-metadata>' . e(t('admin.thumbnails.refresh_metadata', 'Refresh thumbnail database')) . '</button>';
+    echo '</form>';
+
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
     echo '</article>';
 }
+
+
+/**
+ * Render the scheduled site-maintenance settings card.
+ *
+ * @param array<string, mixed> $model
+ */
+function view_render_admin_dashboard_site_maintenance_card(array $model, string $className): void
+{
+    $status = view_admin_dashboard_array($model, 'site_maintenance_status');
+    $state = is_array($status['state'] ?? null) ? $status['state'] : [];
+    $lastResult = is_array($status['last_result'] ?? null) ? $status['last_result'] : [];
+    $totals = is_array($state['totals'] ?? null) ? $state['totals'] : [];
+    $lastStep = is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [];
+    $enabled = !empty($status['enabled']);
+    $requestTriggerEnabled = !empty($status['request_trigger_enabled']);
+    $utcTime = (string) ($status['utc_time'] ?? '00:00');
+    $batchSize = (int) ($status['batch_size'] ?? 20);
+    $timeBudget = (int) ($status['time_budget_seconds'] ?? 20);
+    $windowHours = (string) ($status['window_hours_value'] ?? '3');
+    $scheduledAtUtc = (string) ($status['scheduled_at_utc'] ?? '');
+    $windowEndsAtUtc = (string) ($status['window_ends_at_utc'] ?? '');
+    $withinWindow = !empty($status['within_window']);
+    $totalSourceImages = max(0, (int) ($status['total_source_images'] ?? 0));
+    $stateStatus = (string) ($state['status'] ?? '');
+    $phase = (string) ($state['phase'] ?? '');
+    $lastCompletedAt = (string) ($status['last_completed_at'] ?? '');
+    $lastCompletedDate = (string) ($status['last_completed_date'] ?? '');
+    $lastStepAt = (string) ($state['last_step_at'] ?? '');
+    $errors = array_values(array_filter(array_map('strval', (array) ($totals['errors'] ?? []))));
+
+    echo '<article class="' . e($className) . ' admin-site-maintenance-card">';
+    echo '<strong>' . e(t('admin.site_maintenance.title', 'Scheduled site maintenance')) . '</strong>';
+    echo '<p class="admin-site-maintenance-copy">' . e(t('admin.site_maintenance.hint', 'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired.')) . '</p>';
+
+    if ($stateStatus !== '') {
+        echo '<div class="admin-site-maintenance-statusline"><strong>' . e(t('admin.site_maintenance.current_state', 'Current state')) . ':</strong> <span>' . e($stateStatus) . ($phase !== '' ? ' / ' . e($phase) : '') . '</span></div>';
+        echo '<dl class="admin-site-maintenance-metrics">';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_checked', 'Checked')) . '</dt><dd>' . e((string) (int) ($totals['images_seen'] ?? 0)) . ' / ' . e($totalSourceImages > 0 ? (string) $totalSourceImages : '?') . '</dd></div>';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_repair_attempts', 'Repair attempts')) . '</dt><dd>' . e((string) (int) ($totals['images_processed'] ?? 0)) . '</dd></div>';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_created', 'Created')) . '</dt><dd>' . e((string) (int) ($totals['thumbs_created'] ?? 0)) . '</dd></div>';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_invalid_removed', 'Invalid removed')) . '</dt><dd>' . e((string) (int) ($totals['invalid_geometry_deleted'] ?? 0)) . '</dd></div>';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_deferred', 'Deferred')) . '</dt><dd>' . e((string) (int) ($totals['images_deferred'] ?? 0)) . '</dd></div>';
+        echo '<div><dt>' . e(t('admin.site_maintenance.metric_failed', 'Failed')) . '</dt><dd>' . e((string) (int) ($totals['failed'] ?? 0)) . '</dd></div>';
+        echo '</dl>';
+        if ($lastStepAt !== '') {
+            echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_step', 'Last safe slice: {time}, checked {checked}, repair attempts {repairs}, created {created}, deferred {deferred}.', [
+                'time' => $lastStepAt . ' UTC',
+                'checked' => (string) (int) ($lastStep['images_checked'] ?? 0),
+                'repairs' => (string) (int) ($lastStep['repair_attempts'] ?? 0),
+                'created' => (string) (int) ($lastStep['thumbnails_created'] ?? 0),
+                'deferred' => (string) (int) ($lastStep['deferred_images'] ?? 0),
+            ])) . '</span>';
+        }
+        if ($errors !== []) {
+            echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_diagnostic', 'Latest diagnostic: {message}', ['message' => (string) end($errors)])) . '</span>';
+        }
+    } elseif ($lastCompletedAt !== '') {
+        echo '<span><strong>' . e(t('admin.site_maintenance.last_completed', 'Last completed')) . ':</strong> ' . e($lastCompletedAt) . ' UTC</span>';
+    } else {
+        echo '<span>' . e(t('admin.site_maintenance.not_run_yet', 'No maintenance cycle has completed yet.')) . '</span>';
+    }
+
+    if ($lastCompletedDate !== '') {
+        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.last_completed_date', 'Last scheduled UTC date: {date}', ['date' => $lastCompletedDate])) . '</span>';
+    }
+
+    if (!empty($lastResult['busy'])) {
+        echo '<span class="admin-site-maintenance-note is-warning">' . e(t('admin.site_maintenance.last_busy', 'The last maintenance call found another invocation already running.')) . '</span>';
+    }
+
+    if ($scheduledAtUtc !== '' && $windowEndsAtUtc !== '') {
+        echo '<span class="admin-site-maintenance-note">' . e(t('admin.site_maintenance.window_summary', 'Active UTC window: {start} to {end}. Current window state: {state}.', [
+            'start' => $scheduledAtUtc,
+            'end' => $windowEndsAtUtc,
+            'state' => $withinWindow ? t('admin.site_maintenance.window_active', 'active') : t('admin.site_maintenance.window_inactive', 'inactive'),
+        ])) . '</span>';
+    }
+
+    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-settings-form">' . csrf_field();
+    echo '<input type="hidden" name="site_maintenance_action" value="save">';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.enabled', 'Enable scheduled maintenance')) . '</span></label>';
+    echo '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"' . ($requestTriggerEnabled ? ' checked' : '') . '> <span>' . e(t('admin.site_maintenance.request_trigger_enabled', 'Let normal page requests trigger due maintenance')) . '</span></label>';
+    echo '<label><span>' . e(t('admin.site_maintenance.utc_time', 'Start time, UTC')) . '</span><input type="time" name="site_maintenance_utc_time" value="' . e($utcTime) . '"></label>';
+    echo '<label><span>' . e(t('admin.site_maintenance.window_hours', 'Overall maintenance window, hours')) . '</span><input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="' . e($windowHours) . '"></label>';
+    echo '<label><span>' . e(t('admin.site_maintenance.batch_size', 'Max images checked per internal batch')) . '</span><input type="number" name="site_maintenance_batch_size" min="1" max="50" value="' . $batchSize . '"></label>';
+    echo '<label><span>' . e(t('admin.site_maintenance.time_budget', 'Time budget per call, seconds')) . '</span><input type="number" name="site_maintenance_time_budget_seconds" min="3" max="120" value="' . $timeBudget . '"></label>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.site_maintenance.save', 'Save maintenance settings')) . '</button>';
+    echo '</form>';
+
+    echo '<div class="admin-site-maintenance-cron">';
+    echo '<span><strong>' . e(t('admin.site_maintenance.automatic_trigger', 'Automatic trigger')) . '</strong></span>';
+    echo '<span>' . e(t('admin.site_maintenance.automatic_trigger_hint', 'When a normal public or Admin page is opened during the configured UTC window, the site starts one safe slice after the page response and then queues the next safe slice directly. Chained slices continue until the cycle finishes or the UTC window ends.')) . '</span>';
+    echo '<span>' . e(t('admin.site_maintenance.external_cron_hint', 'For completely unattended execution on a site with no traffic, use the CLI command from hosting cron: {command}', [
+        'command' => 'php ' . dirname(dirname(__DIR__)) . '/scripts/site_maintenance.php --quiet',
+    ])) . '</span>';
+    echo '</div>';
+
+    echo '<form method="post" action="' . e(url_for('admin_site_maintenance_settings')) . '" class="admin-site-maintenance-actions">' . csrf_field();
+    echo '<div class="nav">';
+    echo '<button type="submit" name="site_maintenance_action" value="run_now" class="secondary">' . e(t('admin.site_maintenance.run_now', 'Run one safe check now')) . '</button>';
+    echo '<button type="submit" name="site_maintenance_action" value="reset_state" class="secondary">' . e(t('admin.site_maintenance.reset_state', 'Reset interrupted state')) . '</button>';
+    echo '<button type="submit" name="site_maintenance_action" value="rotate_token" class="secondary danger" onclick="return confirm(' . e(json_encode(t('admin.site_maintenance.rotate_confirm', 'Rotate the hidden web-cron token? Existing external web cron URLs will stop working until updated.'), JSON_UNESCAPED_UNICODE)) . ');">' . e(t('admin.site_maintenance.rotate_token', 'Rotate hidden web-cron token')) . '</button>';
+    echo '</div>';
+    echo '</form>';
+
+    echo '</article>';
+}
+
 
 /**
  * Render the complete gallery archive card.

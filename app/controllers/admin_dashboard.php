@@ -53,8 +53,13 @@ function cms_admin(): void
 function cms_admin_storage_statistics(): void
 {
     require_admin();
-    $statistics = function_exists('admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
-    view_render_admin_storage_statistics_page($statistics);
+    $activeTab = (string) ($_GET['tab'] ?? 'files');
+    if (!in_array($activeTab, ['files', 'database'], true)) {
+        $activeTab = 'files';
+    }
+    $statistics = $activeTab === 'files' && function_exists('admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
+    $databaseUsage = $activeTab === 'database' && function_exists('admin_database_usage_summary') ? admin_database_usage_summary() : null;
+    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab);
 }
 
 /**

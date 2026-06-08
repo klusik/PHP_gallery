@@ -229,7 +229,9 @@
     display: grid;
     align-content: start;
     gap: 0.55rem;
+    min-width: 0;
     min-height: 8.5rem;
+    overflow-wrap: anywhere;
     padding: 0.9rem;
     border: 1px solid var(--admin-border);
     border-radius: 12px;
@@ -611,6 +613,55 @@ body.is-navdata-updating {
     }
 }
 
+.admin-storage-tabs {
+    margin: 0 0 1rem;
+    padding: 0.65rem;
+}
+
+.admin-storage-tab-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.admin-storage-tab {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #1d2327;
+    text-decoration: none;
+}
+
+.admin-storage-tab:hover,
+.admin-storage-tab:focus {
+    border-color: #91b9d8;
+    background: #eef6fc;
+}
+
+.admin-storage-tab.is-active {
+    border-color: #2271b1;
+    background: #eaf4fb;
+    box-shadow: inset 0 0 0 1px #2271b1;
+}
+
+.admin-storage-tab span {
+    font-size: 0.95rem;
+    font-weight: 850;
+}
+
+.admin-storage-tab small {
+    overflow: hidden;
+    color: #5d6975;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .admin-storage-panel {
     display: grid;
     gap: 1rem;
@@ -778,6 +829,10 @@ body.is-navdata-updating {
 }
 
 @media (max-width: 720px) {
+    .admin-storage-tab-list {
+        grid-template-columns: 1fr;
+    }
+
     .admin-storage-summary-grid {
         grid-template-columns: 1fr;
     }
@@ -903,4 +958,139 @@ body.is-navdata-updating {
 .admin-thumbnail-legacy-cleanup-form {
     padding-top: 0.4rem;
     border-top: 1px solid var(--admin-border);
+}
+
+.admin-site-maintenance-card form {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+}
+
+.admin-site-maintenance-card label {
+    display: grid;
+    gap: 0.2rem;
+    color: var(--text, #172033);
+    font-size: 0.9rem;
+}
+
+.admin-site-maintenance-card input[type="time"],
+.admin-site-maintenance-card input[type="number"] {
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-site-maintenance-card .admin-compact-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    margin: 0.15rem 0;
+}
+
+.admin-site-maintenance-card .admin-compact-toggle input {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15rem;
+    accent-color: var(--accent, #3b82f6);
+}
+
+.admin-site-maintenance-card .admin-compact-toggle span {
+    color: var(--text, #172033);
+}
+
+.admin-site-maintenance-card,
+.admin-site-maintenance-card > *,
+.admin-site-maintenance-card span,
+.admin-site-maintenance-card p,
+.admin-site-maintenance-card dd,
+.admin-site-maintenance-card dt {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.admin-site-maintenance-copy {
+    margin: 0;
+    color: #64717d;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.admin-site-maintenance-statusline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    color: #1d2327;
+    font-size: 0.9rem;
+}
+
+.admin-site-maintenance-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.admin-site-maintenance-metrics div {
+    min-width: 0;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.admin-site-maintenance-metrics dt {
+    margin: 0 0 0.12rem;
+    color: #64717d;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.admin-site-maintenance-metrics dd {
+    margin: 0;
+    color: #1d2327;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.admin-site-maintenance-note {
+    display: block;
+    color: #64717d;
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.admin-site-maintenance-note.is-warning {
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #e5b700;
+    border-radius: 8px;
+    background: #fff8d7;
+    color: #6f5200;
+}
+
+.admin-site-maintenance-cron {
+    display: grid;
+    gap: 0.35rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--admin-border);
+}
+
+.admin-site-maintenance-cron code {
+    display: block;
+    overflow-wrap: anywhere;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: #f3f6f8;
+    color: #1d2327;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.admin-site-maintenance-actions .nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
 }

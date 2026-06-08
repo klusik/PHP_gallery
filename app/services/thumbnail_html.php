@@ -51,8 +51,10 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
     // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
     $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    // $selectedFallback stores the first image URL and whether it had to fall back to the original media file.
+    $selectedFallback = thumbnail_bundle_select_variant($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $fallbackUrl stores the small first image used for the initial responsive paint.
-    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize, $preferredFormat);
+    $fallbackUrl = (string) $selectedFallback['url'];
     // $initialWebpSrcset stores only the small WebP candidate so navigation stays responsive.
     $initialWebpSrcset = thumbnail_bundle_srcset($thumbnailBundle, [$fallbackSize], 'webp');
     // $initialJpegSrcset stores only the small JPEG candidate for browsers without WebP support.
@@ -61,8 +63,14 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
     $fullWebpSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'webp');
     // $fullJpegSrcset stores larger JPEG candidates that JavaScript applies after the first paint.
     $fullJpegSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'jpg');
+    // $warmupSizes stores missing or invalid derivatives that should be repaired after the page has rendered.
+    $warmupSizes = array_merge([$fallbackSize], $srcsetSizes, (array) ($thumbnailBundle['warmup_sizes'] ?? []));
+    // $warmupAttributes stores self-healing thumbnail metadata when the rendered image used /media or stale derivatives were removed.
+    $warmupAttributes = ((!empty($selectedFallback['is_media_fallback']) || !empty($thumbnailBundle['warmup_sizes'])) && is_array($thumbnailBundle['gallery'] ?? null))
+        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], $warmupSizes)
+        : '';
     // $attributes stores caller-provided attributes plus the progressive marker used by the browser module.
-    $attributes = trim($extraAttributes . ' data-progressive-thumbnail');
+    $attributes = trim($extraAttributes . ' data-progressive-thumbnail ' . $warmupAttributes);
     // $html stores the generated picture element.
     $html = '<picture>';
     if ($initialWebpSrcset !== '') {
@@ -99,14 +107,22 @@ function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSi
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
     // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
     $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    // $selectedFallback stores the first image URL and whether it had to fall back to the original media file.
+    $selectedFallback = thumbnail_bundle_select_variant($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.
-    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize, $preferredFormat);
+    $fallbackUrl = (string) $selectedFallback['url'];
     // $webpSrcset stores an intermediate value used by the surrounding gallery workflow.
     $webpSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'webp');
     // $jpegSrcset stores an intermediate value used by the surrounding gallery workflow.
     $jpegSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'jpg');
+    // $warmupSizes stores missing or invalid derivatives that should be repaired after the page has rendered.
+    $warmupSizes = array_merge([$fallbackSize], $srcsetSizes, (array) ($thumbnailBundle['warmup_sizes'] ?? []));
+    // $warmupAttributes stores self-healing thumbnail metadata when the rendered image used /media or stale derivatives were removed.
+    $warmupAttributes = ((!empty($selectedFallback['is_media_fallback']) || !empty($thumbnailBundle['warmup_sizes'])) && is_array($thumbnailBundle['gallery'] ?? null))
+        ? thumbnail_warmup_candidate_attributes($image, $thumbnailBundle['gallery'], $warmupSizes)
+        : '';
     // $attributes stores an intermediate value used by the surrounding gallery workflow.
-    $attributes = trim($extraAttributes);
+    $attributes = trim($extraAttributes . ' ' . $warmupAttributes);
     // $html stores an intermediate value used by the surrounding gallery workflow.
     $html = '<picture>';
     if ($webpSrcset !== '') {

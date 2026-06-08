@@ -60,6 +60,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Thumbnail generation | `app/services/thumbnail_generation.php` | GD/Imagick handling. |
 | Thumbnail responsive HTML | `app/services/thumbnail_html.php`, `app/services/thumbnail_bundles.php` | Used by public pages. |
 | Thumbnail maintenance | `app/services/thumbnail_maintenance.php`, `app/controllers/admin_thumbnails.php` | Admin create/delete/rebuild status. |
+| Scheduled site maintenance | `app/services/site_maintenance.php`, `app/controllers/site_maintenance.php`, `scripts/site_maintenance.php` | Cron-safe daily maintenance, request-triggered hidden runner, UTC maintenance window, chained safe web slices, per-image persisted thumbnail checks, metadata refresh and cleanup tasks. |
 | Thumbnail size bounds | `app/services/thumbnail_bounds.php` | Global/gallery/image min/max sizes. |
 | WebP behavior | `app/services/thumbnail_formats.php` | Format decisions. |
 | Gallery covers | `app/services/gallery_covers.php`, `app/controllers/public_media.php` | Cover image serving and metadata. |
@@ -276,6 +277,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Admin creation | `scripts/create_admin.php` |
 | Manifest generation | `scripts/generate_manifest.php` |
 | Telemetry maintenance CLI | `scripts/telemetry_maintenance.php` |
+| Site maintenance CLI | `scripts/site_maintenance.php` |
 
 ## Test Files
 

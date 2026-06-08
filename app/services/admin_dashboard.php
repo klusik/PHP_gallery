@@ -198,6 +198,8 @@ function admin_dashboard_view_model(): array
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
+    // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
+    $siteMaintenanceStatus = admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('site_maintenance_status') ? site_maintenance_status() : []);
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
@@ -205,6 +207,16 @@ function admin_dashboard_view_model(): array
     $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
+    // $databaseUsage stores a cheap information_schema estimate for DB capacity display.
+    $databaseUsage = function_exists('admin_database_usage_summary') ? admin_render_profile_db('dashboard_database_usage', static fn (): array => admin_database_usage_summary()) : [];
+    // $galleryDatabaseUsageBytes stores table-level DB storage for gallery/content metadata.
+    $galleryDatabaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['gallery_bytes'] ?? 0)) : 0;
+    // $databaseUsageBytes stores table-level DB storage for the whole app database.
+    $databaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['total_bytes'] ?? 0)) : 0;
+    // $galleryDatabaseUsageLabel stores a human-readable database storage amount for the dashboard summary card.
+    $galleryDatabaseUsageLabel = !empty($databaseUsage['available']) ? admin_dashboard_format_bytes($galleryDatabaseUsageBytes) : '';
+    // $databaseUsageLabel stores a human-readable database storage amount for all database tables.
+    $databaseUsageLabel = !empty($databaseUsage['available']) ? admin_dashboard_format_bytes($databaseUsageBytes) : '';
     // $totalGalleries stores an intermediate value used by the surrounding gallery workflow.
     $totalGalleries = count($galleries);
     // $totalImages stores an intermediate value used by the surrounding gallery workflow.
@@ -248,7 +260,11 @@ function admin_dashboard_view_model(): array
         'update_button_class' => $updateButtonClass,
         'update_label' => $updateLabel,
         'thumbnail_summary' => $thumbnailSummary,
+        'site_maintenance_status' => $siteMaintenanceStatus,
         'original_storage_label' => $originalStorageLabel,
+        'gallery_database_usage_label' => $galleryDatabaseUsageLabel,
+        'database_usage_label' => $databaseUsageLabel,
+        'database_usage_available' => !empty($databaseUsage['available']),
         'total_galleries' => $totalGalleries,
         'total_images' => $totalImages,
         'unpublished_galleries' => $unpublishedGalleries,

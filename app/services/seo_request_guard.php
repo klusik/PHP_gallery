@@ -97,6 +97,7 @@ function seo_request_guard_route_is_exempt(string $page): bool
     return in_array($page, [
         'setup',
         'mobile_webdav',
+        'site_maintenance_cron',
         'upload_automation_upload',
         'gallery_migration_receive_manifest',
         'gallery_migration_receive_asset',

@@ -79,7 +79,8 @@ function thumbnail_bundle_media_url(array $image, ?array $gallery): string
  *     gallery:?array,
  *     media_url:string,
  *     sizes:array<int,int>,
- *     variants:array<string,array<int,string>>
+ *     variants:array<string,array<int,string>>,
+ *     warmup_sizes:array<int,int>
  * }
  */
 function thumbnail_bundle(array $image): array
@@ -115,10 +116,39 @@ function thumbnail_bundle(array $image): array
                 'jpg' => [],
                 'webp' => [],
             ],
+            'warmup_sizes' => [],
         ];
 
         if (!$gallery) {
             return $bundle;
+        }
+
+        if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+            // $metadata stores renderable thumbnail variants selected from DB state only.
+            $metadata = thumbnail_metadata_bundle_data($image, $gallery, $sizes);
+            $bundle['variants'] = $metadata['variants'];
+            $bundle['warmup_sizes'] = $metadata['warmup_sizes'];
+            foreach (['jpg', 'webp'] as $format) {
+                public_render_profile_count('thumbnail_bundle_variant_hits', count($bundle['variants'][$format] ?? []));
+            }
+            if (!empty($bundle['warmup_sizes'])) {
+                public_render_profile_count('thumbnail_bundle_metadata_warmup_sizes', count($bundle['warmup_sizes']));
+            }
+            return $bundle;
+        }
+
+        // Older installations without the metadata migration keep the legacy filesystem lookup path.
+        $sourceGeometry = null;
+        if (function_exists('thumbnail_source_geometry_dimensions')) {
+            try {
+                // $sourcePath stores the original file path used only for geometry validation.
+                $sourcePath = image_abs_path($image, $gallery);
+                if (is_file($sourcePath)) {
+                    $sourceGeometry = thumbnail_source_geometry_dimensions($sourcePath, $image);
+                }
+            } catch (Throwable) {
+                $sourceGeometry = null;
+            }
         }
 
         foreach ($sizes as $size) {
@@ -131,6 +161,15 @@ function thumbnail_bundle(array $image): array
                     $path = thumbnail_abs_path($image, $gallery, $size, $format);
                     if (!public_render_profile_is_file($path)) {
                         continue;
+                    }
+                    if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                        // $geometryStatus stores whether this cache file still matches the source aspect ratio.
+                        $geometryStatus = thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
+                        if (empty($geometryStatus['valid'])) {
+                            $bundle['warmup_sizes'][(int) $size] = (int) $size;
+                            public_render_profile_count('thumbnail_bundle_invalid_geometry_queued');
+                            continue;
+                        }
                     }
                     public_render_profile_count('thumbnail_bundle_variant_hits');
                     $bundle['variants'][$format][$size] = thumbnail_serving_url($image, $gallery, $size, $format);
