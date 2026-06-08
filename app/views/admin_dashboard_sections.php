@@ -128,17 +128,28 @@ function view_render_admin_dashboard_metric_grid(array $model): void
     $privateGalleries = view_admin_dashboard_int($model, 'private_galleries');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
     $originalStorageLabel = (string) ($model['original_storage_label'] ?? '');
+    $galleryDatabaseUsageLabel = (string) ($model['gallery_database_usage_label'] ?? '');
+    $databaseUsageLabel = (string) ($model['database_usage_label'] ?? '');
+    $databaseUsageAvailable = view_admin_dashboard_bool($model, 'database_usage_available');
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
 
     $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
         ? t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')
         : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . t('admin.dashboard.metric_images_sampled', 'images sampled');
+    $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
+    if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
+        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_gallery_database_storage', 'Gallery DB: {size}', ['size' => $galleryDatabaseUsageLabel]));
+    }
+    if ($databaseUsageAvailable && $databaseUsageLabel !== '' && $databaseUsageLabel !== $galleryDatabaseUsageLabel) {
+        $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_total_database_storage', 'Total DB: {size}', ['size' => $databaseUsageLabel]));
+    }
+    $galleryStorageHelp .= '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>';
     view_render_admin_metric_grid([
         [
             'label' => t('admin.dashboard.metric_galleries', 'Galleries'),
             'value' => (string) $totalGalleries,
-            'help_html' => e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '<br><a class="admin-metric-inline-link" href="' . e(url_for('admin_storage_statistics')) . '">' . e(t('admin.storage.open_details', 'Storage details')) . '</a>',
+            'help_html' => $galleryStorageHelp,
             'state' => $privateGalleries > 0 || $unpublishedGalleries > 0 ? 'care' : 'ready',
         ],
         [

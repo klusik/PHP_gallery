@@ -38,13 +38,26 @@ declare(strict_types=1);
  * Render the dedicated Admin storage statistics page.
  *
  * @param array<string, mixed>|null $statistics
+ * @param array<string, mixed>|null $databaseUsage
+ * @param string $activeTab
  */
-function view_render_admin_storage_statistics_page(?array $statistics): void
+function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files'): void
 {
+    $activeTab = view_admin_storage_statistics_normalize_tab($activeTab);
     render_header(t('admin.storage.page_title', 'Storage statistics'));
 
     echo '<section class="hero admin-dashboard-hero admin-storage-hero"><div><p class="admin-kicker">' . e(t('admin.storage.kicker', 'Storage')) . '</p><h1>' . e(t('admin.storage.page_title', 'Storage statistics')) . '</h1><p class="muted">' . e(t('admin.storage.page_description', 'Detailed media storage statistics are calculated only when you request them. The normal dashboard keeps using the cheap source-file total.')) . '</p></div>';
     echo '<div class="admin-hero-actions"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.storage.back_to_dashboard', 'Back to dashboard')) . '</a></div></section>';
+
+    view_render_admin_storage_statistics_tabs($activeTab);
+
+    if ($activeTab === 'database') {
+        if (function_exists('view_render_admin_database_usage_panel')) {
+            view_render_admin_database_usage_panel($databaseUsage);
+        }
+        render_footer();
+        return;
+    }
 
     echo '<section class="panel admin-storage-update-shell" data-admin-storage-statistics data-update-url="' . e(url_for('admin_storage_statistics_update')) . '" data-csrf-token="' . e(csrf_token()) . '">';
     echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.storage.manual_update_kicker', 'Manual scan')) . '</p><h2>' . e(t('admin.storage.manual_update_title', 'Populate detailed statistics')) . '</h2></div><p class="muted">' . e(t('admin.storage.manual_update_hint', 'Click the update button to scan expected generated thumbnail and display-master files. Progress is processed in small browser-driven batches.')) . '</p></div>';
@@ -61,6 +74,45 @@ function view_render_admin_storage_statistics_page(?array $statistics): void
     echo '</div>';
 
     render_footer();
+}
+
+/**
+ * Render the local tab navigation for the dedicated storage statistics page.
+ */
+function view_render_admin_storage_statistics_tabs(string $activeTab): void
+{
+    $activeTab = view_admin_storage_statistics_normalize_tab($activeTab);
+    $tabs = [
+        'files' => [
+            'label' => t('admin.storage.tab_files', 'Files'),
+            'hint' => t('admin.storage.tab_files_hint', 'Source photos, thumbnails, and display masters'),
+            'url' => url_for('admin_storage_statistics', ['tab' => 'files']),
+        ],
+        'database' => [
+            'label' => t('admin.storage.tab_database', 'Database'),
+            'hint' => t('admin.storage.tab_database_hint', 'MySQL/MariaDB table storage'),
+            'url' => url_for('admin_storage_statistics', ['tab' => 'database']),
+        ],
+    ];
+
+    echo '<nav class="admin-storage-tabs panel" aria-label="' . e(t('admin.storage.tabs_aria', 'Storage statistics sections')) . '">';
+    echo '<div class="admin-storage-tab-list" role="tablist">';
+    foreach ($tabs as $tabKey => $tab) {
+        $isActive = $activeTab === $tabKey;
+        $className = $isActive ? 'admin-storage-tab is-active' : 'admin-storage-tab';
+        echo '<a class="' . e($className) . '" role="tab" aria-selected="' . ($isActive ? 'true' : 'false') . '" href="' . e((string) $tab['url']) . '">';
+        echo '<span>' . e((string) $tab['label']) . '</span><small>' . e((string) $tab['hint']) . '</small>';
+        echo '</a>';
+    }
+    echo '</div></nav>';
+}
+
+/**
+ * Normalize the requested storage statistics tab.
+ */
+function view_admin_storage_statistics_normalize_tab(string $activeTab): string
+{
+    return in_array($activeTab, ['files', 'database'], true) ? $activeTab : 'files';
 }
 
 /**

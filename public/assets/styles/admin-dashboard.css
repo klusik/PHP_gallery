@@ -613,6 +613,55 @@ body.is-navdata-updating {
     }
 }
 
+.admin-storage-tabs {
+    margin: 0 0 1rem;
+    padding: 0.65rem;
+}
+
+.admin-storage-tab-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.admin-storage-tab {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #1d2327;
+    text-decoration: none;
+}
+
+.admin-storage-tab:hover,
+.admin-storage-tab:focus {
+    border-color: #91b9d8;
+    background: #eef6fc;
+}
+
+.admin-storage-tab.is-active {
+    border-color: #2271b1;
+    background: #eaf4fb;
+    box-shadow: inset 0 0 0 1px #2271b1;
+}
+
+.admin-storage-tab span {
+    font-size: 0.95rem;
+    font-weight: 850;
+}
+
+.admin-storage-tab small {
+    overflow: hidden;
+    color: #5d6975;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .admin-storage-panel {
     display: grid;
     gap: 1rem;
@@ -780,6 +829,10 @@ body.is-navdata-updating {
 }
 
 @media (max-width: 720px) {
+    .admin-storage-tab-list {
+        grid-template-columns: 1fr;
+    }
+
     .admin-storage-summary-grid {
         grid-template-columns: 1fr;
     }
