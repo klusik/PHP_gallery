@@ -80,20 +80,20 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 ## Admin Dashboard and Maintenance
 
-| Task | Primary files |
-| --- | --- |
-| Dashboard route | `app/controllers/admin_dashboard.php`, handler `cms_admin` |
-| Dashboard model | `app/services/admin_dashboard.php` |
-| Admin shell/chrome | `app/views/admin_chrome.php` |
-| Dashboard view helpers | `app/views/admin_dashboard.php` |
+| Task | Primary files | Notes |
+| --- | --- | --- |
+| Dashboard route | `app/controllers/admin_dashboard.php`, handler `cms_admin` | Main admin landing route. |
+| Dashboard model | `app/services/admin_dashboard.php` | Prepares counters, gallery rows, warnings, and maintenance status without view queries. |
+| Admin shell/chrome | `app/views/admin_chrome.php` | Admin navigation, top-level tabs, and reusable nested subtabs. |
+| Dashboard view helpers | `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php` | Overview metrics, gallery table rendering, and grouped maintenance subtab sections. |
 | Gallery date suggestions entry | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php` | Global and scoped branch review plus the focused `admin_gallery_date_suggestion` apply endpoint. |
-| URL rewrite settings | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
-| Public search settings card | `app/controllers/admin_dashboard.php`, `app/services/public_search.php` |
-| EXIF/GPS display defaults | `app/controllers/admin_dashboard.php`, `app/services/admin_dashboard.php`, `app/views/admin_dashboard.php`, `app/services/exif.php` | Global default-enabled policy, reset-all override action and dashboard cards reused across admin dashboard tabs. |
-| Favorite gallery and main-page shortcuts | `app/controllers/admin_theme.php`, `app/services/favorite_galleries.php`, `app/views/layout.php` |
-| Dev mode | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` |
-| Migrations from admin | `app/controllers/admin_dashboard.php`, `app/migrations.php` |
-| Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` |
+| URL rewrite settings | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` | Clean URL compatibility controls rendered under Content and display maintenance. |
+| Public search settings card | `app/controllers/admin_dashboard.php`, `app/services/public_search.php` | Global public search toggle rendered under Content and display maintenance. |
+| EXIF/GPS display defaults | `app/controllers/admin_dashboard.php`, `app/services/admin_dashboard.php`, `app/views/admin_dashboard.php`, `app/views/admin_dashboard_sections.php`, `app/services/exif.php` | Global default-enabled policy, reset-all override action and dashboard maintenance card. |
+| Favorite gallery and main-page shortcuts | `app/controllers/admin_theme.php`, `app/services/favorite_galleries.php`, `app/views/layout.php` | Theme-admin selection for top navigation shortcuts. |
+| Dev mode | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` | Viewer diagnostics toggle rendered under System health maintenance. |
+| Migrations from admin | `app/controllers/admin_dashboard.php`, `app/migrations.php` | Pending migration action rendered only when needed. |
+| Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` | Core-file and deployment health checks. |
 
 ## Gallery Administration
 

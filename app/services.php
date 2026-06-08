@@ -39,6 +39,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/services/app_settings.php';
 // Load translation helpers early so controllers can use t() for visible text.
 require_once __DIR__ . '/services/translations.php';
+// Load public SEO request guard helpers before routing enforces query-string safety.
+require_once __DIR__ . '/services/seo_request_guard.php';
 // Load global feature visibility helpers before optional feature modules initialize.
 require_once __DIR__ . '/services/feature_flags.php';
 // Load schema helpers before feature modules perform optional-column checks.
@@ -92,6 +94,8 @@ require_once __DIR__ . '/services/gallery_lookup.php';
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
+// Load Admin storage statistics after path and derivative helpers are available.
+require_once __DIR__ . '/services/admin_storage_statistics.php';
 require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';

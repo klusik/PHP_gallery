@@ -201,7 +201,7 @@ function admin_dashboard_view_model(): array
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
-    // $originalStorageBytes stores the total size of imported source files only. Generated thumbnails and display derivatives are not included.
+    // $originalStorageBytes stores the cheap database-only size of imported source files. Generated thumbnails and display derivatives are intentionally not scanned during normal dashboard rendering.
     $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);

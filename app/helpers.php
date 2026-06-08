@@ -1367,6 +1367,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         'assets/styles/admin-update.css',
         'assets/styles/admin-tags.css',
         'assets/styles/side-panel.css',
+        'assets/styles/admin-cinematic.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
     ];

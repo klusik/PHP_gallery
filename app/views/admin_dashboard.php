@@ -44,50 +44,48 @@ function view_render_admin_dashboard(array $model): void
     $pictureGameReady = !empty($model['picture_game_ready']);
     $gpsMapReady = !empty($model['gps_map_ready']);
     $gpsMapOverrideReady = !empty($model['gps_map_override_ready']);
-    $exifGpsDefaultEnabled = !empty($model['exif_gps_default_enabled']);
-    $exifGpsOverrideCount = (int) ($model['exif_gps_override_count'] ?? 0);
     $votingReady = !empty($model['voting_ready']);
     $filenameDisplayReady = !empty($model['filename_display_ready']);
-    $galleryDateRangeReady = !empty($model['gallery_date_range_ready']);
     $migrationPending = !empty($model['migration_pending']);
     $accessReady = !empty($model['access_ready']);
     $backgroundSourceReady = !empty($model['background_source_ready']);
-    $flightNavdataReady = !empty($model['flight_navdata_ready']);
-    $flightNavdataStatus = is_array($model['flight_navdata_status'] ?? null) ? $model['flight_navdata_status'] : [];
     $galleries = is_array($model['galleries'] ?? null) ? $model['galleries'] : [];
     $collapsedIds = is_array($model['collapsed_ids'] ?? null) ? $model['collapsed_ids'] : [];
     $childrenByParent = is_array($model['children_by_parent'] ?? null) ? $model['children_by_parent'] : [];
     $updatePending = !empty($model['update_pending']);
     $updateButtonClass = (string) ($model['update_button_class'] ?? 'button secondary');
     $updateLabel = (string) ($model['update_label'] ?? t('admin.menu.updates', 'Updates'));
-    $thumbnailSummary = is_array($model['thumbnail_summary'] ?? null) ? $model['thumbnail_summary'] : [];
-    $originalStorageLabel = (string) ($model['original_storage_label'] ?? '');
     $totalGalleries = (int) ($model['total_galleries'] ?? count($galleries));
     $totalImages = (int) ($model['total_images'] ?? 0);
-    $unpublishedGalleries = (int) ($model['unpublished_galleries'] ?? 0);
-    $privateGalleries = (int) ($model['private_galleries'] ?? 0);
     $missingThumbnailVariants = (int) ($model['missing_thumbnail_variants'] ?? 0);
     $notices = is_array($model['notices'] ?? null) ? $model['notices'] : [];
-    $publicSearchFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('public_search');
-    $telemetryFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('telemetry');
-    $downloadsFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('downloads');
-    $navigationDataFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('navigation_data');
+    $maintenanceBadge = $migrationPending ? t('admin.dashboard.badge_action', 'Action') : ($missingThumbnailVariants > 0 ? (string) $missingThumbnailVariants : null);
 
     $adminTabs = [
         ['id' => 'admin-tab-overview', 'label' => t('admin.dashboard.tab_overview', 'Overview')],
         ['id' => 'admin-tab-galleries', 'label' => t('admin.dashboard.tab_galleries', 'Galleries'), 'badge' => $totalGalleries],
-        ['id' => 'admin-tab-maintenance', 'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'), 'badge' => $migrationPending ? t('admin.dashboard.badge_action', 'Action') : null],
+        ['id' => 'admin-tab-maintenance', 'label' => t('admin.dashboard.tab_maintenance', 'Maintenance'), 'badge' => $maintenanceBadge],
     ];
 
     admin_render_profile_span('render_header', static function (): void { render_header(t('admin.dashboard.page_title', 'Admin dashboard')); });
-    echo '<section class="hero admin-dashboard-hero"><div><p class="admin-kicker">' . e(t('admin.dashboard.kicker', 'Admin')) . '</p><h1>' . e(t('admin.dashboard.title', 'Dashboard')) . '</h1><p class="muted">' . e(t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.')) . '</p></div>';
-    echo '<div class="admin-hero-actions">';
-    echo '<a class="button" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_gallery', 'Create gallery')) . '</a>';
-    echo '<a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a>';
+    $heroActions = [
+        ['label' => t('admin.dashboard.create_gallery', 'Create gallery'), 'url' => url_for('admin_new_gallery'), 'class' => 'button'],
+        ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
+    ];
     if ($updatePending) {
-        echo '<a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a>';
+        $heroActions[] = ['label' => $updateLabel, 'url' => url_for('admin_update'), 'class' => $updateButtonClass];
     }
-    echo '</div></section>';
+    view_render_admin_hero([
+        'kicker' => t('admin.dashboard.kicker', 'Admin'),
+        'title' => t('admin.dashboard.title', 'Dashboard'),
+        'description' => t('admin.dashboard.description', 'A focused workspace for gallery management, media maintenance, and system health.'),
+        'actions' => $heroActions,
+        'actions_aria_label' => t('admin.dashboard.hero_actions_label', 'Dashboard actions'),
+        'meta' => [
+            ['value' => (string) $totalGalleries, 'label' => t('admin.dashboard.metric_galleries', 'Galleries')],
+            ['value' => (string) $totalImages, 'label' => t('admin.dashboard.metric_top_level_images', 'Top-level images')],
+        ],
+    ]);
 
     view_render_admin_dashboard_notices($notices);
     view_render_admin_url_rewrite_warning();
@@ -96,67 +94,18 @@ function view_render_admin_dashboard(array $model): void
     admin_render_profile_span('render_admin_tabs', static function () use ($adminTabs): void { render_admin_tabs($adminTabs, 'admin-tab-overview'); });
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.overview_kicker', 'Overview')) . '</p><h2>' . e(t('admin.dashboard.overview_title', 'Admin at a glance')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.overview_description', 'Use this page for immediate work. Dedicated tools stay on their own pages.')) . '</p></div>';
-    echo '<section class="admin-metric-grid" aria-label="' . e(t('admin.dashboard.admin_summary', 'Admin summary')) . '">';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_galleries', 'Galleries')) . '</span><strong>' . (int) $totalGalleries . '</strong><small>' . (int) $unpublishedGalleries . ' ' . e(t('admin.dashboard.metric_unpublished', 'unpublished')) . ', ' . (int) $privateGalleries . ' ' . e(t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel])) . '</small></article>';
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_top_level_images', 'Top-level images')) . '</span><strong>' . (int) $totalImages . '</strong><small>' . e(t('admin.dashboard.metric_imported_images_hint', 'Imported images shown in gallery lists')) . '</small></article>';
-    if (!empty($thumbnailSummary['deferred'])) {
-        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . e(t('admin.dashboard.metric_not_checked', 'Not checked')) . '</strong><small>' . e(t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')) . '</small></article>';
-    } else {
-        echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_thumbnail_gaps', 'Thumbnail gaps')) . '</span><strong>' . (int) $missingThumbnailVariants . '</strong><small>' . (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . e(t('admin.dashboard.metric_images_sampled', 'images sampled')) . '</small></article>';
-    }
-    echo '<article class="admin-metric-card"><span>' . e(t('admin.dashboard.metric_system_state', 'System state')) . '</span><strong>' . ($migrationPending ? t('admin.dashboard.badge_action', 'Action') : t('admin.dashboard.state_ready', 'Ready')) . '</strong><small>' . ($migrationPending ? t('admin.dashboard.state_migration_pending', 'Database migration pending') : t('admin.dashboard.state_no_migration_warning', 'No migration warning')) . '</small></article>';
-    echo '</section>';
-    if ($migrationPending) {
-        view_render_admin_migration_notice('' . t('admin.dashboard.migration_notice', 'Some admin features still need database migrations.') . '');
-    }
-    if (empty($thumbnailSummary['deferred'])) {
-        view_render_admin_thumbnail_maintenance_notice($thumbnailSummary);
-    }
-    echo '<section class="admin-quick-panel"><div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.dashboard.actions_kicker', 'Actions')) . '</p><h2>' . e(t('admin.dashboard.quick_actions', 'Quick actions')) . '</h2></div></div><div class="admin-action-grid">';
-    if ($publicSearchFeatureEnabled) {
-        echo '<form method="post" action="' . e(url_for('admin_public_search_settings')) . '" class="admin-action-card admin-public-search-settings">' . csrf_field();
-        echo '<strong>' . e(t('admin.dashboard.public_search_title', 'Public search')) . '</strong><span>' . e(t('admin.dashboard.public_search_hint', 'Show a thin live search bar above the public front-page and gallery content. Gallery pages include a visitor checkbox to limit results to that gallery and its subgalleries.')) . '</span>';
-        echo '<label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1"' . (public_home_search_enabled() ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.public_search_enable', 'Enable public search bar')) . '</span></label>';
-        echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.save_public_search', 'Save search setting')) . '</button></form>';
-    }
-    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form>' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button></form>';
-    echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.gallery_tools', 'Gallery tools')) . '</strong><span>' . e(t('admin.dashboard.gallery_tools_hint', 'Create galleries or upload photos using the existing workflows.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_new_gallery')) . '">' . e(t('admin.dashboard.create_empty_gallery', 'Create empty gallery')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a></div></div>';
-    if ($galleryDateRangeReady) {
-        view_render_admin_gallery_dates_card('admin-action-card');
-    }
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-action-card" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.media_tools', 'Media tools')) . '</strong><span>' . e(t('admin.dashboard.media_tools_hint', 'Generate thumbnails, delete generated thumbnail cache files, or download the complete gallery archive.')) . '</span>';
-    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button>';
-    if ($downloadsFeatureEnabled) {
-        echo '<a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a>';
-    }
-    echo '</div></form>';
-    if ($gpsMapOverrideReady) {
-        view_render_admin_exif_gps_defaults_card('admin-action-card', $exifGpsDefaultEnabled, $exifGpsOverrideCount);
-    }
-    echo '<div class="admin-action-card"><strong>' . e(t('admin.dashboard.maintenance', 'Maintenance')) . '</strong><span>' . e(t('admin.dashboard.maintenance_hint', 'Review logs, integrity, telemetry, updates, and navigation data.')) . '</span><div class="nav"><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.logs', 'Logs')) . '</a><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.integrity', 'Integrity')) . '</a>';
-    if ($telemetryFeatureEnabled) {
-        echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</a>';
-    }
-    if ($navigationDataFeatureEnabled) {
-        echo '<a class="button secondary" href="' . e(url_for('admin_navdata')) . '">' . e(t('admin.menu.navdata', 'Navigation data')) . '</a>';
-    }
-    echo '<a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.features', 'Features')) . '</a></div></div>';
-    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-action-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
-    if ($migrationPending) {
-        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="admin-action-card is-attention">' . csrf_field();
-        echo '<strong>' . e(t('admin.dashboard.database_migrations', 'Database migrations')) . '</strong><span>' . e(t('admin.dashboard.database_migrations_hint', 'Some admin features need database migrations.')) . '</span><button type="submit" class="button is-update-pending">' . e(t('admin.dashboard.run_database_migration', 'Run database migration')) . '</button></form>';
-    }
-    echo '</div></section>';
+    view_render_admin_dashboard_overview_panel($model);
     $overviewHtml = (string) ob_get_clean();
     render_admin_tab_panel('admin-tab-overview', $overviewHtml, true);
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.galleries_kicker', 'Galleries')) . '</p><h2>' . e(t('admin.dashboard.all_galleries', 'All galleries')) . '</h2></div><a class="button secondary" href="' . e(url_for('admin_upload')) . '">' . e(t('admin.dashboard.upload_photos', 'Upload photos')) . '</a></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.dashboard.galleries_kicker', 'Galleries'),
+        'title' => t('admin.dashboard.all_galleries', 'All galleries'),
+        'actions' => [
+            ['label' => t('admin.dashboard.upload_photos', 'Upload photos'), 'url' => url_for('admin_upload'), 'class' => 'button secondary'],
+        ],
+    ]);
     echo '<form method="post" action="' . e(url_for('admin_bulk_galleries')) . '" data-gallery-bulk-form data-admin-gallery-order-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<section class="admin-gallery-workspace" aria-label="' . e(t('admin.dashboard.gallery_management', 'Gallery management')) . '">';
     echo '<div class="admin-gallery-command-panel">';
@@ -224,48 +173,10 @@ function view_render_admin_dashboard(array $model): void
     admin_render_profile_span('render_galleries_tab_panel', static function () use ($galleriesHtml): void { render_admin_tab_panel('admin-tab-galleries', $galleriesHtml, false); });
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.dashboard.maintenance_kicker', 'Maintenance')) . '</p><h2>' . e(t('admin.dashboard.system_tools', 'System tools')) . '</h2></div><p class="muted">' . e(t('admin.dashboard.system_tools_hint', 'Operational tools remain on their dedicated pages. This tab keeps only useful shortcuts and active maintenance controls.')) . '</p></div>';
-    echo '<div class="admin-maintenance-grid">';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.logs', 'Logs')) . '</strong><span>' . e(t('admin.dashboard.logs_hint', 'Review operational events, failures, and workflow status.')) . '</span><a class="button secondary" href="' . e(url_for('admin_logs')) . '">' . e(t('admin.dashboard.open_logs', 'Open logs')) . '</a></article>';
-    if ($telemetryFeatureEnabled) {
-        echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
-    }
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.integrity', 'Integrity')) . '</strong><span>' . e(t('admin.dashboard.integrity_hint', 'Check core files and deployment health.')) . '</span><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.run_integrity_check', 'Run integrity check')) . '</a></article>';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
-    echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
-    if ($gpsMapOverrideReady) {
-        view_render_admin_exif_gps_defaults_card('admin-maintenance-card', $exifGpsDefaultEnabled, $exifGpsOverrideCount);
-    }
-    if ($galleryDateRangeReady) {
-        view_render_admin_gallery_dates_card('admin-maintenance-card');
-    }
-    echo '<form method="post" action="' . e(url_for('admin_regenerate_paths')) . '" class="admin-maintenance-card" onsubmit="return confirm(\'' . e(t('admin.dashboard.confirm_regenerate_paths', 'Regenerate clean public URLs for all galleries and images?')) . '\');">' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.public_paths', 'Public paths')) . '</strong><span>' . e(t('admin.dashboard.public_paths_hint', 'Regenerate clean public URLs for galleries and images.')) . '</span><button type="submit" class="secondary">' . e(t('admin.dashboard.regenerate_paths', 'Regenerate paths')) . '</button></form>';
-    if ($navigationDataFeatureEnabled) {
-        view_render_admin_navdata_maintenance_card($flightNavdataReady, $flightNavdataStatus);
-    }
-    view_render_admin_url_rewrite_card('admin-maintenance-card');
-    if ($downloadsFeatureEnabled) {
-        echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.gallery_archive', 'Gallery archive')) . '</strong><span>' . e(t('admin.dashboard.gallery_archive_hint', 'Download a complete ZIP archive through the existing route.')) . '</span><a class="button secondary" href="' . e(url_for('download_all')) . '">' . e(t('admin.dashboard.download_all_galleries', 'Download all galleries')) . '</a></article>';
-    }
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-maintenance-card" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
-    if (!empty($thumbnailSummary['deferred'])) {
-        echo '<span>' . e(t('admin.dashboard.thumbnail_check_deferred', 'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.')) . '</span>';
-    } else {
-        echo '<span>' . (int) $missingThumbnailVariants . ' ' . e(t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.')) . '</span>';
-    }
-    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
-    if ($migrationPending) {
-        echo '<form method="post" action="' . e(url_for('admin_run_migrations')) . '" class="admin-maintenance-card is-attention">' . csrf_field();
-        echo '<strong>' . e(t('admin.dashboard.database_migrations', 'Database migrations')) . '</strong><span>' . e(t('admin.dashboard.pending_migrations_hint', 'Pending migrations must be applied before every admin feature is fully available.')) . '</span><button type="submit" class="button is-update-pending">' . e(t('admin.dashboard.run_database_migration', 'Run database migration')) . '</button></form>';
-    }
-    echo '</div>';
+    view_render_admin_dashboard_maintenance_panel($model);
     $maintenanceHtml = (string) ob_get_clean();
     admin_render_profile_span('render_maintenance_tab_panel', static function () use ($maintenanceHtml): void { render_admin_tab_panel('admin-tab-maintenance', $maintenanceHtml, false); });
 
-    view_render_admin_devmode_panel();
     render_admin_render_profile_panel();
     admin_render_profile_span('render_footer', static function (): void { render_footer(); });
 }
@@ -400,17 +311,27 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
 
 
 /**
+ * Render the reusable admin dev mode settings card.
+ */
+function view_render_admin_devmode_card(string $className): void
+{
+    // $enabled stores an intermediate value used by the surrounding gallery workflow.
+    $enabled = dev_mode_enabled();
+    echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="' . e($className) . ' admin-devmode-card">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.devmode_title', 'Dev mode')) . '</strong>';
+    echo '<span>' . e(t('admin.dashboard.devmode_description', 'Optional admin-only diagnostics overlay for preload, cache, memory, network and frame-timing tuning in the public viewer and fullscreen viewer.')) . '</span>';
+    echo '<label class="admin-checkbox-row"><input type="checkbox" name="dev_mode_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.devmode_enable_overlay', 'Enable viewer diagnostics overlay')) . '</span></label>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.devmode_save', 'Save dev mode')) . '</button></form>';
+}
+
+/**
  * Render the admin dev mode panel.
  */
 function view_render_admin_devmode_panel(): void
 {
-    // $enabled stores an intermediate value used by the surrounding gallery workflow.
-    $enabled = dev_mode_enabled();
-    echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary"><h2>' . e(t('admin.dashboard.devmode_title', 'Dev mode')) . '</h2>';
-    echo '<form method="post" action="' . e(url_for('admin_devmode')) . '" class="form-grid">' . csrf_field();
-    echo '<p class="muted">' . e(t('admin.dashboard.devmode_description', 'Optional admin-only diagnostics overlay for preload, cache, memory, network and frame-timing tuning in the public viewer and fullscreen viewer.')) . '</p>';
-    echo '<label class="admin-checkbox-row"><input type="checkbox" name="dev_mode_enabled" value="1"' . ($enabled ? ' checked' : '') . '> <span>' . e(t('admin.dashboard.devmode_enable_overlay', 'Enable viewer diagnostics overlay')) . '</span></label>';
-    echo '<button type="submit" class="secondary">' . e(t('admin.dashboard.devmode_save', 'Save dev mode')) . '</button></form></section>';
+    echo '<section class="panel admin-devmode-panel admin-devmode-panel--secondary">';
+    view_render_admin_devmode_card('admin-maintenance-card');
+    echo '</section>';
 }
 
 /**

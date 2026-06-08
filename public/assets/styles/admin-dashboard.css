@@ -577,3 +577,330 @@ body.is-navdata-updating {
     height: 1rem;
     accent-color: var(--accent, #3b82f6);
 }
+
+.admin-dashboard-maintenance-scope {
+    gap: 1rem;
+}
+
+.admin-dashboard-subtab-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-dashboard-subtab-heading h3,
+.admin-dashboard-subtab-heading p {
+    margin-top: 0;
+}
+
+.admin-dashboard-subtab-heading h3 {
+    margin-bottom: 0.25rem;
+    color: #1d2327;
+    font-size: 1.08rem;
+}
+
+.admin-devmode-card .admin-checkbox-row,
+.admin-public-search-settings .admin-compact-toggle {
+    align-items: flex-start;
+}
+
+@media (max-width: 720px) {
+    .admin-dashboard-subtab-heading {
+        flex-direction: column;
+    }
+}
+
+.admin-storage-panel {
+    display: grid;
+    gap: 1rem;
+    margin: 0 0 1rem;
+}
+
+.admin-storage-heading {
+    margin-bottom: 0;
+}
+
+.admin-storage-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-storage-summary-card {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.85rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.admin-storage-summary-card span {
+    color: #5d6975;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.admin-storage-summary-card strong {
+    color: #16202a;
+    font-size: 1.35rem;
+    line-height: 1.1;
+}
+
+.admin-storage-summary-card small,
+.admin-storage-chart-card small {
+    color: #6c7782;
+    font-size: 0.82rem;
+}
+
+.admin-storage-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.admin-storage-facts span {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    max-width: 100%;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #5d6975;
+    font-size: 0.82rem;
+}
+
+.admin-storage-facts strong {
+    color: #1d2327;
+}
+
+.admin-storage-facts em {
+    overflow: hidden;
+    max-width: min(24rem, 80vw);
+    color: #5d6975;
+    font-style: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-storage-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-storage-chart-card {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    min-height: 13rem;
+    padding: 0.9rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    background: #fbfcfd;
+}
+
+.admin-storage-chart-heading {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.admin-storage-chart-heading strong {
+    color: #1d2327;
+    font-size: 1rem;
+}
+
+.admin-storage-bar-list {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.admin-storage-bar-row {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.admin-storage-bar-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.admin-storage-bar-meta span {
+    overflow: hidden;
+    color: #1d2327;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-storage-bar-meta small {
+    flex: 0 0 auto;
+    max-width: 55%;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-storage-bar-track {
+    overflow: hidden;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: #e8eef4;
+}
+
+.admin-storage-bar-fill {
+    display: block;
+    width: var(--admin-storage-bar, 0%);
+    min-width: 0.2rem;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2271b1, #5aa7d9);
+}
+
+@media (max-width: 1100px) {
+    .admin-storage-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .admin-storage-chart-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .admin-storage-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-storage-bar-meta {
+        display: grid;
+        gap: 0.15rem;
+    }
+
+    .admin-storage-bar-meta small {
+        max-width: 100%;
+        text-align: left;
+    }
+}
+
+.admin-metric-inline-link {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 0.15rem;
+    color: var(--admin-accent);
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.admin-metric-inline-link:hover,
+.admin-metric-inline-link:focus {
+    text-decoration: underline;
+}
+
+.admin-storage-hero {
+    margin-bottom: 1rem;
+}
+
+.admin-storage-update-shell {
+    display: grid;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.admin-storage-update-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.admin-storage-progress {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.admin-storage-progress[hidden] {
+    display: none;
+}
+
+.admin-storage-progress-bar {
+    overflow: hidden;
+    height: 0.75rem;
+    border-radius: 999px;
+    background: #e8eef4;
+}
+
+.admin-storage-progress-bar span {
+    display: block;
+    width: var(--admin-storage-progress, 0%);
+    min-width: 0.2rem;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2271b1, #5aa7d9);
+    transition: width 0.2s ease;
+}
+
+.admin-storage-progress-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: #6c7782;
+    font-size: 0.85rem;
+}
+
+.admin-storage-empty-panel {
+    min-height: 9rem;
+}
+
+.admin-storage-stale {
+    border-color: #c99700 !important;
+    background: #fff9e7 !important;
+}
+
+.admin-thumbnail-maintenance-card form {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+}
+
+.admin-thumbnail-card-subtitle {
+    color: #1d2327;
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    margin: 0.15rem 0;
+    color: var(--text, #172033);
+    font-size: 0.9rem;
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle input {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15rem;
+    accent-color: var(--accent, #3b82f6);
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle span {
+    color: var(--text, #172033);
+}
+
+.admin-thumbnail-legacy-cleanup-form {
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--admin-border);
+}

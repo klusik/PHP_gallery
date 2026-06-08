@@ -121,6 +121,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         'assets/styles/admin-update.css',
         'assets/styles/admin-tags.css',
         'assets/styles/side-panel.css',
+        'assets/styles/admin-cinematic.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
     ];
@@ -141,7 +142,11 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     if (is_file($mobileGalleryStylePath)) {
         echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
     }
-    echo cms_head_extras_html();
+    $headExtras = cms_head_extras_html();
+    if ($bodyClass === 'public-page' && function_exists('seo_request_guard_canonical_head_html')) {
+        echo seo_request_guard_canonical_head_html($page, $currentGallery, $headExtras);
+    }
+    echo $headExtras;
     $devModeActive = $user && dev_mode_enabled();
     echo '</head><body class="' . e($bodyClass . $pageWidthClass) . '"' . ($devModeActive ? ' data-dev-mode="1"' : '') . '>';
     if ($bodyClass === 'public-page') {
@@ -296,6 +301,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-date-picker.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {

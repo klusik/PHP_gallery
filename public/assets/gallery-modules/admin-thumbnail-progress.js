@@ -30,12 +30,26 @@
  *   2026-05-12
  */
 
-import { adminUrlWithParams, ensureThumbnailProgress, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
+import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
 
 // Function `setupThumbnailProgress` executes this focused behavior.
 export function setupThumbnailProgress() {
     document.addEventListener('click', async (event) => {
         if (!(event.target instanceof Element)) {
+            return;
+        }
+        const legacyCleanupButton = event.target.closest('[data-delete-legacy-jpg-thumbnails]');
+        if (legacyCleanupButton) {
+            const cleanupForm = legacyCleanupButton.closest('form');
+            if (!(cleanupForm instanceof HTMLFormElement)) {
+                return;
+            }
+            event.preventDefault();
+            const confirmMessage = legacyCleanupButton.getAttribute('data-confirm-message') || i18n('admin.thumbnails.legacy_cleanup_confirm', 'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.');
+            if (!window.confirm(confirmMessage)) {
+                return;
+            }
+            await runLegacyJpegThumbnailCleanup(cleanupForm);
             return;
         }
         // Variable `button` stores this steps working value.
@@ -101,6 +115,103 @@ export function setupThumbnailProgress() {
         event.preventDefault();
         runImportWithThumbnailProgress(form);
     });
+}
+
+
+/**
+ * Remove generated legacy JPEG thumbnail derivatives in browser-driven batches.
+ *
+ * @param {HTMLFormElement} form Submitted cleanup form.
+ * @returns {Promise<void>}
+ */
+async function runLegacyJpegThumbnailCleanup(form) {
+    const progress = ensureThumbnailProgress(form);
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+
+    let offset = 0;
+    let total = 0;
+    let deleted = 0;
+    let freedBytes = 0;
+    updateLegacyJpegCleanupProgress(progress, 0, 0, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_preparing', 'Preparing legacy JPG cleanup...'));
+
+    try {
+        while (true) {
+            const body = new FormData(form);
+            body.set('ajax', '1');
+            body.set('offset', String(offset));
+            body.set('batch_size', '24');
+            const response = await fetch(form.action || window.location.href, {
+                method: 'POST',
+                body,
+                headers: {'Accept': 'application/json'},
+            });
+            if (!response.ok) {
+                throw new Error('Legacy JPG cleanup request failed.');
+            }
+            const result = await response.json();
+            if (!result.ok) {
+                throw new Error(result.error || 'Legacy JPG cleanup request failed.');
+            }
+            total = result.total || 0;
+            offset = result.next_offset || 0;
+            deleted += result.files_deleted || 0;
+            freedBytes += result.bytes_deleted || 0;
+            updateLegacyJpegCleanupProgress(progress, result.processed || 0, total, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_running', 'Removing legacy JPG thumbnails...'));
+            if (result.done) {
+                updateLegacyJpegCleanupProgress(progress, total, total, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_complete', 'Legacy JPG cleanup complete.'));
+                break;
+            }
+        }
+    } catch (error) {
+        updateLegacyJpegCleanupProgress(progress, offset, total, deleted, freedBytes, i18n('admin.thumbnails.legacy_cleanup_failed', 'Legacy JPG cleanup failed.'));
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+/**
+ * Update the legacy JPEG cleanup progress display.
+ *
+ * @param {HTMLElement} progress Progress root.
+ * @param {number} processed Processed image count.
+ * @param {number} total Total image count.
+ * @param {number} deleted Deleted file count.
+ * @param {number} freedBytes Deleted byte count.
+ * @param {string} label Status label.
+ * @returns {void}
+ */
+function updateLegacyJpegCleanupProgress(progress, processed, total, deleted, freedBytes, label) {
+    progress.hidden = false;
+    const percent = total > 0 ? Math.round((processed / total) * 100) : 100;
+    progress.querySelector('[data-thumbnail-progress-fill]').value = percent;
+    progress.querySelector('[data-thumbnail-progress-text]').textContent = i18n(
+        'admin.thumbnails.legacy_cleanup_progress',
+        '{label} {processed}/{total} images checked, {deleted} files deleted, {size} freed.',
+        {label, processed, total, deleted, size: formatBytes(freedBytes)}
+    );
+}
+
+/**
+ * Format byte counts for concise browser progress messages.
+ *
+ * @param {number} bytes Raw byte count.
+ * @returns {string} Human-readable size.
+ */
+function formatBytes(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Math.max(0, Number(bytes) || 0);
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    const decimals = value >= 10 || unitIndex === 0 ? 0 : 1;
+    return `${value.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
 /**

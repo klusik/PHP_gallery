@@ -27,7 +27,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-28
+ *   2026-06-08
  */
 
 import { setupImageBulkMoveFields } from './admin-bulk-actions.js?v=20260519-gallery-picker-v1';
@@ -36,10 +36,13 @@ import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20260601-3d-carousel-v2';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20260519-picture-manager-v5';
 import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
-import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTabsInRoot } from './admin-tabs.js?v=20260514-admin-sidebar-hash-v2';
+import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTabsInRoot } from './admin-tabs.js?v=20260608-admin-cinematic-v1';
+import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
+
+const adminSidePanelMotionDurationMs = 280;
 
 // Function `setupGalleryUploadProgress` executes this focused behavior.
 export function setupGalleryUploadProgress() {
@@ -504,6 +507,7 @@ function sidePanelContentFromHtml(html, workflow) {
 function prepareAdminSidePanelLoadedContent(body, workflow, sourceUrl) {
     setupGalleryUploadProgress();
     setupAdminTabsInRoot(body);
+    setupAdminNestedTabs(body);
     setupAdminPanelRangeDisplays(body);
     setupAdminPanelThumbnailBoundControls(body);
     setupTagSuggestions(body);
@@ -736,9 +740,12 @@ function ensureAdminGallerySidePanel() {
  */
 function openAdminGallerySidePanelShell(panel) {
     panel.hidden = false;
-    panel.classList.add('is-open');
+    panel.classList.remove('is-closing');
     panel.setAttribute('aria-hidden', 'false');
     document.body.classList.add('has-admin-side-panel');
+    window.requestAnimationFrame(() => {
+        panel.classList.add('is-open');
+    });
 }
 
 /**
@@ -748,10 +755,16 @@ function openAdminGallerySidePanelShell(panel) {
  * @returns {void}
  */
 function closeAdminGallerySidePanel(panel) {
-    panel.hidden = true;
     panel.classList.remove('is-open');
+    panel.classList.add('is-closing');
     panel.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('has-admin-side-panel');
+    window.setTimeout(() => {
+        if (!panel.classList.contains('is-open')) {
+            panel.hidden = true;
+            panel.classList.remove('is-closing');
+        }
+    }, adminSidePanelMotionDurationMs);
     writeAdminGallerySidePanelStatus(panel, '', false);
 }
 
@@ -1553,6 +1566,7 @@ function replaceAdminEditorMainFromParsedDocument(parsed) {
     const activeTabId = activeAdminTabId(currentMain);
     currentMain.innerHTML = freshMain.innerHTML;
     setupAdminTabsInRoot(currentMain);
+    setupAdminNestedTabs(currentMain);
     if (activeTabId) {
         activateAdminTabInRoot(currentMain, activeTabId);
     }

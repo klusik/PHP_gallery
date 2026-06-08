@@ -916,17 +916,72 @@ function cms_admin_edit_gallery(): void
         $adminTabs[] = ['id' => 'admin-edit-renamer', 'label' => t('admin.media_renamer.tab_label', 'File renamer')];
     }
 
-    echo '<section class="admin-dashboard-hero admin-edit-gallery-hero">';
-    echo '<div><p class="admin-kicker">' . e(t('admin.gallery_editor.kicker')) . '</p><h1>' . e((string) $gallery['title']) . '</h1><p class="muted">' . e(t('admin.gallery_editor.intro')) . '</p></div>';
-    echo '<nav class="admin-hero-actions" aria-label="' . e(t('admin.gallery_editor.hero_actions_label')) . '"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.upload_workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.upload_photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here')) . '</a><a class="button secondary" href="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('gallery.workflow')) . '" data-admin-side-panel-title="' . e(t('gallery.create_here')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.create_gallery_here')) . '</a><a class="button secondary" href="' . e(gallery_public_url($gallery)) . '" target="_blank" rel="noopener noreferrer">' . e(t('admin.gallery_editor.view_gallery')) . '</a><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.gallery_editor.back_to_galleries')) . '</a></nav>';
-    echo '</section>';
+    view_render_admin_hero([
+        'class' => 'admin-edit-gallery-hero',
+        'kicker' => t('admin.gallery_editor.kicker'),
+        'title' => (string) $gallery['title'],
+        'description' => t('admin.gallery_editor.intro'),
+        'actions_aria_label' => t('admin.gallery_editor.hero_actions_label'),
+        'actions' => [
+            [
+                'label' => t('admin.gallery_editor.upload_photos_here'),
+                'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
+                'class' => 'button',
+                'attributes' => [
+                    'data-gallery-side-panel-link' => true,
+                    'data-admin-side-panel-workflow' => 'upload',
+                    'data-admin-side-panel-kicker' => t('gallery.upload_workflow'),
+                    'data-admin-side-panel-title' => t('gallery.upload_photos'),
+                    'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                ],
+            ],
+            [
+                'label' => t('admin.gallery_editor.create_gallery_here'),
+                'url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id']]),
+                'class' => 'button secondary',
+                'attributes' => [
+                    'data-gallery-side-panel-link' => true,
+                    'data-admin-side-panel-workflow' => 'upload',
+                    'data-admin-side-panel-kicker' => t('gallery.workflow'),
+                    'data-admin-side-panel-title' => t('gallery.create_here'),
+                    'data-gallery-side-panel-url' => url_for('admin_upload', ['upload_mode' => 'new', 'parent_id' => $gallery['id'], 'panel' => 1]),
+                ],
+            ],
+            ['label' => t('admin.gallery_editor.view_gallery'), 'url' => gallery_public_url($gallery), 'class' => 'button secondary', 'target' => '_blank'],
+            ['label' => t('admin.gallery_editor.back_to_galleries'), 'url' => url_for('admin'), 'class' => 'button secondary'],
+        ],
+        'meta' => [
+            ['value' => (string) $imageCount, 'label' => t('admin.gallery_editor.metric_images')],
+            ['value' => ucfirst($activeVisibility), 'label' => t('admin.gallery_editor.metric_visibility')],
+        ],
+    ]);
 
-    echo '<div class="admin-metric-grid admin-edit-gallery-summary">';
-    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><strong>' . e(ucfirst($activeVisibility)) . '</strong><small>' . e(t('admin.gallery_editor.metric_visibility_help')) . '</small></div>';
-    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_images')) . '</span><strong>' . (int) $imageCount . '</strong><small>' . e(t('admin.gallery_editor.metric_images_help')) . '</small></div>';
-    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_folder')) . '</span><strong>' . e(gallery_folder_name_from_path((string) $gallery['folder_path'])) . '</strong><small>' . e(t('admin.gallery_editor.metric_folder_help')) . '</small></div>';
-    echo '<div class="admin-metric-card"><span>' . e(t('admin.gallery_editor.metric_parent')) . '</span><strong>' . ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')) . '</strong><small>' . e(t('admin.gallery_editor.metric_parent_help')) . '</small></div>';
-    echo '</div>';
+    view_render_admin_metric_grid([
+        [
+            'label' => t('admin.gallery_editor.metric_visibility'),
+            'value' => ucfirst($activeVisibility),
+            'help' => t('admin.gallery_editor.metric_visibility_help'),
+            'state' => $activeVisibility === 'public' ? 'ready' : 'care',
+        ],
+        [
+            'label' => t('admin.gallery_editor.metric_images'),
+            'value' => (string) $imageCount,
+            'help' => t('admin.gallery_editor.metric_images_help'),
+            'state' => $imageCount > 0 ? 'ready' : 'neutral',
+        ],
+        [
+            'label' => t('admin.gallery_editor.metric_folder'),
+            'value' => gallery_folder_name_from_path((string) $gallery['folder_path']),
+            'help' => t('admin.gallery_editor.metric_folder_help'),
+            'state' => 'neutral',
+        ],
+        [
+            'label' => t('admin.gallery_editor.metric_parent'),
+            'value' => ((int) ($gallery['parent_id'] ?? 0) > 0 ? '#' . (int) $gallery['parent_id'] : t('admin.gallery_editor.root_parent')),
+            'help' => t('admin.gallery_editor.metric_parent_help'),
+            'state' => 'neutral',
+        ],
+    ], 'admin-metric-grid admin-edit-gallery-summary', t('admin.gallery_editor.summary_aria', 'Gallery summary'));
 
     render_admin_tabs($adminTabs, $activeEditTab);
 
@@ -935,7 +990,11 @@ function cms_admin_edit_gallery(): void
     echo '<input type="hidden" name="return_tab" value="admin-edit-identity">';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.identity_kicker', 'Identity')) . '</p><h2>' . e(t('admin.gallery_editor.names_and_placement', 'Names and placement')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.gallery_editor.identity_kicker', 'Identity'),
+        'title' => t('admin.gallery_editor.names_and_placement', 'Names and placement'),
+        'description' => t('admin.gallery_editor.identity_help', 'Controls the public title, URL slug, disk folder, and gallery tree position.'),
+    ]);
     echo '<div class="admin-edit-card-grid">';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
     if (function_exists('view_render_admin_gallery_date_range_fields')) {
@@ -960,7 +1019,11 @@ function cms_admin_edit_gallery(): void
     render_admin_tab_panel('admin-edit-identity', (string) ob_get_clean(), $activeEditTab === 'admin-edit-identity');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.access_kicker', 'Access')) . '</p><h2>' . e(t('admin.gallery_editor.visibility_and_protection', 'Visibility and protection')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.access_help', 'Visibility decides discoverability. Passwords and generated links are optional on top of it.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.gallery_editor.access_kicker', 'Access'),
+        'title' => t('admin.gallery_editor.visibility_and_protection', 'Visibility and protection'),
+        'description' => t('admin.gallery_editor.access_help', 'Visibility decides discoverability. Passwords and generated links are optional on top of it.'),
+    ]);
     echo '<div class="admin-edit-card-grid">';
     echo '<div class="admin-edit-card"><label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options((string) $gallery['visibility']) . '</select></label><p class="muted">' . e(t('admin.gallery_editor.visibility_help', 'Public galleries are listed. Unpublished galleries are hidden but open from their normal URL. Private galleries are admin-only except for supported direct-token access.')) . '</p></div>';
     if ($accessReady) {
@@ -1003,7 +1066,11 @@ function cms_admin_edit_gallery(): void
     render_admin_tab_panel('admin-edit-access', (string) ob_get_clean(), $activeEditTab === 'admin-edit-access');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.display_kicker', 'Display')) . '</p><h2>' . e(t('admin.gallery_editor.gallery_behavior', 'Gallery behavior')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.gallery_behavior_help', 'Feature toggles and grid overrides affecting this gallery branch.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.gallery_editor.display_kicker', 'Display'),
+        'title' => t('admin.gallery_editor.gallery_behavior', 'Gallery behavior'),
+        'description' => t('admin.gallery_editor.gallery_behavior_help', 'Feature toggles and grid overrides affecting this gallery branch.'),
+    ]);
     echo '<div class="admin-edit-card-grid">';
     if ($pictureGameReady) {
         echo '<div class="admin-edit-card"><label class="checkbox-label"><input type="checkbox" name="picture_game_enabled" value="1"' . ((int) ($gallery['picture_game_enabled'] ?? 0) === 1 ? ' checked' : '') . '> ' . e(t('admin.gallery_editor.enable_picture_game', 'Enable picture game for this gallery branch')) . '</label></div>';
@@ -1113,7 +1180,11 @@ function cms_admin_edit_gallery(): void
     render_admin_tab_panel('admin-edit-display', (string) ob_get_clean(), $activeEditTab === 'admin-edit-display');
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.media_kicker', 'Media')) . '</p><h2>' . e(t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background')) . '</h2></div><p class="muted">' . e(t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.gallery_editor.media_kicker', 'Media'),
+        'title' => t('admin.gallery_editor.media_title', 'Thumbnail, branding, and background'),
+        'description' => t('admin.gallery_editor.media_help', 'Optional visual assets override theme fallbacks only for this gallery.'),
+    ]);
     echo '<div class="admin-edit-card-grid">';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title_picture', t('admin.gallery_editor.title_picture_current', 'Title picture'))) . '<select name="cover_image_id"><option value="0">' . e(t('admin.gallery_editor.automatic', 'Automatic')) . '</option>' . gallery_cover_options((int) $gallery['id'], (int) ($gallery['cover_image_id'] ?? 0), true) . '</select><span class="muted">' . e(t('admin.gallery_editor.includes_subgallery_images', 'Includes images from subgalleries.')) . '</span></label>';
     if (gallery_cover_asset_schema_ready()) {
@@ -1140,7 +1211,26 @@ function cms_admin_edit_gallery(): void
     echo '</form>';
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('admin.gallery_editor.tab_images', 'Images')) . '</p><h2>' . e(t('admin.gallery_editor.images_title', 'Photos and ordering')) . '</h2></div><div class="admin-hero-actions"><a class="button" href="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id']])) . '" data-gallery-side-panel-link data-admin-side-panel-workflow="upload" data-admin-side-panel-kicker="' . e(t('admin.gallery_editor.upload_workflow', 'Upload workflow')) . '" data-admin-side-panel-title="' . e(t('admin.gallery_editor.upload_photos', 'Upload photos')) . '" data-gallery-side-panel-url="' . e(url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1])) . '">' . e(t('admin.gallery_editor.upload_photos_here', 'Upload photos here')) . '</a><form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form></div></div>';
+    $scanImagesActionHtml = '<form method="post" action="' . e(url_for('admin_scan_images')) . '">' . csrf_field() . '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '"><button type="submit" class="secondary">' . e(t('admin.gallery_editor.scan_import_images', 'Scan/import images')) . '</button></form>';
+    view_render_admin_tab_intro([
+        'kicker' => t('admin.gallery_editor.tab_images', 'Images'),
+        'title' => t('admin.gallery_editor.images_title', 'Photos and ordering'),
+        'actions' => [
+            [
+                'label' => t('admin.gallery_editor.upload_photos_here', 'Upload photos here'),
+                'url' => url_for('admin_upload', ['gallery_id' => $gallery['id']]),
+                'class' => 'button',
+                'attributes' => [
+                    'data-gallery-side-panel-link' => true,
+                    'data-admin-side-panel-workflow' => 'upload',
+                    'data-admin-side-panel-kicker' => t('admin.gallery_editor.upload_workflow', 'Upload workflow'),
+                    'data-admin-side-panel-title' => t('admin.gallery_editor.upload_photos', 'Upload photos'),
+                    'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                ],
+            ],
+        ],
+        'actions_html' => $scanImagesActionHtml,
+    ]);
     echo '<form method="post" action="' . e(url_for('admin_bulk_images')) . '" data-admin-image-bulk-form>' . csrf_field();
     echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-images">';
@@ -1166,7 +1256,11 @@ function cms_admin_edit_gallery(): void
     }
 
     ob_start();
-    echo '<div class="admin-tab-intro"><div><p class="admin-kicker">' . e(t('upload_automation.kicker', 'Automation')) . '</p><h2>' . e(t('admin.upload_automation.gallery_tab_title', 'Upload API keys')) . '</h2></div><p class="muted">' . e(t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.')) . '</p></div>';
+    view_render_admin_tab_intro([
+        'kicker' => t('upload_automation.kicker', 'Automation'),
+        'title' => t('admin.upload_automation.gallery_tab_title', 'Upload API keys'),
+        'description' => t('admin.upload_automation.gallery_tab_help', 'Generate and revoke the API keys used by the Windows companion app. Keys stay scoped to this gallery, and the global API manager shows every active key across the site.'),
+    ]);
     if ($uploadApiFeatureEnabled) {
         render_admin_gallery_upload_automation_panel($gallery, 'admin-edit-api');
     }

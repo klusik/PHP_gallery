@@ -401,6 +401,9 @@ function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = 
 function thumbnail_maintenance_summary_cache_clear(): void
 {
     set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
+    if (function_exists('admin_storage_statistics_cache_clear')) {
+        admin_storage_statistics_cache_clear();
+    }
     if (function_exists('gallery_map_cache_clear_all')) {
         gallery_map_cache_clear_all();
     }

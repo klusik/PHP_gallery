@@ -34,7 +34,7 @@
 
 declare(strict_types=1);
 
-const CMS_VERSION = '0.75';
+const CMS_VERSION = '0.76';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -146,6 +146,9 @@ function cms_run(): void
     foreach ($route['params'] as $name => $value) {
         $_GET[$name] = $value;
     }
+    if (function_exists('seo_request_guard_enforce')) {
+        seo_request_guard_enforce($page);
+    }
     translation_bootstrap_request($page);
     send_security_headers();
     application_autoupdate_maybe_run();
@@ -195,8 +198,11 @@ function cms_run(): void
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
+        'admin_storage_statistics' => 'cms_admin_storage_statistics',
+        'admin_storage_statistics_update' => 'cms_admin_storage_statistics_update',
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
         'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
+        'admin_seo_guard_settings' => 'cms_admin_seo_guard_settings',
         'admin_discover' => 'cms_admin_discover',
         'admin_import' => 'cms_admin_import',
         'admin_new_gallery' => 'cms_admin_new_gallery',
@@ -222,6 +228,8 @@ function cms_run(): void
         'admin_update_navdata' => 'cms_admin_update_navdata',
         'admin_navdata' => 'cms_admin_navdata',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_thumbnail_compatibility_settings' => 'cms_admin_thumbnail_compatibility_settings',
+        'admin_delete_legacy_jpg_thumbnails' => 'cms_admin_delete_legacy_jpg_thumbnails',
         'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',
         'admin_dismiss_thumbnail_notice' => 'cms_admin_dismiss_thumbnail_notice',
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',
@@ -384,5 +392,5 @@ function cms_route_from_request(): array
         return ['page' => 'admin', 'params' => []];
     }
 
-    return ['page' => 'home', 'params' => []];
+    return ['page' => 'not_found', 'params' => []];
 }

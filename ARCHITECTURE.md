@@ -333,7 +333,8 @@ Important view files:
 | --- | --- |
 | `app/views/layout.php` | Page layout, shared chrome, and favorite shortcut rendering. |
 | `app/views/admin_chrome.php` | Admin navigation and shared admin page shell. |
-| `app/views/admin_dashboard.php` | Dashboard visual sections. |
+| `app/views/admin_dashboard.php` | Dashboard page composition, top-level Admin tabs, and gallery table rendering. |
+| `app/views/admin_dashboard_sections.php` | Reusable dashboard overview and grouped maintenance subtab sections. |
 | `app/views/admin_gallery_forms.php` | Gallery admin form sections. |
 | `app/views/gallery_descriptions.php` | Gallery description rendering helpers. |
 | `app/views/navigation_data.php` | Navigation data admin rendering. |

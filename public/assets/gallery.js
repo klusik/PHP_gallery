@@ -65,6 +65,7 @@ import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assis
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
+import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260601-3d-carousel-v2';
@@ -85,7 +86,7 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260604-admin-subtabs-v1';
+} from './gallery-modules/admin-operations.js?v=20260608-admin-cinematic-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -117,6 +118,7 @@ function runWhenDomReady(callback) {
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupAdminGalleryDateSuggestions();
+    setupAdminStorageStatistics();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();
     setupGallerySearchPickers();
