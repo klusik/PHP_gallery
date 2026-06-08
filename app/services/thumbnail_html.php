@@ -49,8 +49,10 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
 {
     // $thumbnailBundle stores all generated thumbnail variants resolved once for this image during the current request.
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
+    // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
+    $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
     // $fallbackUrl stores the small first image used for the initial responsive paint.
-    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize);
+    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $initialWebpSrcset stores only the small WebP candidate so navigation stays responsive.
     $initialWebpSrcset = thumbnail_bundle_srcset($thumbnailBundle, [$fallbackSize], 'webp');
     // $initialJpegSrcset stores only the small JPEG candidate for browsers without WebP support.
@@ -95,8 +97,10 @@ function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSi
 {
     // $thumbnailBundle stores all generated thumbnail variants resolved once for this image during the current request.
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
+    // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
+    $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
     // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.
-    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize);
+    $fallbackUrl = thumbnail_bundle_url($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $webpSrcset stores an intermediate value used by the surrounding gallery workflow.
     $webpSrcset = thumbnail_bundle_srcset($thumbnailBundle, $srcsetSizes, 'webp');
     // $jpegSrcset stores an intermediate value used by the surrounding gallery workflow.

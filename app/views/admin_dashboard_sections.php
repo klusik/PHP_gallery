@@ -351,16 +351,31 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 {
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
+    $compatibilityMode = function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
 
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="' . e($className) . '" data-delete-all-thumbnails-form>' . csrf_field();
+    echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
     if (!empty($thumbnailSummary['deferred'])) {
         echo '<span>' . e(t('admin.dashboard.thumbnail_check_deferred', 'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.')) . '</span>';
     } else {
         echo '<span>' . (int) $missingThumbnailVariants . ' ' . e(t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.')) . '</span>';
     }
+
+    echo '<form method="post" action="' . e(url_for('admin_thumbnail_compatibility_settings')) . '" class="admin-thumbnail-compatibility-form">' . csrf_field();
+    echo '<span class="admin-thumbnail-card-subtitle">' . e(t('admin.thumbnails.compatibility_title', 'Thumbnail compatibility mode')) . '</span>';
+    echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="modern"' . ($compatibilityMode === 'modern' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_modern_short', 'Modern')) . '</strong> ' . e(t('admin.thumbnails.compatibility_modern_help', 'Generate WebP thumbnails only where the server can write WebP.')) . '</span></label>';
+    echo '<label class="admin-compact-toggle"><input type="radio" name="thumbnail_compatibility_mode" value="legacy"' . ($compatibilityMode === 'legacy' ? ' checked' : '') . '> <span><strong>' . e(t('admin.thumbnails.compatibility_legacy_short', 'Legacy')) . '</strong> ' . e(t('admin.thumbnails.compatibility_legacy_help', 'Generate JPG fallback thumbnails plus WebP thumbnails.')) . '</span></label>';
+    echo '<button type="submit" class="secondary">' . e(t('admin.thumbnails.save_compatibility_mode', 'Save thumbnail mode')) . '</button></form>';
+
+    echo '<form method="post" action="' . e(url_for('admin_delete_legacy_jpg_thumbnails')) . '" class="admin-thumbnail-legacy-cleanup-form" data-delete-legacy-jpg-thumbnails-form>' . csrf_field();
+    echo '<span>' . e(t('admin.thumbnails.legacy_cleanup_hint', 'Remove generated JPG thumbnails after switching to Modern mode. Original photos, WebP thumbnails, and DNG display masters are not touched.')) . '</span>';
+    echo '<button type="submit" class="secondary danger" data-delete-legacy-jpg-thumbnails data-confirm-message="' . e(t('admin.thumbnails.legacy_cleanup_confirm', 'Delete generated legacy JPG thumbnails? Original photos and WebP files will be kept.')) . '">' . e(t('admin.thumbnails.delete_legacy_jpg_thumbnails', 'Remove legacy JPG thumbnails')) . '</button>';
+    echo '</form>';
+
+    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
+    echo '</article>';
 }
 
 /**

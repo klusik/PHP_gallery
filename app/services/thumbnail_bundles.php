@@ -164,9 +164,10 @@ function thumbnail_bundle_effective_size(array $bundle, int $preferredSize): int
  *
  * @return array{url:string,size:int,format:string,is_media_fallback:bool,is_exact:bool}
  */
-function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, string $preferredFormat = 'jpg'): array
+function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, string $preferredFormat = ''): array
 {
     // $preferredFormat stores the caller's preferred browser format.
+    $preferredFormat = $preferredFormat !== '' ? $preferredFormat : (function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $preferredFormat = thumbnail_bundle_normalize_format($preferredFormat);
     // $effectiveSize stores the size after per-gallery bounds are applied.
     $effectiveSize = thumbnail_bundle_effective_size($bundle, $preferredSize);
@@ -224,8 +225,9 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 /**
  * Return one safe thumbnail URL from a request-local thumbnail bundle.
  */
-function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferredFormat = 'jpg'): string
+function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferredFormat = ''): string
 {
+    $preferredFormat = $preferredFormat !== '' ? $preferredFormat : (function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $format = thumbnail_bundle_normalize_format($preferredFormat);
     public_render_profile_record_thumbnail_purpose(null, $preferredSize, $format, 'bundle');
     $selected = thumbnail_bundle_select_variant($bundle, $preferredSize, $preferredFormat);

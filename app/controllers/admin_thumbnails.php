@@ -520,4 +520,125 @@ function thumbnail_request_image_ids(array $post): array
     }
     return [];
 }
+/**
+ * Persist the thumbnail compatibility mode.
+ */
+function cms_admin_thumbnail_compatibility_settings(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+
+    $mode = thumbnail_compatibility_mode_normalize((string) ($_POST['thumbnail_compatibility_mode'] ?? THUMBNAIL_COMPATIBILITY_MODERN));
+    set_thumbnail_compatibility_mode($mode);
+    thumbnail_maintenance_summary_cache_clear();
+    admin_log_event('info', 'thumbnail.compatibility_mode_updated', 'Admin updated thumbnail compatibility mode.', [
+        'mode' => $mode,
+    ]);
+    flash_message('admin_notice', t('admin.thumbnails.compatibility_saved', 'Thumbnail compatibility mode saved. Future thumbnail generation will use {mode}.', ['mode' => thumbnail_compatibility_mode_label($mode)]));
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+}
+
+/**
+ * Remove generated legacy JPEG thumbnails while preserving originals and WebP derivatives.
+ */
+function cms_admin_delete_legacy_jpg_thumbnails(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+
+    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+        cms_admin_delete_legacy_jpg_thumbnails_batch();
+        return;
+    }
+
+    $imageIds = all_image_ids();
+    $result = delete_legacy_jpg_thumbnails_for_image_ids($imageIds);
+    thumbnail_maintenance_summary_cache_clear();
+    admin_log_event('warning', 'thumbnail.legacy_jpg_deleted', 'Admin deleted generated legacy JPEG thumbnails.', [
+        'scope' => 'all',
+        'image_count' => count($imageIds),
+        'files_deleted' => (int) $result['files_deleted'],
+        'bytes_deleted' => (int) $result['bytes_deleted'],
+    ]);
+    flash_message('admin_notice', t('admin.thumbnails.legacy_jpg_deleted_notice', 'Deleted {files} legacy JPG thumbnail file(s), freeing {size}. Originals and WebP files were kept.', [
+        'files' => (string) (int) $result['files_deleted'],
+        'size' => thumbnail_compatibility_format_bytes((int) $result['bytes_deleted']),
+    ]));
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+}
+
+/**
+ * Process one Ajax batch of legacy JPEG thumbnail cleanup.
+ */
+function cms_admin_delete_legacy_jpg_thumbnails_batch(): void
+{
+    $bufferLevel = ob_get_level();
+    ob_start();
+    try {
+        $imageIds = all_image_ids();
+        $total = count($imageIds);
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        $batchSize = max(1, min(80, (int) ($_POST['batch_size'] ?? 24)));
+        $batch = array_slice($imageIds, $offset, $batchSize);
+        $result = delete_legacy_jpg_thumbnails_for_image_ids($batch);
+        $processed = min($total, $offset + count($batch));
+        $done = $processed >= $total;
+
+        if ((int) $result['files_deleted'] > 0 || $done) {
+            thumbnail_maintenance_summary_cache_clear();
+        }
+        if ($done) {
+            admin_log_event('warning', 'thumbnail.legacy_jpg_deleted', 'Admin deleted generated legacy JPEG thumbnails.', [
+                'scope' => 'all_ajax',
+                'image_count' => $total,
+                'processed' => $processed,
+                'last_batch_files_deleted' => (int) $result['files_deleted'],
+                'last_batch_bytes_deleted' => (int) $result['bytes_deleted'],
+            ]);
+        }
+
+        $discardedOutput = (string) ob_get_clean();
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        if (trim($discardedOutput) !== '') {
+            admin_log_event('warning', 'thumbnail.legacy_cleanup_output_discarded', 'Legacy JPEG cleanup produced output before its JSON response.', [
+                'discarded_output_preview' => mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        }
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => true,
+            'total' => $total,
+            'processed' => $processed,
+            'next_offset' => $processed,
+            'files_deleted' => (int) $result['files_deleted'],
+            'bytes_deleted' => (int) $result['bytes_deleted'],
+            'done' => $done,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (Throwable $exception) {
+        $discardedOutput = (string) ob_get_clean();
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_log_event('error', 'thumbnail.legacy_jpg_delete_failed', 'Legacy JPEG thumbnail cleanup failed.', [
+            'error' => $exception->getMessage(),
+            'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
+        ], ['category' => 'other', 'severity' => 'error']);
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => false,
+            'error' => t('admin.thumbnails.legacy_jpg_delete_failed', 'Legacy JPG thumbnail cleanup failed. Check the admin logs or PHP error log for details.'),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+}
 

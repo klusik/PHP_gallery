@@ -867,3 +867,40 @@ body.is-navdata-updating {
     border-color: #c99700 !important;
     background: #fff9e7 !important;
 }
+
+.admin-thumbnail-maintenance-card form {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+}
+
+.admin-thumbnail-card-subtitle {
+    color: #1d2327;
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    margin: 0.15rem 0;
+    color: var(--text, #172033);
+    font-size: 0.9rem;
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle input {
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15rem;
+    accent-color: var(--accent, #3b82f6);
+}
+
+.admin-thumbnail-maintenance-card .admin-compact-toggle span {
+    color: var(--text, #172033);
+}
+
+.admin-thumbnail-legacy-cleanup-form {
+    padding-top: 0.4rem;
+    border-top: 1px solid var(--admin-border);
+}

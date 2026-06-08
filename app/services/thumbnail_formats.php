@@ -88,13 +88,20 @@ function thumbnail_imagick_webp_available(): bool
  */
 function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
 {
+    // $webpAvailable stores whether the current runtime can write a WebP variant for this source.
+    $webpAvailable = $mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime);
+
+    if (function_exists('thumbnail_formats_for_compatibility_policy')) {
+        return thumbnail_formats_for_compatibility_policy($sourcePath, $mime, $webpAvailable);
+    }
+
     if (is_dng_image_path($sourcePath) || $mime === 'image/x-adobe-dng') {
         return dng_derivative_generation_supported() ? ['jpg', 'webp'] : [];
     }
 
     // $formats stores the concrete variant formats that should exist on disk.
     $formats = ['jpg'];
-    if ($mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime)) {
+    if ($webpAvailable) {
         $formats[] = 'webp';
     }
 

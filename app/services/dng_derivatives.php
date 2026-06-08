@@ -579,8 +579,10 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
         $errors[] = $lastError !== null ? (string) $lastError['message'] : t('thumbnails.dng.error_master_failed');
     }
 
+    // $formats stores thumbnail derivative formats required by the active compatibility mode.
+    $formats = function_exists('thumbnail_target_formats_for_source') ? thumbnail_target_formats_for_source($sourcePath, 'image/x-adobe-dng') : ['jpg', 'webp'];
     foreach (thumbnail_sizes() as $size) {
-        foreach (['jpg', 'webp'] as $format) {
+        foreach ($formats as $format) {
             // $targetPath stores the derivative path for this size and format.
             $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
             if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {

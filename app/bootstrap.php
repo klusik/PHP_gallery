@@ -228,6 +228,8 @@ function cms_run(): void
         'admin_update_navdata' => 'cms_admin_update_navdata',
         'admin_navdata' => 'cms_admin_navdata',
         'admin_create_thumbnails' => 'cms_admin_create_thumbnails',
+        'admin_thumbnail_compatibility_settings' => 'cms_admin_thumbnail_compatibility_settings',
+        'admin_delete_legacy_jpg_thumbnails' => 'cms_admin_delete_legacy_jpg_thumbnails',
         'admin_delete_thumbnails' => 'cms_admin_delete_thumbnails',
         'admin_dismiss_thumbnail_notice' => 'cms_admin_dismiss_thumbnail_notice',
         'admin_regenerate_paths' => 'cms_admin_regenerate_paths',

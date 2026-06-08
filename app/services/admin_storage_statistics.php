@@ -257,6 +257,18 @@ function admin_storage_statistics_cache_write(array $statistics): void
     }
 }
 
+
+/**
+ * Clear cached storage statistics after generated media files change.
+ */
+function admin_storage_statistics_cache_clear(): void
+{
+    if (!function_exists('delete_app_settings')) {
+        return;
+    }
+    delete_app_settings([ADMIN_STORAGE_STATISTICS_CACHE_KEY, ADMIN_STORAGE_STATISTICS_JOB_KEY]);
+}
+
 /**
  * Build uncached statistics from database rows and expected generated media paths.
  *

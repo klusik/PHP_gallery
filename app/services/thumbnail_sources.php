@@ -55,7 +55,8 @@ function thumbnail_sizes(): array
  */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
-    return thumbnail_srcset_for_format($image, $sizes, 'jpg');
+    $format = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    return thumbnail_srcset_for_format($image, $sizes, $format);
 }
 
 /**
@@ -277,10 +278,11 @@ function gallery_static_file_url(array $gallery, string $relativeFilePath): stri
  * @param mixed $format Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function thumbnail_url(array $image, int $size, string $format = 'jpg'): string
+function thumbnail_url(array $image, int $size, string $format = ''): string
 {
     static $cache = [];
     // $cacheKey stores repeated thumbnail URL lookups inside one request.
+    $format = $format !== '' ? $format : (function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
     $purpose = function_exists('public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
     $cacheKey = (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
