@@ -300,6 +300,7 @@ function view_render_footer(): void
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-date-picker.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-simbrief-description.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-storage-statistics.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {

@@ -94,6 +94,8 @@ require_once __DIR__ . '/services/gallery_lookup.php';
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
+// Load Admin storage statistics after path and derivative helpers are available.
+require_once __DIR__ . '/services/admin_storage_statistics.php';
 require_once __DIR__ . '/services/gallery_display.php';
 require_once __DIR__ . '/services/lightbox_metadata.php';
 require_once __DIR__ . '/services/download_signatures.php';

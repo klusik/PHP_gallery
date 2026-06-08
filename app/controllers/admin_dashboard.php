@@ -46,6 +46,103 @@ function cms_admin(): void
     view_render_admin_dashboard($dashboardModel);
 }
 
+
+/**
+ * Render the dedicated Admin storage statistics view.
+ */
+function cms_admin_storage_statistics(): void
+{
+    require_admin();
+    $statistics = function_exists('admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
+    view_render_admin_storage_statistics_page($statistics);
+}
+
+/**
+ * Process browser-driven storage statistics update requests.
+ */
+function cms_admin_storage_statistics_update(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+
+    $bufferLevel = ob_get_level();
+    ob_start();
+    try {
+        verify_csrf();
+        $action = (string) ($_POST['action'] ?? 'step');
+        if ($action === 'start') {
+            $state = admin_storage_statistics_start_job();
+        } else {
+            $batchSize = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE)));
+            $state = admin_storage_statistics_process_job($batchSize);
+        }
+
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_storage_statistics_json_response(admin_storage_statistics_controller_payload($state));
+    } catch (Throwable $exception) {
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_log_event('error', 'storage_statistics.update_failed', 'Admin storage statistics update failed.', ['exception' => $exception->getMessage()]);
+        admin_storage_statistics_json_response([
+            'ok' => false,
+            'status' => 'error',
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
+
+/**
+ * Build the JSON payload for a storage statistics Ajax response.
+ *
+ * @param array<string, mixed> $state
+ * @return array<string, mixed>
+ */
+function admin_storage_statistics_controller_payload(array $state): array
+{
+    $status = (string) ($state['status'] ?? 'running');
+    $message = (string) ($state['message'] ?? '');
+    if ($message === '' && $status === 'missing') {
+        $message = t('admin.storage.progress_missing_job', 'No running storage statistics job was found.');
+    } elseif ($status === 'stale') {
+        $message = t('admin.storage.progress_stale', 'Gallery data changed while statistics were being calculated. Start a new update.');
+    }
+
+    $payload = [
+        'ok' => !empty($state['ok']),
+        'status' => $status,
+        'processed' => (int) ($state['processed'] ?? 0),
+        'total' => (int) ($state['total'] ?? 0),
+        'percent' => (float) ($state['percent'] ?? 0.0),
+        'message' => $message,
+    ];
+
+    if (is_array($state['snapshot'] ?? null)) {
+        ob_start();
+        view_render_admin_storage_statistics_panel($state['snapshot']);
+        $payload['html'] = (string) ob_get_clean();
+        $payload['status_text'] = view_admin_storage_snapshot_status($state['snapshot']);
+    }
+
+    return $payload;
+}
+
+/**
+ * Emit a JSON response for storage statistics endpoints.
+ *
+ * @param array<string, mixed> $payload
+ */
+function admin_storage_statistics_json_response(array $payload): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 /**
  * Backward-compatible wrapper for older controller/view code.
  */

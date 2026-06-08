@@ -198,6 +198,8 @@ function cms_run(): void
         'admin_reset' => 'cms_admin_reset',
         'admin_devmode' => 'cms_admin_devmode',
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
+        'admin_storage_statistics' => 'cms_admin_storage_statistics',
+        'admin_storage_statistics_update' => 'cms_admin_storage_statistics_update',
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
         'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
         'admin_seo_guard_settings' => 'cms_admin_seo_guard_settings',
