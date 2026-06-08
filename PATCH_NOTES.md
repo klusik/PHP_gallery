@@ -1,5 +1,163 @@
 # Patch notes
 
+## Version 0.77
+
+Version 0.77 adds a major thumbnail and maintenance upgrade across the gallery system. This release introduces durable
+  thumbnail variant metadata, public thumbnail warmup, stronger thumbnail repair behavior, a new site maintenance
+  runner, and expanded admin reporting for database usage and storage statistics. The result is a more resilient image
+  pipeline, more informative admin tooling, and better control over long-running background tasks.
+
+  ### Highlights
+
+  #### Added durable thumbnail metadata and metadata-backed rendering
+
+  - Added persistent thumbnail variant metadata so the system can resolve valid derivatives from the database instead of
+    relying only on filesystem probing at request time.
+
+  - Added a new thumbnail_variant_metadata migration to store and refresh derivative information.
+  - Updated thumbnail generation, maintenance, warmup, and upload automation flows so metadata stays in sync after files
+    change.
+
+  - Improved public media rendering so gallery pages can select the best available thumbnail variant more reliably.
+  - Example: when a thumbnail is repaired or regenerated, the public page can immediately use the refreshed variant
+    record without waiting for a separate cache rebuild.
+
+  #### Added guarded public thumbnail warmup
+
+  - Added a public thumbnail warmup workflow that can prefetch and repair missing or stale thumbnail variants in
+    controlled batches.
+
+  - Added a browser-side warmup module that sends signed repair requests and handles progress updates.
+  - Added locking, cooldowns, and access checks so warmup requests do not overwhelm the server or duplicate ongoing
+    work.
+
+  - Added repair-aware handling for image sources that need orientation correction or geometry validation before being
+    published.
+
+  - Example: a gallery with many newly uploaded photos can warm up the most useful public thumbnails in the background
+    instead of making the first visitor wait for repair work.
+
+  #### Improved thumbnail repair and geometry validation
+
+  - Tightened thumbnail geometry checks so stale, square-canvas, or ratio-mismatched derivatives are detected
+    consistently.
+
+  - Updated repair behavior so invalid thumbnails can be marked for background repair instead of being deleted too
+    early.
+
+  - Added support for preserving public responses while a bad derivative is being repaired in the background.
+  - Improved DNG derivative reporting so generated outputs and target formats are tracked more clearly.
+  - Example: if a portrait image was rendered with the wrong canvas shape, the system can now recognize the mismatch,
+    repair it, and keep the public page stable during the process.
+
+  #### Added a cron-safe site maintenance system
+
+  - Added a new maintenance service that can run on a schedule, resume after interruption, and continue work in batches.
+  - Added a token-protected cron endpoint and a command-line runner for unattended execution.
+  - Added maintenance state tracking for schedule timing, batch size, time budget, running status, and completion
+    status.
+
+  - Added cleanup phases so maintenance can coordinate thumbnail work and follow-up repair tasks instead of doing
+    everything in one pass.
+
+  - Added admin controls and status reporting for the new maintenance workflow.
+  - Example: a site can now process background repair jobs in smaller scheduled chunks instead of depending on manual
+    admin intervention.
+
+  #### Added admin database usage reporting
+
+  - Added a new database usage report with its own service and dedicated admin view.
+  - Added dashboard integration so database usage is visible alongside storage statistics.
+  - Added English and Czech translation updates for the new reporting UI.
+  - Added tests for the database usage aggregation and report behavior.
+  - Example: administrators can now see database footprint as a distinct operational metric instead of guessing from
+    file storage alone.
+
+  #### Expanded storage statistics and admin reporting
+
+  - Improved the storage statistics workflow so it fits better alongside the new database usage view and maintenance
+    tooling.
+
+  - Updated admin dashboard cards, styles, and section rendering to present the reporting tools more clearly.
+  - Added or refreshed manifest entries so the new admin surfaces load correctly.
+  - Improved the overall maintenance area so related tools are grouped together and easier to navigate.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added app/services/thumbnail_metadata.php for durable thumbnail variant storage and refresh logic.
+  - Added app/controllers/thumbnail_warmup.php for guarded warmup and repair handling.
+  - Added app/services/thumbnail_warmup.php for batch-based thumbnail warmup orchestration.
+  - Added app/services/site_maintenance.php for cron-safe, resumable maintenance work.
+  - Added app/controllers/site_maintenance.php and scripts/site_maintenance.php for web and CLI maintenance execution.
+  - Added app/services/admin_database_usage.php and updated app/controllers/admin_dashboard.php to expose database usage
+    reporting.
+
+  - Updated app/controllers/admin_thumbnails.php, app/controllers/public_media.php, and app/services/
+    thumbnail_generation.php to support metadata-backed thumbnail behavior.
+
+  - Updated app/services/thumbnail_maintenance.php, app/services/thumbnail_sources.php, app/services/
+    thumbnail_formats.php, app/services/thumbnail_bundles.php, app/services/thumbnail_compatibility.php, app/services/
+    thumbnail_html.php, and app/services/thumbnails.php to align thumbnail rendering and repair with the new metadata
+    model.
+
+  - Updated app/services/upload_automation.php so metadata refresh happens during automated upload flows.
+  - Updated app/services/seo_request_guard.php so internal maintenance routes are exempt from crawler blocking.
+  - Updated app/bootstrap.php, app/controllers.php, app/services.php, app/views.php, and app/services/
+    admin_dashboard.php to register the new services, controllers, and views.
+
+  #### Database
+
+  - Added migration database/migrations/202606080001_thumbnail_variant_metadata.php.
+  - Added durable thumbnail variant storage for generation, warmup, maintenance, and rendering workflows.
+  - Added support for tracking metadata refreshes when thumbnails are repaired or regenerated.
+  - Kept the new storage compatible with existing gallery installs by integrating it through the current migration flow.
+
+  #### Frontend
+
+  - Added public/assets/gallery-modules/thumbnail-warmup.js for guarded public warmup and repair requests.
+  - Updated public/assets/gallery-modules/admin-thumbnail-progress.js to support the new repair and warmup progress
+    flow.
+
+  - Updated public/assets/gallery-modules/lightbox.js, public/assets/gallery-modules/lightbox-deferred.js, and public/
+    assets/styles/lightbox.css to avoid layout artifacts during image swaps and repair states.
+
+  - Updated public/assets/gallery.js so the new maintenance and warmup modules load correctly.
+  - Expanded public/assets/styles/admin-dashboard.css and public/assets/styles/admin.css for the new maintenance,
+    reporting, and database usage screens.
+
+  - Updated the admin dashboard section templates so the new cards and controls fit the existing admin layout.
+
+  #### Tests
+
+  - Added tests/thumbnail_warmup_model_test.php.
+  - Added tests/admin_database_usage_test.php.
+  - Covered thumbnail warmup behavior, source merging, token validation, and repair flow safety.
+  - Covered database usage aggregation and reporting behavior.
+  - Added coverage for thumbnail geometry validation, metadata refresh paths, and public rendering consistency.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public galleries should load more reliably because thumbnail selection now uses durable metadata instead of ad hoc
+    filesystem checks.
+
+  - Broken or stale thumbnails are less likely to appear because repairs are handled more consistently.
+  - Lightbox image swaps are less likely to flash incorrect white letterbox areas during transitions.
+
+  #### For administrators
+
+  - Thumbnail maintenance is easier to manage because warmup, repair, and metadata refresh are now connected.
+  - Background maintenance can run safely in scheduled batches rather than requiring manual intervention for every pass.
+  - Database usage is visible from the admin area as a dedicated operational metric.
+  - Storage statistics and maintenance reporting are more coherent because related tools now share a common admin
+    surface.
+
+  - Translation, manifest, and dashboard updates make the new workflows discoverable in both English and Czech
+    installations.
+
 ## Version 0.76
 
 Version 0.76 expands the Admin area with deeper operational tooling and a more structured interface. This release adds
