@@ -198,6 +198,8 @@ function admin_dashboard_view_model(): array
     $updateButtonClass = $updatePending ? 'button secondary is-update-pending' : 'button secondary';
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
+    // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
+    $siteMaintenanceStatus = admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('site_maintenance_status') ? site_maintenance_status() : []);
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
@@ -248,6 +250,7 @@ function admin_dashboard_view_model(): array
         'update_button_class' => $updateButtonClass,
         'update_label' => $updateLabel,
         'thumbnail_summary' => $thumbnailSummary,
+        'site_maintenance_status' => $siteMaintenanceStatus,
         'original_storage_label' => $originalStorageLabel,
         'total_galleries' => $totalGalleries,
         'total_images' => $totalImages,

@@ -265,9 +265,10 @@ function create_image_thumbnails(array $image, array $gallery): int
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
  * @param array<int, int>|null $requestedSizes Optional thumbnail sizes to generate instead of the full standard set.
+ * @param array<string, mixed> $options Optional generation controls for bounded maintenance callers.
  * @return mixed Result produced by this operation.
  */
-function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null): array
+function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null, array $options = []): array
 {
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
@@ -290,6 +291,10 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     $mime = (string) $info['mime'];
     // $formats stores the variants this server can actually keep current for this source.
     $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
+    // $preferImagickWebpExif stores whether this caller accepts the heavier Imagick WebP writer.
+    $preferImagickWebpExif = array_key_exists('prefer_imagick_webp_exif', $options)
+        ? (bool) $options['prefer_imagick_webp_exif']
+        : true;
     // Variable $sourceMtime stores this steps working value.
     $sourceMtime = filemtime($sourcePath) ?: time();
     // $sourceGeometry stores displayed source dimensions used by validation and generation.
@@ -383,7 +388,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             // $temporaryPath stores the new WebP file until it can replace any stale derivative.
             $temporaryPath = thumbnail_temporary_target_path($formatTargets['webp'], 'webp');
             // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
-            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, $workingWidth, $workingHeight, (int) $size, $temporaryPath, $mime);
+            $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, $workingWidth, $workingHeight, (int) $size, $temporaryPath, $mime, $preferImagickWebpExif);
             if ($webpWritten && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['webp'])) {
                 if (function_exists('thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, 'webp', $formatTargets['webp'], $sourcePath, true);
@@ -730,12 +735,12 @@ function image_source_has_exif(string $sourcePath, string $mime): bool
  * @param mixed $mime Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdImage $source, int $width, int $height, int $maxSide, string $targetPath, string $mime): bool
+function write_resized_webp_preserving_exif_when_needed(string $sourcePath, GdImage $source, int $width, int $height, int $maxSide, string $targetPath, string $mime, bool $preferImagickExif = true): bool
 {
     if (!function_exists('imagewebp')) {
         return false;
     }
-    if (image_source_has_exif($sourcePath, $mime) && thumbnail_imagick_webp_available()) {
+    if ($preferImagickExif && image_source_has_exif($sourcePath, $mime) && thumbnail_imagick_webp_available()) {
         // $imagickWritten stores whether the preferred metadata-preserving writer succeeded.
         $imagickWritten = write_resized_webp_with_imagick_exif($sourcePath, $maxSide, $targetPath);
         if ($imagickWritten) {

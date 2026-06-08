@@ -1712,7 +1712,9 @@ body.has-map-overlay {
     display: grid;
     align-content: start;
     gap: 0.55rem;
+    min-width: 0;
     min-height: 8.5rem;
+    overflow-wrap: anywhere;
     padding: 0.9rem;
     border: 1px solid var(--admin-border);
     border-radius: 12px;
@@ -1736,6 +1738,79 @@ body.has-map-overlay {
 
 .admin-maintenance-card .nav {
     margin-top: 0;
+}
+
+.admin-site-maintenance-card,
+.admin-site-maintenance-card > *,
+.admin-site-maintenance-card span,
+.admin-site-maintenance-card p,
+.admin-site-maintenance-card dd,
+.admin-site-maintenance-card dt {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.admin-site-maintenance-copy {
+    margin: 0;
+    color: #64717d;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.admin-site-maintenance-statusline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    color: #1d2327;
+    font-size: 0.9rem;
+}
+
+.admin-site-maintenance-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.admin-site-maintenance-metrics div {
+    min-width: 0;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.admin-site-maintenance-metrics dt {
+    margin: 0 0 0.12rem;
+    color: #64717d;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.admin-site-maintenance-metrics dd {
+    margin: 0;
+    color: #1d2327;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.admin-site-maintenance-note {
+    display: block;
+    color: #64717d;
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
+.admin-site-maintenance-note.is-warning {
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #e5b700;
+    border-radius: 8px;
+    background: #fff8d7;
+    color: #6f5200;
 }
 
 .admin-panel-heading {
