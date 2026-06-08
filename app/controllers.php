@@ -44,6 +44,7 @@ require_once __DIR__ . '/controllers/public_gallery.php';
 require_once __DIR__ . '/controllers/gallery_lightbox.php';
 require_once __DIR__ . '/controllers/picture_manager.php';
 require_once __DIR__ . '/controllers/public_media.php';
+require_once __DIR__ . '/controllers/thumbnail_warmup.php';
 require_once __DIR__ . '/controllers/admin_auth.php';
 require_once __DIR__ . '/controllers/admin_integrity.php';
 require_once __DIR__ . '/controllers/upload_automation.php';

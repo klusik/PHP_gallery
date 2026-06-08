@@ -42,3 +42,4 @@ require_once __DIR__ . '/thumbnail_html.php';
 require_once __DIR__ . '/thumbnail_formats.php';
 require_once __DIR__ . '/thumbnail_maintenance.php';
 require_once __DIR__ . '/thumbnail_generation.php';
+require_once __DIR__ . '/thumbnail_warmup.php';

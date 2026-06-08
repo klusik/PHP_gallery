@@ -542,15 +542,15 @@ function write_dng_derivative(string $sourcePath, string $targetPath, string $fo
 /**
  * Create thumbnails plus the WebP display master for one DNG source.
  */
-function create_dng_image_derivatives_result(array $image, array $gallery, string $sourcePath): array
+function create_dng_image_derivatives_result(array $image, array $gallery, string $sourcePath, ?array $requestedSizes = null): array
 {
     if (!is_file($sourcePath)) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => [t('thumbnails.dng.error_original_missing')]];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => [t('thumbnails.dng.error_original_missing')], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
     }
     // $generationStatus stores the concrete DNG converter availability state for user-facing diagnostics.
     $generationStatus = dng_derivative_generation_status();
     if (empty($generationStatus['supported'])) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => [(string) $generationStatus['reason']]];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 1, 'errors' => [(string) $generationStatus['reason']], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
     }
     gallery_thumbs_dir($gallery, true);
     // $sourceMtime stores the original DNG timestamp used to detect stale generated files.
@@ -565,6 +565,8 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     $failed = 0;
     // $errors stores concise diagnostic messages for the admin upload and thumbnail progress UI.
     $errors = [];
+    // $createdFiles stores generated derivative basenames for detailed warmup logging.
+    $createdFiles = [];
 
     // $masterPath stores the browser-displayable full-size WebP master.
     $masterPath = dng_display_master_abs_path($image, $gallery, true);
@@ -572,6 +574,7 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
         $skipped++;
     } elseif (create_dng_display_master($sourcePath, $masterPath)) {
         $created++;
+        $createdFiles[] = basename($masterPath);
     } else {
         $webpSkipped++;
         $failed++;
@@ -581,7 +584,11 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
 
     // $formats stores thumbnail derivative formats required by the active compatibility mode.
     $formats = function_exists('thumbnail_target_formats_for_source') ? thumbnail_target_formats_for_source($sourcePath, 'image/x-adobe-dng') : ['jpg', 'webp'];
-    foreach (thumbnail_sizes() as $size) {
+    // $sizes stores the requested thumbnail sizes. Null means all standard sizes.
+    $sizes = $requestedSizes === null ? thumbnail_sizes() : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    // $thumbnailPolicy stores the exact generation policy for diagnostics and warmup logs.
+    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, 'image/x-adobe-dng', $sizes) : null;
+    foreach ($sizes as $size) {
         foreach ($formats as $format) {
             // $targetPath stores the derivative path for this size and format.
             $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
@@ -593,6 +600,7 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
             $written = write_dng_derivative($sourcePath, $targetPath, $format, (int) $size);
             if ($written) {
                 $created++;
+                $createdFiles[] = basename($targetPath);
             } else {
                 $failed++;
                 if ($format === 'webp') {
@@ -610,5 +618,5 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
         $errors[] = t('thumbnails.dng.error_derivatives_failed');
     }
 
-    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors))];
+    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors)), 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
 }

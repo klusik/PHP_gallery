@@ -166,6 +166,7 @@ function cms_run(): void
         'thumb' => 'cms_thumb',
         'public_media' => 'cms_public_media',
         'public_thumb' => 'cms_public_thumb',
+        'thumbnail_warmup' => 'cms_thumbnail_warmup',
         'gallery_cover_asset' => 'cms_gallery_cover_asset',
         'gallery_branding_asset' => 'cms_gallery_branding_asset',
         'theme_background_asset' => 'cms_theme_background_asset',

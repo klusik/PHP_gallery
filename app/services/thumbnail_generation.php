@@ -35,6 +35,22 @@
 declare(strict_types=1);
 
 /**
+ * Return the JPEG quality used by generated thumbnail files.
+ */
+function thumbnail_jpeg_quality(): int
+{
+    return 82;
+}
+
+/**
+ * Return the WebP quality used by generated thumbnail files.
+ */
+function thumbnail_webp_quality(): int
+{
+    return 82;
+}
+
+/**
  * Handles create gallery thumbnails logic for the gallery application.
  * @param mixed $galleryId Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -91,23 +107,24 @@ function create_image_thumbnails(array $image, array $gallery): int
  * Handles create image thumbnails result logic for the gallery application.
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
+ * @param array<int, int>|null $requestedSizes Optional thumbnail sizes to generate instead of the full standard set.
  * @return mixed Result produced by this operation.
  */
-function create_image_thumbnails_result(array $image, array $gallery): array
+function create_image_thumbnails_result(array $image, array $gallery, ?array $requestedSizes = null): array
 {
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => []];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
     }
     gallery_thumbs_dir($gallery, true);
     if (image_uses_dng_display_derivatives($image)) {
-        return create_dng_image_derivatives_result($image, $gallery, $sourcePath);
+        return create_dng_image_derivatives_result($image, $gallery, $sourcePath, $requestedSizes);
     }
     // Variable $info stores this steps working value.
     $info = @getimagesize($sourcePath);
     if ($info === false || empty($info['mime'])) {
-        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => []];
+        return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
     }
     // $mime stores the source MIME value used by the scanner and generator format decision.
     $mime = (string) $info['mime'];
@@ -115,13 +132,23 @@ function create_image_thumbnails_result(array $image, array $gallery): array
     $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // Variable $sourceMtime stores this steps working value.
     $sourceMtime = filemtime($sourcePath) ?: time();
-    // Variable $targets stores this steps working value.
-    $targets = [];
     // Variable $skipped stores this steps working value.
     $skipped = 0;
     // Variable $webpSkipped stores this steps working value.
     $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
-    foreach (thumbnail_sizes() as $size) {
+    // $sizes stores the generated thumbnail sizes requested by this operation. Null means the full standard set.
+    $sizes = $requestedSizes === null ? thumbnail_sizes() : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    // $thumbnailPolicy stores the exact generation policy for diagnostics and warmup logs.
+    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
+    if (!$sizes) {
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
+    }
+    if (!$formats) {
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => $thumbnailPolicy];
+    }
+    // Variable $targets stores this steps working value.
+    $targets = [];
+    foreach ($sizes as $size) {
         foreach ($formats as $format) {
             // Variable $targetPath stores this steps working value.
             $targetPath = thumbnail_abs_path($image, $gallery, $size, $format);
@@ -133,34 +160,38 @@ function create_image_thumbnails_result(array $image, array $gallery): array
         }
     }
     if (!$targets) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => []];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
     }
     if (!extension_loaded('gd')) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => []];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
     }
     // Variable $source stores this steps working value.
     $source = image_create_from_path($sourcePath, (string) $info['mime']);
     if (!$source) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => []];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
     }
     // Variable $created stores this steps working value.
     $created = 0;
+    // $createdFiles stores generated thumbnail basenames for detailed warmup logging.
+    $createdFiles = [];
     foreach ($targets as $size => $formatTargets) {
         if (isset($formatTargets['jpg']) && write_resized_jpeg($source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['jpg'])) {
             $created++;
+            $createdFiles[] = basename($formatTargets['jpg']);
         }
         if (isset($formatTargets['webp'])) {
             // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
             $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, (int) $info[0], (int) $info[1], (int) $size, $formatTargets['webp'], $mime);
             if ($webpWritten) {
                 $created++;
+                $createdFiles[] = basename($formatTargets['webp']);
             } else {
                 $webpSkipped++;
             }
         }
     }
     imagedestroy($source);
-    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => []];
+    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy];
 }
 
 /**
@@ -236,7 +267,7 @@ function write_resized_jpeg(GdImage $source, int $width, int $height, int $maxSi
     imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
     imageinterlace($target, true);
     // Variable $written stores this steps working value.
-    $written = imagejpeg($target, $targetPath, 82);
+    $written = imagejpeg($target, $targetPath, thumbnail_jpeg_quality());
     imagedestroy($target);
     return $written;
 }
@@ -325,7 +356,7 @@ function write_resized_webp_with_gd(GdImage $source, int $width, int $height, in
     imagefilledrectangle($target, 0, 0, $targetWidth, $targetHeight, $transparent);
     imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
     // Variable $written stores this steps working value.
-    $written = imagewebp($target, $targetPath, 82);
+    $written = imagewebp($target, $targetPath, thumbnail_webp_quality());
     imagedestroy($target);
     return $written;
 }
@@ -352,7 +383,7 @@ function write_resized_webp_with_imagick_exif(string $sourcePath, int $maxSide, 
         $profiles = $image->getImageProfiles('exif', true);
         $image->thumbnailImage($maxSide, $maxSide, true, true);
         $image->setImageFormat('webp');
-        $image->setImageCompressionQuality(82);
+        $image->setImageCompressionQuality(thumbnail_webp_quality());
         if (isset($profiles['exif']) && $profiles['exif'] !== '') {
             $image->profileImage('exif', $profiles['exif']);
         }
