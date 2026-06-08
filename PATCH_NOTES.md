@@ -1,5 +1,155 @@
 # Patch notes
 
+## Version 0.76
+
+Version 0.76 expands the Admin area with deeper operational tooling and a more structured interface. This release adds
+  detailed storage statistics for galleries and generated media, improves thumbnail compatibility handling with a modern
+  WebP-first policy and legacy cleanup tools, and introduces a crawler-safety request guard that reduces duplicate or
+  suspicious public requests. The Admin dashboard and theme editor also continue moving toward a shared cinematic layout
+  system with reusable heroes, intros, tabs, and side panels.
+
+  ### Highlights
+
+  #### Added storage statistics for gallery files and generated media
+
+  - Added a new Admin storage statistics workflow that tracks how much space original uploads, thumbnails, and DNG
+    display masters consume.
+
+  - Split the reporting into meaningful categories so administrators can see source photo sizes separately from
+    generated derivative sizes.
+
+  - Added statistics for image type distribution, source-size buckets, largest source files, and top galleries by
+    storage usage.
+
+  - Added cache and job handling so the statistics view can be built without blocking the dashboard on every request.
+  - Added a browser-driven batch job mode so large installations can calculate generated-media totals in smaller
+    requests instead of one long-running page load.
+
+  - Added a dedicated Admin storage statistics page and dashboard entry point so the feature is easy to reach from the
+    maintenance area.
+
+  - Added dedicated progress and reporting behavior so administrators can monitor the scan while it runs.
+  - Example: an installation can now show that gallery originals take 57 GB, thumbnails take 11 GB, and DNG display
+    masters take 4 GB, rather than only showing one combined total.
+
+  #### Improved thumbnail compatibility handling
+
+  - Added a thumbnail compatibility mode that controls whether new thumbnail generation uses modern WebP-only output or
+    legacy JPEG plus WebP compatibility pairs.
+
+  - Added policy-aware format selection so the generator, bundle lookup, HTML rendering, and maintenance scanner all use
+    the same output rules.
+
+  - Added a safe fallback path for sources that cannot be written as WebP on the current server, so shared-hosting
+    installs remain usable even when runtime capabilities vary.
+
+  - Added legacy JPEG cleanup tools that remove generated JPG thumbnails without touching originals, WebP derivatives,
+    or database rows.
+
+  - Added an Admin control for switching compatibility mode and an Admin action for batch-deleting legacy JPEG
+    thumbnails.
+
+  - Added tests covering format normalization, policy decisions, and safe cleanup behavior.
+  - Example: a site can switch to modern mode and keep new thumbnails as WebP only, while still retaining the option to
+    delete older generated JPG variants later.
+
+  #### Added crawler-safety request guarding
+
+  - Added a public request guard that rejects suspicious query strings before they can render duplicate gallery pages.
+  - Added 404 responses with X-Robots-Tag: noindex, nofollow for blocked requests and not-found pages.
+  - Added Admin controls for enabling or disabling the guard and for sampled logging of rejected requests.
+  - Added dashboard visibility for the guard state so administrators can see whether crawler safety is active.
+  - Updated robots handling and shared header rendering so the public side emits the right indexing signals.
+  - Example: malformed or spammy requests with unexpected query parameters no longer create crawlable duplicate pages.
+
+  #### Refined the Admin dashboard and cinematic UI system
+
+  - Continued the transition to shared Admin UI primitives for heroes, section intros, metric cards, and design-spec
+    panels.
+
+  - Reworked dashboard and theme pages to use the same reusable layout vocabulary.
+  - Updated nested tabs and side panels so panel transitions feel smoother and the Admin shell reads as one coherent
+    interface.
+
+  - Added admin-cinematic.css and expanded the dashboard stylesheet to support the denser Admin layout.
+  - Improved the theme editor and dashboard grouping so content, media, navigation, and system tools are easier to scan.
+  - Preserved the existing workflows while making the Admin presentation more consistent across full pages and side-
+    panel flows.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added app/services/admin_storage_statistics.php for storage fingerprinting, caching, job execution, and source/
+    generated media aggregation.
+
+  - Added app/services/thumbnail_compatibility.php for thumbnail mode policy, legacy cleanup, and compatibility labels.
+  - Added app/services/seo_request_guard.php for public request rejection, logging, and canonical response handling.
+  - Added cms_admin_storage_statistics() and supporting dashboard/model wiring for the new statistics page.
+  - Added cms_admin_thumbnail_compatibility_settings() and legacy thumbnail cleanup actions in app/controllers/
+    admin_thumbnails.php.
+
+  - Added cms_admin_seo_guard_settings() in app/controllers/admin_dashboard.php.
+  - Updated app/controllers/admin_galleries_edit.php and related Admin UI flows to use the shared cinematic primitives.
+  - Updated thumbnail_target_formats_for_source(), thumbnail_bundle_url(), thumbnail_srcset(), and related helpers so
+    thumbnail output follows the active compatibility policy.
+
+  - Updated cms_run() to enforce the SEO request guard early in request handling.
+  - Updated public not-found behavior in app/controllers/http_helpers.php to emit crawler-safe headers.
+  - Updated dashboard section rendering in app/views/admin_dashboard_sections.php to expose the new storage and security
+    tools.
+
+  - Updated app/views/layout.php to load the new Admin stylesheet and browser modules.
+
+  #### Database
+
+  - Refined cache and job storage through app settings for storage statistics and thumbnail cleanup workflows.
+  - Extended manifest metadata in app/core-manifest.json for the new service and view surface.
+  - No new SQL migration was introduced in this release.
+
+  #### Frontend
+
+  - Added public/assets/gallery-modules/admin-storage-statistics.js for batch processing and progress updates.
+  - Updated public/assets/gallery-modules/admin-thumbnail-progress.js to support the new maintenance workflow.
+  - Updated public/assets/gallery-modules/admin-nested-tabs.js, admin-tabs.js, admin-side-panel.js, and admin-
+    operations.js for the refreshed Admin interaction model.
+
+  - Expanded public/assets/styles/admin-dashboard.css and public/assets/styles/admin-cinematic.css for the new
+    dashboard, statistics panels, and theme-editor presentation.
+
+  - Updated public/assets/gallery.js so the new Admin modules boot automatically.
+  - Updated app/views/admin_ui.php so shared hero, intro, metric, and design-spec components can be reused across Admin
+    pages.
+
+  #### Tests
+
+  - Added tests/admin_storage_statistics_test.php.
+  - Added tests/thumbnail_compatibility_model_test.php.
+  - Covered file-extension normalization, size bucket selection, and grouped statistics calculations.
+  - Covered thumbnail compatibility normalization, legacy versus modern format decisions, and safe JPG cleanup.
+  - Covered compatibility cleanup behavior to ensure originals and WebP files are preserved.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public pages are less likely to expose duplicate crawl targets from suspicious query strings.
+  - Not-found pages and blocked requests now signal crawlers more clearly with noindex, nofollow.
+  - Public thumbnails can be served in a more modern WebP-first configuration where the server supports it.
+
+  #### For administrators
+
+  - The Admin dashboard now gives a clearer view of storage usage and generated-media cost.
+  - Thumbnail maintenance is easier to reason about because format policy, generation, and cleanup now follow the same
+    rules.
+
+  - Legacy thumbnail cleanup can free disk space without risking originals or newer derivative formats.
+  - The Admin area feels more structured and easier to navigate because repeated layout patterns are now shared and
+    consistent.
+
+  - Crawler-safety controls are available directly from the dashboard, with visibility into whether the guard is enabled
+    and logging activity is being sampled.
+
 ## Version 0.75
 
 Version 0.75 expands gallery editing, administration, and navigation with several connected workflows: administrators
