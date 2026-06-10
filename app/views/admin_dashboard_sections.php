@@ -134,9 +134,12 @@ function view_render_admin_dashboard_metric_grid(array $model): void
     $migrationPending = view_admin_dashboard_bool($model, 'migration_pending');
 
     $thumbnailValue = !empty($thumbnailSummary['deferred']) ? t('admin.dashboard.metric_not_checked', 'Not checked') : (string) $missingThumbnailVariants;
+    $thumbnailImagesLabel = !empty($thumbnailSummary['full_check'])
+        ? t('admin.dashboard.metric_images_checked', 'images checked')
+        : t('admin.dashboard.metric_images_sampled', 'images sampled');
     $thumbnailHelp = !empty($thumbnailSummary['deferred'])
         ? t('admin.dashboard.metric_thumbnail_check_deferred', 'Open thumbnail maintenance for an exact scan.')
-        : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . t('admin.dashboard.metric_images_sampled', 'images sampled');
+        : (int) ($thumbnailSummary['images_scanned'] ?? 0) . ' ' . $thumbnailImagesLabel;
     $galleryStorageHelp = e((int) $unpublishedGalleries . ' ' . t('admin.dashboard.metric_unpublished', 'unpublished') . ', ' . (int) $privateGalleries . ' ' . t('admin.dashboard.metric_private', 'private')) . '<br>' . e(t('admin.dashboard.metric_original_storage', 'Original files: {size}', ['size' => $originalStorageLabel]));
     if ($databaseUsageAvailable && $galleryDatabaseUsageLabel !== '') {
         $galleryStorageHelp .= '<br>' . e(t('admin.dashboard.metric_gallery_database_storage', 'Gallery DB: {size}', ['size' => $galleryDatabaseUsageLabel]));
@@ -420,13 +423,61 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
     $compatibilityMode = function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
+    $lastThumbnailCheck = function_exists('thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
 
     echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
     if (!empty($thumbnailSummary['deferred'])) {
         echo '<span>' . e(t('admin.dashboard.thumbnail_check_deferred', 'Thumbnail status has not been scanned yet on this login. Use Create all thumbnails or the dedicated thumbnail tools when you need a full check.')) . '</span>';
     } else {
-        echo '<span>' . (int) $missingThumbnailVariants . ' ' . e(t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.')) . '</span>';
+        $thumbnailScopeText = !empty($thumbnailSummary['full_check'])
+            ? t('admin.dashboard.missing_stale_variants_full_check', 'missing or stale variant(s) in the last full check.')
+            : t('admin.dashboard.missing_stale_variants', 'missing or stale variant(s) in the current sample.');
+        echo '<span>' . (int) $missingThumbnailVariants . ' ' . e($thumbnailScopeText) . '</span>';
+    }
+
+    if ($lastThumbnailCheck) {
+        $affectedImages = (int) ($lastThumbnailCheck['images_with_missing'] ?? 0);
+        $affectedGalleries = (int) ($lastThumbnailCheck['affected_gallery_count'] ?? 0);
+        $missingVariants = (int) ($lastThumbnailCheck['missing_variants'] ?? 0);
+        $checkedAt = (string) ($lastThumbnailCheck['checked_at'] ?? '');
+        echo '<div class="admin-thumbnail-check-result">';
+        echo '<span><strong>' . e(t('admin.thumbnails.last_check_title', 'Last full thumbnail check')) . '</strong>' . ($checkedAt !== '' ? ': ' . e($checkedAt) . ' UTC' : '') . '</span>';
+        echo '<span>' . e(t('admin.thumbnails.last_check_summary', 'Checked {images} image(s). {affected_images} image(s) in {galleries} gallery/galleries need {variants} thumbnail variant(s).', [
+            'images' => (string) (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
+            'affected_images' => (string) $affectedImages,
+            'galleries' => (string) $affectedGalleries,
+            'variants' => (string) $missingVariants,
+        ])) . '</span>';
+        if ((int) ($lastThumbnailCheck['invalid_geometry_detected'] ?? 0) > 0) {
+            echo '<span class="muted">' . e(t('admin.thumbnails.last_check_invalid_geometry', '{count} wrong-ratio thumbnail file(s) were counted as needing regeneration. The check did not delete them.', [
+                'count' => (string) (int) ($lastThumbnailCheck['invalid_geometry_detected'] ?? 0),
+            ])) . '</span>';
+        }
+        $affectedGalleryRows = array_values(array_filter((array) ($lastThumbnailCheck['affected_galleries'] ?? []), static fn ($row): bool => is_array($row)));
+        if ($affectedGalleryRows !== []) {
+            echo '<details class="admin-thumbnail-check-galleries"><summary>' . e(t('admin.thumbnails.last_check_galleries', 'Affected galleries')) . '</summary><ul>';
+            foreach (array_slice($affectedGalleryRows, 0, 10) as $galleryRow) {
+                $galleryLabel = trim((string) ($galleryRow['title'] ?? ''));
+                $folderPath = trim((string) ($galleryRow['folder_path'] ?? ''));
+                if ($folderPath !== '') {
+                    $galleryLabel .= ($galleryLabel !== '' ? ' (' . $folderPath . ')' : $folderPath);
+                }
+                if ($galleryLabel === '') {
+                    $galleryLabel = '#' . (int) ($galleryRow['id'] ?? 0);
+                }
+                echo '<li>' . e(t('admin.thumbnails.last_check_gallery_value', '{gallery}: {images} image(s), {variants} variant(s).', [
+                    'gallery' => $galleryLabel,
+                    'images' => (string) (int) ($galleryRow['images_with_missing'] ?? 0),
+                    'variants' => (string) (int) ($galleryRow['missing_variants'] ?? 0),
+                ])) . '</li>';
+            }
+            if (count($affectedGalleryRows) > 10 || !empty($lastThumbnailCheck['affected_galleries_truncated'])) {
+                echo '<li>' . e(t('admin.thumbnails.last_check_more_galleries', 'More affected galleries were found; see the admin log for the stored check context.')) . '</li>';
+            }
+            echo '</ul></details>';
+        }
+        echo '</div>';
     }
 
     echo '<form method="post" action="' . e(url_for('admin_thumbnail_compatibility_settings')) . '" class="admin-thumbnail-compatibility-form">' . csrf_field();
@@ -445,9 +496,30 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="button" class="secondary" data-refresh-thumbnail-metadata>' . e(t('admin.thumbnails.refresh_metadata', 'Refresh thumbnail database')) . '</button>';
     echo '</form>';
 
+    echo '<form method="post" action="' . e(url_for('admin_check_thumbnail_maintenance')) . '" class="admin-thumbnail-check-actions-form" data-thumbnail-check-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
+    echo '<span>' . e(t('admin.thumbnails.check_missing_hint', 'Check every imported photo and list galleries that need thumbnail generation. No thumbnails are created.')) . '</span>';
+    echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
+    echo '</form>';
+
     echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
     echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
+    $experimentalRebuildConfig = function_exists('experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $experimentalRebuildJson = json_encode($experimentalRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($experimentalRebuildJson)) {
+        $experimentalRebuildJson = '{}';
+    }
+    $experimentalRebuildDisabled = empty($experimentalRebuildConfig['enabled']);
+    $hasUsableThumbnailCheck = !empty($lastThumbnailCheck) && (int) ($lastThumbnailCheck['images_scanned'] ?? 0) > 0;
+    $hasMissingFromLastCheck = $hasUsableThumbnailCheck && (int) ($lastThumbnailCheck['images_with_missing'] ?? 0) > 0;
+    $missingButtonDisabled = !$hasMissingFromLastCheck;
+    $missingButtonStatus = $hasUsableThumbnailCheck
+        ? ($hasMissingFromLastCheck
+            ? t('admin.thumbnails.create_missing_ready_hint', 'Targeted repair is ready. Use Create missing thumbnails to process only the images reported by the last full check.')
+            : t('admin.thumbnails.create_missing_none_hint', 'The last full check found no missing or stale thumbnails. Run Check missing thumbnails again after importing or changing files.'))
+        : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
+    echo '<label class="admin-compact-toggle experimental-thumbnail-rebuild-toggle"><input type="checkbox" name="experimental_thumbnail_rebuild" value="1" data-experimental-thumbnail-rebuild-toggle data-experimental-thumbnail-rebuild-config="' . e($experimentalRebuildJson) . '"' . ($experimentalRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.experimental_rebuild_label', 'Experimental browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.experimental_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
+    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div>';
+    echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
     echo '</article>';
 }
 

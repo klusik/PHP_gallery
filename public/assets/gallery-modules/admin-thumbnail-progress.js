@@ -31,6 +31,49 @@
  */
 
 import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
+import { experimentalThumbnailRebuildRequested, runExperimentalThumbnailRebuild } from './admin-experimental-thumbnail-rebuild.js?v=20260610-thumbnail-serial-v5';
+
+
+/**
+ * Update the targeted missing-thumbnail action state after a dry check.
+ *
+ * @param {boolean} enabled Whether the button should be enabled.
+ * @param {string} message Browser-visible status text.
+ * @returns {void}
+ */
+function setCreateMissingThumbnailState(enabled, message) {
+    const button = document.querySelector('[data-create-missing-thumbnails]');
+    if (button instanceof HTMLButtonElement) {
+        button.disabled = !enabled;
+        button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+    }
+    const status = document.querySelector('[data-create-missing-thumbnails-status]');
+    if (status instanceof HTMLElement && message) {
+        status.textContent = message;
+    }
+}
+
+/**
+ * Return the browser-visible targeted repair hint for one dry-check result.
+ *
+ * @param {number} affectedImages Images needing at least one thumbnail variant.
+ * @param {number} missingVariants Missing or stale variants.
+ * @returns {string} Status line.
+ */
+function createMissingThumbnailStateMessage(affectedImages, missingVariants) {
+    if (affectedImages > 0) {
+        return i18n(
+            'admin.thumbnails.create_missing_ready_after_check',
+            'Targeted repair is ready. {images} image(s) still need {variants} thumbnail variant(s).',
+            {images: affectedImages, variants: missingVariants}
+        );
+    }
+    return i18n(
+        'admin.thumbnails.create_missing_none_after_check',
+        'The latest full check found no missing or stale thumbnails. Create missing thumbnails stays disabled.',
+        {}
+    );
+}
 
 // Function `setupThumbnailProgress` executes this focused behavior.
 export function setupThumbnailProgress() {
@@ -72,18 +115,58 @@ export function setupThumbnailProgress() {
                 }
                 return;
             }
+            // Variable `checkButton` stores the dry thumbnail inventory action.
+            const checkButton = event.target.closest('[data-check-missing-thumbnails]');
+            if (checkButton) {
+                // Variable `checkForm` stores the dry thumbnail inventory form.
+                const checkForm = checkButton.closest('form');
+                if (!(checkForm instanceof HTMLFormElement)) {
+                    return;
+                }
+                event.preventDefault();
+                await runThumbnailMaintenanceCheck(checkForm);
+                return;
+            }
             // Variable `missingButton` stores this steps working value.
             const missingButton = event.target.closest('[data-create-missing-thumbnails]');
             if (!missingButton) {
                 return;
             }
             // Variable `missingForm` stores this steps working value.
-            const missingForm = document.querySelector('[data-thumbnail-maintenance-form]');
+            const missingForm = missingButton.closest('form') || document.querySelector('[data-thumbnail-maintenance-form]');
             if (!(missingForm instanceof HTMLFormElement)) {
                 return;
             }
             event.preventDefault();
-            await runThumbnailJob(missingForm, null, {scope: 'missing'});
+            if (missingButton instanceof HTMLButtonElement && missingButton.disabled) {
+                return;
+            }
+            if (experimentalThumbnailRebuildRequested(missingForm)) {
+                missingButton.disabled = true;
+                try {
+                    await runExperimentalThumbnailRebuild(missingForm, ensureThumbnailProgress(missingForm), {scope: 'missing'});
+                } finally {
+                    missingButton.disabled = false;
+                }
+                return;
+            }
+            missingButton.disabled = true;
+            try {
+                await runThumbnailJob(missingForm, null, {scope: 'missing'});
+            } finally {
+                missingButton.disabled = false;
+            }
+            return;
+        }
+        const experimentalForm = button.closest('form');
+        if (experimentalForm instanceof HTMLFormElement && experimentalThumbnailRebuildRequested(experimentalForm)) {
+            event.preventDefault();
+            button.disabled = true;
+            try {
+                await runExperimentalThumbnailRebuild(experimentalForm, ensureThumbnailProgress(experimentalForm), {scope: 'all'});
+            } finally {
+                button.disabled = false;
+            }
             return;
         }
         // Variable `form` stores this steps working value.
@@ -113,6 +196,11 @@ export function setupThumbnailProgress() {
     document.addEventListener('submit', (event) => {
         // Variable `form` stores this steps working value.
         const form = event.target;
+        if (form instanceof HTMLFormElement && form.matches('[data-thumbnail-check-form]')) {
+            event.preventDefault();
+            runThumbnailMaintenanceCheck(form);
+            return;
+        }
         if (!(form instanceof HTMLFormElement) || !isThumbnailSubmission(form, event.submitter)) {
             return;
         }
@@ -134,6 +222,104 @@ export function setupThumbnailProgress() {
     });
 }
 
+
+/**
+ * Run a dry thumbnail maintenance check in browser-driven batches.
+ *
+ * @param {HTMLFormElement} form Submitted check form.
+ * @returns {Promise<void>}
+ */
+async function runThumbnailMaintenanceCheck(form) {
+    const progress = ensureThumbnailProgress(form);
+    const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+
+    let offset = 0;
+    let total = 0;
+    let jobToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    updateThumbnailCheckProgress(progress, 0, 0, 0, 0, i18n('admin.thumbnails.check_preparing', 'Preparing thumbnail check...'));
+
+    try {
+        while (true) {
+            const body = new FormData(form);
+            body.set('ajax', '1');
+            body.set('job_token', jobToken);
+            body.set('offset', String(offset));
+            body.set('batch_size', '150');
+
+            const response = await fetch(form.action || window.location.href, {
+                method: 'POST',
+                body,
+                headers: {'Accept': 'application/json'},
+            });
+            if (!response.ok) {
+                throw new Error('Thumbnail check request failed.');
+            }
+            const result = await response.json();
+            if (!result.ok) {
+                throw new Error(result.error || 'Thumbnail check request failed.');
+            }
+
+            jobToken = result.job_token || jobToken;
+            total = result.total || 0;
+            offset = result.next_offset || 0;
+            updateThumbnailCheckProgress(
+                progress,
+                result.processed || 0,
+                total,
+                result.images_with_missing || 0,
+                result.missing_variants || 0,
+                i18n('admin.thumbnails.check_running', 'Checking thumbnails...')
+            );
+
+            if (result.done) {
+                const affectedImages = Number(result.images_with_missing || 0);
+                const missingVariants = Number(result.missing_variants || 0);
+                updateThumbnailCheckProgress(
+                    progress,
+                    total,
+                    total,
+                    affectedImages,
+                    missingVariants,
+                    i18n('admin.thumbnails.check_complete', 'Thumbnail check complete.')
+                );
+                setCreateMissingThumbnailState(affectedImages > 0, createMissingThumbnailStateMessage(affectedImages, missingVariants));
+                break;
+            }
+        }
+    } catch (error) {
+        updateThumbnailCheckProgress(progress, offset, total, 0, 0, i18n('admin.thumbnails.check_failed', 'Thumbnail check failed. Check the admin logs or PHP error log for details.'));
+        setCreateMissingThumbnailState(false, i18n('admin.thumbnails.create_missing_requires_successful_check', 'Run Check missing thumbnails successfully before targeted repair is available.'));
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+}
+
+/**
+ * Update the dry thumbnail maintenance check progress display.
+ *
+ * @param {HTMLElement} progress Progress root.
+ * @param {number} processed Processed image count.
+ * @param {number} total Total image count.
+ * @param {number} affectedImages Images requiring at least one thumbnail variant.
+ * @param {number} missingVariants Missing or stale variant count.
+ * @param {string} label Status label.
+ * @returns {void}
+ */
+function updateThumbnailCheckProgress(progress, processed, total, affectedImages, missingVariants, label) {
+    progress.hidden = false;
+    const percent = total > 0 ? Math.round((processed / total) * 100) : 100;
+    progress.querySelector('[data-thumbnail-progress-fill]').value = percent;
+    progress.querySelector('[data-thumbnail-progress-text]').textContent = i18n(
+        'admin.thumbnails.check_progress',
+        '{label} {processed}/{total} images checked, {images} image(s) need {variants} thumbnail variant(s).',
+        {label, processed, total, images: affectedImages, variants: missingVariants}
+    );
+}
 
 /**
  * Remove generated legacy JPEG thumbnail derivatives in browser-driven batches.
@@ -379,10 +565,15 @@ async function runThumbnailJob(form, submitter, options = {}) {
                     ? 'No missing or stale thumbnails found.'
                     : (options.scope === 'metadata' ? 'Thumbnail database refresh complete.' : 'Thumbnail job complete.');
                 updateThumbnailProgress(progress, total, total, created, skipped, finalLabel);
-                if (options.scope === 'missing' && result.maintenance_after && (result.maintenance_after.images_with_missing || 0) <= 0) {
-                    const notice = form.closest('.admin-thumbnail-maintenance-notice');
-                    if (notice) {
-                        notice.remove();
+                if (options.scope === 'missing') {
+                    if (result.maintenance_after && (result.maintenance_after.images_with_missing || 0) <= 0) {
+                        const notice = form.closest('.admin-thumbnail-maintenance-notice');
+                        if (notice) {
+                            notice.remove();
+                        }
+                        setCreateMissingThumbnailState(false, i18n('admin.thumbnails.create_missing_none_after_repair', 'Targeted repair is complete. No missing or stale thumbnails remain in the latest maintenance state.'));
+                    } else if (result.remaining_image_count > 0) {
+                        setCreateMissingThumbnailState(true, i18n('admin.thumbnails.create_missing_remaining_after_repair', 'Targeted repair completed, but some images still need attention. You can run Create missing thumbnails again.', {}));
                     }
                 }
                 break;

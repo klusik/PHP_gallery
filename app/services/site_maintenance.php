@@ -1005,6 +1005,10 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
             continue;
         }
 
+        // These snapshots let runtime pauses retry the same image in the next slice.
+        $previousCursorImageId = (int) ($state['cursor_image_id'] ?? 0);
+        $totalsBeforeImage = $totals;
+        $stepBeforeImage = $step;
         $galleryId = (int) ($image['gallery_id'] ?? 0);
         if (!array_key_exists($galleryId, $galleryCache)) {
             $galleryCache[$galleryId] = $galleryId > 0 ? find_gallery($galleryId) : null;
@@ -1051,8 +1055,18 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         $step['images_with_repairs_needed'] = (int) ($step['images_with_repairs_needed'] ?? 0) + 1;
         $step['variants_missing_or_invalid'] = (int) ($step['variants_missing_or_invalid'] ?? 0) + $missing;
 
-        $repairDecision = site_maintenance_thumbnail_repair_decision($image, $galleryCache[$galleryId], $deadline);
+        $repairDecision = site_maintenance_thumbnail_repair_decision($image, $galleryCache[$galleryId], $deadline, (string) ($state['source'] ?? ''));
         if (empty($repairDecision['allowed'])) {
+            if ((string) ($repairDecision['reason'] ?? '') === 'not_enough_runtime_left') {
+                $totals = $totalsBeforeImage;
+                $step = $stepBeforeImage;
+                $state['cursor_image_id'] = $previousCursorImageId;
+                $state['current_image_id'] = 0;
+                $state['current_image_started_at'] = null;
+                $state['totals'] = $totals;
+                site_maintenance_save_state($state);
+                break;
+            }
             $message = 'Deferred thumbnail repair for image id ' . $imageId . ': ' . (string) ($repairDecision['reason'] ?? 'not_allowed');
             $totals['images_deferred'] = (int) ($totals['images_deferred'] ?? 0) + 1;
             $totals['thumbs_skipped'] = (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
@@ -1157,11 +1171,26 @@ function site_maintenance_step_summary(array $step, int $cursorImageId): array
 }
 
 /**
+ * Return whether one maintenance source should attempt full thumbnail repairs.
+ */
+function site_maintenance_source_allows_full_thumbnail_repair(string $source): bool
+{
+    $source = strtolower(trim($source));
+    return in_array($source, [
+        'cli_cron',
+        'web_cron',
+        'request_trigger',
+        'request_trigger_inline',
+        'maintenance_chain',
+    ], true);
+}
+
+/**
  * Decide whether a missing thumbnail repair may be attempted in this process.
  *
  * @return array{allowed:bool,reason:string,source_bytes:int,pixels:int}
  */
-function site_maintenance_thumbnail_repair_decision(array $image, array $gallery, float $deadline): array
+function site_maintenance_thumbnail_repair_decision(array $image, array $gallery, float $deadline, string $source = ''): array
 {
     if (!site_maintenance_has_web_repair_runtime($deadline)) {
         return ['allowed' => false, 'reason' => 'not_enough_runtime_left', 'source_bytes' => 0, 'pixels' => 0];
@@ -1171,9 +1200,7 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
         return ['allowed' => true, 'reason' => 'cli_runner', 'source_bytes' => 0, 'pixels' => 0];
     }
 
-    if (image_uses_dng_display_derivatives($image)) {
-        return ['allowed' => false, 'reason' => 'dng_repair_requires_cli_or_dedicated_admin_action', 'source_bytes' => 0, 'pixels' => 0];
-    }
+    $fullRepairSource = site_maintenance_source_allows_full_thumbnail_repair($source);
 
     try {
         $sourcePath = image_abs_path($image, $gallery);
@@ -1188,6 +1215,17 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
     $sourceBytes = (int) (filesize($sourcePath) ?: 0);
     $info = @getimagesize($sourcePath);
     $sourcePixels = is_array($info) ? max(0, (int) ($info[0] ?? 0) * (int) ($info[1] ?? 0)) : 0;
+
+    if (image_uses_dng_display_derivatives($image)) {
+        if ($fullRepairSource) {
+            return ['allowed' => true, 'reason' => 'scheduled_dng_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+        }
+        return ['allowed' => false, 'reason' => 'dng_repair_requires_scheduled_or_cli_maintenance', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+    }
+
+    if ($fullRepairSource) {
+        return ['allowed' => true, 'reason' => 'scheduled_repair_allowed', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];
+    }
 
     if ($sourceBytes > SITE_MAINTENANCE_WEB_REPAIR_MAX_BYTES) {
         return ['allowed' => false, 'reason' => 'source_file_too_large_for_web_repair', 'source_bytes' => $sourceBytes, 'pixels' => $sourcePixels];

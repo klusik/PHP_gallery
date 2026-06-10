@@ -41,6 +41,7 @@ import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-ci
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
+import { experimentalUploadRequested, runExperimentalGalleryUpload } from './admin-experimental-upload.js?v=20260610-client-upload-v2';
 
 const adminSidePanelMotionDurationMs = 280;
 
@@ -77,7 +78,13 @@ async function runGalleryUpload(form) {
         // createThumbnails stores state or configuration for the gallery front-end flow.
         const createThumbnails = Boolean(form.querySelector('input[name="create_thumbnails"]')?.checked);
         // result stores state or configuration for the gallery front-end flow.
-        const result = await runGalleryUploadFiles(form, progress, createThumbnails);
+        let result;
+        if (experimentalUploadRequested(form)) {
+            result = await runExperimentalGalleryUpload(form, progress);
+        }
+        if (!result || result.fallback) {
+            result = await runGalleryUploadFiles(form, progress, createThumbnails);
+        }
         if (createThumbnails) {
             const failed = Number(result.thumbnail_failed || 0);
             const message = failed > 0 ? i18n('admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.', {count: failed}) : i18n('admin.operations.upload_complete', 'Upload and thumbnail job complete.');

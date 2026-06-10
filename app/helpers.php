@@ -1350,7 +1350,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     }
     // Built-in stylesheets are linked directly with per-file cache keys.
     // This avoids stale browser caches for CSS files that were previously loaded through @import.
-    $styleFiles = [
+    $adminStyleFiles = [
         'assets/styles/base.css',
         'assets/styles/public.css',
         'assets/styles/lightbox.css',
@@ -1371,6 +1371,15 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         'assets/styles/utilities.css',
         'assets/styles.css',
     ];
+    $publicStyleFiles = [
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/public-shared.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+    ];
+    $styleFiles = ($bodyClass === 'admin-page' || ($user && !$anonymousPreview)) ? $adminStyleFiles : $publicStyleFiles;
     foreach ($styleFiles as $styleFile) {
         $stylePath = dirname(__DIR__) . '/public/' . $styleFile;
         if (!is_file($stylePath)) {
@@ -1670,9 +1679,22 @@ function render_footer(): void
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
+    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
+    $user = current_user();
+    $anonymousPreview = admin_anonymous_preview_active();
+    $scriptAsset = (!$isAdminPage && (!$user || $anonymousPreview)) ? 'assets/public-gallery.js' : 'assets/gallery.js';
     // Variable $scriptPath stores this steps working value.
-    $scriptPath = dirname(__DIR__) . '/public/assets/gallery.js';
-    $scriptVersionPaths = [
+    $scriptPath = dirname(__DIR__) . '/public/' . $scriptAsset;
+    $scriptVersionPaths = $scriptAsset === 'assets/public-gallery.js' ? [
+        $scriptPath,
+        dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-deferred.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/public-home-search.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/back-to-top.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/responsive-thumbnails.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/thumbnail-warmup.js',
+    ] : [
         $scriptPath,
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/lightbox-votes.js',
@@ -1693,7 +1715,7 @@ function render_footer(): void
         }
     }
     render_browser_i18n_script();
-    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
+    echo '<script type="module" src="' . e(asset_url($scriptAsset)) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }
