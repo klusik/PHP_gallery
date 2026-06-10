@@ -1,5 +1,214 @@
 # Patch notes
 
+## Version 0.78
+
+Version 0.78 adds an experimental browser-side upload and thumbnail rebuild pipeline designed to reduce shared-hosting
+  CPU pressure while keeping the existing server-side workflow available as the default. This release introduces new
+  admin settings, worker-based browser processing, ZIP batch packaging, server-side unpacking for prepared uploads,
+  stronger thumbnail maintenance checks, and supporting documentation, manifest, and test updates. The result is a more
+  flexible upload system that can offload heavy image work to the browser when explicitly enabled, while preserving the
+  existing reliable server path for normal use.
+
+    ### Highlights
+
+    #### Added experimental browser-side upload processing
+
+    - Added an opt-in experimental upload mode that is disabled by default and clearly presented as non-default in the
+    upload UI.
+    - Added browser-side preparation of uploaded files so the client can generate thumbnails, package batches, and
+    coordinate upload work before the server receives the final ZIP payloads.
+    - Added a worker-based processing model so thumbnail generation and ZIP assembly can run in parallel without
+    freezing the main thread during supported browser sessions.
+    - Added controlled batching so large upload sets can be split into smaller ZIP archives instead of sending one huge
+    request that would overload shared hosting or browser limits.
+    - Added retry-oriented batch handling so failed batches can be queued and sent again instead of being dropped
+    immediately.
+    - Preserved the existing server-side upload path so unchecked uploads continue to behave exactly as before.
+    - Example: an administrator can leave the feature off for ordinary uploads, or enable it for a large batch of photos
+    when they want the browser to do the thumbnail work first.
+
+    #### Added experimental thumbnail rebuild support
+
+    - Added a browser-assisted thumbnail rebuild path that can stream source files from the server, process them in the
+    browser, and upload prepared thumbnail ZIP batches back to the server.
+    - Added per-image format policy handling so the rebuild pipeline follows the same thumbnail compatibility mode rules
+    as the server-side maintenance logic.
+    - Added worker-pool parallelization for rebuild jobs so the browser can process multiple source items concurrently
+    when the machine and browser support it.
+    - Added batch validation so each prepared rebuild package is checked for completeness before it is accepted by the
+    server.
+    - Added stronger failure handling so incomplete or invalid prepared rebuild content is rejected instead of silently
+    producing partially rebuilt thumbnail sets.
+    - Example: a thumbnail rebuild request can now be prepared from source files in chunks, processed in the browser,
+    and uploaded back as store-only ZIP batches that the server unpacks into the gallery thumbs directory.
+
+    #### Added upload and thumbnail administration controls
+
+    - Added a dedicated Admin upload settings page for the new experimental upload controls and related browser-side
+    behavior.
+    - Added Admin controls for experimental upload worker count, batch sizing, and upload safety limits.
+    - Added Admin controls for experimental thumbnail rebuild chunk sizing and source-batch limits.
+    - Added Admin dashboard maintenance cards and action wiring for the experimental rebuild workflow.
+    - Added clear warning labels and experimental feature language so the UI makes it obvious that these workflows are
+    not the default path.
+    - Example: administrators can tune the worker count and batch sizing from the Admin zone while leaving the end-user
+    upload form with only a simple on/off checkbox.
+
+    #### Improved thumbnail maintenance reporting and compatibility behavior
+
+    - Updated thumbnail maintenance reporting so dry checks, repair flows, and rebuild flows share more consistent
+    target-format logic.
+    - Improved format normalization so browser-assisted rebuilds and server-side maintenance agree on which thumbnail
+    variants are valid for the current policy.
+    - Added stronger diagnostics for missing variants, stale files, and policy-driven rebuild expectations.
+    - Preserved the existing thumbnail compatibility mode interface so modern WebP-only and legacy JPG plus WebP modes
+    continue to work as configured.
+    - Example: the maintenance checker can now distinguish between genuine missing thumbnail variants and prepared
+    browser batches that did not match the active policy.
+
+    ### Technical Details
+
+    #### Backend
+
+    - Added `app/services/experimental_uploads.php` for experimental upload settings, batch sizing, ZIP parsing, cached
+    batch handling, payload validation, and prepared upload storage.
+    - Added `app/services/experimental_thumbnail_rebuild.php` for experimental rebuild configuration, source chunk
+    planning, per-image format policy, ZIP streaming, and prepared rebuild storage.
+    - Added `app/controllers/admin_uploads.php` support for the new experimental upload settings page, the experimental
+    upload batch endpoint, and upload-mode orchestration.
+    - Added `app/controllers/admin_thumbnails.php` support for experimental thumbnail rebuild JSON endpoints,
+    experimental batch handling, and compatibility-mode actions.
+    - Added `app/services/thumbnail_generation.php` helpers for temporary thumbnail targets, publish steps, partial-file
+    cleanup, source orientation handling, and WebP/JPEG writing support.
+    - Updated `app/services/thumbnail_maintenance.php` so maintenance scans and repair reporting are more tightly
+    aligned with the active thumbnail policy.
+    - Updated `app/services/site_maintenance.php` to preserve maintenance behavior while integrating with the newer
+    thumbnail maintenance logic.
+    - Updated `app/services/admin_dashboard.php` so the dashboard can expose the new thumbnail and upload controls
+    cleanly.
+    - Updated `app/bootstrap.php`, `app/services.php`, `app/views.php`, and related controller registration paths to
+    load the new services, controllers, and views.
+    - Updated `app/helpers.php` so thumbnail-related URL and fallback helpers continue to honor the active public
+    rendering format rules.
+    - Updated `app/controllers/admin_uploads.php` and `app/controllers/admin_thumbnails.php` to reject malformed
+    experimental requests and return JSON-safe responses for browser-driven batches.
+    - Added `cms_admin_upload_settings`, `cms_admin_upload_experimental_batch`,
+    `cms_admin_thumbnail_experimental_source_chunk`, and `cms_admin_thumbnail_experimental_upload_batch` endpoints.
+    - Added `admin_upload_experimental_json_response()`, `admin_upload_experimental_verify_csrf()`,
+    `admin_upload_experimental_reject_discarded_body()`, `cms_admin_thumbnail_experimental_json_response()`,
+    `cms_admin_thumbnail_experimental_verify_csrf()`, `cms_admin_thumbnail_experimental_source_chunk()`, and
+    `cms_admin_thumbnail_experimental_upload_batch()` as new request-handling helpers.
+    - Added `experimental_upload_default_settings()`, `experimental_upload_normalize_settings()`,
+    `experimental_upload_settings()`, `set_experimental_upload_settings()`,
+    `experimental_upload_server_upload_limit_bytes()`, `experimental_upload_batch_target_bytes()`,
+    `experimental_upload_effective_batch_target_bytes()`, and `experimental_upload_browser_config()` to manage upload
+    policy.
+    - Added `experimental_upload_parse_store_zip()`, `experimental_upload_store_cached_batch_response()`,
+    `experimental_upload_cached_batch_response()`, and `experimental_upload_store_prepared_zip_batch()` to support
+    store-only ZIP upload processing.
+    - Added `experimental_thumbnail_rebuild_clamped_source_chunk_bytes()`,
+    `experimental_thumbnail_rebuild_megabytes_to_bytes()`, `experimental_thumbnail_rebuild_source_chunk_bytes()`,
+    `experimental_thumbnail_rebuild_source_chunk_item_cap()`, and `experimental_thumbnail_rebuild_browser_config()` to
+    manage rebuild limits and browser configuration.
+    - Added `experimental_thumbnail_rebuild_normalized_formats()`,
+    `experimental_thumbnail_rebuild_target_formats_for_image()`,
+    `experimental_thumbnail_rebuild_expected_variant_count()`, `experimental_thumbnail_rebuild_source_chunk_plan()`,
+    `experimental_thumbnail_rebuild_stream_source_zip()`, and
+    `experimental_thumbnail_rebuild_store_prepared_zip_batch()` to enforce per-image format policy during rebuilds.
+    - Added ZIP helper methods in the new experimental services, including `experimental_upload_zip_uint16()`,
+    `experimental_upload_zip_uint32()`, `experimental_upload_manifest_from_entries()`,
+    `experimental_thumbnail_rebuild_pack_uint16()`, `experimental_thumbnail_rebuild_pack_uint32()`,
+    `experimental_thumbnail_rebuild_zip_dos_time()`, `experimental_thumbnail_rebuild_zip_dos_date()`,
+    `experimental_thumbnail_rebuild_crc32_data()`, `experimental_thumbnail_rebuild_crc32_file()`,
+    `experimental_thumbnail_rebuild_zip_local_header()`, and `experimental_thumbnail_rebuild_zip_central_header()`.
+    - Added experimental upload manifest and item helpers including `experimental_upload_image_rows_by_ids()`,
+    `experimental_upload_validate_original_payload()`, `experimental_upload_validate_thumbnail_payload()`,
+    `experimental_upload_batch_cache_dir()`, and `experimental_upload_batch_cache_key()`.
+    - Added experimental rebuild helpers including `experimental_thumbnail_rebuild_request_image_ids()`,
+    `experimental_thumbnail_rebuild_expected_variant_count()`, `experimental_thumbnail_rebuild_stream_file_payload()`,
+    `experimental_thumbnail_rebuild_manifest_from_entries()`, and
+    `experimental_thumbnail_rebuild_requested_chunk_bytes()`.
+    - Added `thumbnail_compatibility_mode()` integration points so the browser-assisted rebuild path follows the same
+    active format policy as server-side maintenance.
+    - Updated `app/core-manifest.json` repeatedly to keep the bundled asset integrity manifest in sync with the new
+    services and scripts.
+
+    #### Database
+
+    - Added migration `database/migrations/202606100001_experimental_client_upload_settings.php` for the new
+    experimental client upload settings.
+    - Added migration `database/migrations/202606100002_experimental_upload_batch_safety.php` for batch sizing and
+    safety threshold settings.
+    - Added migration `database/migrations/202606100003_experimental_thumbnail_rebuild_settings.php` for rebuild-
+    specific browser and worker configuration.
+    - Added migration `database/migrations/202606100004_experimental_thumbnail_rebuild_resilience.php` for rebuild
+    resilience and policy-aligned behavior.
+    - Stored new runtime settings in `app_settings` so the feature can be configured from the Admin zone without
+    changing `config.php`.
+    - Kept the new settings append-only and migration-driven so existing installs can upgrade without schema edits in
+    controller code.
+
+    #### Frontend
+
+    - Added `public/assets/gallery-modules/admin-experimental-upload.js` for the browser-side upload pipeline, worker
+    orchestration, ZIP batching, and upload progress handling.
+    - Added `public/assets/gallery-modules/experimental-upload-worker.js` for worker-side thumbnail generation, image
+    preparation, and store-only ZIP creation.
+    - Added `public/assets/gallery-modules/admin-experimental-thumbnail-rebuild.js` for browser-assisted thumbnail
+    rebuild batching and policy enforcement.
+    - Added `public/assets/gallery-modules/admin-thumbnail-progress.js` updates so the existing progress system can
+    drive the new experimental upload and rebuild jobs.
+    - Updated `public/assets/gallery-modules/admin-side-panel.js` so the new upload settings and experimental controls
+    can appear correctly in panel-driven admin flows.
+    - Updated `public/assets/gallery-modules/admin-operations.js` to recognize the new experimental actions where
+    needed.
+    - Added `app/views/admin_upload_settings.php` to render the new upload settings page and its experimental controls.
+    - Updated `app/views/admin_dashboard_sections.php` so the thumbnail maintenance card includes the experimental
+    browser-side rebuild entry point and compatibility controls.
+    - Updated `app/views/admin_chrome.php` and `app/views/layout.php` so the new admin/upload modules load in the
+    correct places.
+    - Added `public/assets/public-shared.css` and updated `public/assets/styles.css` to support the broader layout and
+    shared admin/public styling needed by the new workflow.
+    - Updated `public/assets/public-gallery.js` so the new shared public asset loading and module wiring behaves
+    consistently.
+    - Added browser capability checks, worker creation logic, and store-only ZIP creation paths that keep the main
+    thread responsive when the experimental mode is enabled.
+
+    #### Tests
+
+    - Added `tests/experimental_upload_settings_test.php` for upload setting defaults, bounds, ratio behavior, and
+    format normalization.
+    - Added `tests/public_asset_loading_model_test.php` to verify public asset loading behavior and module inclusion
+    rules.
+    - Expanded coverage for experimental thumbnail rebuild format normalization and policy handling.
+    - Added tests for upload batch target size calculations, worker cap logic, and rebuild-specific byte-limit
+    calculations.
+    - Added coverage for browser-side ZIP packaging helpers and prepared-batch validation logic.
+    - Added coverage for experimental settings persistence and normalization edge cases.
+    - Preserved and continued using the existing direct PHP test style so the new logic can be verified without
+    requiring PHPUnit or browser automation.
+
+    ### User Impact
+
+    #### For visitors
+
+    - Uploads can be made faster on the client side when the experimental mode is enabled and the browser supports the
+    needed capabilities.
+    - Large batches can be split into smaller prepared chunks, reducing the chance of long upload stalls on slower
+    shared hosting.
+    - The default behavior remains unchanged for users who do not enable the experimental option.
+
+    #### For administrators
+
+    - Administrators can now tune experimental upload and rebuild behavior from the Admin area instead of editing code.
+    - Worker count, batch sizing, and safety limits are configurable with bounded defaults so the feature stays
+    practical on shared hosting.
+    - Thumbnail rebuilds can be offloaded to the browser when desired, reducing server CPU pressure during large
+    maintenance runs.
+    - Maintenance logs and rebuild diagnostics are more informative, making it easier to tell whether a missing
+    thumbnail is caused by policy, runtime capability, or an incomplete prepared batch.
+    - Existing server-side thumbnail generation and upload behavior remain available as the stable fallback path.
+
 ## Version 0.77
 
 Version 0.77 adds a major thumbnail and maintenance upgrade across the gallery system. This release introduces durable
