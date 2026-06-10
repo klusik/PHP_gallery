@@ -196,6 +196,30 @@ function thumbnail_file_geometry_status(string $thumbnailPath, int $sourceWidth,
 }
 
 /**
+ * Keep a generated thumbnail timestamp current relative to its source image.
+ *
+ * Some imported galleries preserve original file mtimes that can be ahead of
+ * the server clock or ahead of thumbnail writes in the same request. The
+ * maintenance checker uses mtime to detect stale cache files, so every
+ * successful generator path must publish thumbnails with an mtime at least as
+ * new as the source.
+ */
+function thumbnail_touch_generated_file_for_source(string $thumbnailPath, string $sourcePath): void
+{
+    if (!is_file($thumbnailPath)) {
+        return;
+    }
+
+    // $sourceMtime stores the authoritative freshness boundary for this source.
+    $sourceMtime = is_file($sourcePath) ? (filemtime($sourcePath) ?: 0) : 0;
+    // $targetMtime stores a safe cache timestamp for generated derivatives.
+    $targetMtime = max(time(), $sourceMtime);
+    if ($targetMtime > 0 && filemtime($thumbnailPath) < $targetMtime) {
+        @touch($thumbnailPath, $targetMtime);
+    }
+}
+
+/**
  * Delete one invalid generated thumbnail after confirming it is inside the thumbnail cache.
  */
 function thumbnail_delete_invalid_geometry_file(string $thumbnailPath): bool
@@ -372,6 +396,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             // $temporaryPath stores the new JPEG file until it can replace any stale derivative.
             $temporaryPath = thumbnail_temporary_target_path($formatTargets['jpg'], 'jpg');
             if (write_resized_jpeg($source, $workingWidth, $workingHeight, (int) $size, $temporaryPath) && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['jpg'])) {
+                thumbnail_touch_generated_file_for_source($formatTargets['jpg'], $sourcePath);
                 if (function_exists('thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, 'jpg', $formatTargets['jpg'], $sourcePath, true);
                 }
@@ -390,6 +415,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             // $webpWritten stores an intermediate value used by the surrounding gallery workflow.
             $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, $workingWidth, $workingHeight, (int) $size, $temporaryPath, $mime, $preferImagickWebpExif);
             if ($webpWritten && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['webp'])) {
+                thumbnail_touch_generated_file_for_source($formatTargets['webp'], $sourcePath);
                 if (function_exists('thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, 'webp', $formatTargets['webp'], $sourcePath, true);
                 }

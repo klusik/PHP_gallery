@@ -112,6 +112,165 @@ function cms_admin_dismiss_thumbnail_notice(): void
 }
 
 /**
+ * Run a dry thumbnail inventory check without generating thumbnails.
+ */
+function cms_admin_check_thumbnail_maintenance(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+    verify_csrf();
+
+    if (($_POST['ajax'] ?? '') === '1') {
+        cms_admin_check_thumbnail_maintenance_batch();
+        return;
+    }
+
+    @set_time_limit(300);
+    // $report stores a full dry-run inventory grouped by gallery.
+    $report = thumbnail_maintenance_check_report(null, 0);
+    thumbnail_maintenance_store_last_check($report);
+
+    cms_admin_record_thumbnail_check_completion($report);
+
+    flash_message('admin_notice', cms_admin_thumbnail_check_message($report));
+    redirect_to(url_for('admin') . '#admin-tab-maintenance');
+}
+
+/**
+ * Run one dry thumbnail inventory check batch and return JSON progress.
+ */
+function cms_admin_check_thumbnail_maintenance_batch(): void
+{
+    // $bufferLevel stores the output-buffer nesting level before JSON-safe processing starts.
+    $bufferLevel = ob_get_level();
+    ob_start();
+    try {
+        @set_time_limit(120);
+
+        // $jobToken scopes the server-side aggregate to one browser progress run.
+        $jobToken = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($_POST['job_token'] ?? ''));
+        if ($jobToken === '') {
+            $jobToken = bin2hex(random_bytes(8));
+        }
+        // $offset stores the current batch offset requested by the browser.
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        // $batchSize stores the number of image rows inspected per request.
+        $batchSize = max(25, min(500, (int) ($_POST['batch_size'] ?? 150)));
+
+        if (!isset($_SESSION['thumbnail_maintenance_check_jobs']) || !is_array($_SESSION['thumbnail_maintenance_check_jobs'])) {
+            $_SESSION['thumbnail_maintenance_check_jobs'] = [];
+        }
+        if ($offset === 0) {
+            $_SESSION['thumbnail_maintenance_check_jobs'][$jobToken] = thumbnail_maintenance_empty_check_report(null);
+        } elseif (!isset($_SESSION['thumbnail_maintenance_check_jobs'][$jobToken]) || !is_array($_SESSION['thumbnail_maintenance_check_jobs'][$jobToken])) {
+            throw new RuntimeException(t('admin.thumbnails.check_session_expired', 'Thumbnail check progress expired. Start the check again.'));
+        }
+
+        // $batchReport stores one dry, non-mutating check slice.
+        $batchReport = thumbnail_maintenance_check_batch(null, $offset, $batchSize);
+        // $aggregate stores the session aggregate accumulated across prior batches.
+        $aggregate = thumbnail_maintenance_merge_check_reports((array) $_SESSION['thumbnail_maintenance_check_jobs'][$jobToken], $batchReport);
+        $_SESSION['thumbnail_maintenance_check_jobs'][$jobToken] = $aggregate;
+
+        $done = !empty($batchReport['done']);
+        if ($done) {
+            $aggregate['checked_at'] = now_sql();
+            $aggregate = thumbnail_maintenance_finalize_check_report($aggregate);
+            thumbnail_maintenance_store_last_check($aggregate);
+            cms_admin_record_thumbnail_check_completion($aggregate);
+            flash_message('admin_notice', cms_admin_thumbnail_check_message($aggregate));
+            unset($_SESSION['thumbnail_maintenance_check_jobs'][$jobToken]);
+        }
+
+        $response = [
+            'ok' => true,
+            'job_token' => $jobToken,
+            'total' => (int) ($batchReport['total'] ?? 0),
+            'processed' => (int) ($batchReport['processed'] ?? 0),
+            'next_offset' => (int) ($batchReport['next_offset'] ?? 0),
+            'done' => $done,
+            'images_with_missing' => (int) ($aggregate['images_with_missing'] ?? 0),
+            'missing_variants' => (int) ($aggregate['missing_variants'] ?? 0),
+            'affected_gallery_count' => (int) ($aggregate['affected_gallery_count'] ?? 0),
+            'redirect_url' => url_for('admin') . '#admin-tab-maintenance',
+        ];
+
+        $discardedOutput = (string) ob_get_clean();
+        if (trim($discardedOutput) !== '') {
+            admin_log_event('warning', 'thumbnail.check_response_output_discarded', 'Thumbnail dry check produced output before its JSON response.', [
+                'discarded_output_preview' => mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        }
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        return;
+    } catch (Throwable $exception) {
+        $discardedOutput = (string) ob_get_clean();
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_log_event('error', 'thumbnail.check_failed', 'Thumbnail dry check request failed before a JSON response could be completed.', [
+            'error' => $exception->getMessage(),
+            'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
+        ], ['category' => 'other', 'severity' => 'error']);
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'ok' => false,
+            'error' => t('admin.thumbnails.check_failed', 'Thumbnail check failed. Check the admin logs or PHP error log for details.'),
+        ]);
+        return;
+    }
+}
+
+/**
+ * Return the flash message for one completed dry thumbnail check.
+ *
+ * @param array<string, mixed> $report
+ */
+function cms_admin_thumbnail_check_message(array $report): string
+{
+    $affectedImages = (int) ($report['images_with_missing'] ?? 0);
+    if ($affectedImages > 0) {
+        return t('admin.thumbnails.check_completed_with_missing', 'Thumbnail check complete. Checked {images} image(s); {affected_images} image(s) in {galleries} gallery/galleries need {variants} thumbnail variant(s).', [
+            'images' => (string) (int) ($report['images_scanned'] ?? 0),
+            'affected_images' => (string) $affectedImages,
+            'galleries' => (string) (int) ($report['affected_gallery_count'] ?? 0),
+            'variants' => (string) (int) ($report['missing_variants'] ?? 0),
+        ]);
+    }
+
+    return t('admin.thumbnails.check_completed_clean', 'Thumbnail check complete. Checked {images} image(s); no missing or stale thumbnail variants were found.', [
+        'images' => (string) (int) ($report['images_scanned'] ?? 0),
+    ]);
+}
+
+/**
+ * Write the admin log entry for one completed dry thumbnail check.
+ *
+ * @param array<string, mixed> $report
+ */
+function cms_admin_record_thumbnail_check_completion(array $report): void
+{
+    admin_log_event('info', 'thumbnail.maintenance_checked', 'Admin ran a dry thumbnail maintenance check.', [
+        'images_scanned' => (int) ($report['images_scanned'] ?? 0),
+        'images_with_missing' => (int) ($report['images_with_missing'] ?? 0),
+        'missing_variants' => (int) ($report['missing_variants'] ?? 0),
+        'affected_gallery_count' => (int) ($report['affected_gallery_count'] ?? 0),
+        'affected_galleries' => (array) ($report['affected_galleries'] ?? []),
+        'affected_galleries_truncated' => !empty($report['affected_galleries_truncated']),
+        'invalid_geometry_detected' => (int) ($report['invalid_geometry_detected'] ?? 0),
+        'webp_skipped' => (int) ($report['webp_skipped'] ?? 0),
+    ]);
+}
+
+/**
  * Return true when the current thumbnail maintenance warning is temporarily hidden.
  *
  * Both conditions must match: the dismissal timestamp must still be in the
@@ -195,7 +354,7 @@ function cms_admin_create_thumbnails(): void
     }
     if (($_POST['scope'] ?? '') === 'missing') {
         // Variable $imageIds stores the images that currently need thumbnail regeneration.
-        $imageIds = thumbnail_maintenance_image_ids(null, 1000);
+        $imageIds = thumbnail_maintenance_image_ids(null, 0);
         if ($imageIds) {
             // Variable $galleryCache stores galleries only once per batch so we do not refetch the same parent repeatedly.
             $galleryCache = [];
@@ -267,7 +426,7 @@ function cms_admin_create_thumbnails_batch(): void
     // $maintenanceBefore stores the warning state before the first targeted repair batch mutates files.
     $maintenanceBefore = null;
     if ($scope === 'missing' && $offset === 0) {
-        $maintenanceBefore = thumbnail_maintenance_summary(null, 1000);
+        $maintenanceBefore = thumbnail_maintenance_summary(null, 0);
         admin_log_event('info', 'thumbnail.missing_repair_started', 'Targeted thumbnail repair started.', [
             'scope' => $scope,
             'selected_image_count' => $total,
@@ -370,8 +529,8 @@ function cms_admin_create_thumbnails_batch(): void
         ]);
     }
     if ($scope === 'missing' && $done) {
-        $maintenanceAfter = thumbnail_maintenance_summary(null, 1000);
-        $remainingImageIds = thumbnail_maintenance_image_ids(null, 1000);
+        $maintenanceAfter = thumbnail_maintenance_summary(null, 0);
+        $remainingImageIds = thumbnail_maintenance_image_ids(null, 0);
         admin_log_event($remainingImageIds ? 'warning' : 'info', 'thumbnail.missing_repair_completed', 'Targeted thumbnail repair completed.', [
             'scope' => $scope,
             'selected_image_count' => $total,
@@ -443,6 +602,114 @@ function cms_admin_create_thumbnails_batch(): void
             'error' => t('admin.thumbnails.request_failed', 'Thumbnail request failed. Check the admin logs or PHP error log for details.'),
         ]);
         return;
+    }
+}
+
+
+/**
+ * Return a JSON response for experimental thumbnail rebuild endpoints.
+ *
+ * @param array<string, mixed> $payload Response payload.
+ */
+function cms_admin_thumbnail_experimental_json_response(array $payload, int $statusCode = 200): void
+{
+    if (function_exists('admin_upload_experimental_json_response')) {
+        admin_upload_experimental_json_response($payload, $statusCode);
+        return;
+    }
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Verify CSRF for an experimental thumbnail rebuild request without emitting HTML.
+ */
+function cms_admin_thumbnail_experimental_verify_csrf(): void
+{
+    if (function_exists('admin_upload_experimental_verify_csrf')) {
+        admin_upload_experimental_verify_csrf();
+        return;
+    }
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
+        throw new RuntimeException(t('admin.upload.error_invalid_csrf', 'Invalid CSRF token. Reload the admin page and try again.'));
+    }
+}
+
+/**
+ * Stream one source ZIP chunk for the experimental browser thumbnail rebuild path.
+ */
+function cms_admin_thumbnail_experimental_source_chunk(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This endpoint accepts POST requests only.')], 405);
+        return;
+    }
+
+    try {
+        cms_admin_thumbnail_experimental_verify_csrf();
+        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        if (empty($settings['enabled'])) {
+            throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
+        }
+        if (!function_exists('experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('experimental_thumbnail_rebuild_stream_source_zip')) {
+            throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
+        }
+
+        $plan = experimental_thumbnail_rebuild_source_chunk_plan($_POST);
+        admin_log_event('info', 'thumbnail.experimental_rebuild_source_chunk', 'Admin downloaded a browser thumbnail rebuild source chunk.', [
+            'offset' => (int) ($plan['offset'] ?? 0),
+            'next_offset' => (int) ($plan['next_offset'] ?? 0),
+            'total' => (int) ($plan['total'] ?? 0),
+            'items' => count((array) ($plan['items'] ?? [])),
+            'skipped' => count((array) ($plan['skipped'] ?? [])),
+            'source_payload_bytes' => (int) ($plan['source_payload_bytes'] ?? 0),
+        ]);
+        experimental_thumbnail_rebuild_stream_source_zip($plan);
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'thumbnail.experimental_rebuild_source_failed', 'Experimental thumbnail source chunk request failed.', [
+            'error' => $exception->getMessage(),
+            'offset' => (int) ($_POST['offset'] ?? 0),
+        ], ['category' => 'other', 'severity' => 'error']);
+        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
+    }
+}
+
+/**
+ * Accept one browser-prepared thumbnail ZIP batch for the experimental rebuild path.
+ */
+function cms_admin_thumbnail_experimental_upload_batch(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
+        return;
+    }
+    if (function_exists('admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
+        return;
+    }
+
+    try {
+        cms_admin_thumbnail_experimental_verify_csrf();
+        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        if (empty($settings['enabled'])) {
+            throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
+        }
+        if (!function_exists('experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
+            throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
+        }
+        $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['upload_session_id'] ?? '')) ?: bin2hex(random_bytes(8));
+        $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
+        $response = experimental_thumbnail_rebuild_store_prepared_zip_batch($_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+        cms_admin_thumbnail_experimental_json_response($response);
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'thumbnail.experimental_rebuild_upload_failed', 'Experimental browser-prepared thumbnail upload batch failed.', [
+            'error' => $exception->getMessage(),
+            'batch_index' => (int) ($_POST['batch_index'] ?? 0),
+        ], ['category' => 'other', 'severity' => 'error']);
+        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
     }
 }
 
@@ -531,7 +798,7 @@ function thumbnail_maintenance_request_image_ids(array $post): array
         $galleryIds = [(int) $post['gallery_id']];
     }
 
-    return thumbnail_maintenance_image_ids($galleryIds, 1000);
+    return thumbnail_maintenance_image_ids($galleryIds, 0);
 }
 
 /**

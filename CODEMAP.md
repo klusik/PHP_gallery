@@ -118,7 +118,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Task | Files |
 | --- | --- |
-| Upload images | `app/controllers/admin_uploads.php`, `app/services/uploads.php` |
+| Upload images and upload settings | `app/controllers/admin_uploads.php`, `app/views/admin_upload_settings.php`, `app/services/uploads.php`, `app/services/experimental_uploads.php`, `public/assets/gallery-modules/admin-side-panel.js`, `public/assets/gallery-modules/admin-experimental-upload.js`, `public/assets/gallery-modules/experimental-upload-worker.js` |
+| Thumbnail maintenance and browser rebuild | `app/controllers/admin_thumbnails.php`, `app/services/thumbnail_generation.php`, `app/services/thumbnail_sources.php`, `app/services/experimental_thumbnail_rebuild.php`, `public/assets/gallery-modules/admin-thumbnail-progress.js`, `public/assets/gallery-modules/admin-experimental-thumbnail-rebuild.js`, `public/assets/gallery-modules/experimental-upload-worker.js` |
 | Scan images from filesystem | `app/controllers/admin_galleries_edit.php`, `app/services/image_scanning.php` |
 | Bulk image actions | `app/controllers/admin_images_bulk.php` |
 | Reorder images | `app/controllers/admin_images_reorder.php` |

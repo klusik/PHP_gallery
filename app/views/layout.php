@@ -82,6 +82,98 @@ function view_favorite_gallery_nav_html(array $items): string
     return $html;
 }
 
+
+/**
+ * Return the full legacy stylesheet set required by admin screens and logged-in public tools.
+ *
+ * @return array<int, string> Stylesheet paths relative to the public web root.
+ */
+function view_admin_stylesheet_files(): array
+{
+    return [
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/admin.css',
+        'assets/styles/admin-layout.css',
+        'assets/styles/admin-dashboard.css',
+        'assets/styles/admin-subtabs.css',
+        'assets/styles/admin-theme-preview.css',
+        'assets/styles/admin-reordering.css',
+        'assets/styles/admin-media-tools.css',
+        'assets/styles/admin-theme-editor.css',
+        'assets/styles/admin-gallery-list.css',
+        'assets/styles/admin-patch-notes.css',
+        'assets/styles/admin-update.css',
+        'assets/styles/admin-tags.css',
+        'assets/styles/side-panel.css',
+        'assets/styles/admin-cinematic.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+    ];
+}
+
+/**
+ * Return the anonymous public stylesheet set.
+ *
+ * The shared public file contains only visitor-facing rules extracted from
+ * mixed legacy admin stylesheets after visual verification.
+ *
+ * @return array<int, string> Stylesheet paths relative to the public web root.
+ */
+function view_public_stylesheet_files(): array
+{
+    return [
+        'assets/styles/base.css',
+        'assets/styles/public.css',
+        'assets/styles/lightbox.css',
+        'assets/styles/public-shared.css',
+        'assets/styles/utilities.css',
+        'assets/styles.css',
+    ];
+}
+
+/**
+ * Return whether the current request needs the full admin asset set.
+ *
+ * @param string $bodyClass Rendered body class for the current page family.
+ * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
+ * @return bool True when admin or logged-in public tooling must stay available.
+ */
+function view_should_load_admin_assets(string $bodyClass, ?array $user, bool $anonymousPreview): bool
+{
+    return $bodyClass === 'admin-page' || ($user !== null && !$anonymousPreview);
+}
+
+/**
+ * Return stylesheet files for the current page context.
+ *
+ * @param string $bodyClass Rendered body class for the current page family.
+ * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
+ * @return array<int, string> Stylesheet paths relative to the public web root.
+ */
+function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
+{
+    return view_should_load_admin_assets($bodyClass, $user, $anonymousPreview)
+        ? view_admin_stylesheet_files()
+        : view_public_stylesheet_files();
+}
+
+/**
+ * Return the browser entrypoint for the current page context.
+ *
+ * @param bool $isAdminPage Whether the current route renders an admin or setup page.
+ * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
+ * @return string Script path relative to the public web root.
+ */
+function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $anonymousPreview): string
+{
+    return (!$isAdminPage && ($user === null || $anonymousPreview)) ? 'assets/public-gallery.js' : 'assets/gallery.js';
+}
+
 function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     $user = current_user();
@@ -104,27 +196,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     if ($bodyClass === 'admin-page') {
         echo '<meta name="robots" content="noindex,nofollow">';
     }
-    $styleFiles = [
-        'assets/styles/base.css',
-        'assets/styles/public.css',
-        'assets/styles/lightbox.css',
-        'assets/styles/admin.css',
-        'assets/styles/admin-layout.css',
-        'assets/styles/admin-dashboard.css',
-        'assets/styles/admin-subtabs.css',
-        'assets/styles/admin-theme-preview.css',
-        'assets/styles/admin-reordering.css',
-        'assets/styles/admin-media-tools.css',
-        'assets/styles/admin-theme-editor.css',
-        'assets/styles/admin-gallery-list.css',
-        'assets/styles/admin-patch-notes.css',
-        'assets/styles/admin-update.css',
-        'assets/styles/admin-tags.css',
-        'assets/styles/side-panel.css',
-        'assets/styles/admin-cinematic.css',
-        'assets/styles/utilities.css',
-        'assets/styles.css',
-    ];
+    $styleFiles = view_stylesheet_files_for_context($bodyClass, is_array($user) ? $user : null, $anonymousPreview);
     foreach ($styleFiles as $styleFile) {
         $stylePath = dirname(__DIR__, 2) . '/public/' . $styleFile;
         if (!is_file($stylePath)) {
@@ -287,8 +359,22 @@ function view_render_footer(): void
     echo '</main>' . ($hasAdminShell ? '</div>' : '') . '<footer class="site-footer muted">';
     echo '<a class="site-footer-link" href="' . e(cms_github_project_url()) . '" target="_blank" rel="noopener noreferrer">PHP Gallery (' . e(cms_current_version()) . ')</a>';
     echo '</footer>';
-    $scriptPath = dirname(__DIR__, 2) . '/public/assets/gallery.js';
-    $scriptVersionPaths = [
+    $page = (string) ($_GET['page'] ?? 'home');
+    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
+    $user = current_user();
+    $anonymousPreview = admin_anonymous_preview_active();
+    $scriptAsset = view_script_asset_for_context($isAdminPage, is_array($user) ? $user : null, $anonymousPreview);
+    $scriptPath = dirname(__DIR__, 2) . '/public/' . $scriptAsset;
+    $scriptVersionPaths = $scriptAsset === 'assets/public-gallery.js' ? [
+        $scriptPath,
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-deferred.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/admin-core.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/votes.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/public-home-search.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/back-to-top.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/responsive-thumbnails.js',
+        dirname(__DIR__, 2) . '/public/assets/gallery-modules/thumbnail-warmup.js',
+    ] : [
         $scriptPath,
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox.js',
         dirname(__DIR__, 2) . '/public/assets/gallery-modules/lightbox-votes.js',
@@ -310,7 +396,7 @@ function view_render_footer(): void
         }
     }
     view_render_browser_i18n_script();
-    echo '<script type="module" src="' . e(asset_url('assets/gallery.js')) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
+    echo '<script type="module" src="' . e(asset_url($scriptAsset)) . '?v=' . ($scriptVersion > 0 ? $scriptVersion : time()) . '"></script>';
     echo cms_footer_scripts_html();
     echo '</body></html>';
 }

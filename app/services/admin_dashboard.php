@@ -203,6 +203,20 @@ function admin_dashboard_view_model(): array
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
+    // $lastThumbnailCheck stores an explicit full dry-run result when an admin requested one.
+    $lastThumbnailCheck = function_exists('thumbnail_maintenance_last_check') ? admin_render_profile_setting_read('thumbnail_maintenance_last_check', static fn (): array => thumbnail_maintenance_last_check()) : [];
+    if ($lastThumbnailCheck) {
+        $thumbnailSummary = [
+            'images_scanned' => (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
+            'images_with_missing' => (int) ($lastThumbnailCheck['images_with_missing'] ?? 0),
+            'missing_variants' => (int) ($lastThumbnailCheck['missing_variants'] ?? 0),
+            'webp_skipped' => (int) ($lastThumbnailCheck['webp_skipped'] ?? 0),
+            'limited' => !empty($lastThumbnailCheck['limited']),
+            'deferred' => false,
+            'full_check' => true,
+            'inventory_fingerprint' => (string) ($lastThumbnailCheck['inventory_fingerprint'] ?? ''),
+        ];
+    }
     // $originalStorageBytes stores the cheap database-only size of imported source files. Generated thumbnails and display derivatives are intentionally not scanned during normal dashboard rendering.
     $originalStorageBytes = admin_render_profile_db('dashboard_original_storage_bytes', static fn (): int => admin_dashboard_original_storage_bytes());
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.

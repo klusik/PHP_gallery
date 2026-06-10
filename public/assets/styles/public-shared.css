@@ -1,0 +1,1557 @@
+/*
+ * public-shared.css
+ * Public-facing layout rules that previously lived in mixed admin CSS files.
+ * Split on 2026-06-09 so anonymous public pages can avoid admin-only stylesheets
+ * without losing footer alignment, hero metadata layout, tag pills, branding, votes, or map styling.
+ */
+
+/* Responsive adjustments */
+
+/* Provides the shared screen-reader utility used by public labels and icon-only controls.
+   This rule previously came from side-panel.css, which anonymous visitors no longer load. */
+.visually-hidden,
+.admin-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.site-footer {
+    padding: 2rem 0;
+    text-align: center;
+}
+.site-footer-link {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.site-footer-link:hover,
+.site-footer-link:focus {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+
+/* Public gallery list chrome. These selectors are emitted on anonymous home,
+   tag, and gallery pages. They previously lived in mixed admin stylesheets, so
+   anonymous public pages need the compact public copy when admin CSS is not loaded. */
+.public-page .gallery-list-frame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0;
+    column-gap: 0;
+    align-items: start;
+    overflow: visible;
+}
+
+.public-page .gallery-list-content,
+.public-page .gallery-image-grid {
+    min-width: 0;
+}
+
+/* Styles public pagination controls for gallery and photo listings. */
+.public-page .pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.75rem 0 1rem;
+}
+
+/* Styles one public pagination link or inactive pagination item. */
+.public-page .pagination-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid rgba(122, 83, 45, 0.22);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 250, 240, 0.78);
+    color: var(--text);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.public-page .pagination-link:hover,
+.public-page .pagination-link:focus-visible {
+    border-color: color-mix(in srgb, var(--accent-dark) 45%, transparent);
+    background: rgba(255, 250, 240, 0.94);
+    outline: none;
+}
+
+/* Styles the current pagination page. */
+.public-page .pagination-link.is-current {
+    background: var(--accent);
+    color: #fffdf8;
+    border-color: var(--accent);
+}
+
+/* Styles disabled pagination controls. */
+.public-page .pagination-link.is-disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+}
+
+/* Styles compact pagination gaps between page-number ranges. */
+.public-page .pagination-gap {
+    color: var(--muted);
+    padding: 0 0.15rem;
+}
+
+/* Styles the current page text next to pagination controls. */
+.public-page .pagination-status {
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+/* Public back-to-top control. The button is server-rendered after public lists
+   and toggled by back-to-top.js. Keep it styled without loading admin-layout.css. */
+.public-page .back-to-top-button {
+    position: sticky;
+    top: calc(100dvh - 5.25rem);
+    z-index: 900;
+    margin-left: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: max-content;
+    padding: 0.7rem 0.95rem;
+    border: 1px solid rgba(255, 253, 248, 0.7);
+    border-radius: var(--radius, 16px);
+    background: var(--accent);
+    color: #fffdf8;
+    box-shadow: 0 14px 34px rgba(54, 38, 20, 0.24);
+    font: inherit;
+    font-weight: 800;
+    line-height: 1;
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.public-page .back-to-top-button[hidden] {
+    display: none;
+}
+
+.public-page .back-to-top-button.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.public-page .back-to-top-button:hover,
+.public-page .back-to-top-button:focus-visible {
+    box-shadow: 0 18px 44px rgba(54, 38, 20, 0.32);
+    transform: translateY(-2px);
+    outline: none;
+}
+
+.public-page .back-to-top-button span:first-child {
+    display: inline-grid;
+    place-items: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.18);
+    font-size: 1.05rem;
+}
+
+@media (max-width: 980px) {
+    .public-page .gallery-list-frame {
+        display: block;
+    }
+
+    .public-page .back-to-top-button {
+        position: fixed;
+        right: 0.85rem;
+        bottom: 0.85rem;
+        top: auto;
+        margin-left: 0;
+        padding: 0.65rem 0.8rem;
+    }
+}
+
+/* Public design refinements */
+.public-page .hero {
+    position: relative;
+    display: grid;
+    gap: 0.7rem;
+    overflow: hidden;
+    padding: clamp(0.85rem, 1.8vw, 1.25rem);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius, 16px);
+    background: var(--gallery-panel);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.public-page .hero-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, min(30rem, 36vw));
+    align-items: start;
+    gap: clamp(1rem, 3vw, 2.25rem);
+}
+
+/* Holds the readable story part of the hero: title, date, description, and breadcrumbs. */
+.public-page .hero-primary {
+    display: grid;
+    align-content: start;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.public-page .hero-meta {
+    display: grid;
+    justify-items: end;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.public-page .hero .gallery-title-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.public-page .hero .gallery-title-bar .gallery-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.public-page .hero h1 {
+    max-width: 100%;
+    margin: 0;
+    font-size: clamp(2.05rem, 3.6vw, 3.2rem);
+    font-weight: 800;
+    line-height: var(--type-tight-line-height, 1.05);
+    letter-spacing: var(--type-tracking-tight, -0.025em);
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.public-page .hero p {
+    max-width: 84ch;
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    line-height: var(--type-body-line-height, 1.5);
+    opacity: 0.88;
+}
+
+.public-page .hero-description {
+    max-width: min(84ch, 100%);
+    margin-top: 0.15rem;
+}
+
+.public-page .hero-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.public-page .hero-actions .button,
+.public-page .hero-actions button {
+    min-height: 0;
+    padding: 0.48rem 0.75rem;
+    border-radius: var(--radius, 16px);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.public-page .hero .tag-list,
+.public-page .hero .breadcrumbs {
+    margin: 0;
+}
+
+.public-page .hero-tags {
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+    width: 100%;
+    max-width: 100%;
+    max-height: 8.2rem;
+    overflow: auto;
+    padding: 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-radius: max(0.7rem, calc(var(--radius, 16px) * 0.72));
+    background: color-mix(in srgb, var(--panel) 44%, transparent);
+    scrollbar-width: thin;
+}
+
+/* Keeps very heavily tagged galleries compact while still exposing every tag. */
+.public-page .hero-tags:empty {
+    display: none;
+}
+
+.public-page .hero .tag-list {
+    justify-content: flex-end;
+    gap: 0.28rem;
+    opacity: 0.92;
+}
+
+.public-page .hero .tag-list-label {
+    font-size: 0.72rem;
+}
+
+.public-page .hero .tag {
+    padding: 0.1rem 0.42rem;
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.public-page .hero .breadcrumbs {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.public-page .hero .gallery-branding-logo {
+    flex: 0 0 auto;
+    max-width: min(9rem, 24vw);
+    max-height: 4.25rem;
+    object-fit: contain;
+}
+
+.public-page .hero .gallery-branding-banner {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 5rem;
+    object-fit: contain;
+}
+
+@media (max-width: 760px) {
+    .public-page .hero-topbar {
+        grid-template-columns: 1fr;
+    }
+
+    .public-page .hero-meta {
+        justify-items: start;
+        width: 100%;
+    }
+
+    .public-page .hero-actions,
+    .public-page .hero .tag-list {
+        justify-content: flex-start;
+    }
+
+    .public-page .hero-tags {
+        justify-items: start;
+        max-height: 9.5rem;
+    }
+
+    .public-page .hero h1 {
+        font-size: clamp(1.8rem, 9vw, 2.5rem);
+    }
+}
+.public-page .gallery-card {
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.public-page .gallery-card:hover,
+.public-page .gallery-card:focus-within {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(54, 38, 20, 0.14);
+}
+
+.public-page .gallery-card img,
+.public-page .gallery-collage {
+    height: 12rem;
+}
+.public-page .gallery-card-body {
+    min-height: 8rem;
+}
+
+.public-page .gallery-card-body h2,
+.public-page .image-meta h2 {
+    margin: 0 0 0.25rem;
+    line-height: 1.15;
+}
+.public-page .image-card {
+    background: rgba(255, 250, 240, 0.94);
+}
+.public-page .image-meta p {
+    margin-top: 0.25rem;
+}
+
+.gallery-card > .tag-list .tag-list-label,
+.hero .tag-list .tag-list-label {
+    opacity: 0.7;
+}
+.vote-row {
+    margin-top: 0.6rem;
+}
+.image-stage {
+    position: relative;
+    overflow: hidden;
+    line-height: 0;
+}
+
+/* Keeps the generated <picture> wrapper from adding inline text spacing below thumbnails. */
+.image-stage > .image-preview-link,
+.image-stage > .image-preview-link picture {
+    display: block;
+    line-height: 0;
+}
+
+/* Keeps public photo metadata over the thumbnail so descriptions do not change the card height.
+   This public rule used to come from mixed admin stylesheets, but anonymous visitors no longer load them. */
+.image-stage > .image-meta-overlay {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.35rem;
+    left: 2.9rem;
+    z-index: 5;
+    max-width: calc(100% - 3.25rem);
+    max-height: calc(100% - 0.7rem);
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: rgba(255, 250, 240, 0.88);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+    color: var(--text);
+    line-height: 1.25;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Keeps overlaid public photo titles compact and prevents long titles from stretching the grid. */
+.image-stage > .image-meta-overlay h2 {
+    margin: 0 0 0.18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Truncates public photo descriptions to a readable two-line caption with an ellipsis. */
+.image-stage > .image-meta-overlay p {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+/* Keeps photo metadata tags aligned with the compact hero tags. */
+.image-stage > .image-meta-overlay .tag-list {
+    gap: 0.28rem;
+    max-height: 1.45rem;
+    margin: 0.28rem 0 0;
+    overflow: hidden;
+}
+
+.image-stage > .image-meta-overlay .tag {
+    padding: 0.1rem 0.42rem;
+    border-color: var(--accent);
+    border-radius: var(--radius, 16px);
+    background: var(--panel);
+    color: var(--accent-dark);
+    font-size: 0.76rem;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+/* Gives the metadata overlay more room on narrow screens where the vote badge is less likely to overlap. */
+@media (max-width: 520px) {
+    .image-stage > .image-meta-overlay {
+        left: 0.35rem;
+        max-width: calc(100% - 0.7rem);
+    }
+}
+.image-vote-overlay {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    z-index: 6;
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18rem;
+    padding: 0.15rem 0.2rem;
+    border: 0;
+    border-radius: 0 8px 0 0;
+    background: transparent;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: none;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+/* Keeps the vote overlay anchored to the actual picture instead of the surrounding card chrome. */
+.image-stage > .image-vote-overlay {
+    bottom: 0.25rem;
+    left: 0.25rem;
+}
+.vote-score-badge {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.08rem;
+    min-width: 0;
+    padding: 0.08rem 0.2rem;
+    border-radius: 999px;
+    background: rgba(255, 253, 248, 0.0);
+    color: var(--accent-dark);
+    font-weight: 800;
+    line-height: 1;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+/* Overrides the generic vote-row span width inside image overlays so the arrow, score, and hover buttons stay compact. */
+.image-vote-overlay .vote-score-badge,
+.image-vote-overlay .vote-score-badge span,
+.image-vote-overlay .vote-action-group {
+    min-width: 0;
+}
+
+/* Keeps the arrow and count visually close together in the collapsed badge. */
+.vote-score-badge strong {
+    display: inline-block;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+}
+.vote-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Keeps the vote buttons hidden until the user hovers the image card or focuses inside it. */
+.image-vote-overlay .vote-action-group {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-0.25rem);
+    transition: max-width 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+/* Reveals the vote buttons on hover and keyboard focus. */
+.image-card:hover .image-vote-overlay .vote-action-group,
+.image-card:focus-within .image-vote-overlay .vote-action-group {
+    max-width: 6rem;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* Adjusts the hover vote overlay once the buttons are visible. */
+.image-card:hover .image-vote-overlay,
+.image-card:focus-within .image-vote-overlay {
+    background: rgba(15, 23, 42, 0.35);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+
+.image-card:hover .vote-score-badge,
+.image-card:focus-within .vote-score-badge {
+    background: rgba(255, 253, 248, 0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.vote-row > span {
+    min-width: 5.25rem;
+}
+.vote-row button {
+    min-width: 2.1rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+/* Keeps the overlay buttons compact inside the image corner badge. */
+.image-vote-overlay button {
+    min-width: 1.9rem;
+    padding: 0.15rem 0.35rem;
+}
+
+
+/* Keeps anonymous card vote badges compact even when generic button/span rules
+   are present later in the cascade. */
+.public-page .image-vote-overlay.vote-row {
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    min-width: 0;
+}
+
+.public-page .image-vote-overlay > .vote-score-badge {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.08rem;
+    width: auto;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.public-page .image-vote-overlay > .vote-score-badge > span,
+.public-page .image-vote-overlay > .vote-score-badge > strong {
+    display: inline-block;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    line-height: 1;
+}
+
+/* Locks public card vote controls to the compact overlay layout even when global button styles are loaded later. */
+.public-page .image-stage > .image-vote-overlay .vote-action-group {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.25rem;
+    width: auto;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-0.25rem);
+}
+
+/* Reveals the compact vote action only for pointer hover or keyboard focus on the photo card. */
+.public-page .image-card:hover .image-stage > .image-vote-overlay .vote-action-group,
+.public-page .image-card:focus-within .image-stage > .image-vote-overlay .vote-action-group {
+    max-width: 3rem;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* Prevents global button rules from turning the overlay vote button into a large normal form button. */
+.public-page .image-stage > .image-vote-overlay button {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 1.9rem;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0;
+    line-height: 1;
+}
+.lightbox-description {
+    max-width: min(52rem, 100%);
+    margin: 0;
+    color: rgba(255, 253, 248, 0.9);
+    overflow-wrap: anywhere;
+}
+.lightbox-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.lightbox-fullscreen-link {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid #fffdf8;
+    background: rgba(255, 253, 248, 0.12);
+    color: #fffdf8;
+    border-radius: var(--radius, 16px);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.lightbox-counter,
+.lightbox-help {
+    color: rgba(255, 253, 248, 0.78);
+    font-size: 0.9rem;
+}
+.lightbox-original-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    border: 1px solid #fffdf8;
+    border-radius: var(--radius, 16px);
+    color: #fffdf8;
+    padding: 0.35rem 0.65rem;
+    text-decoration: none;
+}
+
+/* Leaflet base layout for EXIF GPS maps.
+   The map library is loaded only when a visitor opens a map, but these rules
+   must already exist before Leaflet measures the canvas. Without them, tile
+   panes can be initialized with incomplete dimensions and the map appears as
+   broken rectangular fragments. These rules intentionally mirror the small
+   subset of Leaflet 1.9.x CSS required for tile, marker, popup and control
+   positioning. */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+    left: 0;
+    position: absolute;
+    top: 0;
+}
+.leaflet-container {
+    background: #ddd;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+    touch-action: pan-x pan-y;
+}
+.leaflet-tile-pane {
+    z-index: 200;
+}
+.leaflet-overlay-pane {
+    z-index: 400;
+}
+.leaflet-shadow-pane {
+    z-index: 500;
+}
+.leaflet-marker-pane {
+    z-index: 600;
+}
+.leaflet-tooltip-pane {
+    z-index: 650;
+}
+.leaflet-popup-pane {
+    z-index: 700;
+}
+
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+    user-select: none;
+}
+.leaflet-tile {
+    filter: inherit;
+    visibility: hidden;
+}
+.leaflet-tile-loaded {
+    opacity: 1;
+    visibility: inherit;
+}
+.leaflet-fade-anim .leaflet-tile {
+    opacity: 0;
+    transition: opacity 0.2s linear;
+    will-change: opacity;
+}
+.leaflet-fade-anim .leaflet-tile-loaded {
+    opacity: 1;
+}
+.leaflet-zoom-animated {
+    transform-origin: 0 0;
+}
+.leaflet-zoom-hide {
+    visibility: hidden;
+}
+.leaflet-interactive {
+    cursor: pointer;
+}
+.leaflet-grab {
+    cursor: grab;
+}
+
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive,
+.leaflet-dragging .leaflet-marker-draggable {
+    cursor: grabbing;
+}
+.leaflet-control {
+    pointer-events: auto;
+    position: relative;
+    z-index: 800;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+    pointer-events: none;
+    position: absolute;
+    z-index: 1000;
+}
+.leaflet-top {
+    top: 0;
+}
+.leaflet-right {
+    right: 0;
+}
+.leaflet-bottom {
+    bottom: 0;
+}
+.leaflet-left {
+    left: 0;
+}
+.leaflet-control {
+    clear: both;
+    float: left;
+}
+.leaflet-right .leaflet-control {
+    float: right;
+}
+.leaflet-top .leaflet-control {
+    margin-top: 10px;
+}
+.leaflet-bottom .leaflet-control {
+    margin-bottom: 10px;
+}
+.leaflet-left .leaflet-control {
+    margin-left: 10px;
+}
+.leaflet-right .leaflet-control {
+    margin-right: 10px;
+}
+.leaflet-control-zoom a {
+    background: #fff;
+    border-bottom: 1px solid #ccc;
+    color: #000;
+    display: block;
+    font: 700 18px/26px Arial, Helvetica, sans-serif;
+    height: 26px;
+    text-align: center;
+    text-decoration: none;
+    width: 26px;
+}
+
+.gallery-map-viewport-control {
+    overflow: hidden;
+}
+.gallery-map-viewport-control button {
+    appearance: none;
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid #ccc;
+    color: #000;
+    cursor: pointer;
+    display: block;
+    font: 700 14px/28px Arial, Helvetica, sans-serif;
+    height: 28px;
+    min-width: 28px;
+    padding: 0 8px;
+    text-align: center;
+}
+.gallery-map-viewport-control button:first-child {
+    font-size: 12px;
+    min-width: 56px;
+}
+.gallery-map-viewport-control button:hover,
+.gallery-map-viewport-control button:focus-visible {
+    background: #f4f4f4;
+    outline: none;
+}
+.gallery-map-viewport-control button:focus-visible {
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
+}
+.gallery-map-viewport-checkbox {
+    align-items: center;
+    background: #fff;
+    color: #000;
+    cursor: pointer;
+    display: flex;
+    font: 600 12px/1.2 Arial, Helvetica, sans-serif;
+    gap: 6px;
+    max-width: 148px;
+    padding: 8px 10px;
+    user-select: none;
+}
+.gallery-map-viewport-checkbox input {
+    accent-color: #2563eb;
+    cursor: pointer;
+    flex: 0 0 auto;
+    height: 14px;
+    margin: 0;
+    width: 14px;
+}
+.gallery-map-viewport-checkbox span {
+    display: inline-block;
+}
+.gallery-map-viewport-checkbox:hover,
+.gallery-map-viewport-checkbox:focus-within {
+    background: #f4f4f4;
+}
+.gallery-map-viewport-checkbox:focus-within {
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.55);
+}
+
+.leaflet-control-zoom a:hover,
+.leaflet-control-zoom a:focus {
+    background: #f4f4f4;
+}
+.leaflet-control-zoom-in {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+.leaflet-control-zoom-out {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    border-bottom: 0;
+}
+.leaflet-bar {
+    border-radius: 4px;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65);
+}
+.leaflet-popup {
+    margin-bottom: 20px;
+    position: absolute;
+    text-align: center;
+}
+.leaflet-popup-content-wrapper {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+    padding: 1px;
+    text-align: left;
+}
+.leaflet-popup-content {
+    line-height: 1.3;
+    margin: 13px 24px 13px 20px;
+    min-height: 1px;
+}
+.leaflet-popup-tip-container {
+    height: 20px;
+    left: 50%;
+    margin-left: -20px;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    width: 40px;
+}
+.leaflet-popup-tip {
+    background: #fff;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+    height: 17px;
+    margin: -10px auto 0;
+    padding: 1px;
+    transform: rotate(45deg);
+    width: 17px;
+}
+.leaflet-popup-close-button {
+    color: #757575;
+    font: 16px/24px Tahoma, Verdana, sans-serif;
+    height: 24px;
+    position: absolute;
+    right: 0;
+    text-align: center;
+    text-decoration: none;
+    top: 0;
+    width: 24px;
+}
+
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus {
+    color: #111;
+}
+.leaflet-control-attribution {
+    background: rgba(255, 255, 255, 0.8);
+    color: #333;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 0 5px;
+}
+
+.leaflet-marker-icon.leaflet-interactive,
+.leaflet-image-layer.leaflet-interactive,
+.leaflet-pane > svg path.leaflet-interactive,
+svg.leaflet-image-layer.leaflet-interactive path {
+    pointer-events: auto;
+}
+
+.leaflet-container img.leaflet-tile,
+.leaflet-container img.leaflet-marker-icon,
+.leaflet-container img.leaflet-marker-shadow {
+    max-height: none;
+    max-width: none;
+}
+
+.leaflet-container .leaflet-marker-pane img,
+.leaflet-container .leaflet-shadow-pane img,
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container img.leaflet-image-layer {
+    border: 0;
+    padding: 0;
+}
+.leaflet-container .leaflet-control-attribution a {
+    color: #0078a8;
+}
+.leaflet-default-icon-path {
+    background-image: url("https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png");
+}
+
+/* GPS map controls for EXIF photo locations. */
+.image-preview-link {
+    display: block;
+}
+.photo-map-pin {
+    align-items: center;
+    --gps-pin-size: 26;
+    --gps-pin-background-size: 22;
+    --gps-pin-background-color: rgba(15, 23, 42, 0.55);
+    --gps-pin-border-color: rgba(255, 255, 255, 0.25);
+    --gps-pin-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+    --gps-pin-backdrop: blur(4px);
+    background: var(--gps-pin-background-color);
+    border: 1px solid var(--gps-pin-border-color);
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: calc(var(--gps-pin-size) * 0.55px);
+    height: calc(var(--gps-pin-background-size) * 1px);
+    justify-content: center;
+    line-height: 1;
+    min-width: calc(var(--gps-pin-background-size) * 1px);
+    padding: 0;
+    position: absolute;
+    right: 0.6rem;
+    top: 0.6rem;
+    width: calc(var(--gps-pin-background-size) * 1px);
+    z-index: 2;
+    backdrop-filter: var(--gps-pin-backdrop);
+    box-shadow: var(--gps-pin-shadow);
+    box-sizing: border-box;
+}
+
+.photo-map-pin[data-pin-background="off"],
+.photo-map-pin[data-theme-pin-background="off"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.photo-map-pin[data-pin-hidden="1"] {
+    display: none !important;
+}
+
+.theme-gps-pin-settings {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.theme-gps-pin-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+}
+
+.theme-gps-pin-preview .photo-map-pin {
+    position: relative;
+    right: auto;
+    top: auto;
+    flex: 0 0 auto;
+}
+
+.photo-map-pin:hover,
+.photo-map-pin:focus-visible,
+.lightbox-map-button:hover,
+.lightbox-map-button:focus-visible {
+    transform: translateY(-1px);
+}
+.lightbox-map-button {
+    padding: 0.35rem 0.7rem;
+}
+.map-overlay {
+    align-items: center;
+    background: rgba(2, 6, 23, 0.82);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 1.5rem;
+    position: fixed;
+    z-index: 1200;
+}
+.map-overlay[hidden] {
+    display: none;
+}
+.map-dialog {
+    background: var(--panel-bg, #fff);
+    border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+    border-radius: 1rem;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    color: var(--text, #111827);
+    max-width: 1120px;
+    padding: 1rem;
+    position: relative;
+    width: min(96vw, 1120px);
+}
+.map-dialog h2 {
+    margin: 0 4.5rem 0.75rem 0;
+}
+.map-close {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+}
+.map-canvas {
+    border-radius: 0.75rem;
+    height: min(70vh, 720px);
+    min-height: 360px;
+    overflow: hidden;
+    width: 100%;
+}
+.map-popup {
+    max-width: 240px;
+}
+.map-popup img {
+    border-radius: 0.45rem;
+    display: block;
+    height: auto;
+    margin-bottom: 0.5rem;
+    max-width: 220px;
+    width: 100%;
+}
+.map-popup h3 {
+    font-size: 1rem;
+    margin: 0 0 0.35rem;
+}
+.map-popup p {
+    margin: 0.35rem 0;
+}
+.map-attribution-note {
+    margin: 0.65rem 0 0;
+}
+body.has-map-overlay {
+    overflow: hidden;
+}
+.exif-admin-summary dl {
+    display: grid;
+    gap: 0.35rem 1rem;
+    grid-template-columns: max-content minmax(0, 1fr);
+}
+.exif-admin-summary dt {
+    font-weight: 700;
+}
+.exif-admin-summary dd {
+    margin: 0;
+}
+
+/* Leaflet fullscreen split hardening.
+   Browser fullscreen applies the gallery lightbox image rules to every image
+   inside the fullscreen element. Leaflet also keeps old tile containers around
+   during zoom/resize transitions. These local overrides keep map tiles as raw
+   map tiles so the split map cannot inherit photo sizing, filters, radius or
+   transitions from the fullscreen viewer. */
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container img.leaflet-tile,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-container .leaflet-tile-pane img {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 256px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 256px !important;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-container,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split .leaflet-tile-pane {
+    filter: none !important;
+    opacity: 1 !important;
+}
+
+/* Leaflet marker icon hardening.
+   Keep the GPS pin dimensions independent from gallery image and fullscreen
+   image rules while leaving map tiles controlled by the tile-specific reset. */
+.leaflet-container img.leaflet-marker-icon {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 41px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 25px !important;
+    z-index: auto;
+}
+.leaflet-container img.leaflet-marker-shadow {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    display: block !important;
+    filter: none !important;
+    height: 41px !important;
+    margin: 0 !important;
+    max-height: none !important;
+    max-width: none !important;
+    object-fit: initial !important;
+    opacity: 1 !important;
+    padding: 0 !important;
+    transition: none !important;
+    visibility: visible !important;
+    width: 41px !important;
+}
+.leaflet-container .leaflet-marker-pane {
+    z-index: 600;
+}
+.leaflet-container .leaflet-shadow-pane {
+    z-index: 500;
+}
+
+/* CSS-only Leaflet marker for gallery GPS maps.
+   This avoids Leaflet's external PNG marker dependency, which can appear as a
+   broken image in fullscreen or on hosts that restrict CDN image loading. */
+.leaflet-container .gallery-leaflet-marker {
+    background: transparent !important;
+    border: 0 !important;
+    display: block !important;
+    height: 40px !important;
+    margin: 0 !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    visibility: visible !important;
+    width: 26px !important;
+}
+.leaflet-container .gallery-leaflet-marker-pin {
+    background: #2f80d1;
+    border: 2px solid #ffffff;
+    border-radius: 50% 50% 50% 0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+    display: block;
+    height: 26px;
+    left: 0;
+    position: absolute;
+    top: 0;
+    transform: rotate(-45deg);
+    width: 26px;
+}
+.leaflet-container .gallery-leaflet-marker--route .gallery-leaflet-marker-pin,
+.leaflet-container .gallery-leaflet-marker--route-start .gallery-leaflet-marker-pin,
+.leaflet-container .gallery-leaflet-marker--route-end .gallery-leaflet-marker-pin {
+    background: #2563eb;
+}
+.leaflet-container .gallery-leaflet-marker--route-via {
+    height: 8px !important;
+    width: 8px !important;
+}
+.leaflet-container .gallery-leaflet-marker--route-via .gallery-leaflet-marker-pin {
+    background: #2563eb;
+    border: 1px solid #ffffff;
+    border-radius: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    height: 8px;
+    transform: none;
+    width: 8px;
+}
+.leaflet-container .gallery-leaflet-marker--route-via .gallery-leaflet-marker-pin::after,
+.leaflet-container .gallery-leaflet-marker--route-via .gallery-leaflet-marker-shadow {
+    display: none;
+}
+.leaflet-container .gallery-leaflet-marker--photo .gallery-leaflet-marker-pin {
+    background: #0f766e;
+}
+.leaflet-container .gallery-leaflet-marker--active-photo {
+    height: 46px !important;
+    width: 32px !important;
+}
+.leaflet-container .gallery-leaflet-marker--active-photo .gallery-leaflet-marker-pin {
+    background: #f97316;
+    box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.22), 0 3px 10px rgba(0, 0, 0, 0.42);
+    height: 32px;
+    width: 32px;
+}
+.leaflet-container .gallery-leaflet-marker--active-photo .gallery-leaflet-marker-pin::after {
+    height: 10px;
+    left: 9px;
+    top: 9px;
+    width: 10px;
+}
+.leaflet-container .gallery-leaflet-marker-pin::after {
+    background: #ffffff;
+    border-radius: 50%;
+    content: "";
+    display: block;
+    height: 8px;
+    left: 7px;
+    position: absolute;
+    top: 7px;
+    width: 8px;
+}
+.leaflet-container .gallery-leaflet-marker-shadow {
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 50%;
+    bottom: -1px;
+    display: block;
+    height: 9px;
+    left: 4px;
+    position: absolute;
+    transform: rotate(-12deg);
+    width: 22px;
+}
+.leaflet-container .gallery-leaflet-marker--active-photo .gallery-leaflet-marker-shadow {
+    bottom: 0;
+    height: 11px;
+    left: 5px;
+    width: 27px;
+}
+.image-detail-panel {
+    text-align: center;
+}
+.image-detail-photo {
+    display: block;
+    width: 100%;
+    max-height: 82vh;
+    object-fit: contain;
+    border-radius: var(--radius-lg);
+}
+.favicon-current {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.favicon-current img,
+.favicon-preview-row canvas {
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--line, #d6cfc2);
+    border-radius: 0.5rem;
+    background: #fff;
+    image-rendering: auto;
+}
+.favicon-cropper {
+    display: grid;
+    gap: 0.8rem;
+    max-width: 360px;
+}
+.favicon-crop-stage {
+    width: 256px;
+    height: 256px;
+    border: 1px solid var(--line, #d6cfc2);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #fff;
+    touch-action: none;
+}
+.favicon-crop-stage canvas {
+    display: block;
+    width: 256px;
+    height: 256px;
+    cursor: grab;
+}
+.favicon-crop-stage canvas:active {
+    cursor: grabbing;
+}
+.favicon-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.lightbox.is-fullscreen,
+.lightbox.is-mobile-fullscreen,
+.lightbox:fullscreen {
+    background: #050505 !important;
+}
+.gallery-dev-overlay {
+    position: fixed;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 2147483000;
+    width: min(35rem, calc(100vw - 1.5rem));
+    max-height: min(60vh, 34rem);
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.94);
+    background: rgba(5, 10, 18, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 0.7rem;
+    box-shadow: 0 1.4rem 4rem rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.68rem;
+    line-height: 1.28;
+    pointer-events: none;
+}
+
+.gallery-dev-overlay header,
+.gallery-dev-overlay footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.35rem 0.5rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.gallery-dev-overlay footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    border-bottom: 0;
+    opacity: 0.72;
+}
+.gallery-dev-overlay strong {
+    display: inline-grid;
+    place-items: center;
+    min-width: 2.2rem;
+    min-height: 1.3rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gallery-dev-overlay pre {
+    margin: 0;
+    padding: 0.45rem 0.55rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.gallery-dev-overlay canvas {
+    display: block;
+    width: 100%;
+    height: 72px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.lightbox.is-fullscreen .gallery-dev-overlay,
+.lightbox.is-mobile-fullscreen .gallery-dev-overlay,
+.lightbox:fullscreen .gallery-dev-overlay {
+    right: 0.75rem;
+    bottom: 0.75rem;
+}
+@media (max-width: 720px) {
+.gallery-dev-overlay {
+        right: 0.5rem;
+        bottom: 0.5rem;
+        width: calc(100vw - 1rem);
+        font-size: 0.62rem;
+    }
+}
+
+
+/* Makes Theme banner artwork replace the visible site title in the shared public header. */
+.brand-with-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(0.5rem, 1.5vw, 1rem);
+    min-width: 0;
+    letter-spacing: 0;
+}
+
+/* Keeps an optional per-gallery logo stable beside the shared header banner. */
+.brand-logo {
+    display: block;
+    flex: 0 0 auto;
+    max-width: min(9rem, 26vw);
+    max-height: clamp(2.5rem, 7vw, 5rem);
+    object-fit: contain;
+}
+
+/* Constrains the public header banner so uploaded artwork cannot collapse navigation. */
+.brand-banner {
+    display: block;
+    width: auto;
+    max-width: min(42rem, 58vw);
+    max-height: clamp(3rem, 9vw, 6.5rem);
+    object-fit: contain;
+}
+
+/* Renders the Theme separator below the shared public header and above page content. */
+.site-branding-separator {
+    width: min(var(--page-width-default, 1120px), calc(100% - 2rem));
+    margin: -0.5rem auto 1rem;
+    pointer-events: none;
+}
+
+.public-page.page-width-wide .site-branding-separator {
+    width: min(var(--page-width-wide, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-custom .site-branding-separator {
+    width: min(var(--page-width-custom, 1440px), calc(100% - 2rem));
+}
+
+.public-page.page-width-full .site-branding-separator {
+    width: calc(100% - clamp(1rem, 3vw, 3rem));
+}
+
+.site-branding-separator img {
+    display: block;
+    width: 100%;
+    max-height: clamp(1.25rem, 7vw, 4.5rem);
+    object-fit: contain;
+}
+
+@media (max-width: 680px) {
+    .brand-banner {
+        max-width: min(100%, 82vw);
+        max-height: clamp(2.75rem, 18vw, 5rem);
+    }
+
+    .brand-logo {
+        max-width: min(7rem, 28vw);
+        max-height: clamp(2.25rem, 14vw, 4rem);
+    }
+
+    .site-branding-separator {
+        margin-top: -0.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .gallery-title-bar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .gallery-branding-logo {
+        max-width: min(11rem, 70vw);
+    }
+
+    .gallery-title-bar .gallery-title {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .gallery-branding-banner {
+        width: 100%;
+        max-height: 8rem;
+    }
+
+    .public-page .hero .gallery-title-bar {
+        gap: 0.45rem;
+    }
+
+    .public-page .hero .gallery-branding-logo {
+        max-width: min(6rem, 32vw);
+        max-height: 2.75rem;
+    }
+
+    .public-page .hero .gallery-branding-banner {
+        width: 100%;
+        max-height: 3.75rem;
+    }
+}
