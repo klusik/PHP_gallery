@@ -76,8 +76,9 @@ function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 /**
  * Add pending-rename counts to gallery rows and optionally keep only galleries with rename candidates.
  *
- * This scan is intentionally separated from the normal gallery-list query because each gallery needs
- * a deterministic dry-run plan for the current filename pattern.
+ * Availability is intentionally database-only. The preview and apply workflows still build full
+ * safety plans with filesystem checks, but this lightweight count keeps the on-demand admin filter
+ * fast for large galleries where the database is the canonical media index.
  *
  * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
  * @param string $pattern Pattern value.
@@ -87,8 +88,17 @@ function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 function media_renamer_gallery_rows_with_rename_availability(array $galleryRows, string $pattern = '', bool $hideWithoutRenameCandidates = false): array
 {
     $rows = [];
-    $availability = [];
+    $galleryIds = [];
     $pattern = media_renamer_normalize_pattern($pattern);
+
+    foreach ($galleryRows as $galleryRow) {
+        $galleryId = (int) ($galleryRow['id'] ?? 0);
+        if ($galleryId > 0) {
+            $galleryIds[] = $galleryId;
+        }
+    }
+
+    $availability = media_renamer_availability_for_gallery_ids($galleryIds, $pattern);
 
     foreach ($galleryRows as $galleryRow) {
         $galleryId = (int) ($galleryRow['id'] ?? 0);
@@ -96,20 +106,9 @@ function media_renamer_gallery_rows_with_rename_availability(array $galleryRows,
             continue;
         }
 
-        try {
-            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
-            $summary = (array) ($plan['summary'] ?? []);
-            $renameCount = (int) ($summary['rename'] ?? 0);
-            $warningCount = (int) (($summary['warnings'] ?? 0) + ($summary['missing'] ?? 0) + ($summary['collision'] ?? 0) + ($summary['skipped'] ?? 0));
-        } catch (Throwable $exception) {
-            $renameCount = 0;
-            $warningCount = 1;
-        }
-
-        $availability[$galleryId] = [
-            'rename_count' => $renameCount,
-            'warning_count' => $warningCount,
-        ];
+        $counts = (array) ($availability[$galleryId] ?? []);
+        $renameCount = (int) ($counts['rename_count'] ?? 0);
+        $warningCount = (int) ($counts['warning_count'] ?? 0);
 
         if ($hideWithoutRenameCandidates && $renameCount <= 0) {
             continue;
@@ -126,10 +125,11 @@ function media_renamer_gallery_rows_with_rename_availability(array $galleryRows,
     ];
 }
 
-
-
 /**
  * Return pending-rename availability counts for selected gallery ids.
+ *
+ * This function is used by the admin "Check availability" button and must not touch
+ * the filesystem. Full previews and physical rename actions use media_renamer_plan_for_gallery().
  *
  * @param array<int|string> $galleryIds Gallery ids value.
  * @param string $pattern Pattern value.
@@ -142,12 +142,7 @@ function media_renamer_availability_for_gallery_ids(array $galleryIds, string $p
 
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
         try {
-            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
-            $summary = (array) ($plan['summary'] ?? []);
-            $availability[$galleryId] = [
-                'rename_count' => (int) ($summary['rename'] ?? 0),
-                'warning_count' => (int) (($summary['warnings'] ?? 0) + ($summary['missing'] ?? 0) + ($summary['collision'] ?? 0) + ($summary['skipped'] ?? 0)),
-            ];
+            $availability[$galleryId] = media_renamer_db_availability_for_gallery($galleryId, $pattern);
         } catch (Throwable $exception) {
             $availability[$galleryId] = [
                 'rename_count' => 0,
@@ -157,6 +152,141 @@ function media_renamer_availability_for_gallery_ids(array $galleryIds, string $p
     }
 
     return $availability;
+}
+
+/**
+ * Count pending renames for one gallery using only indexed database state.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Pattern value.
+ * @return array{rename_count:int,warning_count:int} Availability counts for the admin filter.
+ */
+function media_renamer_db_availability_for_gallery(int $galleryId, string $pattern = ''): array
+{
+    $gallery = find_gallery($galleryId, true);
+    if (!$gallery) {
+        throw new RuntimeException(t('admin.media_renamer.error_gallery_missing', 'Gallery was not found.'));
+    }
+
+    $images = gallery_images($galleryId, false);
+    $pattern = media_renamer_normalize_pattern($pattern);
+    $contextBase = media_renamer_gallery_context_base($gallery);
+    $selectedImageIds = array_fill_keys(array_map(static fn (array $image): int => (int) $image['id'], $images), true);
+    $indexedRelativePathImageIds = media_renamer_indexed_relative_path_image_ids($galleryId);
+    $usedTargetPaths = [];
+    $renameCount = 0;
+    $warningCount = 0;
+    $sequence = 1;
+
+    foreach ($images as $image) {
+        $oldRelativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+        $oldFilename = (string) ($image['filename'] ?? basename($oldRelativePath));
+        $warnings = [];
+
+        if ($oldRelativePath === '' || str_contains($oldRelativePath, '/')) {
+            $warningCount++;
+            $sequence++;
+            continue;
+        }
+
+        $target = media_renamer_unique_target_from_database(
+            $gallery,
+            $image,
+            $contextBase,
+            $pattern,
+            $sequence,
+            media_renamer_safe_extension($oldFilename),
+            $selectedImageIds,
+            $indexedRelativePathImageIds,
+            $usedTargetPaths,
+            $warnings
+        );
+
+        if ($target === null) {
+            $warningCount++;
+            $sequence++;
+            continue;
+        }
+
+        if ($oldRelativePath !== (string) ($target['relative_path'] ?? '')) {
+            $renameCount++;
+        }
+
+        $warningCount += count($warnings);
+        $sequence++;
+    }
+
+    return [
+        'rename_count' => $renameCount,
+        'warning_count' => $warningCount,
+    ];
+}
+
+/**
+ * Return indexed image paths for a gallery keyed by comparable relative path.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return array<string,int> Image ids keyed by normalized relative path.
+ */
+function media_renamer_indexed_relative_path_image_ids(int $galleryId): array
+{
+    $stmt = db()->prepare('SELECT id, relative_path FROM images WHERE gallery_id = ?');
+    $stmt->execute([$galleryId]);
+    $paths = [];
+
+    foreach ($stmt->fetchAll() as $image) {
+        $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+        if ($relativePath === '') {
+            continue;
+        }
+        $paths[media_renamer_path_key($relativePath)] = (int) ($image['id'] ?? 0);
+    }
+
+    return $paths;
+}
+
+/**
+ * Find a safe target filename by checking planned names and database-indexed paths only.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $image Image row or image data.
+ * @param string $contextBase Context base value.
+ * @param string $pattern Pattern value.
+ * @param int $sequence Sequence value.
+ * @param string $extension Extension value.
+ * @param array<int,bool> $selectedImageIds Selected image ids value.
+ * @param array<string,int> $indexedRelativePathImageIds Database-indexed image ids keyed by relative path.
+ * @param array<string,int> $usedTargetPaths Planned target paths keyed by relative path.
+ * @param array<int,string> $warnings Warnings value.
+ * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
+ */
+function media_renamer_unique_target_from_database(array $gallery, array $image, string $contextBase, string $pattern, int $sequence, string $extension, array $selectedImageIds, array $indexedRelativePathImageIds, array &$usedTargetPaths, array &$warnings): ?array
+{
+    $collisionCount = 0;
+    for ($suffix = 0; $suffix <= 99; $suffix++) {
+        $filename = media_renamer_build_filename($contextBase, $sequence, $extension, $suffix, $pattern, $gallery, $image);
+        $relativePath = $filename;
+        $targetKey = media_renamer_path_key($relativePath);
+
+        if (isset($usedTargetPaths[$targetKey])) {
+            $collisionCount++;
+            continue;
+        }
+
+        $conflictImageId = (int) ($indexedRelativePathImageIds[$targetKey] ?? 0);
+        if ($conflictImageId > 0 && $conflictImageId !== (int) ($image['id'] ?? 0) && !isset($selectedImageIds[$conflictImageId])) {
+            $collisionCount++;
+            continue;
+        }
+
+        $usedTargetPaths[$targetKey] = (int) ($image['id'] ?? 0);
+        if ($collisionCount > 0 || $suffix > 0) {
+            $warnings[] = t('admin.media_renamer.warning_collision_adjusted', 'The preferred filename was already occupied, so a deterministic suffix was added.');
+        }
+        return ['filename' => $filename, 'relative_path' => $relativePath];
+    }
+
+    return null;
 }
 
 /**
@@ -199,17 +329,12 @@ function media_renamer_gallery_rows_with_submitted_availability(array $galleryRo
 function media_renamer_gallery_ids_with_pending_renames(array $galleryIds, string $pattern = ''): array
 {
     $filtered = [];
-    $pattern = media_renamer_normalize_pattern($pattern);
+    $availability = media_renamer_availability_for_gallery_ids($galleryIds, $pattern);
 
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
-        try {
-            $plan = media_renamer_plan_for_gallery($galleryId, $pattern);
-            $summary = (array) ($plan['summary'] ?? []);
-            if ((int) ($summary['rename'] ?? 0) > 0) {
-                $filtered[] = $galleryId;
-            }
-        } catch (Throwable $exception) {
-            // Unreadable galleries are not silently selected by the availability filter.
+        $counts = (array) ($availability[$galleryId] ?? []);
+        if ((int) ($counts['rename_count'] ?? 0) > 0) {
+            $filtered[] = $galleryId;
         }
     }
 

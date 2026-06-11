@@ -770,6 +770,12 @@ When adding logic-heavy services, prefer creating a direct test script that exer
 11. Keep comments practical and close to the relevant code.
 12. Avoid adding new dependencies unless the feature cannot be implemented reasonably without them.
 
+### Comment and Docstring Rules
+
+Every PHP function or method should keep a short PHPDoc entry above it. The entry should start with one factual purpose sentence, then list every parameter with `@param`, a concrete type, and a short description. Add `@return` when the function returns data. Mention important caller context, dependencies, or downstream service calls only when that context helps maintenance.
+
+Keep descriptions brief and factual. Do not remove existing file headers or function docstrings while editing unrelated logic. Prefer normal inline comments for local reasoning, avoid decorative separator lines, and keep comments near the code they explain.
+
 ## Recommended AI Maintenance Workflow
 
 When asking an AI agent to modify this project, include these documents with the ZIP:

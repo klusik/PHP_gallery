@@ -5,7 +5,7 @@
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:4021ba275f58c2f67357d101606d10ba600df81fa4aa82bd0f968a0553b99859",
-        "ARCHITECTURE.md": "sha256:ce821994697ac154bd162219d699e1cc3eb9429df9dd98070e643edf17511186",
+        "ARCHITECTURE.md": "sha256:20c51db735c831eabb75ff61abeff1710649422b0341d19371169e72a463af17",
         "CODEMAP.md": "sha256:e94b6f33558f8b5caa9d023293d88dfb3d94ffb98c1ac9f346675d08e0074a4f",
         "DATABASE.md": "sha256:0d35b8b85c9e4a1a302df562e75c2ed3314ead0142524c3c6fba4ba7ddb05322",
         "PATCH_NOTES.md": "sha256:d98a577ff7f8e6d33604d7b36659cbec280133d1812e9ba6fc0db199f02b7120",
@@ -109,7 +109,7 @@
         "app/services/image_scanning.php": "sha256:c3f1434b59841072fa5a2b5494c38253e13b8dce56026a96e86960030f4e921e",
         "app/services/lightbox_metadata.php": "sha256:2cf5982ac00f72bc207f5c0179fedce8e6892588c83398ff7dc689eff1014649",
         "app/services/logs.php": "sha256:de91e533499a4f9523c4032b79d8bb51f81d603fb47e6d2c5e6f8387ad112a75",
-        "app/services/media_renamer.php": "sha256:8feadd356129dd909a7f173e4929e2ad19cfd9f2a71251bc3f0b9d1f83484a7d",
+        "app/services/media_renamer.php": "sha256:306023757d3c6ce4fbfeea95928a647681f6d43a009347904b0483e3fded4a9b",
         "app/services/mobile_webdav.php": "sha256:2691e48d4410bb0802abdbdf252d6287ff5d95e89a4c7b2ba97b960bf4ec29a4",
         "app/services/navigation_data.php": "sha256:32624acb4bb14f1add3e2a288f8d7eecf8b8942a65eea97819bec53660b2a8ee",
         "app/services/openai_text_assist.php": "sha256:71913e2fda302603f2721a64c1afd2166e214de2b8aa5210ce53c22dabfa6051",
