@@ -100,6 +100,8 @@ require_once __DIR__ . '/services/gallery_lookup.php';
 require_once __DIR__ . '/services/gallery_lightbox_mode.php';
 require_once __DIR__ . '/services/gallery_sidecars.php';
 require_once __DIR__ . '/services/gallery_paths.php';
+// Load browser-driven discovery after path and sidecar helpers can inspect gallery folders.
+require_once __DIR__ . '/services/admin_gallery_discovery.php';
 // Load Admin storage statistics after path and derivative helpers are available.
 require_once __DIR__ . '/services/admin_storage_statistics.php';
 require_once __DIR__ . '/services/gallery_display.php';

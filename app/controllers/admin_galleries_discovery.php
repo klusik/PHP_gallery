@@ -35,42 +35,165 @@
 declare(strict_types=1);
 
 /**
- * Admin gallery management controller model.
+ * Render the Admin gallery discovery page or process its Ajax batches.
  *
- * This module handles gallery discovery, import, creation, editing, bulk operations, public inline updates, and supporting select-list renderers.
+ * The visible page no longer performs filesystem recursion during initial
+ * rendering. Browser-side JavaScript starts or resumes a small-batch discovery
+ * job and renders the import table when the scan is complete.
  */
 function cms_admin_discover(): void
 {
     require_admin();
-    // $refresh stores an intermediate value used by the surrounding gallery workflow.
-    $refresh = null;
+
+    if (request_method() === 'POST' && admin_wants_json()) {
+        cms_admin_discover_ajax();
+        return;
+    }
+
     if (request_method() === 'POST') {
         verify_csrf();
-        // $refresh stores an intermediate value used by the surrounding gallery workflow.
-        $refresh = scan_all_imported_gallery_images();
-        admin_log_event('info', 'galleries.refresh_scanned', t('admin.galleries.log_refreshed_imported'), $refresh);
+        redirect_to(url_for('admin_discover'));
     }
-    // Variable $candidates stores this steps working value.
-    $candidates = discover_gallery_candidates();
+
+    $jobToken = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_GET['job_token'] ?? '')) ?: '';
+
     render_header(t('admin.galleries.discover_title'));
-    echo '<section class="panel"><h1>' . e(t('admin.galleries.discover_title')) . '</h1>';
-    echo '<p><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a></p>';
-    if ($refresh !== null) {
-        echo '<div class="notice">' . e(t('admin.galleries.discover_refresh_notice', 'Scanned {galleries} existing galleries and imported or updated {images} images.', ['galleries' => (int) $refresh['galleries'], 'images' => (int) $refresh['images']])) . '</div>';
-    }
-    if (!$candidates) {
-        echo '<p>' . e(t('admin.galleries.discover_none_found')) . '</p>';
-    } else {
-        echo '<form method="post" action="' . e(url_for('admin_import')) . '" data-import-galleries-form>' . csrf_field();
-        echo '<p><label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.galleries.discover_create_thumbnails')) . '</label></p>';
-        echo '<table><thead><tr><th>' . e(t('admin.galleries.discover_column_import')) . '</th><th>' . e(t('admin.galleries.discover_column_folder')) . '</th><th>' . e(t('admin.galleries.discover_column_title')) . '</th><th>' . e(t('admin.galleries.discover_column_visibility')) . '</th></tr></thead><tbody>';
-        foreach ($candidates as $candidate) {
-            echo '<tr><td><input type="checkbox" name="folders[]" value="' . e($candidate['folder_path']) . '"></td><td>' . e($candidate['folder_path']) . '</td><td>' . e($candidate['title']) . '</td><td>' . e($candidate['visibility']) . '</td></tr>';
-        }
-        echo '</tbody></table><button type="submit">' . e(t('admin.galleries.discover_import_selected')) . '</button></form>';
-    }
-    echo '</section>';
+    echo '<section class="hero"><h1>' . e(t('admin.galleries.discover_title')) . '</h1><nav class="nav"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.common.back_to_dashboard')) . '</a></nav></section>';
+    render_admin_gallery_discovery_shell($jobToken);
     render_footer();
+}
+
+/**
+ * Process one Admin gallery discovery Ajax action.
+ */
+function cms_admin_discover_ajax(): void
+{
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+
+    $bufferLevel = ob_get_level();
+    ob_start();
+    try {
+        verify_csrf();
+        @set_time_limit(120);
+
+        $action = (string) ($_POST['action'] ?? 'step');
+        $token = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($_POST['job_token'] ?? '')) ?: '';
+        $batchSize = max(1, min(ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE, (int) ($_POST['batch_size'] ?? ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE)));
+
+        if ($action === 'start') {
+            $state = admin_gallery_discovery_start_job();
+        } elseif ($action === 'status') {
+            $state = admin_gallery_discovery_job_status($token);
+        } else {
+            $state = admin_gallery_discovery_process_job($token, $batchSize);
+        }
+
+        $payload = admin_gallery_discovery_controller_payload($state);
+        $discardedOutput = (string) ob_get_clean();
+        if (trim($discardedOutput) !== '') {
+            admin_log_event('warning', 'gallery.discovery_response_output_discarded', 'Gallery discovery produced output before its JSON response.', [
+                'discarded_output_preview' => mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        }
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_gallery_discovery_json_response($payload);
+    } catch (Throwable $exception) {
+        $discardedOutput = (string) ob_get_clean();
+        while (ob_get_level() > $bufferLevel) {
+            ob_end_clean();
+        }
+        admin_log_event('error', 'gallery.discovery_failed', 'Gallery discovery Ajax request failed.', [
+            'error' => $exception->getMessage(),
+            'discarded_output_preview' => $discardedOutput !== '' ? mb_substr(trim(preg_replace('/\s+/', ' ', $discardedOutput)), 0, 500) : null,
+        ], ['category' => 'other', 'severity' => 'error']);
+        admin_gallery_discovery_json_response([
+            'ok' => false,
+            'status' => 'error',
+            'done' => true,
+            'error' => $exception->getMessage(),
+            'message' => $exception->getMessage(),
+        ]);
+    }
+}
+
+/**
+ * Build the JSON payload consumed by the Admin discovery browser module.
+ *
+ * @param array<string, mixed> $state Discovery service state.
+ * @return array<string, mixed> JSON-safe controller payload.
+ */
+function admin_gallery_discovery_controller_payload(array $state): array
+{
+    $status = (string) ($state['status'] ?? 'running');
+    $processed = (int) ($state['processed_directories'] ?? 0);
+    $total = (int) ($state['discovered_directories'] ?? 0);
+    $candidateCount = (int) ($state['candidate_count'] ?? 0);
+    $message = (string) ($state['message'] ?? '');
+
+    if ($message === '') {
+        if ($status === 'complete') {
+            $message = $candidateCount > 0
+                ? t('admin.galleries.discovery_done_with_candidates', 'Discovery complete. Found {count} new folder(s).', ['count' => (string) $candidateCount])
+                : t('admin.galleries.discover_none_found');
+        } elseif ($status === 'missing') {
+            $message = t('admin.galleries.discovery_missing_job', 'Discovery progress expired. Start the scan again.');
+        } elseif ($status === 'error') {
+            $message = t('admin.galleries.discovery_failed', 'Gallery discovery failed.');
+        } else {
+            $message = t('admin.galleries.discovery_running', 'Scanning gallery folders...');
+        }
+    }
+
+    $payload = [
+        'ok' => !empty($state['ok']),
+        'status' => $status,
+        'done' => !empty($state['done']),
+        'job_token' => (string) ($state['job_token'] ?? ''),
+        'processed_directories' => $processed,
+        'discovered_directories' => $total,
+        'queued_directories' => (int) ($state['queued_directories'] ?? 0),
+        'candidate_count' => $candidateCount,
+        'percent' => (float) ($state['percent'] ?? 0.0),
+        'message' => $message,
+        'result_url' => url_for('admin_discover', ['job_token' => (string) ($state['job_token'] ?? '')]),
+        'errors' => is_array($state['errors'] ?? null) ? $state['errors'] : [],
+    ];
+
+    if (is_array($state['candidates'] ?? null)) {
+        $payload['candidates'] = $state['candidates'];
+    }
+
+    return $payload;
+}
+
+/**
+ * Emit a JSON response for Admin discovery endpoints.
+ *
+ * @param array<string, mixed> $payload Payload written to the browser.
+ */
+function admin_gallery_discovery_json_response(array $payload): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Render the dynamic discovery shell used by the browser-side progress module.
+ *
+ * @param string $jobToken Existing completed or running job token from the query string.
+ */
+function render_admin_gallery_discovery_shell(string $jobToken = ''): void
+{
+    echo '<section class="panel admin-discovery-panel" data-admin-discovery-panel data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-import-url="' . e(url_for('admin_import')) . '" data-csrf-token="' . e(csrf_token()) . '" data-job-token="' . e($jobToken) . '">';
+    echo '<p class="muted">' . e(t('admin.galleries.discovery_intro', 'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.')) . '</p>';
+    echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status>' . e(t('admin.galleries.discovery_starting', 'Preparing gallery discovery...')) . '</p><p class="muted" data-admin-discovery-counts></p></div>';
+    echo '<div data-admin-discovery-results></div>';
+    echo '</section>';
 }
 
 /**

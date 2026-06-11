@@ -32,7 +32,7 @@
 
 export { setupAdminTabs } from './admin-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
-export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260512-modular-admin-v1';
+export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-ajax-v1';
 export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260608-admin-cinematic-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260611-server-missing-thumbnails-v2';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20260521-navdata-feedback-v2';

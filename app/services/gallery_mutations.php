@@ -1003,45 +1003,8 @@ function ensure_gallery_ancestors_for_path(string $folderPath): array
  */
 function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
-    // Variable $candidates stores this steps working value.
-    $candidates = [];
-    foreach (discover_gallery_candidates() as $candidate) {
-        $candidates[$candidate['folder_path']] = $candidate;
-    }
-
-    // Variable $requested stores this steps working value.
-    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
-    // Variable $folderPaths stores this steps working value.
-    $folderPaths = [];
-    foreach ($requested as $requestedPath) {
-        if ($requestedPath === '') {
-            continue;
-        }
-
-        // Import missing ancestors first. This is important when the admin
-        // selects only a deep child folder from the discovery screen. Without
-        // these rows, sync_gallery_parent_ids() has no parent record to attach
-        // the child to, so the child appears as a top-level gallery.
-        // Variable $segments stores this steps working value.
-        $segments = explode('/', $requestedPath);
-        // Variable $ancestorSegments stores this steps working value.
-        $ancestorSegments = [];
-        while (count($segments) > 1) {
-            $ancestorSegments[] = array_shift($segments);
-            // Variable $ancestorPath stores this steps working value.
-            $ancestorPath = implode('/', $ancestorSegments);
-            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
-                $folderPaths[$ancestorPath] = $ancestorPath;
-            }
-        }
-
-        foreach (array_keys($candidates) as $candidatePath) {
-            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
-                $folderPaths[$candidatePath] = $candidatePath;
-            }
-        }
-    }
-    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    // $folderPaths stores the ordered import queue expanded from the admin selection.
+    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // Variable $imported stores this steps working value.
     $imported = 0;
@@ -1087,39 +1050,8 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
  */
 function import_galleries_without_thumbnails(array $folderPaths): array
 {
-    // Variable $candidates stores this steps working value.
-    $candidates = [];
-    foreach (discover_gallery_candidates() as $candidate) {
-        $candidates[$candidate['folder_path']] = $candidate;
-    }
-
-    // Variable $requested stores this steps working value.
-    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
-    // Variable $folderPaths stores this steps working value.
-    $folderPaths = [];
-    foreach ($requested as $requestedPath) {
-        if ($requestedPath === '') {
-            continue;
-        }
-        // $segments stores an intermediate value used by the surrounding gallery workflow.
-        $segments = explode('/', $requestedPath);
-        // $ancestorSegments stores an intermediate value used by the surrounding gallery workflow.
-        $ancestorSegments = [];
-        while (count($segments) > 1) {
-            $ancestorSegments[] = array_shift($segments);
-            // $ancestorPath stores an intermediate value used by the surrounding gallery workflow.
-            $ancestorPath = implode('/', $ancestorSegments);
-            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
-                $folderPaths[$ancestorPath] = $ancestorPath;
-            }
-        }
-        foreach (array_keys($candidates) as $candidatePath) {
-            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
-                $folderPaths[$candidatePath] = $candidatePath;
-            }
-        }
-    }
-    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    // $folderPaths stores the ordered import queue expanded from the admin selection.
+    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // $imported stores an intermediate value used by the surrounding gallery workflow.
     $imported = 0;

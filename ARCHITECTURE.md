@@ -656,6 +656,11 @@ Aviation-related gallery features are intentionally modular.
 
 The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
 
+
+## Admin Gallery Discovery
+
+Filesystem gallery discovery is handled by `app/controllers/admin_galleries_discovery.php`, `app/services/admin_gallery_discovery.php`, and `public/assets/gallery-modules/admin-refresh-progress.js`. The Admin dashboard button starts an Ajax job instead of submitting a long blocking request. The service stores a short-lived session job, scans a bounded number of directories per request, tracks candidate folder paths, and returns the final import table data to the browser. Import expansion reuses the same service helper so selected folders are expanded from the selected subtree instead of rescanning the entire gallery root.
+
 ## EXIF/GPS Public Display Policy
 
 EXIF/GPS display is default-enabled globally through `app_settings.exif_gps_maps_default_enabled`. The nullable `galleries.gps_map_enabled` column stores only branch-level overrides: `NULL` inherits, `1` forces display on, and `0` forces display off. The effective state is resolved by `gallery_effective_gps_map_enabled()` in `app/services/exif.php`, which walks from the current gallery to its parents and falls back to the global default when no explicit override exists.
@@ -731,6 +736,7 @@ Logs support category, severity, status, subject, request id, route, method, AJA
 | `public/assets/styles.css` | Main public and admin styling. |
 | `public/assets/gallery.js` | Gallery UI behavior, search, maps, inline admin behavior and related browser interactions. |
 | `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | In-place apply workflow for the reusable per-gallery EXIF date suggestion component in full editor and side-panel contexts. |
+| `public/assets/gallery-modules/admin-refresh-progress.js` | Ajax progress workflow for Admin filesystem gallery discovery. |
 | `public/assets/telemetry.js` | Telemetry event capture. |
 | `public/assets/usage.js` | Usage collection helper. |
 | `public/assets/custom.css` | Public custom CSS entry. |

@@ -100,8 +100,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 
 | Task | Primary files | Notes |
 | --- | --- | --- |
-| Discover filesystem galleries | `app/controllers/admin_galleries_discovery.php` | Uses scanning and gallery mutation services. |
-| Import discovered galleries | `app/controllers/admin_galleries_discovery.php` | Creates DB records from folders. |
+| Discover filesystem galleries | `app/controllers/admin_galleries_discovery.php`, `app/services/admin_gallery_discovery.php`, `public/assets/gallery-modules/admin-refresh-progress.js` | Runs browser-driven folder discovery in Ajax batches and renders import candidates without blocking the Admin dashboard. |
+| Import discovered galleries | `app/controllers/admin_galleries_discovery.php`, `app/services/gallery_mutations.php`, `app/services/admin_gallery_discovery.php` | Creates DB records from selected folders and expands selected paths without rescanning the entire gallery root. |
 | Create gallery | `app/controllers/admin_galleries_discovery.php` | Includes side-panel handling. |
 | Edit gallery | `app/controllers/admin_galleries_edit.php` | Large feature surface, including manual date ranges and the embedded reusable EXIF suggestion component. |
 | Gallery form rendering | `app/views/admin_gallery_forms.php`, `app/controllers/admin_gallery_renderers.php` | Shared form fragments, manual date range inputs, per-gallery EXIF suggestion controls and select lists. The suggestion component carries endpoint, gallery id and CSRF data so it works in full-page and side-panel admin contexts. |
@@ -152,7 +152,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Lightbox browsing-mode resolution | `app/services/gallery_lightbox_mode.php`, `app/controllers/admin_theme.php`, `app/controllers/admin_galleries_edit.php`, `app/controllers/public_gallery.php` |
 | Picture-strip and 3D-carousel lightbox UI | `public/assets/gallery-modules/lightbox.js`, `public/assets/styles/lightbox.css`, `public/assets/styles/mobile-gallery.css` |
 | Public/admin styling | `public/assets/styles.css`, `public/assets/custom.css` |
-| Browser UI behavior | `public/assets/gallery.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js` |
+| Browser UI behavior | `public/assets/gallery.js`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, `public/assets/gallery-modules/admin-refresh-progress.js` |
 
 ## Access, Sharing and Downloads
 
