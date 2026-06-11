@@ -82,6 +82,7 @@ if (!function_exists('admin_log_english_t')) {
 
 function render_admin_log_row(array $entry, bool $withActions = false): string
 {
+    unset($withActions);
     // Variable $context stores this steps working value.
     $context = [];
     if (!empty($entry['context_json'])) {
@@ -92,27 +93,11 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
             $context = $decoded;
         }
     }
-    // Variable $stateLabel stores this steps working value.
-    $stateLabel = admin_log_status_label((string) ($entry['status'] ?? 'todo'));
-    // Variable $statusForm stores this steps working value.
-    $statusForm = '';
-    if ($withActions) {
-        // $statusForm stores an intermediate value used by the surrounding gallery workflow.
-        $statusForm = '<form method="post" action="' . e(url_for('admin_log_update')) . '" class="inline-action-form">' . csrf_field()
-            . '<input type="hidden" name="log_id" value="' . (int) $entry['id'] . '">'
-            . '<select name="status">';
-        foreach (admin_log_status_options() as $status => $label) {
-            $statusForm .= '<option value="' . e($status) . '"' . ((string) ($entry['status'] ?? '') === $status ? ' selected' : '') . '>' . e($label) . '</option>';
-        }
-        $statusForm .= '</select><button type="submit">' . e(admin_log_english_t('admin.logs.update', 'Update')) . '</button></form>';
-    }
     return '<tr>'
         . '<td>' . e((string) $entry['created_at']) . '</td>'
-        . '<td>' . e($stateLabel) . '</td>'
         . '<td>' . e((string) $entry['event_key']) . '</td>'
         . '<td>' . e((string) $entry['message']) . ($context ? '<div class="muted">' . e(json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</div>' : '') . '</td>'
         . '<td>' . e((string) ($entry['username'] ?? '')) . '</td>'
-        . ($withActions ? '<td>' . $statusForm . '</td>' : '')
         . '</tr>';
 }
 
@@ -263,16 +248,126 @@ function admin_log_severity_filter_summary(array $selectedSeverities): string
 }
 
 /**
+ * Return supported admin log page-size choices.
+ */
+function admin_log_page_size_options(): array
+{
+    return [10, 50, 150, 500];
+}
+
+/**
+ * Return a validated admin log page size.
+ */
+function admin_log_normalize_page_size(mixed $value): int
+{
+    // $pageSize stores the requested visible row count.
+    $pageSize = (int) $value;
+    return in_array($pageSize, admin_log_page_size_options(), true) ? $pageSize : 150;
+}
+
+/**
+ * Return a validated admin log page number.
+ */
+function admin_log_normalize_page_number(mixed $value): int
+{
+    return max(1, (int) $value);
+}
+
+/**
+ * Return whether similar admin log events should be grouped.
+ */
+function admin_log_grouping_enabled(mixed $value): bool
+{
+    return (string) $value !== '0';
+}
+
+/**
+ * Return the compact result count text used above the admin log table.
+ */
+function admin_log_result_count_text(int $shown, int $total, bool $grouped): string
+{
+    // $unit stores the visible item type so grouped counts are not confused with raw log rows.
+    $unit = $grouped
+        ? admin_log_english_t('admin.logs.grouped_rows', 'groups')
+        : admin_log_english_t('admin.logs.raw_rows', 'log rows');
+    return admin_log_english_t('admin.logs.result_count', '{shown} shown of {total} {unit}', [
+        'shown' => $shown,
+        'total' => $total,
+        'unit' => $unit,
+    ]);
+}
+
+/**
+ * Return the visible range text for the current admin log page.
+ */
+function admin_log_page_range_text(int $page, int $perPage, int $total): string
+{
+    if ($total <= 0) {
+        return admin_log_english_t('admin.logs.page_range_empty', 'No matching log rows.');
+    }
+    // $from stores the first one-based visible row number.
+    $from = (($page - 1) * $perPage) + 1;
+    // $to stores the last one-based visible row number.
+    $to = min($total, $from + $perPage - 1);
+    return admin_log_english_t('admin.logs.page_range', 'Showing {from}-{to} of {total}', [
+        'from' => $from,
+        'to' => $to,
+        'total' => $total,
+    ]);
+}
+
+/**
+ * Render admin log pagination controls.
+ */
+function render_admin_log_pagination(int $page, int $totalPages, int $total, int $perPage): string
+{
+    // $html stores the rendered pagination control.
+    $html = '<nav class="pagination admin-log-pagination" data-admin-log-pagination aria-label="' . e(admin_log_english_t('pagination.label', 'Pagination')) . '">';
+    $html .= '<span class="pagination-status">' . e(admin_log_page_range_text($page, $perPage, $total)) . '</span>';
+    if ($totalPages > 1) {
+        // $previousPage stores the bounded previous page number.
+        $previousPage = max(1, $page - 1);
+        // $nextPage stores the bounded next page number.
+        $nextPage = min($totalPages, $page + 1);
+        $html .= '<a class="pagination-link' . ($page <= 1 ? ' is-disabled' : '') . '" href="' . e(admin_log_filter_url(['log_page' => $previousPage])) . '" data-admin-log-page-link="' . $previousPage . '">' . e(admin_log_english_t('pagination.previous', 'Previous')) . '</a>';
+
+        // $pages stores a compact page-number window around the current page.
+        $pages = [1, $page - 1, $page, $page + 1, $totalPages];
+        $pages = array_values(array_unique(array_filter($pages, static fn (int $candidate): bool => $candidate >= 1 && $candidate <= $totalPages)));
+        sort($pages);
+        $lastPage = 0;
+        foreach ($pages as $pageNumber) {
+            if ($lastPage > 0 && $pageNumber > $lastPage + 1) {
+                $html .= '<span class="pagination-gap">...</span>';
+            }
+            if ($pageNumber === $page) {
+                $html .= '<span class="pagination-link is-current" aria-current="page">' . e((string) $pageNumber) . '</span>';
+            } else {
+                $html .= '<a class="pagination-link" href="' . e(admin_log_filter_url(['log_page' => $pageNumber])) . '" data-admin-log-page-link="' . $pageNumber . '">' . e((string) $pageNumber) . '</a>';
+            }
+            $lastPage = $pageNumber;
+        }
+
+        $html .= '<a class="pagination-link' . ($page >= $totalPages ? ' is-disabled' : '') . '" href="' . e(admin_log_filter_url(['log_page' => $nextPage])) . '" data-admin-log-page-link="' . $nextPage . '">' . e(admin_log_english_t('pagination.next', 'Next')) . '</a>';
+        $html .= '<span class="pagination-status">' . e(admin_log_english_t('pagination.status', 'Page {current} of {total}', ['current' => $page, 'total' => $totalPages])) . '</span>';
+    }
+    $html .= '</nav>';
+    return $html;
+}
+
+/**
  * Build the admin log URL while preserving active filters.
  */
 function admin_log_filter_url(array $overrides = []): string
 {
     // $params stores query parameters that should remain stable across filter and sort clicks.
     $params = [
-        'status' => (string) ($_GET['status'] ?? ''),
         'category' => (string) ($_GET['category'] ?? ''),
         'q' => trim((string) ($_GET['q'] ?? '')),
         'time_sort' => admin_log_normalize_time_sort((string) ($_GET['time_sort'] ?? 'desc')),
+        'per_page' => admin_log_normalize_page_size($_GET['per_page'] ?? 150),
+        'grouped' => admin_log_grouping_enabled($_GET['grouped'] ?? '1') ? '1' : '0',
+        'log_page' => admin_log_normalize_page_number($_GET['log_page'] ?? 1),
     ];
 
     // Preserve multi-select severities when building sort links. Legacy single severity links
@@ -309,16 +404,43 @@ function render_admin_log_table_rows(array $logs): string
             $decoded = json_decode((string) $entry['context_json'], true);
             $context = is_array($decoded) ? $decoded : [];
         }
+        // $groupCount stores how many raw log rows this visible row represents.
+        $groupCount = max(1, (int) ($entry['group_count'] ?? 1));
+        // $firstCreatedAt stores the first timestamp covered by this visible row.
+        $firstCreatedAt = (string) ($entry['first_created_at'] ?? $entry['created_at']);
+        // $latestCreatedAt stores the latest timestamp covered by this visible row.
+        $latestCreatedAt = (string) ($entry['latest_created_at'] ?? $entry['created_at']);
+        // $createdAtLabel stores the representative timestamp shown in the main table cell.
+        $createdAtLabel = (string) $entry['created_at'];
+        // $groupSelectionValue stores the submitted value used by bulk updates.
+        $groupSelectionValue = $groupCount > 1 && !empty($entry['group_hash'])
+            ? 'group:' . (string) $entry['group_hash']
+            : (string) ((int) $entry['id']);
+        // $groupMembers stores every raw log row contained inside this grouped summary.
+        $groupMembers = isset($entry['group_members']) && is_array($entry['group_members']) ? $entry['group_members'] : [];
         echo '<tr data-admin-log-row>';
-        echo '<td><input type="checkbox" name="log_ids[]" value="' . (int) $entry['id'] . '" form="admin-log-bulk-form"></td>';
-        echo '<td data-admin-log-created-at>' . e((string) $entry['created_at']) . '</td>';
-        echo '<td data-admin-log-state>' . e(admin_log_status_label((string) ($entry['status'] ?? 'todo'))) . '</td>';
+        echo '<td><input type="checkbox" name="log_ids[]" value="' . e($groupSelectionValue) . '" form="admin-log-bulk-form"></td>';
+        echo '<td data-admin-log-created-at>' . e($createdAtLabel);
+        if ($groupCount > 1 && $firstCreatedAt !== $latestCreatedAt) {
+            echo '<div class="muted">' . e($firstCreatedAt) . ' - ' . e($latestCreatedAt) . '</div>';
+        }
+        echo '</td>';
+        echo '<td><strong>' . e((string) $groupCount) . '</strong><div class="muted">' . e($groupCount === 1 ? admin_log_english_t('admin.logs.group_count_one', 'entry') : admin_log_english_t('admin.logs.group_count_many', 'entries')) . '</div></td>';
         echo '<td><span class="log-severity log-severity-' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '">' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</span></td>';
         echo '<td>' . e((string) ($entry['category'] ?? 'other')) . '</td>';
+        $exportParams = ['id' => (int) $entry['id']];
+        if ($groupCount > 1 && !empty($entry['group_hash'])) {
+            $exportParams['group'] = (string) $entry['group_hash'];
+        }
         echo '<td><details class="log-entry-details"><summary><code>' . e((string) $entry['event_key']) . '</code></summary>';
-        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e(url_for('admin_log_export', ['id' => (int) $entry['id']])) . '">' . e(admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT')) . '</a></div>';
+        echo '<div class="log-detail-actions"><a class="button secondary" href="' . e(url_for('admin_log_export', $exportParams)) . '">' . e(admin_log_english_t('admin.logs.save_details_txt', 'Save details as TXT')) . '</a></div>';
         echo '<dl class="log-detail-list">';
         echo '<dt>' . e(admin_log_english_t('admin.logs.log_id', 'Log ID')) . '</dt><dd>' . (int) $entry['id'] . '</dd>';
+        echo '<dt>' . e(admin_log_english_t('admin.logs.group_count', 'Grouped entries')) . '</dt><dd>' . e((string) $groupCount) . '</dd>';
+        if ($groupCount > 1) {
+            echo '<dt>' . e(admin_log_english_t('admin.logs.first_seen', 'First seen')) . '</dt><dd>' . e($firstCreatedAt) . '</dd>';
+            echo '<dt>' . e(admin_log_english_t('admin.logs.latest_seen', 'Latest seen')) . '</dt><dd>' . e($latestCreatedAt) . '</dd>';
+        }
         echo '<dt>' . e(admin_log_english_t('admin.logs.created_at', 'Created at')) . '</dt><dd>' . e((string) $entry['created_at']) . '</dd>';
         echo '<dt>' . e(admin_log_english_t('admin.logs.level', 'Level')) . '</dt><dd>' . e((string) ($entry['level'] ?? '')) . '</dd>';
         echo '<dt>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</dt><dd>' . e((string) ($entry['severity'] ?? $entry['level'] ?? 'info')) . '</dd>';
@@ -326,12 +448,41 @@ function render_admin_log_table_rows(array $logs): string
         echo '<dt>' . e(admin_log_english_t('admin.logs.route', 'Route')) . '</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
         echo '<dt>' . e(admin_log_english_t('admin.logs.request_id', 'Request ID')) . '</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
         echo '</dl>';
+        if ($groupCount > 1 && $groupMembers !== []) {
+            echo '<details class="log-context"><summary>' . e(admin_log_english_t('admin.logs.all_instances', 'All grouped instances')) . ' (' . e((string) count($groupMembers)) . ')</summary><pre>';
+            foreach ($groupMembers as $member) {
+                echo e((string) ($member['created_at'] ?? ''));
+                echo ' | #' . e((string) ($member['id'] ?? '0'));
+                echo ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
+                if (!empty($member['username'])) {
+                    echo ' | ' . e((string) $member['username']);
+                }
+                if (!empty($member['request_id'])) {
+                    echo ' | ' . e(admin_log_english_t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $member['request_id']);
+                }
+                if (!empty($member['route_name'])) {
+                    echo ' | ' . e((string) $member['route_name']);
+                }
+                if (!empty($member['message'])) {
+                    echo "\n  " . e((string) $member['message']);
+                }
+                $memberContext = admin_log_context_array($member);
+                if ($memberContext !== []) {
+                    echo "\n  " . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                }
+                echo "\n";
+            }
+            echo '</pre></details>';
+        }
         echo '<code>' . e((string) $entry['event_key']) . '</code>';
         if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
             echo '<div class="muted">' . e((string) ($entry['subject_type'] ?? '')) . ' #' . e((string) ($entry['subject_id'] ?? '')) . '</div>';
         }
         echo '</details></td>';
         echo '<td>' . e((string) $entry['message']);
+        if ($groupCount > 1) {
+            echo '<div class="muted">' . e(admin_log_english_t('admin.logs.grouped_row_note', 'Grouped row; showing one representative entry.')) . '</div>';
+        }
         if ($context) {
             echo '<details class="log-context"><summary>' . e(admin_log_english_t('admin.logs.details', 'Details')) . '</summary><pre>' . e(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre></details>';
         }
@@ -340,11 +491,6 @@ function render_admin_log_table_rows(array $logs): string
         }
         echo '</td>';
         echo '<td>' . e((string) ($entry['username'] ?? '')) . '</td>';
-        echo '<td><select name="status" data-admin-log-status-select data-log-id="' . (int) $entry['id'] . '" data-update-url="' . e(url_for('admin_log_update')) . '" data-csrf-token="' . e(csrf_token()) . '">';
-        foreach (admin_log_status_options() as $value => $label) {
-            echo '<option value="' . e($value) . '"' . ((string) ($entry['status'] ?? '') === $value ? ' selected' : '') . '>' . e($label) . '</option>';
-        }
-        echo '</select></td>';
         echo '</tr>';
     }
     return (string) ob_get_clean();
@@ -357,8 +503,8 @@ function render_admin_log_table_rows(array $logs): string
 function cms_admin_logs(): void
 {
     require_admin();
-    // $status stores the workflow status filter.
-    $status = isset($_GET['status']) ? (string) $_GET['status'] : null;
+    // $status remains available to the service layer but is intentionally hidden from the admin log UI.
+    $status = null;
     // $category stores the operational category filter.
     $category = isset($_GET['category']) ? (string) $_GET['category'] : '';
     // $selectedSeverities stores the persistent multi-select severity filter.
@@ -367,13 +513,36 @@ function cms_admin_logs(): void
     $query = trim((string) ($_GET['q'] ?? ''));
     // $timeSort stores the selected chronological order.
     $timeSort = admin_log_normalize_time_sort((string) ($_GET['time_sort'] ?? 'desc'));
-    // $logs stores the filtered admin log entries.
-    $logs = admin_log_list($status, 150, [
+    // $pageSize stores the requested number of visible rows per page.
+    $pageSize = admin_log_normalize_page_size($_GET['per_page'] ?? 150);
+    // $grouped stores whether repeated log events are collapsed before pagination.
+    $grouped = admin_log_grouping_enabled($_GET['grouped'] ?? '1');
+    // $currentPage stores the requested admin log pagination page.
+    $currentPage = admin_log_normalize_page_number($_GET['log_page'] ?? 1);
+    // $filters stores active filters shared by the count and list queries.
+    $filters = [
         'category' => $category,
         'severities' => $selectedSeverities,
         'q' => $query,
         'time_sort' => $timeSort,
-    ]);
+    ];
+    // $totalRows stores the filtered row count after optional grouping.
+    $totalRows = $grouped ? admin_log_grouped_count($status, $filters) : admin_log_count($status, $filters);
+    // $totalPages stores the bounded number of available pages.
+    $totalPages = max(1, (int) ceil($totalRows / $pageSize));
+    if ($currentPage > $totalPages) {
+        $currentPage = $totalPages;
+    }
+    // $offset stores the SQL offset for the current page.
+    $offset = ($currentPage - 1) * $pageSize;
+    // $logs stores the filtered admin log entries.
+    $logs = $grouped
+        ? admin_log_grouped_list($status, $pageSize, $filters, $offset)
+        : admin_log_list($status, $pageSize, $filters, $offset);
+    // $countText stores the compact result count shown in the page heading.
+    $countText = admin_log_result_count_text(count($logs), $totalRows, $grouped);
+    // $paginationHtml stores the current pagination controls for normal and live responses.
+    $paginationHtml = render_admin_log_pagination($currentPage, $totalPages, $totalRows, $pageSize);
 
     if ((string) ($_GET['ajax'] ?? '') === '1') {
         if (ob_get_level() > 0) {
@@ -384,6 +553,12 @@ function cms_admin_logs(): void
             'ok' => true,
             'rows_html' => render_admin_log_table_rows($logs),
             'count' => count($logs),
+            'total' => $totalRows,
+            'count_text' => $countText,
+            'pagination_html' => $paginationHtml,
+            'log_page' => $currentPage,
+            'per_page' => $pageSize,
+            'grouped' => $grouped ? 1 : 0,
             'time_sort' => $timeSort,
             'empty_html' => '<p>' . e(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p>',
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -391,27 +566,29 @@ function cms_admin_logs(): void
     }
 
     render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
-    echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, maintenance actions, and workflow states.')) . '</p><nav class="nav">';
+    echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
     echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a>';
     echo '</nav></section>';
 
-    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log without losing the selected severity state.')) . '</p></div><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
+    echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.')) . '</p></div><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
+    echo '<input type="hidden" name="log_page" value="' . (int) $currentPage . '" data-admin-log-page-input>';
     echo '<div class="admin-log-filter-main">';
     echo '<fieldset class="admin-log-filter-group"><legend>' . e(admin_log_english_t('admin.logs.filter_scope', 'Log scope')) . '</legend><div class="admin-log-control-grid">';
-    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.status', 'Status')) . '</span><select name="status" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_states', 'All states')) . '</option>';
-    foreach (admin_log_status_options() as $value => $label) {
-        echo '<option value="' . e($value) . '"' . ($status === $value ? ' selected' : '') . '>' . e($label) . '</option>';
-    }
-    echo '</select></label>';
     echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</span><select name="category" data-admin-log-live-filter><option value="">' . e(admin_log_english_t('admin.logs.all_categories', 'All categories')) . '</option>';
     foreach (admin_log_category_options() as $value => $label) {
         echo '<option value="' . e($value) . '"' . ($category === $value ? ' selected' : '') . '>' . e($label) . '</option>';
     }
     echo '</select></label>';
     echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.time_order', 'Time order')) . '</span><select name="time_sort" data-admin-log-live-filter><option value="desc"' . ($timeSort === 'desc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.newest_first', 'Newest first')) . '</option><option value="asc"' . ($timeSort === 'asc' ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.oldest_first', 'Oldest first')) . '</option></select></label>';
+    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.grouping', 'Grouping')) . '</span><select name="grouped" data-admin-log-live-filter><option value="1"' . ($grouped ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.group_similar', 'Group similar events')) . '</option><option value="0"' . (!$grouped ? ' selected' : '') . '>' . e(admin_log_english_t('admin.logs.show_individual', 'Show individual rows')) . '</option></select></label>';
+    echo '<label class="admin-log-filter-control"><span>' . e(admin_log_english_t('admin.logs.per_page', 'Rows per page')) . '</span><select name="per_page" data-admin-log-live-filter>';
+    foreach (admin_log_page_size_options() as $option) {
+        echo '<option value="' . (int) $option . '"' . ($pageSize === $option ? ' selected' : '') . '>' . (int) $option . '</option>';
+    }
+    echo '</select></label>';
     echo '</div></fieldset>';
     echo '<fieldset class="admin-log-severity-filter admin-log-filter-group" data-admin-log-severity-filter data-all-text="' . e(admin_log_english_t('admin.logs.severity_filter_all_summary', 'All severities are shown.')) . '" data-active-template="' . e(admin_log_english_t('admin.logs.severity_filter_active_summary', 'Active severities: {values}')) . '"><legend><span>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</span><span class="admin-log-severity-count">' . e((string) count($selectedSeverities)) . '</span></legend>';
     echo '<input type="hidden" name="severity_filter_submitted" value="1">';
@@ -428,19 +605,20 @@ function cms_admin_logs(): void
     echo '</div>';
     echo '</form></section>';
 
-    echo '<section class="panel" data-admin-log-results><h2>' . e(admin_log_english_t('admin.logs.entries', 'Entries')) . ' <span class="muted" data-admin-log-count>(' . count($logs) . ' ' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . ')</span></h2>';
+    echo '<section class="panel" data-admin-log-results><h2>' . e(admin_log_english_t('admin.logs.entries', 'Entries')) . ' <span class="muted" data-admin-log-count>(' . e($countText) . ')</span></h2>';
+    echo $paginationHtml;
     if (!$logs) {
         echo '<div data-admin-log-empty><p>' . e(admin_log_english_t('admin.logs.no_entries_match', 'No log entries match the current filters.')) . '</p></div>';
     }
     echo '<div class="admin-log-table-wrap">';
-    echo '<table class="admin-log-table"><thead><tr><th>' . e(admin_log_english_t('admin.logs.select', 'Select')) . '</th><th><a href="' . e(admin_log_filter_url(['time_sort' => $timeSort === 'desc' ? 'asc' : 'desc'])) . '" data-admin-log-time-sort-link data-next-sort="' . e($timeSort === 'desc' ? 'asc' : 'desc') . '">' . e(admin_log_english_t('admin.logs.when', 'When')) . ' ' . e($timeSort === 'desc' ? '↓' : '↑') . '</a></th><th>' . e(admin_log_english_t('admin.logs.state', 'State')) . '</th><th>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</th><th>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</th><th>' . e(admin_log_english_t('admin.logs.event', 'Event')) . '</th><th>' . e(admin_log_english_t('admin.logs.message', 'Message')) . '</th><th>' . e(admin_log_english_t('admin.logs.by', 'By')) . '</th><th>' . e(admin_log_english_t('admin.logs.set_state', 'Set state')) . '</th></tr></thead><tbody data-admin-log-tbody>';
+    echo '<table class="admin-log-table"><thead><tr><th>' . e(admin_log_english_t('admin.logs.select', 'Select')) . '</th><th><a href="' . e(admin_log_filter_url(['time_sort' => $timeSort === 'desc' ? 'asc' : 'desc', 'log_page' => 1])) . '" data-admin-log-time-sort-link data-next-sort="' . e($timeSort === 'desc' ? 'asc' : 'desc') . '">' . e(admin_log_english_t('admin.logs.when', 'When')) . ' ' . e($timeSort === 'desc' ? '↓' : '↑') . '</a></th><th>' . e(admin_log_english_t('admin.logs.instances', 'Instances')) . '</th><th>' . e(admin_log_english_t('admin.logs.severity', 'Severity')) . '</th><th>' . e(admin_log_english_t('admin.logs.category', 'Category')) . '</th><th>' . e(admin_log_english_t('admin.logs.event', 'Event')) . '</th><th>' . e(admin_log_english_t('admin.logs.message', 'Message')) . '</th><th>' . e(admin_log_english_t('admin.logs.by', 'By')) . '</th></tr></thead><tbody data-admin-log-tbody>';
     echo render_admin_log_table_rows($logs);
     echo '</tbody></table></div><form id="admin-log-bulk-form" method="post" action="' . e(url_for('admin_log_update')) . '">' . csrf_field();
     echo '<div class="bulk-row"><label>' . e(admin_log_english_t('admin.logs.bulk_set_selected', 'Bulk set selected')) . '<select name="status">';
     foreach (admin_log_status_options() as $value => $label) {
         echo '<option value="' . e($value) . '">' . e($label) . '</option>';
     }
-    echo '</select></label><button type="submit" name="action" value="bulk">' . e(admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected')) . '</button></div></form></section>';
+    echo '</select></label><button type="submit" name="action" value="bulk">' . e(admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected')) . '</button><span class="muted">' . e(admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.')) . '</span></div></form></section>';
     render_footer();
 }
 
@@ -487,12 +665,17 @@ function cms_admin_log_update(): void
         redirect_to(url_for('admin_logs'));
     }
     if ($action === 'bulk' && !empty($_POST['log_ids']) && is_array($_POST['log_ids'])) {
-        foreach (array_map('intval', $_POST['log_ids']) as $logId) {
+        foreach ($_POST['log_ids'] as $selectedValue) {
             try {
-                admin_log_update_status($logId, $status);
+                $selectedValue = trim((string) $selectedValue);
+                if (str_starts_with($selectedValue, 'group:')) {
+                    admin_log_update_group_status(substr($selectedValue, 6), $status);
+                    continue;
+                }
+                admin_log_update_status((int) $selectedValue, $status);
             } catch (RuntimeException $exception) {
                 admin_log_event('error', 'admin_log.bulk_update_failed', 'Bulk admin log status update failed.', [
-                    'log_id' => $logId,
+                    'log_id' => $selectedValue,
                     'status' => $status,
                     'error' => $exception->getMessage(),
                 ]);
@@ -513,6 +696,8 @@ function cms_admin_log_export(): void
     require_admin();
     // $logId stores the requested admin log identifier from the query string.
     $logId = max(0, (int) ($_GET['id'] ?? 0));
+    // $groupHash stores the optional grouped admin log hash from the query string.
+    $groupHash = trim((string) ($_GET['group'] ?? ''));
     if ($logId <= 0) {
         cms_not_found();
         return;
@@ -525,13 +710,22 @@ function cms_admin_log_export(): void
     }
     // $fileName stores a filesystem-safe diagnostic export name.
     $fileName = 'php-gallery-log-' . $logId . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
+    // $exportText stores the plain-text diagnostic response body.
+    $exportText = admin_log_export_text($entry);
+    if ($groupHash !== '') {
+        $groupMembers = admin_log_group_member_rows([$groupHash]);
+        if ($groupMembers !== []) {
+            $fileName = 'php-gallery-log-group-' . substr($groupHash, 0, 12) . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
+            $exportText = admin_log_export_group_text($entry, $groupMembers);
+        }
+    }
     if (ob_get_level() > 0) {
         ob_end_clean();
     }
     header('Content-Type: text/plain; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $fileName . '"');
     header('X-Content-Type-Options: nosniff');
-    echo admin_log_export_text($entry);
+    echo $exportText;
 }
 
 

@@ -98,6 +98,8 @@ export function setupAdminLogLiveFilters() {
     let emptyContainer = document.querySelector('[data-admin-log-empty]');
     // Variable `timeSortLink` stores this steps working value.
     const timeSortLink = document.querySelector('[data-admin-log-time-sort-link]');
+    // Variable `pageInput` stores the hidden pagination page controlled by live filters.
+    const pageInput = form.querySelector('[data-admin-log-page-input]');
     // Variable `searchInput` stores this steps working value.
     const searchInput = form.querySelector('[data-admin-log-live-search]');
     // Variable `debounceHandle` stores this steps working value.
@@ -118,6 +120,13 @@ export function setupAdminLogLiveFilters() {
     const setLiveState = (message) => {
         if (stateLabel) {
             stateLabel.textContent = message;
+        }
+    };
+
+    // Function `setPage` updates the hidden page input used by filtered requests.
+    const setPage = (page) => {
+        if (pageInput) {
+            pageInput.value = String(Math.max(1, Number(page) || 1));
         }
     };
 
@@ -203,13 +212,18 @@ export function setupAdminLogLiveFilters() {
             }
             tbody.innerHTML = result.rows_html || '';
             setupAdminLogStatusForms();
+            setPage(result.log_page || 1);
             if (countLabel) {
-                countLabel.textContent = `(${Number(result.count || 0)} ${liveText.shown})`;
+                countLabel.textContent = `(${result.count_text || `${Number(result.count || 0)} ${liveText.shown}`})`;
             }
             const noResults = Number(result.count || 0) === 0;
             const empty = ensureEmptyContainer();
             empty.innerHTML = noResults ? (result.empty_html || '<p>No log entries match the current filters.</p>') : '';
             empty.hidden = !noResults;
+            const pagination = document.querySelector('[data-admin-log-pagination]');
+            if (pagination && typeof result.pagination_html === 'string') {
+                pagination.outerHTML = result.pagination_html;
+            }
             if (timeSortLink) {
                 const currentSort = result.time_sort === 'asc' ? 'asc' : 'desc';
                 const nextSort = currentSort === 'desc' ? 'asc' : 'desc';
@@ -217,6 +231,7 @@ export function setupAdminLogLiveFilters() {
                 timeSortLink.textContent = `${liveText.when} ${currentSort === 'desc' ? '↓' : '↑'}`;
                 const linkUrl = new URL(buildUrl(false), window.location.href);
                 linkUrl.searchParams.set('time_sort', nextSort);
+                linkUrl.searchParams.set('log_page', '1');
                 timeSortLink.href = linkUrl.toString();
             }
             window.history.replaceState(null, '', buildUrl(false));
@@ -236,16 +251,21 @@ export function setupAdminLogLiveFilters() {
 
     form.querySelectorAll('[data-admin-log-live-filter]').forEach((control) => {
         control.addEventListener('change', () => {
+            setPage(1);
             updateSeveritySummary();
             refreshLogs();
         });
     });
     if (searchInput) {
-        searchInput.addEventListener('input', scheduleRefresh);
+        searchInput.addEventListener('input', () => {
+            setPage(1);
+            scheduleRefresh();
+        });
     }
     form.addEventListener('submit', (event) => {
         event.preventDefault();
         window.clearTimeout(debounceHandle);
+        setPage(1);
         refreshLogs();
     });
     if (timeSortLink) {
@@ -255,7 +275,20 @@ export function setupAdminLogLiveFilters() {
             if (sortControl) {
                 sortControl.value = timeSortLink.dataset.nextSort === 'asc' ? 'asc' : 'desc';
             }
+            setPage(1);
             refreshLogs();
         });
     }
+    document.addEventListener('click', (event) => {
+        const link = event.target.closest('[data-admin-log-page-link]');
+        if (!link || !document.querySelector('[data-admin-log-results]')?.contains(link)) {
+            return;
+        }
+        event.preventDefault();
+        if (link.classList.contains('is-disabled')) {
+            return;
+        }
+        setPage(link.dataset.adminLogPageLink || 1);
+        refreshLogs();
+    });
 }

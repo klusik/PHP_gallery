@@ -327,18 +327,10 @@ function admin_log_recent(int $limit = 12): array
 }
 
 /**
- * Handles admin log list logic for the gallery application.
- * @param mixed $status Input used by this operation.
- * @param mixed $limit Input used by this operation.
- * @return mixed Result produced by this operation.
+ * Return reusable SQL fragments for admin log list filters.
  */
-function admin_log_list(?string $status = null, int $limit = 100, array $filters = []): array
+function admin_log_filter_sql(?string $status = null, array $filters = []): array
 {
-    if (!admin_log_schema_ready()) {
-        return [];
-    }
-    // $sql stores the filtered admin log query.
-    $sql = 'SELECT l.*, u.username FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id';
     // $params stores query parameters matching the active filters.
     $params = [];
     // $where stores filter fragments that are combined after validation.
@@ -393,17 +385,214 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
         }
         $where[] = '(' . implode(' OR ', $searchColumns) . ')';
     }
-    if ($where) {
-        $sql .= ' WHERE ' . implode(' AND ', $where);
+
+    return [
+        'where_sql' => $where ? ' WHERE ' . implode(' AND ', $where) : '',
+        'params' => $params,
+    ];
+}
+
+/**
+ * Return the normalized SQL sort direction for admin log time ordering.
+ */
+function admin_log_time_sort_sql(array $filters): string
+{
+    return strtolower((string) ($filters['time_sort'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+}
+
+/**
+ * Return columns used for default grouped admin log rows.
+ */
+function admin_log_group_columns(): array
+{
+    // Grouping by event identity plus severity keeps high-volume progress logs compact
+    // without merging errors and informational events into the same row.
+    $columns = ['event_key', 'level'];
+    foreach (['category', 'severity'] as $optionalColumn) {
+        if (admin_log_column_exists($optionalColumn)) {
+            $columns[] = $optionalColumn;
+        }
     }
+    return $columns;
+}
+
+/**
+ * Return the SQL expression used to identify one grouped admin log bucket.
+ */
+function admin_log_group_hash_sql(string $tableAlias = 'l'): string
+{
+    // $parts stores stable text fragments for the grouped hash expression.
+    $parts = [];
+    foreach (admin_log_group_columns() as $column) {
+        $parts[] = 'COALESCE(' . $tableAlias . '.' . $column . ", '')";
+    }
+    return 'SHA2(CONCAT_WS(\'|\', ' . implode(', ', $parts) . '), 256)';
+}
+
+/**
+ * Handles admin log list logic for the gallery application.
+ * @param mixed $status Input used by this operation.
+ * @param mixed $limit Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function admin_log_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $filterSql stores reusable WHERE fragments and bound parameters.
+    $filterSql = admin_log_filter_sql($status, $filters);
+    // $sql stores the filtered admin log query.
+    $sql = 'SELECT l.*, u.username, 1 AS group_count, ' . admin_log_group_hash_sql('l') . ' AS group_hash, l.created_at AS first_created_at, l.created_at AS latest_created_at FROM admin_logs l LEFT JOIN users u ON u.id = l.user_id';
+    $sql .= $filterSql['where_sql'];
     // $timeSort stores the direction used for chronological sorting.
-    $timeSort = strtolower((string) ($filters['time_sort'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+    $timeSort = admin_log_time_sort_sql($filters);
     $idSort = $timeSort === 'ASC' ? 'ASC' : 'DESC';
-    $sql .= ' ORDER BY l.created_at ' . $timeSort . ', l.id ' . $idSort . ' LIMIT ' . max(1, min(300, $limit));
+    $sql .= ' ORDER BY l.created_at ' . $timeSort . ', l.id ' . $idSort . ' LIMIT ' . max(1, min(500, $limit)) . ' OFFSET ' . max(0, $offset);
     // $stmt stores the prepared filtered admin log query.
     $stmt = db()->prepare($sql);
-    $stmt->execute($params);
+    $stmt->execute($filterSql['params']);
     return $stmt->fetchAll();
+}
+
+/**
+ * Return the number of admin log rows matching the active filters.
+ */
+function admin_log_count(?string $status = null, array $filters = []): int
+{
+    if (!admin_log_schema_ready()) {
+        return 0;
+    }
+    // $filterSql stores reusable WHERE fragments and bound parameters.
+    $filterSql = admin_log_filter_sql($status, $filters);
+    // $stmt stores the filtered count query.
+    $stmt = db()->prepare('SELECT COUNT(*) FROM admin_logs l' . $filterSql['where_sql']);
+    $stmt->execute($filterSql['params']);
+    return max(0, (int) $stmt->fetchColumn());
+}
+
+/**
+ * Return grouped admin log rows matching the active filters.
+ */
+function admin_log_grouped_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
+{
+    if (!admin_log_schema_ready()) {
+        return [];
+    }
+    // $filterSql stores reusable WHERE fragments and bound parameters.
+    $filterSql = admin_log_filter_sql($status, $filters);
+    // $timeSort stores the direction used for chronological sorting.
+    $timeSort = admin_log_time_sort_sql($filters);
+    $idSort = $timeSort === 'ASC' ? 'ASC' : 'DESC';
+    // $groupBy stores safe column references used to collapse repeated operational events.
+    $groupBy = array_map(static fn (string $column): string => 'l.' . $column, admin_log_group_columns());
+    // $representativeIdSql stores the row id shown for the grouped entry.
+    $representativeIdSql = $timeSort === 'ASC' ? 'MIN(l.id)' : 'MAX(l.id)';
+    // $sortColumn stores the aggregate timestamp matching the selected chronological direction.
+    $sortColumn = $timeSort === 'ASC' ? 'grouped.first_created_at' : 'grouped.latest_created_at';
+    // $groupSql stores the grouped subquery so pagination applies after grouping.
+    $groupSql = 'SELECT ' . $representativeIdSql . ' AS representative_id, ' . admin_log_group_hash_sql('l') . ' AS group_hash, COUNT(*) AS group_count, MIN(l.created_at) AS first_created_at, MAX(l.created_at) AS latest_created_at FROM admin_logs l'
+        . $filterSql['where_sql']
+        . ' GROUP BY ' . implode(', ', $groupBy);
+    // $sql stores the grouped admin log query with the representative row joined back.
+    $sql = 'SELECT l.*, u.username, grouped.group_count, grouped.group_hash, grouped.first_created_at, grouped.latest_created_at FROM (' . $groupSql . ') grouped'
+        . ' INNER JOIN admin_logs l ON l.id = grouped.representative_id'
+        . ' LEFT JOIN users u ON u.id = l.user_id'
+        . ' ORDER BY ' . $sortColumn . ' ' . $timeSort . ', grouped.representative_id ' . $idSort
+        . ' LIMIT ' . max(1, min(500, $limit)) . ' OFFSET ' . max(0, $offset);
+    // $stmt stores the prepared grouped admin log query.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($filterSql['params']);
+    return admin_log_attach_group_members($stmt->fetchAll());
+}
+
+/**
+ * Return the number of grouped admin log rows matching the active filters.
+ */
+function admin_log_grouped_count(?string $status = null, array $filters = []): int
+{
+    if (!admin_log_schema_ready()) {
+        return 0;
+    }
+    // $filterSql stores reusable WHERE fragments and bound parameters.
+    $filterSql = admin_log_filter_sql($status, $filters);
+    // $groupBy stores safe column references used to collapse repeated operational events.
+    $groupBy = array_map(static fn (string $column): string => 'l.' . $column, admin_log_group_columns());
+    // $sql stores a grouped count query. The outer count measures visible grouped rows.
+    $sql = 'SELECT COUNT(*) FROM (SELECT 1 FROM admin_logs l' . $filterSql['where_sql'] . ' GROUP BY ' . implode(', ', $groupBy) . ') grouped_count';
+    // $stmt stores the prepared grouped count query.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($filterSql['params']);
+    return max(0, (int) $stmt->fetchColumn());
+}
+
+/**
+ * Return every log row that belongs to the requested grouped hashes.
+ */
+function admin_log_group_member_rows(array $groupHashes): array
+{
+    if ($groupHashes === [] || !admin_log_schema_ready()) {
+        return [];
+    }
+    // $normalizedHashes stores distinct non-empty hash values.
+    $normalizedHashes = [];
+    foreach ($groupHashes as $groupHash) {
+        $groupHash = trim((string) $groupHash);
+        if ($groupHash !== '') {
+            $normalizedHashes[$groupHash] = true;
+        }
+    }
+    if ($normalizedHashes === []) {
+        return [];
+    }
+    // $hashes stores the final ordered group hashes used by the query.
+    $hashes = array_keys($normalizedHashes);
+    // $hashSql stores the grouping expression repeated in the SELECT and WHERE clauses.
+    $hashSql = admin_log_group_hash_sql('l');
+    // $sql stores the grouped member fetch query for every visible grouped row.
+    $sql = 'SELECT l.*, u.username, ' . $hashSql . ' AS group_hash FROM admin_logs l'
+        . ' LEFT JOIN users u ON u.id = l.user_id'
+        . ' WHERE ' . $hashSql . ' IN (' . implode(', ', array_fill(0, count($hashes), '?')) . ')'
+        . ' ORDER BY l.created_at DESC, l.id DESC';
+    // $stmt stores the prepared grouped member query.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($hashes);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Attach grouped member rows to grouped summary entries.
+ */
+function admin_log_attach_group_members(array $logs): array
+{
+    // $groupHashes stores visible grouped hashes that need a member listing.
+    $groupHashes = [];
+    foreach ($logs as $entry) {
+        if ((int) ($entry['group_count'] ?? 1) > 1 && !empty($entry['group_hash'])) {
+            $groupHashes[] = (string) $entry['group_hash'];
+        }
+    }
+    if ($groupHashes === []) {
+        return $logs;
+    }
+    // $groupMembers stores fetched member rows bucketed by grouped hash.
+    $groupMembers = [];
+    foreach (admin_log_group_member_rows($groupHashes) as $member) {
+        $groupHash = (string) ($member['group_hash'] ?? '');
+        if ($groupHash === '') {
+            continue;
+        }
+        if (!isset($groupMembers[$groupHash])) {
+            $groupMembers[$groupHash] = [];
+        }
+        $groupMembers[$groupHash][] = $member;
+    }
+    foreach ($logs as &$entry) {
+        $groupHash = (string) ($entry['group_hash'] ?? '');
+        $entry['group_members'] = $groupMembers[$groupHash] ?? [];
+    }
+    unset($entry);
+    return $logs;
 }
 
 /**
@@ -668,12 +857,35 @@ function admin_log_export_text(array $entry): string
 }
 
 /**
+ * Build a plain-text diagnostic export for a grouped admin log summary.
+ */
+function admin_log_export_group_text(array $entry, array $groupMembers): string
+{
+    $groupCount = count($groupMembers);
+    $lines = [
+        admin_log_english_t('admin.logs.export.title', 'PHP Gallery admin log event'),
+        str_repeat('=', 60),
+        admin_log_english_t('admin.logs.export.event_key', 'Event key: {value}', ['value' => (string) ($entry['event_key'] ?? '')]),
+        admin_log_english_t('admin.logs.group_count', 'Grouped entries') . ': ' . $groupCount,
+        admin_log_english_t('admin.logs.first_seen', 'First seen') . ': ' . (string) ($entry['first_created_at'] ?? $entry['created_at'] ?? ''),
+        admin_log_english_t('admin.logs.latest_seen', 'Latest seen') . ': ' . (string) ($entry['latest_created_at'] ?? $entry['created_at'] ?? ''),
+        '',
+    ];
+
+    foreach ($groupMembers as $index => $member) {
+        $lines[] = '[' . ($index + 1) . '/' . $groupCount . ']';
+        $lines[] = admin_log_export_text($member);
+    }
+
+    return implode("\n", $lines) . "\n";
+}
+
+/**
  * Handles admin log update status logic for the gallery application.
- * @param mixed $logId Input used by this operation.
  * @param mixed $status Input used by this operation.
  * @return mixed Result produced by this operation.
  */
-function admin_log_update_status(int $logId, string $status): void
+function admin_log_update_status_where(string $whereSql, array $whereParams, string $status): int
 {
     // $statuses stores an intermediate value used by the surrounding gallery workflow.
     $statuses = admin_log_status_options();
@@ -686,12 +898,26 @@ function admin_log_update_status(int $logId, string $status): void
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     if ($status === 'done' && admin_log_column_exists('resolved_at')) {
         // $stmt stores the workflow status update query including the resolved timestamp.
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE id = ?');
-        $stmt->execute([$status, now_sql(), now_sql(), $logId]);
+        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ?, resolved_at = COALESCE(resolved_at, ?) WHERE ' . $whereSql);
+        $stmt->execute(array_merge([$status, now_sql(), now_sql()], $whereParams));
     } else {
         // $stmt stores the workflow status update query.
-        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE id = ?');
-        $stmt->execute([$status, now_sql(), $logId]);
+        $stmt = db()->prepare('UPDATE admin_logs SET status = ?, status_updated_at = ? WHERE ' . $whereSql);
+        $stmt->execute(array_merge([$status, now_sql()], $whereParams));
+    }
+    return (int) $stmt->rowCount();
+}
+
+/**
+ * Handles admin log update status logic for the gallery application.
+ * @param mixed $logId Input used by this operation.
+ * @param mixed $status Input used by this operation.
+ * @return mixed Result produced by this operation.
+ */
+function admin_log_update_status(int $logId, string $status): void
+{
+    if (admin_log_update_status_where('id = ?', [$logId], $status) <= 0) {
+        throw new RuntimeException('Admin log entry was not updated.');
     }
     // $check stores an intermediate value used by the surrounding gallery workflow.
     $check = db()->prepare('SELECT status FROM admin_logs WHERE id = ?');
@@ -699,4 +925,21 @@ function admin_log_update_status(int $logId, string $status): void
     if ($check->fetchColumn() !== $status) {
         throw new RuntimeException('Admin log entry was not updated.');
     }
+}
+
+/**
+ * Update every admin log row that belongs to one grouped hash.
+ */
+function admin_log_update_group_status(string $groupHash, string $status): int
+{
+    $groupHash = trim($groupHash);
+    if ($groupHash === '') {
+        throw new RuntimeException('Grouped admin log selection is invalid.');
+    }
+    $hashSql = admin_log_group_hash_sql('admin_logs');
+    $updatedRows = admin_log_update_status_where($hashSql . ' = ?', [$groupHash], $status);
+    if ($updatedRows <= 0) {
+        throw new RuntimeException('Grouped admin log rows were not updated.');
+    }
+    return $updatedRows;
 }
