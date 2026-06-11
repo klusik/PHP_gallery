@@ -404,13 +404,15 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     if (!$targets) {
         return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
     }
+    // $targetCount stores how many files this request still needs to create.
+    $targetCount = array_sum(array_map('count', $targets));
     if (!extension_loaded('gd')) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $targetCount, 'errors' => ['gd_extension_missing'], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
     }
     // Variable $source stores this steps working value.
     $source = image_create_from_path($sourcePath, (string) $info['mime']);
     if (!$source) {
-        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
+        return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $targetCount, 'errors' => ['source_decode_failed'], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
     }
     $source = thumbnail_apply_gd_exif_orientation($sourcePath, $source, $mime);
     // $workingWidth stores the real width after any EXIF orientation transform.
@@ -419,6 +421,10 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     $workingHeight = imagesy($source);
     // Variable $created stores this steps working value.
     $created = 0;
+    // $failed stores target variants that could not be written.
+    $failed = 0;
+    // $errors stores concise failure reasons for logs and Ajax diagnostics.
+    $errors = [];
     // $createdFiles stores generated thumbnail basenames for detailed warmup logging.
     $createdFiles = [];
     foreach ($targets as $size => $formatTargets) {
@@ -437,6 +443,8 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
                 if (function_exists('thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
                 }
+                $failed++;
+                $errors[] = 'jpg_write_failed';
             }
         }
         if (isset($formatTargets['webp'])) {
@@ -457,11 +465,13 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
                     thumbnail_metadata_delete_variant($image, (int) $size, 'webp');
                 }
                 $webpSkipped++;
+                $failed++;
+                $errors[] = 'webp_write_failed';
             }
         }
     }
     imagedestroy($source);
-    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
+    return ['created' => $created, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => $failed, 'errors' => array_values(array_unique($errors)), 'created_files' => $createdFiles, 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
 }
 
 /**

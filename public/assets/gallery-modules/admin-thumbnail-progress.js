@@ -41,15 +41,39 @@ import { experimentalThumbnailRebuildRequested, runExperimentalThumbnailRebuild 
  * @param {string} message Browser-visible status text.
  */
 function setCreateMissingThumbnailState(enabled, message) {
-    const button = document.querySelector('[data-create-missing-thumbnails]');
-    if (button instanceof HTMLButtonElement) {
-        button.disabled = !enabled;
-        button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-    }
-    const status = document.querySelector('[data-create-missing-thumbnails-status]');
-    if (status instanceof HTMLElement && message) {
-        status.textContent = message;
-    }
+    document.querySelectorAll('[data-create-missing-thumbnails]').forEach((button) => {
+        if (button instanceof HTMLButtonElement) {
+            button.disabled = !enabled;
+            button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        }
+    });
+    document.querySelectorAll('[data-create-missing-thumbnails-status]').forEach((status) => {
+        if (status instanceof HTMLElement && message) {
+            status.textContent = message;
+        }
+    });
+}
+
+/**
+ * Store the server-side repair queue token in every Create missing thumbnails form.
+ *
+ * @param {string} token Session repair token returned by the dry-check endpoint.
+ */
+function setCreateMissingThumbnailRepairToken(token) {
+    document.querySelectorAll('[data-create-missing-thumbnails]').forEach((button) => {
+        const form = button.closest('form');
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+        let input = form.querySelector('input[name="thumbnail_repair_token"]');
+        if (!(input instanceof HTMLInputElement)) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'thumbnail_repair_token';
+            form.append(input);
+        }
+        input.value = token || '';
+    });
 }
 
 /**
@@ -145,20 +169,21 @@ export function setupThumbnailProgress() {
             if (missingButton instanceof HTMLButtonElement && missingButton.disabled) {
                 return;
             }
-            if (experimentalThumbnailRebuildRequested(missingForm)) {
-                missingButton.disabled = true;
-                try {
-                    await runExperimentalThumbnailRebuild(missingForm, ensureThumbnailProgress(missingForm), {scope: 'missing'});
-                } finally {
-                    missingButton.disabled = false;
-                }
-                return;
-            }
-            missingButton.disabled = true;
+            await runThumbnailJob(missingForm, null, {scope: 'missing'});
+            return;
+        }
+        const maintenanceForm = button.closest('[data-thumbnail-maintenance-action-form]');
+        if (maintenanceForm instanceof HTMLFormElement) {
+            event.preventDefault();
+            button.disabled = true;
             try {
-                await runThumbnailJob(missingForm, null, {scope: 'missing'});
+                if (experimentalThumbnailRebuildRequested(maintenanceForm)) {
+                    await runExperimentalThumbnailRebuild(maintenanceForm, ensureThumbnailProgress(maintenanceForm), {scope: 'all'});
+                } else {
+                    await runThumbnailJob(maintenanceForm, null, {scope: 'all'});
+                }
             } finally {
-                missingButton.disabled = false;
+                button.disabled = false;
             }
             return;
         }
@@ -288,12 +313,14 @@ async function runThumbnailMaintenanceCheck(form) {
                     missingVariants,
                     i18n('admin.thumbnails.check_complete', 'Thumbnail check complete.')
                 );
+                setCreateMissingThumbnailRepairToken(result.repair_token || '');
                 setCreateMissingThumbnailState(affectedImages > 0, createMissingThumbnailStateMessage(affectedImages, missingVariants));
                 break;
             }
         }
     } catch (error) {
         updateThumbnailCheckProgress(progress, offset, total, 0, 0, i18n('admin.thumbnails.check_failed', 'Thumbnail check failed. Check the admin logs or PHP error log for details.'));
+        setCreateMissingThumbnailRepairToken('');
         setCreateMissingThumbnailState(false, i18n('admin.thumbnails.create_missing_requires_successful_check', 'Run Check missing thumbnails successfully before targeted repair is available.'));
     } finally {
         buttons.forEach((button) => {
@@ -461,6 +488,8 @@ async function runImportWithThumbnailProgress(form) {
         let created = 0;
         // skipped stores state or configuration for the gallery front-end flow.
         let skipped = 0;
+        // failed stores thumbnail variants that the server could not create.
+        let failed = 0;
         while (true) {
             // thumbBody stores state or configuration for the gallery front-end flow.
             const thumbBody = new FormData();
@@ -482,10 +511,14 @@ async function runImportWithThumbnailProgress(form) {
             }
             // result stores state or configuration for the gallery front-end flow.
             const result = await response.json();
+            if (result.ok === false) {
+                throw new Error(result.error || 'Thumbnail request failed.');
+            }
             total = result.total || 0;
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
+            failed += result.failed || 0;
             updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Imported ${importResult.imported || 0} galleries, scanned ${importResult.scanned || 0} images. Creating thumbnails...`);
             if (result.done) {
                 updateThumbnailProgress(progress, total, total, created, skipped, 'Import and thumbnail job complete.');
@@ -525,6 +558,10 @@ async function runThumbnailJob(form, submitter, options = {}) {
     let created = 0;
     // Variable `skipped` stores this steps working value.
     let skipped = 0;
+    // Variable `failed` stores thumbnail variants that the server could not create.
+    let failed = 0;
+    // Variable `missingStateAfterJob` stores the final targeted-repair button state after buttons are restored.
+    let missingStateAfterJob = null;
     const initialLabel = options.scope === 'metadata' ? 'Preparing thumbnail database refresh...' : 'Preparing thumbnails...';
     updateThumbnailProgress(progress, 0, 0, created, skipped, initialLabel);
     try {
@@ -551,10 +588,14 @@ async function runThumbnailJob(form, submitter, options = {}) {
             }
             // Variable `result` stores this steps working value.
             const result = await response.json();
+            if (result.ok === false) {
+                throw new Error(result.error || 'Thumbnail request failed.');
+            }
             total = result.total || 0;
             offset = result.next_offset || 0;
             created += result.created || 0;
             skipped += result.skipped || 0;
+            failed += result.failed || 0;
             const scopeLabel = options.scope === 'missing'
                 ? 'missing thumbnails'
                 : (options.scope === 'metadata' ? 'thumbnail database' : 'thumbnails');
@@ -563,29 +604,41 @@ async function runThumbnailJob(form, submitter, options = {}) {
             if (result.done) {
                 // finalLabel keeps empty targeted jobs readable instead of showing only 0/0 counters.
                 const finalLabel = options.scope === 'missing' && total === 0
-                    ? 'No missing or stale thumbnails found.'
+                    ? 'No server-side repair queue was available. Run Check missing thumbnails first, then run Create missing thumbnails again.'
                     : (options.scope === 'metadata' ? 'Thumbnail database refresh complete.' : 'Thumbnail job complete.');
                 updateThumbnailProgress(progress, total, total, created, skipped, finalLabel);
                 if (options.scope === 'missing') {
                     if (result.maintenance_after && (result.maintenance_after.images_with_missing || 0) <= 0) {
-                        const notice = form.closest('.admin-thumbnail-maintenance-notice');
-                        if (notice) {
+                        document.querySelectorAll('.admin-thumbnail-maintenance-notice').forEach((notice) => {
                             notice.remove();
-                        }
-                        setCreateMissingThumbnailState(false, i18n('admin.thumbnails.create_missing_none_after_repair', 'Targeted repair is complete. No missing or stale thumbnails remain in the latest maintenance state.'));
+                        });
+                        missingStateAfterJob = {
+                            enabled: false,
+                            message: i18n('admin.thumbnails.create_missing_none_after_repair', 'Targeted repair is complete. No missing or stale thumbnails remain in the latest maintenance state.')
+                        };
                     } else if (result.remaining_image_count > 0) {
-                        setCreateMissingThumbnailState(true, i18n('admin.thumbnails.create_missing_remaining_after_repair', 'Targeted repair completed, but some images still need attention. You can run Create missing thumbnails again.', {}));
+                        missingStateAfterJob = {
+                            enabled: true,
+                            message: i18n('admin.thumbnails.create_missing_remaining_after_repair', 'Targeted repair completed, but some images still need attention. You can run Create missing thumbnails again.', {})
+                        };
                     }
+                }
+                if (failed > 0) {
+                    updateThumbnailProgress(progress, total, total, created, skipped, `${finalLabel} ${failed} file(s) failed.`);
                 }
                 break;
             }
         }
     } catch (error) {
         const failedLabel = options.scope === 'metadata' ? 'Thumbnail database refresh failed.' : 'Thumbnail job failed.';
-        updateThumbnailProgress(progress, offset, total, created, skipped, failedLabel);
+        const detail = error instanceof Error && error.message ? ` ${error.message}` : '';
+        updateThumbnailProgress(progress, offset, total, created, skipped, `${failedLabel}${detail}`);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
         });
+        if (missingStateAfterJob) {
+            setCreateMissingThumbnailState(missingStateAfterJob.enabled, missingStateAfterJob.message);
+        }
     }
 }

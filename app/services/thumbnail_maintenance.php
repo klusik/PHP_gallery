@@ -350,6 +350,33 @@ function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxI
 }
 
 /**
+ * Build a dry thumbnail maintenance report for a known image ID list.
+ *
+ * Targeted server-side repair uses this helper after generation so it can report
+ * whether the selected images are fixed without rescanning the whole library.
+ *
+ * @param array $imageIds Image IDs to inspect.
+ * @return array<string mixed> Structured report for the selected images.
+ */
+function thumbnail_maintenance_check_report_for_image_ids(array $imageIds): array
+{
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        return thumbnail_maintenance_empty_check_report(null);
+    }
+
+    // $placeholders stores bound parameters for the selected image list.
+    $placeholders = implode(',', array_fill(0, count($imageIds), '?'));
+    // $stmt stores selected direct image rows with parent gallery data for grouping.
+    $stmt = db()->prepare("SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.id IN ($placeholders) AND i.relative_path NOT LIKE '%/%' ORDER BY g.folder_path, i.sort_order, i.filename");
+    $stmt->execute($imageIds);
+    // $rows stores only the image rows selected by the completed repair job.
+    $rows = $stmt->fetchAll();
+
+    return thumbnail_maintenance_check_report_from_rows($rows, null, false);
+}
+
+/**
  * Build one dry-run thumbnail report from already selected image rows.
  *
  * @param array $rows Rows to process.
@@ -372,6 +399,8 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
     $invalidGeometryDetected = 0;
     // $affectedGalleries stores grouped dry-run findings by gallery id.
     $affectedGalleries = [];
+    // $affectedImageIds stores exact image ids from this dry check for later targeted repair.
+    $affectedImageIds = [];
 
     foreach ($rows as $image) {
         // $galleryId stores the current image gallery identifier.
@@ -394,6 +423,10 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
 
         $imagesWithMissing++;
         $missingVariants += $missing;
+        $imageId = (int) ($image['id'] ?? 0);
+        if ($imageId > 0) {
+            $affectedImageIds[] = $imageId;
+        }
         if (!isset($affectedGalleries[$galleryId])) {
             $affectedGalleries[$galleryId] = [
                 'id' => $galleryId,
@@ -426,6 +459,8 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
         'affected_gallery_count' => count($affectedGalleries),
         'affected_galleries' => array_values($affectedGalleries),
         'affected_galleries_truncated' => false,
+        'affected_image_ids' => array_values(array_unique($affectedImageIds)),
+        'affected_image_ids_truncated' => false,
         'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
 
@@ -543,6 +578,17 @@ function thumbnail_maintenance_merge_check_reports(array $base, array $addition)
     $base['affected_gallery_count'] = count($galleriesById);
     $base['affected_galleries_truncated'] = false;
 
+    // $affectedImageIds stores an exact repair list while keeping app_settings payloads bounded.
+    $affectedImageIds = array_values(array_unique(array_filter(array_map('intval', array_merge(
+        (array) ($base['affected_image_ids'] ?? []),
+        (array) ($addition['affected_image_ids'] ?? [])
+    )), static fn (int $id): bool => $id > 0)));
+    $affectedImageLimit = 2000;
+    $base['affected_image_ids_truncated'] = !empty($base['affected_image_ids_truncated'])
+        || !empty($addition['affected_image_ids_truncated'])
+        || count($affectedImageIds) > $affectedImageLimit;
+    $base['affected_image_ids'] = array_slice($affectedImageIds, 0, $affectedImageLimit);
+
     return $base;
 }
 
@@ -557,10 +603,14 @@ function thumbnail_maintenance_finalize_check_report(array $report): array
     $affectedGalleryRows = array_values(array_filter((array) ($report['affected_galleries'] ?? []), static fn ($row): bool => is_array($row)));
     $affectedGalleryCount = count($affectedGalleryRows);
     $storedGalleryLimit = 50;
+    $affectedImageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($report['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    $storedImageLimit = 2000;
 
     $report['affected_gallery_count'] = $affectedGalleryCount;
     $report['affected_galleries'] = array_slice($affectedGalleryRows, 0, $storedGalleryLimit);
     $report['affected_galleries_truncated'] = $affectedGalleryCount > $storedGalleryLimit;
+    $report['affected_image_ids'] = array_slice($affectedImageIds, 0, $storedImageLimit);
+    $report['affected_image_ids_truncated'] = !empty($report['affected_image_ids_truncated']) || count($affectedImageIds) > $storedImageLimit;
 
     return $report;
 }
@@ -584,6 +634,8 @@ function thumbnail_maintenance_empty_check_report(?array $galleryIds = null): ar
         'affected_gallery_count' => 0,
         'affected_galleries' => [],
         'affected_galleries_truncated' => false,
+        'affected_image_ids' => [],
+        'affected_image_ids_truncated' => false,
         'inventory_fingerprint' => thumbnail_inventory_fingerprint($galleryIds),
     ];
 }
@@ -627,6 +679,47 @@ function thumbnail_maintenance_last_check(): array
     }
 
     return $report;
+}
+
+/**
+ * Return exact image ids from the latest full dry check when they are safe to reuse.
+ *
+ * @param ?array $galleryIds Optional gallery scope for targeted repair.
+ * @return array<int int>.
+ */
+function thumbnail_maintenance_last_check_image_ids(?array $galleryIds = null): array
+{
+    $report = thumbnail_maintenance_last_check();
+    if (!$report || !empty($report['affected_image_ids_truncated'])) {
+        return [];
+    }
+
+    // $imageIds stores the exact dry-check repair list saved with the current inventory fingerprint.
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($report['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        return [];
+    }
+
+    if ($galleryIds === null) {
+        return $imageIds;
+    }
+
+    // $galleryIds stores a normalized optional subset for future scoped maintenance controls.
+    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if (!$galleryIds) {
+        return [];
+    }
+
+    // $filteredIds stores only saved findings that still belong to the requested gallery subset.
+    $filteredIds = [];
+    foreach ($imageIds as $imageId) {
+        $image = find_image($imageId);
+        if ($image && in_array((int) ($image['gallery_id'] ?? 0), $galleryIds, true)) {
+            $filteredIds[] = $imageId;
+        }
+    }
+
+    return $filteredIds;
 }
 
 /**

@@ -517,8 +517,6 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
     echo '</form>';
 
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
     $experimentalRebuildConfig = function_exists('experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
     $experimentalRebuildJson = json_encode($experimentalRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($experimentalRebuildJson)) {
@@ -533,9 +531,15 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
             ? t('admin.thumbnails.create_missing_ready_hint', 'Targeted repair is ready. Use Create missing thumbnails to process only the images reported by the last full check.')
             : t('admin.thumbnails.create_missing_none_hint', 'The last full check found no missing or stale thumbnails. Run Check missing thumbnails again after importing or changing files.'))
         : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
+
+    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<label class="admin-compact-toggle experimental-thumbnail-rebuild-toggle"><input type="checkbox" name="experimental_thumbnail_rebuild" value="1" data-experimental-thumbnail-rebuild-toggle data-experimental-thumbnail-rebuild-config="' . e($experimentalRebuildJson) . '"' . ($experimentalRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.experimental_rebuild_label', 'Experimental browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.experimental_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div>';
+    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button></div>';
     echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
+
+    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
+    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
+    echo '<div class="nav"><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
     echo '</article>';
 }
 
