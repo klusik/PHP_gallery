@@ -133,13 +133,18 @@ function admin_gallery_discovery_controller_payload(array $state): array
     $processed = (int) ($state['processed_directories'] ?? 0);
     $total = (int) ($state['discovered_directories'] ?? 0);
     $candidateCount = (int) ($state['candidate_count'] ?? 0);
+    $metadataOnlyCount = (int) ($state['metadata_only_count'] ?? 0);
     $message = (string) ($state['message'] ?? '');
 
     if ($message === '') {
         if ($status === 'complete') {
-            $message = $candidateCount > 0
-                ? t('admin.galleries.discovery_done_with_candidates', 'Discovery complete. Found {count} new folder(s).', ['count' => (string) $candidateCount])
-                : t('admin.galleries.discover_none_found');
+            if ($candidateCount > 0) {
+                $message = t('admin.galleries.discovery_done_with_candidates', 'Discovery complete. Found {count} folder(s) that need a decision.', ['count' => (string) $candidateCount]);
+            } elseif ($metadataOnlyCount > 0) {
+                $message = t('admin.galleries.discovery_done_metadata_only', 'Discovery complete. No importable photo folders found. Ignored {count} metadata-only folder(s).', ['count' => (string) $metadataOnlyCount]);
+            } else {
+                $message = t('admin.galleries.discover_none_found');
+            }
         } elseif ($status === 'missing') {
             $message = t('admin.galleries.discovery_missing_job', 'Discovery progress expired. Start the scan again.');
         } elseif ($status === 'error') {
@@ -158,6 +163,7 @@ function admin_gallery_discovery_controller_payload(array $state): array
         'discovered_directories' => $total,
         'queued_directories' => (int) ($state['queued_directories'] ?? 0),
         'candidate_count' => $candidateCount,
+        'metadata_only_count' => $metadataOnlyCount,
         'percent' => (float) ($state['percent'] ?? 0.0),
         'message' => $message,
         'result_url' => url_for('admin_discover', ['job_token' => (string) ($state['job_token'] ?? '')]),
@@ -192,6 +198,7 @@ function render_admin_gallery_discovery_shell(string $jobToken = ''): void
     echo '<section class="panel admin-discovery-panel" data-admin-discovery-panel data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-import-url="' . e(url_for('admin_import')) . '" data-csrf-token="' . e(csrf_token()) . '" data-job-token="' . e($jobToken) . '">';
     echo '<p class="muted">' . e(t('admin.galleries.discovery_intro', 'Discovery now runs in browser-driven batches, so large gallery folders no longer freeze the Admin page.')) . '</p>';
     echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status>' . e(t('admin.galleries.discovery_starting', 'Preparing gallery discovery...')) . '</p><p class="muted" data-admin-discovery-counts></p></div>';
+    echo '<template data-admin-gallery-move-options><option value="">' . e(t('admin.galleries.discover_move_target_placeholder', 'Choose existing destination gallery')) . '</option>' . gallery_options_for_select(0) . '</template>';
     echo '<div data-admin-discovery-results></div>';
     echo '</section>';
 }
@@ -203,17 +210,95 @@ function cms_admin_import(): void
 {
     require_admin();
     verify_csrf();
-    if (!empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
-        // Variable $result stores this steps working value.
-        $result = import_galleries_without_thumbnails($_POST['folders'] ?? []);
-        header('Content-Type: application/json');
-        echo json_encode($result);
+
+    // $action stores the requested discovery follow-up operation from the dynamic table.
+    $action = (string) ($_POST['discovery_action'] ?? 'import_in_place');
+    // $wantsJson stores whether the browser-side thumbnail job expects a JSON result.
+    $wantsJson = !empty($_POST['ajax']) || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
+
+    if ($wantsJson) {
+        // $result stores the selected discovery action result returned to JavaScript.
+        $result = admin_gallery_discovery_import_action_result($action, $_POST, false);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         return;
     }
-    // Variable $result stores this steps working value.
-    $result = import_galleries($_POST['folders'] ?? [], !empty($_POST['create_thumbnails']));
-    flash_message('admin_notice', t('admin.galleries.import_result', 'Imported {galleries} gallery folder(s) and created {thumbnails} thumbnail(s).', ['galleries' => (int) ($result['imported'] ?? 0), 'thumbnails' => (int) ($result['thumbnails'] ?? 0)]));
+
+    // $result stores the selected discovery action result displayed after redirect.
+    $result = admin_gallery_discovery_import_action_result($action, $_POST, !empty($_POST['create_thumbnails']));
+    admin_gallery_discovery_flash_action_result($result);
     redirect_to(url_for('admin'));
+}
+
+/**
+ * Execute the selected discovery follow-up action.
+ *
+ * @param string $action Posted discovery action name.
+ * @param array<string, mixed> $post Posted form data.
+ * @param bool $createThumbnails Create thumbnails during the synchronous non-Ajax import path.
+ * @return array<string, mixed> Action result for flash messages or JSON.
+ */
+function admin_gallery_discovery_import_action_result(string $action, array $post, bool $createThumbnails): array
+{
+    // $folders stores selected discovered folder paths from the browser table.
+    $folders = is_array($post['folders'] ?? null) ? $post['folders'] : [];
+
+    if ($action === 'delete_from_disk') {
+        return admin_gallery_discovery_delete_requested_paths($folders);
+    }
+
+    if ($action === 'move_photos') {
+        return admin_gallery_discovery_move_requested_photos($folders, (int) ($post['target_gallery_id'] ?? 0));
+    }
+
+    // $result stores the legacy in-place import result.
+    $result = $createThumbnails
+        ? import_galleries($folders, true)
+        : import_galleries_without_thumbnails($folders);
+    $result['ok'] = true;
+    $result['action'] = 'import_in_place';
+    if (!isset($result['gallery_ids'])) {
+        $result['gallery_ids'] = [];
+    }
+    return $result;
+}
+
+/**
+ * Store a human-readable flash message for a discovery follow-up action.
+ *
+ * @param array<string, mixed> $result Action result returned by the service layer.
+ */
+function admin_gallery_discovery_flash_action_result(array $result): void
+{
+    if (empty($result['ok']) && !empty($result['error'])) {
+        flash_message('admin_notice', (string) $result['error']);
+        return;
+    }
+
+    $action = (string) ($result['action'] ?? 'import_in_place');
+    if ($action === 'delete_from_disk') {
+        flash_message('admin_notice', t('admin.galleries.discover_delete_result', 'Deleted {folders} folder(s) and {files} file(s) from disk. Skipped {skipped} item(s).', [
+            'folders' => (string) (int) ($result['deleted_folders'] ?? 0),
+            'files' => (string) (int) ($result['deleted_files'] ?? 0),
+            'skipped' => (string) (int) ($result['skipped'] ?? 0),
+        ]));
+        return;
+    }
+
+    if ($action === 'move_photos') {
+        flash_message('admin_notice', t('admin.galleries.discover_move_result', 'Moved {moved} photo file(s), scanned {images} image(s) into the destination gallery, and removed {folders} empty source folder(s).', [
+            'moved' => (string) (int) ($result['moved'] ?? 0),
+            'images' => (string) (int) ($result['scanned'] ?? 0),
+            'folders' => (string) (int) ($result['source_folders_cleaned'] ?? 0),
+        ]));
+        return;
+    }
+
+    flash_message('admin_notice', t('admin.galleries.import_result', 'Imported {galleries} gallery folder(s), scanned {images} image(s), and created {thumbnails} thumbnail(s).', [
+        'galleries' => (string) (int) ($result['imported'] ?? 0),
+        'images' => (string) (int) ($result['scanned'] ?? 0),
+        'thumbnails' => (string) (int) ($result['thumbnails'] ?? 0),
+    ]));
 }
 
 /**

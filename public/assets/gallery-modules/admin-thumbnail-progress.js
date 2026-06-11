@@ -240,10 +240,11 @@ export function setupThumbnailProgress() {
     document.addEventListener('submit', (event) => {
         // form stores state or configuration for the gallery front-end flow.
         const form = event.target;
-        if (!(form instanceof HTMLFormElement) || !form.matches('[data-import-galleries-form]')) {
+        if (event.defaultPrevented || !(form instanceof HTMLFormElement) || !form.matches('[data-import-galleries-form]')) {
             return;
         }
-        if (!form.querySelector('input[name="create_thumbnails"]')?.checked) {
+        const discoveryAction = String(form.querySelector('input[name="discovery_action"]:checked')?.value || 'import_in_place');
+        if (discoveryAction === 'delete_from_disk' || !form.querySelector('input[name="create_thumbnails"]')?.checked) {
             return;
         }
         event.preventDefault();
@@ -473,10 +474,14 @@ async function runImportWithThumbnailProgress(form) {
         }
         // importResult stores state or configuration for the gallery front-end flow.
         const importResult = await importResponse.json();
+        if (importResult.ok === false) {
+            throw new Error(importResult.error || importResult.message || 'Import request failed.');
+        }
         // galleryIds stores state or configuration for the gallery front-end flow.
         const galleryIds = Array.isArray(importResult.gallery_ids) ? importResult.gallery_ids : [];
-        if (galleryIds.length === 0) {
-            updateThumbnailProgress(progress, 0, 0, 0, 0, `Import complete. ${importResult.imported || 0} galleries imported, ${importResult.scanned || 0} images scanned.`);
+        const scannedImages = Number(importResult.scanned || 0);
+        if (galleryIds.length === 0 || scannedImages <= 0) {
+            updateThumbnailProgress(progress, 0, 0, 0, 0, discoveryImportFinishedMessage(importResult));
             window.location.href = adminUrlWithParams({imported: importResult.imported || 0, scanned: importResult.scanned || 0, thumbnails: 0});
             return;
         }
@@ -519,7 +524,7 @@ async function runImportWithThumbnailProgress(form) {
             created += result.created || 0;
             skipped += result.skipped || 0;
             failed += result.failed || 0;
-            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, `Imported ${importResult.imported || 0} galleries, scanned ${importResult.scanned || 0} images. Creating thumbnails...`);
+            updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, discoveryThumbnailRunningMessage(importResult));
             if (result.done) {
                 updateThumbnailProgress(progress, total, total, created, skipped, 'Import and thumbnail job complete.');
                 window.location.href = adminUrlWithParams({imported: importResult.imported || 0, scanned: importResult.scanned || 0, thumbnails: created});
@@ -527,12 +532,56 @@ async function runImportWithThumbnailProgress(form) {
             }
         }
     } catch (error) {
-        updateThumbnailProgress(progress, 0, 0, 0, 0, 'Import or thumbnail job failed.');
+        const message = error instanceof Error && error.message
+            ? error.message
+            : i18n('admin.galleries.discover_import_or_thumbnail_failed', 'Import or thumbnail job failed.');
+        updateThumbnailProgress(progress, 0, 0, 0, 0, message);
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
         });
     }
+}
+
+
+/**
+ * Return a completed import or move message for a no-thumbnail-needed workflow.
+ *
+ * @param {Object<string, *>} result Import or move result returned by the server.
+ * @return {string} Browser-visible completion message.
+ */
+function discoveryImportFinishedMessage(result) {
+    if (String(result?.action || '') === 'move_photos') {
+        return i18n('admin.galleries.discover_move_ajax_complete', 'Move complete. Moved {moved} photo file(s) and scanned {scanned} image(s).', {
+            moved: Number(result?.moved || 0),
+            scanned: Number(result?.scanned || 0),
+        });
+    }
+
+    return i18n('admin.galleries.discover_import_ajax_complete', 'Import complete. Imported {imported} gallery folder(s) and scanned {scanned} image(s).', {
+        imported: Number(result?.imported || 0),
+        scanned: Number(result?.scanned || 0),
+    });
+}
+
+/**
+ * Return the thumbnail-progress label after import or move scanning.
+ *
+ * @param {Object<string, *>} result Import or move result returned by the server.
+ * @return {string} Browser-visible progress message.
+ */
+function discoveryThumbnailRunningMessage(result) {
+    if (String(result?.action || '') === 'move_photos') {
+        return i18n('admin.galleries.discover_move_thumbnail_running', 'Moved {moved} photo file(s), scanned {scanned} image(s). Creating thumbnails...', {
+            moved: Number(result?.moved || 0),
+            scanned: Number(result?.scanned || 0),
+        });
+    }
+
+    return i18n('admin.galleries.discover_import_thumbnail_running', 'Imported {imported} gallery folder(s), scanned {scanned} image(s). Creating thumbnails...', {
+        imported: Number(result?.imported || 0),
+        scanned: Number(result?.scanned || 0),
+    });
 }
 
 /**

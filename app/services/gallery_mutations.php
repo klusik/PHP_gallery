@@ -1039,7 +1039,7 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
             $thumbs += create_gallery_thumbnails($galleryId);
         }
     }
-    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs];
+    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs, 'gallery_ids' => $importedIds];
 }
 
 /**

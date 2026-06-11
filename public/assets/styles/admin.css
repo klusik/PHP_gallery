@@ -5249,3 +5249,25 @@ button.gallery-row-action.secondary {
         grid-template-columns: 1fr;
     }
 }
+
+.admin-discovery-actions,
+.admin-discovery-move-target {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0.8rem 0;
+}
+
+.admin-discovery-actions label,
+.admin-discovery-move-target label {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-discovery-move-target select {
+    min-width: min(100%, 32rem);
+}
+
+.admin-discovery-panel tr.warning td {
+    background: color-mix(in srgb, var(--warning, #f5a623) 12%, transparent);
+}
