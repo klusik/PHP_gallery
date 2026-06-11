@@ -49,6 +49,8 @@ require __DIR__ . '/controllers.php';
 
 /**
  * Return the expected application config path.
+ *
+ * @return string Text result for the caller.
  */
 function cms_config_path(): string
 {
@@ -57,6 +59,8 @@ function cms_config_path(): string
 
 /**
  * Return true when the application has a real local configuration file.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_has_config(): bool
 {
@@ -89,6 +93,8 @@ function cms_redirect_to_installer(): void
  * Production installs should provide config.php. The example config remains a
  * fallback for manual tooling, while browser requests without config.php are
  * redirected to the one-time installer before this function is called.
+ *
+ * @return array Structured result data for the caller.
  */
 function cms_config(): array
 {
@@ -285,6 +291,8 @@ function cms_run(): void
  *
  * Query-string routes remain compatible. Pretty URLs are a convenience layer
  * when Apache rewrite rules are available.
+ *
+ * @return array Structured result data for the caller.
  */
 function cms_route_from_request(): array
 {

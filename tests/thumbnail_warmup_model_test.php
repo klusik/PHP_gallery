@@ -38,6 +38,9 @@ require __DIR__ . '/../app/bootstrap.php';
 
 /**
  * Assert a condition and stop the script with a readable message when it fails.
+ *
+ * @param bool $condition Condition value.
+ * @param string $message Message value.
  */
 function thumbnail_warmup_test_assert(bool $condition, string $message): void
 {

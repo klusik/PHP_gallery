@@ -43,7 +43,7 @@ const THUMBNAIL_COMPATIBILITY_LEGACY = 'legacy';
 /**
  * Return supported thumbnail compatibility modes.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function thumbnail_compatibility_modes(): array
 {
@@ -52,6 +52,9 @@ function thumbnail_compatibility_modes(): array
 
 /**
  * Normalize a submitted thumbnail compatibility mode.
+ *
+ * @param ?string $mode Mode value.
+ * @return string Text result for the caller.
  */
 function thumbnail_compatibility_mode_normalize(?string $mode): string
 {
@@ -61,6 +64,8 @@ function thumbnail_compatibility_mode_normalize(?string $mode): string
 
 /**
  * Return the configured thumbnail compatibility mode.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_compatibility_mode(): string
 {
@@ -70,6 +75,8 @@ function thumbnail_compatibility_mode(): string
 
 /**
  * Persist the thumbnail compatibility mode.
+ *
+ * @param string $mode Mode value.
  */
 function set_thumbnail_compatibility_mode(string $mode): void
 {
@@ -81,6 +88,8 @@ function set_thumbnail_compatibility_mode(string $mode): void
 
 /**
  * Return true when new thumbnails should avoid legacy JPEG variants where WebP can be generated safely.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_compatibility_modern_enabled(): bool
 {
@@ -89,6 +98,8 @@ function thumbnail_compatibility_modern_enabled(): bool
 
 /**
  * Return the preferred browser thumbnail format for fallback image URLs.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_preferred_browser_format(): string
 {
@@ -97,6 +108,9 @@ function thumbnail_preferred_browser_format(): string
 
 /**
  * Return a stable machine-readable label for the active thumbnail output policy.
+ *
+ * @param ?string $mode Mode value.
+ * @return string Text result for the caller.
  */
 function thumbnail_compatibility_mode_log_value(?string $mode = null): string
 {
@@ -111,7 +125,8 @@ function thumbnail_compatibility_mode_log_value(?string $mode = null): string
  * the concrete target formats for one source image, but modern mode must never
  * silently ask the generator to create JPEG thumbnails.
  *
- * @return array<int, string>
+ * @param ?string $mode Mode value.
+ * @return array<int string>.
  */
 function thumbnail_policy_requested_formats(?string $mode = null): array
 {
@@ -121,6 +136,9 @@ function thumbnail_policy_requested_formats(?string $mode = null): array
 
 /**
  * Return a readable label for one compatibility mode.
+ *
+ * @param string $mode Mode value.
+ * @return string Text result for the caller.
  */
 function thumbnail_compatibility_mode_label(string $mode): string
 {
@@ -133,6 +151,10 @@ function thumbnail_compatibility_mode_label(string $mode): string
 
 /**
  * Return whether a WebP thumbnail can be written for the current source.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_source_webp_available_for_policy(string $sourcePath, string $mime): bool
 {
@@ -146,7 +168,10 @@ function thumbnail_source_webp_available_for_policy(string $sourcePath, string $
  * WebP safely for one source, the caller receives no writable target format
  * instead of silently creating legacy JPEG thumbnails.
  *
- * @return array<int, string>
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @param bool $webpAvailable Webp available value.
+ * @return array<int string>.
  */
 function thumbnail_formats_for_compatibility_policy(string $sourcePath, string $mime, bool $webpAvailable): array
 {
@@ -170,6 +195,8 @@ function thumbnail_formats_for_compatibility_policy(string $sourcePath, string $
 
 /**
  * Return the number of JPEG thumbnail derivatives that may exist for one image.
+ *
+ * @return int Integer result for the caller.
  */
 function thumbnail_legacy_jpg_variant_count(): int
 {
@@ -178,6 +205,9 @@ function thumbnail_legacy_jpg_variant_count(): int
 
 /**
  * Format deleted thumbnail bytes for admin notices.
+ *
+ * @param int $bytes Bytes value.
+ * @return string Text result for the caller.
  */
 function thumbnail_compatibility_format_bytes(int $bytes): string
 {
@@ -205,7 +235,9 @@ function thumbnail_compatibility_format_bytes(int $bytes): string
  * jpg format. It does not delete original images, database rows, WebP thumbs,
  * DNG display masters, gallery cover assets, or any other file in the gallery.
  *
- * @return array{files_deleted:int,bytes_deleted:int,checked:int}
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array{files_deleted:int,bytes_deleted:int,checked:int} Structured result data for the caller.
  */
 function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): array
 {
@@ -244,8 +276,8 @@ function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): a
 /**
  * Delete legacy JPEG thumbnail files for a list of image IDs.
  *
- * @param array<int, int> $imageIds
- * @return array{files_deleted:int,bytes_deleted:int,checked:int,images_checked:int}
+ * @param array $imageIds Image ids value.
+ * @return array{files_deleted:int,bytes_deleted:int,checked:int,images_checked:int} Structured result data for the caller.
  */
 function delete_legacy_jpg_thumbnails_for_image_ids(array $imageIds): array
 {

@@ -39,7 +39,6 @@ import { experimentalThumbnailRebuildRequested, runExperimentalThumbnailRebuild 
  *
  * @param {boolean} enabled Whether the button should be enabled.
  * @param {string} message Browser-visible status text.
- * @returns {void}
  */
 function setCreateMissingThumbnailState(enabled, message) {
     const button = document.querySelector('[data-create-missing-thumbnails]');
@@ -58,7 +57,7 @@ function setCreateMissingThumbnailState(enabled, message) {
  *
  * @param {number} affectedImages Images needing at least one thumbnail variant.
  * @param {number} missingVariants Missing or stale variants.
- * @returns {string} Status line.
+ * @return {string} Status line.
  */
 function createMissingThumbnailStateMessage(affectedImages, missingVariants) {
     if (affectedImages > 0) {
@@ -76,6 +75,11 @@ function createMissingThumbnailStateMessage(affectedImages, missingVariants) {
 }
 
 // Function `setupThumbnailProgress` executes this focused behavior.
+/**
+ * Handle setup thumbnail progress.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupThumbnailProgress() {
     document.addEventListener('click', async (event) => {
         if (!(event.target instanceof Element)) {
@@ -227,7 +231,6 @@ export function setupThumbnailProgress() {
  * Run a dry thumbnail maintenance check in browser-driven batches.
  *
  * @param {HTMLFormElement} form Submitted check form.
- * @returns {Promise<void>}
  */
 async function runThumbnailMaintenanceCheck(form) {
     const progress = ensureThumbnailProgress(form);
@@ -308,7 +311,6 @@ async function runThumbnailMaintenanceCheck(form) {
  * @param {number} affectedImages Images requiring at least one thumbnail variant.
  * @param {number} missingVariants Missing or stale variant count.
  * @param {string} label Status label.
- * @returns {void}
  */
 function updateThumbnailCheckProgress(progress, processed, total, affectedImages, missingVariants, label) {
     progress.hidden = false;
@@ -325,7 +327,6 @@ function updateThumbnailCheckProgress(progress, processed, total, affectedImages
  * Remove generated legacy JPEG thumbnail derivatives in browser-driven batches.
  *
  * @param {HTMLFormElement} form Submitted cleanup form.
- * @returns {Promise<void>}
  */
 async function runLegacyJpegThumbnailCleanup(form) {
     const progress = ensureThumbnailProgress(form);
@@ -386,7 +387,6 @@ async function runLegacyJpegThumbnailCleanup(form) {
  * @param {number} deleted Deleted file count.
  * @param {number} freedBytes Deleted byte count.
  * @param {string} label Status label.
- * @returns {void}
  */
 function updateLegacyJpegCleanupProgress(progress, processed, total, deleted, freedBytes, label) {
     progress.hidden = false;
@@ -403,7 +403,7 @@ function updateLegacyJpegCleanupProgress(progress, processed, total, deleted, fr
  * Format byte counts for concise browser progress messages.
  *
  * @param {number} bytes Raw byte count.
- * @returns {string} Human-readable size.
+ * @return {string} Human-readable size.
  */
 function formatBytes(bytes) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -419,8 +419,8 @@ function formatBytes(bytes) {
 
 /**
  * Handles run import with thumbnail progress behavior for the gallery UI.
+ *
  * @param {*} form Value supplied by the caller or event context.
- * @returns {*} Result of the UI operation, when a value is produced.
  */
 async function runImportWithThumbnailProgress(form) {
     // progress stores state or configuration for the gallery front-end flow.
@@ -504,9 +504,10 @@ async function runImportWithThumbnailProgress(form) {
 
 /**
  * Handles run thumbnail job behavior for the gallery UI.
+ *
  * @param {*} form Value supplied by the caller or event context.
  * @param {*} submitter Value supplied by the caller or event context.
- * @returns {*} Result of the UI operation, when a value is produced.
+ * @param {object} options Optional behavior flags.
  */
 async function runThumbnailJob(form, submitter, options = {}) {
     // Variable `progress` stores this steps working value.

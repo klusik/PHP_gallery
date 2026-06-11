@@ -37,9 +37,9 @@ declare(strict_types=1);
 /**
  * Render the dedicated Admin storage statistics page.
  *
- * @param array<string, mixed>|null $statistics
- * @param array<string, mixed>|null $databaseUsage
- * @param string $activeTab
+ * @param ?array $statistics Statistics value.
+ * @param ?array $databaseUsage Database usage value.
+ * @param string $activeTab Active tab value.
  */
 function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files'): void
 {
@@ -78,6 +78,8 @@ function view_render_admin_storage_statistics_page(?array $statistics, ?array $d
 
 /**
  * Render the local tab navigation for the dedicated storage statistics page.
+ *
+ * @param string $activeTab Active tab value.
  */
 function view_render_admin_storage_statistics_tabs(string $activeTab): void
 {
@@ -109,6 +111,9 @@ function view_render_admin_storage_statistics_tabs(string $activeTab): void
 
 /**
  * Normalize the requested storage statistics tab.
+ *
+ * @param string $activeTab Active tab value.
+ * @return string Text result for the caller.
  */
 function view_admin_storage_statistics_normalize_tab(string $activeTab): string
 {
@@ -126,7 +131,8 @@ function view_render_admin_storage_empty_panel(): void
 /**
  * Return a short status label for the cached statistics snapshot.
  *
- * @param array<string, mixed>|null $statistics
+ * @param ?array $statistics Statistics value.
+ * @return string Text result for the caller.
  */
 function view_admin_storage_snapshot_status(?array $statistics): string
 {
@@ -146,7 +152,7 @@ function view_admin_storage_snapshot_status(?array $statistics): string
 /**
  * Render the detailed storage statistics panel on the dashboard overview.
  *
- * @param array<string, mixed> $statistics
+ * @param array $statistics Statistics value.
  */
 function view_render_admin_storage_statistics_panel(array $statistics): void
 {
@@ -207,6 +213,10 @@ function view_render_admin_storage_statistics_panel(array $statistics): void
 
 /**
  * Render one compact storage summary card.
+ *
+ * @param string $label Label value.
+ * @param string $value Value to process.
+ * @param string $hint Hint value.
  */
 function view_render_admin_storage_summary_card(string $label, string $value, string $hint): void
 {
@@ -216,7 +226,10 @@ function view_render_admin_storage_summary_card(string $label, string $value, st
 /**
  * Render a CSS-based horizontal bar chart.
  *
- * @param array<int, array<string, mixed>> $rows
+ * @param string $title Title value.
+ * @param string $hint Hint value.
+ * @param array $rows Rows to process.
+ * @param string $emptyText Empty text value.
  */
 function view_render_admin_storage_bar_chart(string $title, string $hint, array $rows, string $emptyText): void
 {
@@ -252,7 +265,8 @@ function view_render_admin_storage_bar_chart(string $title, string $hint, array 
 /**
  * Return a translated label for one chart row.
  *
- * @param array<string, mixed> $row
+ * @param array $row Row data.
+ * @return string Text result for the caller.
  */
 function view_admin_storage_row_label(array $row): string
 {
@@ -267,7 +281,10 @@ function view_admin_storage_row_label(array $row): string
 /**
  * Return a safe integer from a storage statistics array.
  *
- * @param array<string, mixed> $statistics
+ * @param array $statistics Statistics value.
+ * @param string $key Lookup key.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function view_admin_storage_int(array $statistics, string $key, int $fallback = 0): int
 {
@@ -277,8 +294,9 @@ function view_admin_storage_int(array $statistics, string $key, int $fallback = 
 /**
  * Return a safe array from a storage statistics array.
  *
- * @param array<string, mixed> $statistics
- * @return array<int, array<string, mixed>>
+ * @param array $statistics Statistics value.
+ * @param string $key Lookup key.
+ * @return array<int array<string, mixed>>.
  */
 function view_admin_storage_array(array $statistics, string $key): array
 {

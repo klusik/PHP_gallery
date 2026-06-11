@@ -40,6 +40,8 @@ declare(strict_types=1);
  * MySQL can auto-commit DDL statements such as CREATE TABLE, so migrations are
  * not wrapped in an explicit transaction. Each migration records its version
  * only after every SQL statement in that file has executed successfully.
+ *
+ * @return array Structured result data for the caller.
  */
 function run_migrations(): array
 {
@@ -94,6 +96,9 @@ function run_migrations(): array
  * table/column/index already present but schema_migrations not yet recorded.
  * MySQL and MariaDB differ on IF NOT EXISTS support for ALTER TABLE, so the
  * portable path is to treat duplicate DDL errors as successful replays.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $statement Statement value.
  */
 function apply_migration_statement(PDO $pdo, string $statement): void
 {
@@ -108,6 +113,9 @@ function apply_migration_statement(PDO $pdo, string $statement): void
 
 /**
  * Return true when an exception is a duplicate object error from idempotent DDL.
+ *
+ * @param PDOException $exception Exception value.
+ * @return bool True when the condition matches.
  */
 function migration_duplicate_ddl_error(PDOException $exception): bool
 {
@@ -128,6 +136,8 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
 
 /**
  * Return true when at least one migration file has not been recorded yet.
+ *
+ * @return bool True when the condition matches.
  */
 function pending_migrations_exist(): bool
 {

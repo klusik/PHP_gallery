@@ -267,6 +267,9 @@ function cms_admin_tags(): void
 
 /**
  * Render the selected tag edit form.
+ *
+ * @param array $tag Tag value.
+ * @param string $sortMode Sort mode value.
  */
 function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 {
@@ -291,6 +294,8 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 
 /**
  * Return whether the current admin tag request expects JSON.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_tags_request_wants_json(): bool
 {
@@ -299,6 +304,9 @@ function admin_tags_request_wants_json(): bool
 
 /**
  * Send a JSON response for the admin tag editor and stop execution.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function admin_tags_json_response(array $payload, int $status = 200): void
 {
@@ -310,6 +318,9 @@ function admin_tags_json_response(array $payload, int $status = 200): void
 
 /**
  * Keep delete fallbacks on same-origin relative URLs only.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function admin_tags_safe_return_url(string $url): string
 {
@@ -325,6 +336,9 @@ function admin_tags_safe_return_url(string $url): string
 
 /**
  * Return localized validation errors for the admin tag form.
+ *
+ * @param string $code Code value.
+ * @return string Text result for the caller.
  */
 function admin_tags_error_message(string $code): string
 {

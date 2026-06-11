@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle view public header branding model.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $siteName Site name value.
+ * @param ?array $currentGallery Current gallery value.
+ * @param bool $publicOnly Public only value.
+ * @param string $bodyClass Body class value.
+ * @return array Structured result data for the caller.
+ */
 function view_public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
 {
     $model = [
@@ -62,7 +73,7 @@ function view_public_header_branding_model(string $siteName, ?array $currentGall
 /**
  * Render configured favorite gallery shortcut links for the top navigation.
  *
- * @param array<int, array<string, mixed>> $items Resolved favorite gallery navigation items.
+ * @param array $items Items value.
  * @return string Favorite gallery anchor markup, or an empty string when none are configured.
  */
 function view_favorite_gallery_nav_html(array $items): string
@@ -86,7 +97,7 @@ function view_favorite_gallery_nav_html(array $items): string
 /**
  * Return the full legacy stylesheet set required by admin screens and logged-in public tools.
  *
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_admin_stylesheet_files(): array
 {
@@ -119,7 +130,7 @@ function view_admin_stylesheet_files(): array
  * The shared public file contains only visitor-facing rules extracted from
  * mixed legacy admin stylesheets after visual verification.
  *
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_public_stylesheet_files(): array
 {
@@ -137,7 +148,7 @@ function view_public_stylesheet_files(): array
  * Return whether the current request needs the full admin asset set.
  *
  * @param string $bodyClass Rendered body class for the current page family.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
  * @return bool True when admin or logged-in public tooling must stay available.
  */
@@ -150,9 +161,9 @@ function view_should_load_admin_assets(string $bodyClass, ?array $user, bool $an
  * Return stylesheet files for the current page context.
  *
  * @param string $bodyClass Rendered body class for the current page family.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
 {
@@ -165,7 +176,7 @@ function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool
  * Return the browser entrypoint for the current page context.
  *
  * @param bool $isAdminPage Whether the current route renders an admin or setup page.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
  * @return string Script path relative to the public web root.
  */
@@ -174,6 +185,15 @@ function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $an
     return (!$isAdminPage && ($user === null || $anonymousPreview)) ? 'assets/public-gallery.js' : 'assets/gallery.js';
 }
 
+/**
+ * Handle view render header.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $title Title value.
+ * @param ?array $currentGallery Current gallery value.
+ * @param bool $publicOnly Public only value.
+ */
 function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     $user = current_user();
@@ -270,6 +290,13 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     }
 }
 
+/**
+ * Handle view cms browser i18n strings.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @return array Structured result data for the caller.
+ */
 function view_cms_browser_i18n_strings(): array
 {
     $activeStrings = translation_load_language(translation_active_language());
@@ -339,6 +366,11 @@ function view_cms_browser_i18n_strings(): array
     ]);
 }
 
+/**
+ * Handle view render browser i18n script.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_browser_i18n_script(): void
 {
     $payload = [
@@ -352,6 +384,11 @@ function view_render_browser_i18n_script(): void
     echo '<script>window.PHP_GALLERY_I18N = ' . $json . ';</script>';
 }
 
+/**
+ * Handle view render footer.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_footer(): void
 {
     $page = (string) ($_GET['page'] ?? 'home');

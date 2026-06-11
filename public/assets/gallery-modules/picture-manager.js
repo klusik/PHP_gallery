@@ -43,8 +43,6 @@ let activePictureManager = null;
 
 /**
  * Release the currently bound Picture manager instance, if any.
- *
- * @returns {void}
  */
 export function teardownPictureManager() {
     if (!activePictureManager || typeof activePictureManager.teardown !== 'function') {
@@ -63,7 +61,7 @@ export function teardownPictureManager() {
  * still open the lightbox. Modifier-clicks and the visible check buttons are the
  * only card-level selection gestures, so anonymous browsing behavior stays intact.
  *
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 export function setupPictureManager() {
     // toolbar stores the public-page manager controls rendered by PHP.
@@ -143,11 +141,10 @@ export function setupPictureManager() {
     // createButton stores the explicit create-gallery-from-selection action.
     const createButton = toolbar.querySelector('[data-picture-manager-create]');
 
-    /**
+        /**
      * Expands or collapses the Picture manager action panel.
      *
      * @param {boolean} expanded Whether the detailed controls should be visible.
-     * @returns {void}
      */
     function setPanelExpanded(expanded) {
         toolbar.classList.toggle('is-picture-manager-collapsed', !expanded);
@@ -161,10 +158,8 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Expands the manager when a selection makes bulk actions relevant.
-     *
-     * @returns {void}
      */
     function expandForSelection() {
         if (selectedIds.size > 0) {
@@ -172,11 +167,11 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Returns a stable image ID from a visible card.
      *
      * @param {Element|null} card Card element rendered for one image.
-     * @returns {string} Image ID or an empty string when unavailable.
+     * @return {string} Image ID or an empty string when unavailable.
      */
     function cardImageId(card) {
         if (!(card instanceof HTMLElement)) {
@@ -185,11 +180,11 @@ export function setupPictureManager() {
         return card.dataset.pictureManagerImageId || '';
     }
 
-    /**
+        /**
      * Returns the current card index inside the visible page.
      *
      * @param {Element|null} card Card element rendered for one image.
-     * @returns {number} Zero-based visible index, or -1 when unavailable.
+     * @return {number} Zero-based visible index, or -1 when unavailable.
      */
     function cardPosition(card) {
         if (!(card instanceof HTMLElement)) {
@@ -198,12 +193,11 @@ export function setupPictureManager() {
         return cards.indexOf(card);
     }
 
-    /**
+        /**
      * Writes a toolbar status message.
      *
      * @param {string} message Message visible to the user.
      * @param {'idle'|'ok'|'error'|'working'} state Visual state used by CSS.
-     * @returns {void}
      */
     function setStatus(message, state = 'idle') {
         if (!(statusLabel instanceof HTMLElement)) {
@@ -213,10 +207,10 @@ export function setupPictureManager() {
         statusLabel.dataset.state = state;
     }
 
-    /**
+        /**
      * Returns selected image IDs in the same order as visible cards.
      *
-     * @returns {string[]} Selected image IDs in visual order.
+     * @return {string[]} Selected image IDs in visual order.
      */
     function selectedIdsInPageOrder() {
         return cards
@@ -224,20 +218,19 @@ export function setupPictureManager() {
             .filter((imageId) => selectedIds.has(imageId));
     }
 
-    /**
+        /**
      * Returns selected cards in the same order as the visible gallery page.
      *
-     * @returns {HTMLElement[]} Selected visible image cards.
+     * @return {HTMLElement[]} Selected visible image cards.
      */
     function selectedCardsInPageOrder() {
         return cards.filter((card) => selectedIds.has(cardImageId(card)));
     }
 
-    /**
+        /**
      * Applies visual selected state to one card and its check button.
      *
      * @param {HTMLElement} card Visible image card.
-     * @returns {void}
      */
     function syncCardState(card) {
         const imageId = cardImageId(card);
@@ -254,10 +247,8 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Synchronizes toolbar controls and visible card state after any selection change.
-     *
-     * @returns {void}
      */
     function syncSelectionState() {
         cards.forEach(syncCardState);
@@ -272,10 +263,8 @@ export function setupPictureManager() {
         expandForSelection();
     }
 
-    /**
+        /**
      * Enables or disables mutation buttons based on current form state.
-     *
-     * @returns {void}
      */
     function updateActionButtons() {
         const hasSelection = selectedIds.size > 0;
@@ -298,11 +287,10 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Sets active state for all server-side mutation controls.
      *
      * @param {boolean} isActive Whether a request is running.
-     * @returns {void}
      */
     function setRequestActive(isActive) {
         activeRequest = isActive;
@@ -321,11 +309,11 @@ export function setupPictureManager() {
         updateActionButtons();
     }
 
-    /**
+        /**
      * Return a conservative file extension for a fetched share Blob MIME type.
      *
      * @param {string} mimeType Response Blob MIME type.
-     * @returns {string} Extension without dot.
+     * @return {string} Extension without dot.
      */
     function extensionForMimeType(mimeType) {
         const normalized = String(mimeType || '').toLowerCase();
@@ -344,13 +332,13 @@ export function setupPictureManager() {
         return 'jpg';
     }
 
-    /**
+        /**
      * Return a filesystem-safe name suitable for a File object sent to mobile apps.
      *
      * @param {string} requestedName Name rendered by PHP for the selected card.
      * @param {string} mimeType Response Blob MIME type.
      * @param {number} index One-based fallback sequence number.
-     * @returns {string} Safe filename with extension.
+     * @return {string} Safe filename with extension.
      */
     function shareFilename(requestedName, mimeType, index) {
         const fallback = `photo-${index}`;
@@ -367,12 +355,12 @@ export function setupPictureManager() {
         return `${candidate}.${extensionForMimeType(mimeType)}`;
     }
 
-    /**
+        /**
      * Fetch one selected image as a File for the native Web Share API.
      *
      * @param {HTMLElement} card Selected image card.
      * @param {number} index One-based selected photo number.
-     * @returns {Promise<File>} Browser File object ready for navigator.share().
+     * @return {Promise<File>} Browser File object ready for navigator.share().
      */
     async function fetchShareFile(card, index) {
         const shareUrl = card.dataset.pictureManagerShareUrl || card.dataset.previewSrc || card.dataset.fullSrc || '';
@@ -401,11 +389,10 @@ export function setupPictureManager() {
         });
     }
 
-    /**
+        /**
      * Submit the selected photo IDs to the ZIP fallback endpoint without leaving the page.
      *
      * @param {string[]} imageIds Selected image IDs.
-     * @returns {void}
      */
     function downloadSelectionFallback(imageIds) {
         if (!downloadUrl) {
@@ -431,6 +418,14 @@ export function setupPictureManager() {
         form.target = frameName;
         form.hidden = true;
 
+        /**
+         * Handle add field.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {string} name Name value.
+         * @param {*} value Value to process.
+         */
         const addField = (name, value) => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -447,13 +442,11 @@ export function setupPictureManager() {
         setStatus('Native sharing is not available here. A ZIP download was started with the selected photos.', 'ok');
     }
 
-    /**
+        /**
      * Shares selected photos through the native device share sheet when possible.
      *
      * Browser code cannot force Instagram Story or Reel as the target. The share
      * sheet decides which installed apps can receive multiple images.
-     *
-     * @returns {Promise<void>}
      */
     async function shareSelectedPhotos() {
         const imageIds = selectedIdsInPageOrder();
@@ -498,12 +491,11 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Selects exactly the provided cards and clears all other visible selections.
      *
      * @param {HTMLElement[]} nextCards Cards that should be selected.
      * @param {HTMLElement|null} nextAnchor Card that becomes the new range anchor.
-     * @returns {void}
      */
     function replaceSelection(nextCards, nextAnchor) {
         selectedIds.clear();
@@ -517,20 +509,16 @@ export function setupPictureManager() {
         syncSelectionState();
     }
 
-    /**
+        /**
      * Selects all visible photos on the current page.
-     *
-     * @returns {void}
      */
     function selectAllVisible() {
         replaceSelection(cards, cards[0] || null);
         setStatus(`Selected all ${cards.length} visible photo${cards.length === 1 ? '' : 's'}.`, 'ok');
     }
 
-    /**
+        /**
      * Clears every visible selected photo.
-     *
-     * @returns {void}
      */
     function clearSelection() {
         selectedIds.clear();
@@ -540,11 +528,10 @@ export function setupPictureManager() {
         setStatus('Selection cleared.', 'idle');
     }
 
-    /**
+        /**
      * Toggles one card in the selected set.
      *
      * @param {HTMLElement} card Card to toggle.
-     * @returns {void}
      */
     function toggleCard(card) {
         const imageId = cardImageId(card);
@@ -560,11 +547,10 @@ export function setupPictureManager() {
         syncSelectionState();
     }
 
-    /**
+        /**
      * Selects an inclusive range from the anchor card to the target card.
      *
      * @param {HTMLElement} targetCard Card at the end of the range.
-     * @returns {void}
      */
     function selectRange(targetCard) {
         if (!anchorCard) {
@@ -588,11 +574,10 @@ export function setupPictureManager() {
         syncSelectionState();
     }
 
-    /**
+        /**
      * Handles a click on a visible selection check button.
      *
      * @param {MouseEvent} event Click event from the check button.
-     * @returns {void}
      */
     function handleSelectButtonClick(event) {
         const button = event.currentTarget;
@@ -609,11 +594,10 @@ export function setupPictureManager() {
         toggleCard(card);
     }
 
-    /**
+        /**
      * Handles modifier-click selection on the card itself.
      *
      * @param {MouseEvent} event Click event from the card.
-     * @returns {void}
      */
     function handleCardClick(event) {
         if (event.defaultPrevented || activeRequest) {
@@ -642,11 +626,10 @@ export function setupPictureManager() {
         toggleCard(card);
     }
 
-    /**
+        /**
      * Collapses the HUD when the user clicks away from it without an active selection.
      *
      * @param {PointerEvent} event Pointer event from the document.
-     * @returns {void}
      */
     function handleDocumentPointerDown(event) {
         if (selectedIds.size > 0 || toolbar.dataset.pictureManagerExpanded !== '1') {
@@ -659,12 +642,11 @@ export function setupPictureManager() {
         setStatus('Ready.', 'idle');
     }
 
-    /**
+        /**
      * Adds selected image IDs and shared request metadata to a FormData object.
      *
      * @param {FormData} formData Request body to populate.
      * @param {string[]} imageIds Selected image IDs.
-     * @returns {void}
      */
     function appendBaseFormData(formData, imageIds) {
         formData.append('csrf_token', csrfToken);
@@ -672,12 +654,12 @@ export function setupPictureManager() {
         imageIds.forEach((imageId) => formData.append('image_ids[]', imageId));
     }
 
-    /**
+        /**
      * Sends a Picture manager POST request and parses its JSON response safely.
      *
      * @param {string} url Endpoint URL rendered by PHP.
      * @param {FormData} formData Request body.
-     * @returns {Promise<object>} Parsed response payload.
+     * @return {Promise<object>} Parsed response payload.
      */
     async function postManagerAction(url, formData) {
         const response = await fetch(url, {
@@ -700,23 +682,21 @@ export function setupPictureManager() {
         return payload;
     }
 
-    /**
+        /**
      * Reloads the gallery page after a successful mutation.
      *
      * @param {object} payload JSON payload returned by the server.
-     * @returns {void}
      */
     function reloadAfterSuccess(payload) {
         const refreshUrl = typeof payload.refresh_url === 'string' && payload.refresh_url !== '' ? payload.refresh_url : window.location.href;
         window.location.href = refreshUrl;
     }
 
-    /**
+        /**
      * Moves the current selection into a destination gallery.
      *
      * @param {string} destinationGalleryId Destination gallery ID.
      * @param {string[]|null} explicitImageIds Optional explicit dragged image IDs.
-     * @returns {Promise<void>}
      */
     async function moveSelectedToGallery(destinationGalleryId, explicitImageIds = null) {
         const imageIds = Array.isArray(explicitImageIds) && explicitImageIds.length > 0
@@ -754,11 +734,10 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Copies the current selection into an existing destination gallery.
      *
      * @param {string} destinationGalleryId Destination gallery ID.
-     * @returns {Promise<void>}
      */
     async function copySelectedToGallery(destinationGalleryId) {
         const imageIds = selectedIdsInPageOrder();
@@ -794,10 +773,8 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Creates a child gallery by copying the current selection.
-     *
-     * @returns {Promise<void>}
      */
     async function createGalleryFromSelection() {
         const imageIds = selectedIdsInPageOrder();
@@ -836,17 +813,17 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Returns visible subgallery cards that can accept selected photos.
      *
-     * @returns {HTMLElement[]} Visible drop targets.
+     * @return {HTMLElement[]} Visible drop targets.
      */
     function dropTargets() {
         return publicPhotoDropTargets(sourceGalleryId);
     }
 
 
-    /**
+        /**
      * Returns the visible subgallery target under the current pointer position.
      *
      * Native HTML drag events often report a nested image, link, or badge as the
@@ -856,37 +833,34 @@ export function setupPictureManager() {
      *
      * @param {number} clientX Pointer X coordinate.
      * @param {number} clientY Pointer Y coordinate.
-     * @returns {HTMLElement|null} Destination subgallery card, or null.
+     * @return {HTMLElement|null} Destination subgallery card, or null.
      */
     function dropTargetAt(clientX, clientY) {
         return publicPhotoDropTargetAtPoint(clientX, clientY, {sourceGalleryId});
     }
 
-    /**
+        /**
      * Updates the highlighted native drag destination.
      *
      * @param {HTMLElement|null} activeTarget Target that should be highlighted.
-     * @returns {void}
      */
     function highlightDropTarget(activeTarget) {
         highlightPublicPhotoDropTarget(activeTarget, sourceGalleryId);
     }
 
-    /**
+        /**
      * Updates visible subgallery targets during drag sessions.
      *
      * @param {boolean} isActive Whether drag affordance should be shown.
-     * @returns {void}
      */
     function setDropTargetsActive(isActive) {
         setPublicPhotoDropTargetsActive(sourceGalleryId, isActive);
     }
 
-    /**
+        /**
      * Starts native desktop dragging for selected picture cards.
      *
      * @param {DragEvent} event Drag event from an image card.
-     * @returns {void}
      */
     function handleDragStart(event) {
         if (activeRequest || !(event.currentTarget instanceof HTMLElement)) {
@@ -913,10 +887,8 @@ export function setupPictureManager() {
         setStatus(`Dragging ${dragSelection.length} selected photo${dragSelection.length === 1 ? '' : 's'}. Drop onto a subgallery.`, 'working');
     }
 
-    /**
+        /**
      * Ends a native drag session and removes transient visual state.
-     *
-     * @returns {void}
      */
     function handleDragEnd() {
         dragSelection = [];
@@ -927,11 +899,10 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Handles dragover on visible subgallery cards.
      *
      * @param {DragEvent} event Drag event from a drop target.
-     * @returns {void}
      */
     function handleTargetDragOver(event) {
         if (dragSelection.length === 0 || activeRequest) {
@@ -949,21 +920,17 @@ export function setupPictureManager() {
         highlightDropTarget(target);
     }
 
-    /**
+        /**
      * Handles dragleave on visible subgallery cards.
-     *
-     * @param {DragEvent} event Drag event from a drop target.
-     * @returns {void}
      */
     function handleTargetDragLeave() {
         highlightDropTarget(null);
     }
 
-    /**
+        /**
      * Moves the dragged selection when dropped onto a valid subgallery target.
      *
      * @param {DragEvent} event Drop event from a subgallery card.
-     * @returns {void}
      */
     function handleTargetDrop(event) {
         const target = dropTargetAt(event.clientX, event.clientY)
@@ -983,7 +950,7 @@ export function setupPictureManager() {
         moveSelectedToGallery(destinationGalleryId, explicitImageIds.length > 0 ? explicitImageIds : null);
     }
 
-    /**
+        /**
      * Moves the current selected photos to a subgallery chosen by another module.
      *
      * Public photo reordering uses pointer events instead of native HTML drag events.
@@ -991,7 +958,6 @@ export function setupPictureManager() {
      * the native Picture manager card drag path.
      *
      * @param {CustomEvent} event Drop request emitted by public photo reordering.
-     * @returns {void}
      */
     function handleExternalDropMove(event) {
         const detail = event.detail || {};
@@ -1006,12 +972,11 @@ export function setupPictureManager() {
         moveSelectedToGallery(destinationGalleryId, explicitImageIds);
     }
 
-    /**
+        /**
      * Handles native drag movement at document level so nested anchors and images
      * inside subgallery cards cannot swallow the dragover event.
      *
      * @param {DragEvent} event Dragover event captured from the document.
-     * @returns {void}
      */
     function handleDocumentDragOver(event) {
         if (dragSelection.length === 0 || activeRequest) {
@@ -1028,12 +993,11 @@ export function setupPictureManager() {
         }
     }
 
-    /**
+        /**
      * Handles native drops at document level. This is the safety net that makes
      * dropping over any visible part of a subgallery card behave consistently.
      *
      * @param {DragEvent} event Drop event captured from the document.
-     * @returns {void}
      */
     function handleDocumentDrop(event) {
         if (dragSelection.length === 0 || activeRequest) {
@@ -1046,11 +1010,10 @@ export function setupPictureManager() {
         handleTargetDrop(event);
     }
 
-    /**
+        /**
      * Enables Ctrl/Cmd+A selection when focus is not inside an editor field.
      *
      * @param {KeyboardEvent} event Keyboard event from the document.
-     * @returns {void}
      */
     function handleDocumentKeyDown(event) {
         if (event.key === 'Escape' && selectedIds.size === 0 && toolbar.dataset.pictureManagerExpanded === '1') {

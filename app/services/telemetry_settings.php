@@ -43,6 +43,8 @@
 
 /**
  * Return whether the telemetry settings table exists.
+ *
+ * @return bool True when the condition matches.
  */
 function telemetry_settings_schema_ready(): bool
 {
@@ -57,6 +59,10 @@ function telemetry_settings_schema_ready(): bool
 
 /**
  * Read one telemetry setting value, returning a safe default if unavailable.
+ *
+ * @param string $key Lookup key.
+ * @param ?string $default Default value when no explicit value is available.
+ * @return ?string Text result for the caller.
  */
 function telemetry_setting(string $key, ?string $default = null): ?string
 {
@@ -77,6 +83,9 @@ function telemetry_setting(string $key, ?string $default = null): ?string
 
 /**
  * Store one telemetry setting value.
+ *
+ * @param string $key Lookup key.
+ * @param string $value Value to process.
  */
 function telemetry_set_setting(string $key, string $value): void
 {
@@ -90,6 +99,8 @@ function telemetry_set_setting(string $key, string $value): void
 
 /**
  * Return all known telemetry settings as a key-value map.
+ *
+ * @return array Structured result data for the caller.
  */
 function telemetry_all_settings(): array
 {
@@ -108,6 +119,10 @@ function telemetry_all_settings(): array
 
 /**
  * Return true when a string setting is enabled.
+ *
+ * @param string $key Lookup key.
+ * @param string $default Default value when no explicit value is available.
+ * @return bool True when the condition matches.
  */
 function telemetry_setting_enabled(string $key, string $default = '0'): bool
 {
@@ -116,6 +131,8 @@ function telemetry_setting_enabled(string $key, string $default = '0'): bool
 
 /**
  * Return whether anonymous public telemetry may be collected.
+ *
+ * @return bool True when the condition matches.
  */
 function telemetry_public_usage_enabled(): bool
 {
@@ -124,6 +141,8 @@ function telemetry_public_usage_enabled(): bool
 
 /**
  * Return the configured maximum photo view duration in milliseconds.
+ *
+ * @return int Integer result for the caller.
  */
 function telemetry_max_photo_view_ms(): int
 {
@@ -135,6 +154,12 @@ function telemetry_max_photo_view_ms(): int
 
 /**
  * Return one bounded integer retention setting.
+ *
+ * @param string $key Lookup key.
+ * @param int $default Default value when no explicit value is available.
+ * @param int $minimum Minimum value.
+ * @param int $maximum Maximum value.
+ * @return int Integer result for the caller.
  */
 function telemetry_retention_days(string $key, int $default, int $minimum, int $maximum): int
 {

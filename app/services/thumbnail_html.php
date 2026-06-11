@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 /**
  * Handles progressive thumbnail picture html logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $fallbackSize Input used by this operation.
  * @param mixed $srcsetSizes Input used by this operation.
@@ -43,6 +44,7 @@ declare(strict_types=1);
  * @param mixed $finalSizes Input used by this operation.
  * @param mixed $alt Input used by this operation.
  * @param mixed $extraAttributes Input used by this operation.
+ * @param ?array $thumbnailBundle Thumbnail bundle value.
  * @return mixed Result produced by this operation.
  */
 function thumbnail_progressive_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $initialSizes, string $finalSizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string
@@ -93,12 +95,14 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
 
 /**
  * Handles thumbnail picture html logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $fallbackSize Input used by this operation.
  * @param mixed $srcsetSizes Input used by this operation.
  * @param mixed $sizes Input used by this operation.
  * @param mixed $alt Input used by this operation.
  * @param mixed $extraAttributes Input used by this operation.
+ * @param ?array $thumbnailBundle Thumbnail bundle value.
  * @return mixed Result produced by this operation.
  */
 function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string

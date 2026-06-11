@@ -45,6 +45,11 @@ declare(strict_types=1);
 
 /**
  * Build the patch notes viewer model for the updates screen.
+ *
+ * @param array $status Status value.
+ * @param ?string $requestedVersion Requested version value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return array Structured result data for the caller.
  */
 function cms_update_patch_notes_model(array $status, ?string $requestedVersion = null, int $ttlSeconds = 18000): array
 {
@@ -67,6 +72,9 @@ function cms_update_patch_notes_model(array $status, ?string $requestedVersion =
 
 /**
  * Render only the currently selected patch notes section.
+ *
+ * @param array $patchNotesModel Patch notes model value.
+ * @return string Text result for the caller.
  */
 function cms_render_update_patch_notes_fragment(array $patchNotesModel): string
 {

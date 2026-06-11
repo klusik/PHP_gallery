@@ -47,7 +47,9 @@ declare(strict_types=1);
  * reliable DNG decoder. The scanner records DNG dimensions through Imagick and
  * stores an explicit DNG MIME value while leaving the original file untouched.
  *
- * @return array{width:int,height:int,mime:string}|null
+ * @param string $path Filesystem path.
+ * @param string $filename Filename value.
+ * @return array{width:int,height:int,mime:string}|null Structured result data for the caller.
  */
 function scan_image_file_metadata(string $path, string $filename): ?array
 {
@@ -88,6 +90,14 @@ function scan_image_file_metadata(string $path, string $filename): ?array
     ];
 }
 
+/**
+ * Handle scan gallery images.
+ *
+ * Part of the related application service.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return int Integer result for the caller.
+ */
 function scan_gallery_images(int $galleryId): int
 {
     // Variable $gallery stores this steps working value.
@@ -267,6 +277,13 @@ function next_gallery_image_sort_order(int $galleryId): int
     return $maxSortOrder + 10;
 }
 
+/**
+ * Handle scan all imported gallery images.
+ *
+ * Part of the related application service.
+ *
+ * @return array Structured result data for the caller.
+ */
 function scan_all_imported_gallery_images(): array
 {
     // $scanned stores an intermediate value used by the surrounding gallery workflow.

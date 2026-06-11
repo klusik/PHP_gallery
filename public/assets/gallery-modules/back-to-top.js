@@ -53,7 +53,7 @@ const backToTopState = {
  * DOM nodes are looked up on demand so this module never stores old gallery
  * fragments after a server-rendered refresh replaces the public listing.
  *
- * @returns {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}}
+ * @return {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null} }.
  */
 function findBackToTopElements() {
     return {
@@ -66,8 +66,8 @@ function findBackToTopElements() {
 /**
  * Returns whether the supplied back-to-top elements are usable.
  *
- * @param {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}} elements Current DOM lookup result.
- * @returns {boolean}
+ * @param {HTMLElement} elements Elements value.
+ * @return {boolean} True when the condition matches.
  */
 function hasConnectedBackToTopElements(elements) {
     return Boolean(
@@ -83,8 +83,8 @@ function hasConnectedBackToTopElements(elements) {
 /**
  * Determines whether the back-to-top button should be visible now.
  *
- * @param {{scope: Element|null, listing: Element|null, button: HTMLButtonElement|null}} elements Current DOM lookup result.
- * @returns {boolean}
+ * @param {HTMLElement} elements Elements value.
+ * @return {boolean} True when the condition matches.
  */
 function shouldShowBackToTopButton(elements) {
     if (!hasConnectedBackToTopElements(elements)) {
@@ -103,8 +103,6 @@ function shouldShowBackToTopButton(elements) {
 
 /**
  * Applies the current back-to-top visibility state.
- *
- * @returns {void}
  */
 function updateBackToTopVisibility() {
     backToTopState.frameId = 0;
@@ -122,8 +120,6 @@ function updateBackToTopVisibility() {
 
 /**
  * Schedules a back-to-top visibility update for the next animation frame.
- *
- * @returns {void}
  */
 function requestBackToTopVisibilityUpdate() {
     if (!backToTopState.controller || backToTopState.controller.signal.aborted || backToTopState.ticking) {
@@ -137,7 +133,6 @@ function requestBackToTopVisibilityUpdate() {
  * Scrolls the public page back to the top when the delegated button is clicked.
  *
  * @param {MouseEvent} event Click event from the document-level listener.
- * @returns {void}
  */
 function handleBackToTopClick(event) {
     const target = event.target instanceof Element ? event.target.closest('[data-back-to-top-button]') : null;
@@ -150,8 +145,6 @@ function handleBackToTopClick(event) {
 
 /**
  * Releases the active back-to-top binding before gallery content is refreshed.
- *
- * @returns {void}
  */
 export function teardownBackToTopButton() {
     if (backToTopState.frameId) {
@@ -165,6 +158,11 @@ export function teardownBackToTopButton() {
     backToTopState.ticking = false;
 }
 
+/**
+ * Handle setup back to top button.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupBackToTopButton() {
     teardownBackToTopButton();
 

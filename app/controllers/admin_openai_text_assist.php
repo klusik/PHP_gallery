@@ -38,9 +38,8 @@ declare(strict_types=1);
 /**
  * Send an OpenAI text-assistance JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
  * @param int $statusCode HTTP status code.
- * @return void
  */
 function admin_openai_text_assist_json_response(array $payload, int $statusCode = 200): void
 {
@@ -52,6 +51,9 @@ function admin_openai_text_assist_json_response(array $payload, int $statusCode 
 
 /**
  * Return true when the current user may run thumbnail-based OpenAI actions.
+ *
+ * @param int $userId User id identifier.
+ * @return bool True when the condition matches.
  */
 function admin_openai_text_assist_user_allows_image_input(int $userId): bool
 {
@@ -61,7 +63,9 @@ function admin_openai_text_assist_user_allows_image_input(int $userId): bool
 /**
  * Return a validated image row that belongs to the requested gallery.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageId Image identifier.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function admin_openai_text_assist_owned_image(int $galleryId, int $imageId): array
 {
@@ -74,6 +78,8 @@ function admin_openai_text_assist_owned_image(int $galleryId, int $imageId): arr
 
 /**
  * Return direct-gallery photo candidates for the bulk-description confirmation step.
+ *
+ * @param int $galleryId Gallery identifier.
  */
 function admin_openai_text_assist_bulk_count_response(int $galleryId): void
 {
@@ -89,6 +95,11 @@ function admin_openai_text_assist_bulk_count_response(int $galleryId): void
 
 /**
  * Generate and immediately save one photo description during a confirmed bulk run.
+ *
+ * @param int $userId User id identifier.
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageId Image identifier.
+ * @param string $language Language value.
  */
 function admin_openai_text_assist_bulk_generate_one_response(int $userId, int $galleryId, int $imageId, string $language): void
 {
@@ -126,8 +137,6 @@ function admin_openai_text_assist_bulk_generate_one_response(int $userId, int $g
 
 /**
  * Generate one reviewable gallery-description suggestion through OpenAI.
- *
- * @return void
  */
 function cms_admin_openai_text_assist(): void
 {

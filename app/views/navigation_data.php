@@ -37,7 +37,7 @@ declare(strict_types=1);
 /**
  * Render the dedicated admin navigation-data page.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_navigation_data(array $model): void
 {
@@ -83,7 +83,7 @@ function view_render_admin_navigation_data(array $model): void
 /**
  * Render compact provider status metrics.
  *
- * @param array<string, mixed> $status
+ * @param array $status Status value.
  */
 function view_render_admin_navigation_data_status_grid(array $status): void
 {

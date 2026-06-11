@@ -35,7 +35,7 @@
  * Normalize user-entered search text for stable case-insensitive matching.
  *
  * @param {string} value Raw text from the input or option metadata.
- * @returns {string} Lowercase normalized text.
+ * @return {string} Lowercase normalized text.
  */
 function normalizeSearchText(value) {
     return String(value || '')
@@ -56,7 +56,7 @@ function normalizeSearchText(value) {
  *
  * @param {HTMLElement} option Gallery option button.
  * @param {string} query Normalized user query.
- * @returns {number} Relevance score, or 9999 when the option does not match.
+ * @return {number} Relevance score, or 9999 when the option does not match.
  */
 function galleryOptionScore(option, query) {
     const title = normalizeSearchText(option.dataset.galleryTitle || '');
@@ -90,7 +90,6 @@ function galleryOptionScore(option, query) {
  * keeps this picker compatible with those flows without special-case callbacks.
  *
  * @param {HTMLInputElement} hiddenInput Hidden submitted gallery ID field.
- * @returns {void}
  */
 function notifyHiddenValueChanged(hiddenInput) {
     hiddenInput.dispatchEvent(new Event('input', {bubbles: true}));
@@ -101,7 +100,6 @@ function notifyHiddenValueChanged(hiddenInput) {
  * Enables one searchable gallery picker widget.
  *
  * @param {HTMLElement} picker Server-rendered picker root.
- * @returns {void}
  */
 function setupOneGallerySearchPicker(picker) {
     if (picker.dataset.gallerySearchPickerBound === '1') {
@@ -137,11 +135,10 @@ function setupOneGallerySearchPicker(picker) {
     // committedLabel stores the last label that matches the hidden submitted ID.
     let committedLabel = input.value.trim();
 
-    /**
+        /**
      * Opens or closes the result menu.
      *
      * @param {boolean} open Whether the menu should be visible.
-     * @returns {void}
      */
     function setMenuOpen(open) {
         menu.hidden = !open;
@@ -149,11 +146,10 @@ function setupOneGallerySearchPicker(picker) {
         picker.classList.toggle('is-gallery-search-open', open);
     }
 
-    /**
+        /**
      * Updates the active descendant used by keyboard navigation.
      *
      * @param {number} nextIndex New highlighted option index.
-     * @returns {void}
      */
     function setActiveIndex(nextIndex) {
         activeIndex = visibleOptions.length === 0 ? -1 : Math.max(0, Math.min(nextIndex, visibleOptions.length - 1));
@@ -171,11 +167,10 @@ function setupOneGallerySearchPicker(picker) {
         }
     }
 
-    /**
+        /**
      * Commits one option into the hidden submitted value.
      *
      * @param {HTMLElement|null} option Option button to commit.
-     * @returns {void}
      */
     function commitOption(option) {
         if (!(option instanceof HTMLElement)) {
@@ -195,10 +190,8 @@ function setupOneGallerySearchPicker(picker) {
         notifyHiddenValueChanged(hiddenInput);
     }
 
-    /**
+        /**
      * Clears the submitted gallery value and leaves the user ready to search.
-     *
-     * @returns {void}
      */
     function clearSelection() {
         hiddenInput.value = '';
@@ -210,11 +203,10 @@ function setupOneGallerySearchPicker(picker) {
         input.focus({preventScroll: true});
     }
 
-    /**
+        /**
      * Applies the current query to all option buttons.
      *
      * @param {boolean} openAfterFiltering Whether matching results should be shown.
-     * @returns {void}
      */
     function applyFilter(openAfterFiltering) {
         const query = normalizeSearchText(input.value);
@@ -247,23 +239,19 @@ function setupOneGallerySearchPicker(picker) {
         setMenuOpen(openAfterFiltering && (visibleOptions.length > 0 || query !== ''));
     }
 
-    /**
+        /**
      * Schedules filtering after the configured debounce delay.
-     *
-     * @returns {void}
      */
     function scheduleFilter() {
         window.clearTimeout(filterTimer);
         filterTimer = window.setTimeout(() => applyFilter(true), searchDelay);
     }
 
-    /**
+        /**
      * Applies filtering immediately after navigation and composition-safe input.
      *
      * The debounce is still used for normal typing, but this helper lets paste,
      * cut, and rapid correction update the visible result list predictably.
-     *
-     * @returns {void}
      */
     function applyFilterSoon() {
         window.clearTimeout(filterTimer);
@@ -348,8 +336,6 @@ function setupOneGallerySearchPicker(picker) {
 
 /**
  * Enables all searchable gallery picker widgets on the current page.
- *
- * @returns {void}
  */
 export function setupGallerySearchPickers() {
     document.querySelectorAll('[data-gallery-search-picker]').forEach((picker) => {

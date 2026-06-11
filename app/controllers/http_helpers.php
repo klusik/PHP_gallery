@@ -36,10 +36,12 @@ declare(strict_types=1);
 
 /**
  * HTTP controller helper model.
- * 
+ *
  * This module contains small response helpers shared by public and admin controllers, such as conditional file headers and the public back-to-top control renderer.
+ *
+ * @param string $path Filesystem path.
+ * @param string $cacheControl Cache control value.
  */
-
 function send_conditional_file_headers(string $path, string $cacheControl): void
 {
     // $mtime stores an intermediate value used by the surrounding gallery workflow.
@@ -64,7 +66,6 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
 
 /**
  * Handles render back to top button logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function render_back_to_top_button(): void
 {
@@ -73,7 +74,6 @@ function render_back_to_top_button(): void
 
 /**
  * Handles cms not found logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_not_found(): void
 {

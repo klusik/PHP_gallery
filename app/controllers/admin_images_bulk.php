@@ -36,9 +36,7 @@ declare(strict_types=1);
 
 /**
  * Handles cms admin bulk images logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
-
 function cms_admin_bulk_images(): void
 {
     require_admin();

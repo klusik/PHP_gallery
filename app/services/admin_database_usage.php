@@ -43,7 +43,7 @@ declare(strict_types=1);
  * AI metadata rows, analysis jobs, and tracked thumbnail variants. Runtime logs,
  * telemetry, settings, accounts, and update state remain outside this number.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function admin_database_usage_gallery_table_names(): array
 {
@@ -72,7 +72,7 @@ function admin_database_usage_gallery_table_names(): array
  * enough for admin capacity planning, but they should not be treated as exact
  * byte-for-byte payload serialization sizes.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function admin_database_usage_summary(): array
 {
@@ -94,6 +94,8 @@ function admin_database_usage_summary(): array
 
 /**
  * Return the active database/schema name for the shared PDO connection.
+ *
+ * @return string Text result for the caller.
  */
 function admin_database_usage_current_database_name(): string
 {
@@ -109,7 +111,8 @@ function admin_database_usage_current_database_name(): string
 /**
  * Return raw table-size rows from information_schema.TABLES.
  *
- * @return array<int, array<string, mixed>>
+ * @param string $databaseName Database name value.
+ * @return array<int array<string, mixed>>.
  */
 function admin_database_usage_table_rows(string $databaseName): array
 {
@@ -130,7 +133,8 @@ function admin_database_usage_table_rows(string $databaseName): array
 /**
  * Build a safe unavailable-state payload.
  *
- * @return array<string, mixed>
+ * @param string $reason Reason value.
+ * @return array<string mixed>.
  */
 function admin_database_usage_unavailable(string $reason): array
 {
@@ -161,9 +165,10 @@ function admin_database_usage_unavailable(string $reason): array
 /**
  * Build a normalized usage summary from information_schema rows.
  *
- * @param array<int, array<string, mixed>> $rows
- * @param array<int, string> $galleryTableNames
- * @return array<string, mixed>
+ * @param string $databaseName Database name value.
+ * @param array $rows Rows to process.
+ * @param array $galleryTableNames Gallery table names value.
+ * @return array<string mixed>.
  */
 function admin_database_usage_build_summary_from_rows(string $databaseName, array $rows, array $galleryTableNames): array
 {
@@ -237,9 +242,9 @@ function admin_database_usage_build_summary_from_rows(string $databaseName, arra
 /**
  * Normalize one information_schema row for display and aggregation.
  *
- * @param array<string, mixed> $row
- * @param array<string, bool> $galleryTableLookup
- * @return array<string, mixed>
+ * @param array $row Row data.
+ * @param array $galleryTableLookup Gallery table lookup value.
+ * @return array<string mixed>.
  */
 function admin_database_usage_normalize_table_row(array $row, array $galleryTableLookup): array
 {
@@ -266,8 +271,10 @@ function admin_database_usage_normalize_table_row(array $row, array $galleryTabl
 /**
  * Sort table rows and add percentage values for chart rendering.
  *
- * @param array<int, array<string, mixed>> $rows
- * @return array<int, array<string, mixed>>
+ * @param array $rows Rows to process.
+ * @param int $totalBytes Total bytes value.
+ * @param int $limit Maximum number of items.
+ * @return array<int array<string, mixed>>.
  */
 function admin_database_usage_finalize_table_rows(array $rows, int $totalBytes, int $limit = 10): array
 {

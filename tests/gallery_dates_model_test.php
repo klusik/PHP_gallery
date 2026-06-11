@@ -37,8 +37,12 @@
 declare(strict_types=1);
 
 if (!function_exists('db_column_exists')) {
-    /**
+        /**
      * Schema shim for gallery date service tests.
+     *
+     * @param string $table Table value.
+     * @param string $column Column value.
+     * @return bool True when the condition matches.
      */
     function db_column_exists(string $table, string $column): bool
     {
@@ -47,8 +51,11 @@ if (!function_exists('db_column_exists')) {
 }
 
 if (!function_exists('e')) {
-    /**
+        /**
      * Minimal HTML escaping shim for renderer tests.
+     *
+     * @param ?string $value Value to process.
+     * @return string Text result for the caller.
      */
     function e(?string $value): string
     {
@@ -57,8 +64,13 @@ if (!function_exists('e')) {
 }
 
 if (!function_exists('t')) {
-    /**
+        /**
      * Minimal translation shim for service tests.
+     *
+     * @param string $key Lookup key.
+     * @param string|array|null $fallback Fallback value.
+     * @param array $parameters Parameters value.
+     * @return string Text result for the caller.
      */
     function t(string $key, string|array|null $fallback = null, array $parameters = []): string
     {
@@ -74,6 +86,10 @@ require_once __DIR__ . '/../app/services/gallery_dates.php';
 
 /**
  * Throw when a gallery date expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_gallery_dates_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -84,6 +100,10 @@ function assert_gallery_dates_same(mixed $expected, mixed $actual, string $label
 
 /**
  * Throw when a rendered string does not contain an expected substring.
+ *
+ * @param string $needle Needle value.
+ * @param string $haystack Haystack value.
+ * @param string $label Label value.
  */
 function assert_gallery_dates_contains(string $needle, string $haystack, string $label): void
 {

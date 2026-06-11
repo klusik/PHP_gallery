@@ -36,6 +36,12 @@ declare(strict_types=1);
 
 /**
  * Build the public vote controls and current vote state.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $score Score value.
+ * @param int $currentVote Current vote value.
+ * @param bool $votingAllowed Voting allowed value.
+ * @return string Text result for the caller.
  */
 function render_vote_form_html(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): string
 {
@@ -55,6 +61,11 @@ function render_vote_form_html(int $imageId, int $score, int $currentVote, bool 
 
 /**
  * Render the public vote controls and current vote state.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $score Score value.
+ * @param int $currentVote Current vote value.
+ * @param bool $votingAllowed Voting allowed value.
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
 {

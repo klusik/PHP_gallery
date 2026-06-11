@@ -49,6 +49,8 @@ declare(strict_types=1);
 
 /**
  * Return true when the gallery background source column is available.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_background_source_schema_ready(): bool
 {
@@ -70,6 +72,8 @@ function gallery_background_source_schema_ready(): bool
 
 /**
  * Return the theme fallback background source, if configured.
+ *
+ * @return ?string Text result for the caller.
  */
 function theme_background_source(): ?string
 {
@@ -80,6 +84,9 @@ function theme_background_source(): ?string
 
 /**
  * Return the gallery override background source, if configured.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return ?string Text result for the caller.
  */
 function gallery_background_source(array $gallery): ?string
 {
@@ -90,6 +97,9 @@ function gallery_background_source(array $gallery): ?string
 
 /**
  * Resolve the effective background source for a gallery.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function resolved_gallery_background_source(array $gallery): string
 {
@@ -100,6 +110,10 @@ function resolved_gallery_background_source(array $gallery): string
 
 /**
  * Return the public background asset URL for a gallery, if one can be resolved.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @return string Text result for the caller.
  */
 function gallery_background_asset_url(array $gallery, bool $publicOnly): string
 {
@@ -126,6 +140,8 @@ function gallery_background_asset_url(array $gallery, bool $publicOnly): string
 
 /**
  * Return the stored global theme background file path, if present.
+ *
+ * @return ?string Text result for the caller.
  */
 function theme_background_path(): ?string
 {
@@ -134,6 +150,8 @@ function theme_background_path(): ?string
 
 /**
  * Return the stored original global theme background file path, if present.
+ *
+ * @return ?string Text result for the caller.
  */
 function theme_background_original_path(): ?string
 {
@@ -142,6 +160,8 @@ function theme_background_original_path(): ?string
 
 /**
  * Return the stored optimized global theme background file path, if present.
+ *
+ * @return ?string Text result for the caller.
  */
 function theme_background_optimized_path(): ?string
 {
@@ -150,6 +170,9 @@ function theme_background_optimized_path(): ?string
 
 /**
  * Resolve a saved theme background path only when the file still exists.
+ *
+ * @param string $path Filesystem path.
+ * @return ?string Text result for the caller.
  */
 function theme_background_existing_path(string $path): ?string
 {
@@ -165,6 +188,8 @@ function theme_background_existing_path(string $path): ?string
 
 /**
  * Return the preferred public theme background path.
+ *
+ * @return ?string Text result for the caller.
  */
 function theme_background_served_path(): ?string
 {
@@ -173,6 +198,8 @@ function theme_background_served_path(): ?string
 
 /**
  * Return the public URL for the stored global theme background.
+ *
+ * @return string Text result for the caller.
  */
 function theme_background_asset_url(): string
 {
@@ -188,6 +215,9 @@ function theme_background_asset_url(): string
 
 /**
  * Return a stable asset revision for the currently served theme background.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return string Text result for the caller.
  */
 function theme_background_served_version(string $relativePath): string
 {
@@ -201,6 +231,9 @@ function theme_background_served_version(string $relativePath): string
 
 /**
  * Normalize the maximum side used for optimized theme backgrounds.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_background_optimized_max_side_value(mixed $value): int
 {
@@ -214,6 +247,8 @@ function theme_background_optimized_max_side_value(mixed $value): int
 
 /**
  * Return true when the installed PHP runtime can create optimized WebP backgrounds.
+ *
+ * @return bool True when the condition matches.
  */
 function theme_background_webp_generation_available(): bool
 {
@@ -222,6 +257,8 @@ function theme_background_webp_generation_available(): bool
 
 /**
  * Return the storage directory for the global theme background asset.
+ *
+ * @return string Text result for the caller.
  */
 function theme_background_storage_dir(): string
 {
@@ -235,6 +272,10 @@ function theme_background_storage_dir(): string
 
 /**
  * Store one uploaded global theme background image in private cache storage.
+ *
+ * @param array $file File value.
+ * @param ?int $maxSide Max side value.
+ * @return string Text result for the caller.
  */
 function store_uploaded_theme_background(array $file, ?int $maxSide = null): string
 {
@@ -261,6 +302,8 @@ function store_uploaded_theme_background(array $file, ?int $maxSide = null): str
 
 /**
  * Remove old global theme background derivatives before storing a replacement.
+ *
+ * @param ?string $keepPath Keep path filesystem path.
  */
 function theme_background_clear_stored_files(?string $keepPath = null): void
 {
@@ -274,6 +317,9 @@ function theme_background_clear_stored_files(?string $keepPath = null): void
 
 /**
  * Rebuild the optimized WebP global theme background from the saved original.
+ *
+ * @param ?int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function theme_background_regenerate_optimized(?int $maxSide = null): bool
 {
@@ -290,6 +336,10 @@ function theme_background_regenerate_optimized(?int $maxSide = null): bool
 
 /**
  * Generate a resized WebP derivative for the global theme background.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function theme_background_generate_optimized(string $sourcePath, int $maxSide): bool
 {

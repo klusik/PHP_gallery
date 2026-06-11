@@ -62,6 +62,13 @@
     let lastPhotoOpenedId = null;
     let sessionStarted = sessionStorage.getItem(sessionKey + '_started') === '1';
 
+    /**
+     * Handle browser family.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {string} Text result for the caller.
+     */
     function browserFamily() {
         const agentData = navigator.userAgentData;
         if (agentData && Array.isArray(agentData.brands)) {
@@ -92,12 +99,26 @@
         return 'unknown';
     }
 
+    /**
+     * Handle browser major bucket.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function browserMajorBucket() {
         const userAgent = navigator.userAgent.toLowerCase();
         const match = userAgent.match(/(?:chrome|firefox|version|edg|opr)\/(\d+)/);
         return match ? Number(match[1]) : null;
     }
 
+    /**
+     * Handle os family.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {string} Text result for the caller.
+     */
     function osFamily() {
         const platform = String(navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
         const userAgent = navigator.userAgent.toLowerCase();
@@ -119,6 +140,13 @@
         return 'unknown';
     }
 
+    /**
+     * Handle device type.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {string} Text result for the caller.
+     */
     function deviceType() {
         const userAgent = navigator.userAgent.toLowerCase();
         if (userAgent.includes('bot') || userAgent.includes('crawler') || userAgent.includes('spider')) {
@@ -133,6 +161,14 @@
         return 'desktop';
     }
 
+    /**
+     * Handle base event.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {string} eventName Event name value.
+     * @return {object} Object result for the caller.
+     */
     function baseEvent(eventName) {
         return {
             event_name: eventName,
@@ -153,6 +189,11 @@
         };
     }
 
+    /**
+     * Handle enqueue.
+     *
+     * @param {Event} event Browser or application event.
+     */
     function enqueue(event) {
         const sampleRate = Number(config.sampleRate || 1);
         if (sampleRate < 1 && Math.random() > sampleRate) {
@@ -166,6 +207,11 @@
         scheduleFlush();
     }
 
+    /**
+     * Schedule flush.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function scheduleFlush() {
         if (flushTimer !== null) {
             return;
@@ -176,6 +222,9 @@
         }, 750);
     }
 
+    /**
+     * Handle flush.
+     */
     function flush() {
         if (flushTimer !== null) {
             window.clearTimeout(flushTimer);
@@ -205,6 +254,14 @@
         });
     }
 
+    /**
+     * Handle visible width bucket.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {number} width Width value.
+     * @return {string} Text result for the caller.
+     */
     function visibleWidthBucket(width) {
         if (!width || width <= 0) {
             return 'unknown';
@@ -224,6 +281,11 @@
         return '1201_plus';
     }
 
+    /**
+     * Start page events.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function startPageEvents() {
         if (!sessionStarted) {
             sessionStarted = true;
@@ -296,6 +358,14 @@
     };
 
 
+    /**
+     * Handle card from telemetry click.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {Event} event Browser or application event.
+     * @return {*} Result value for the caller.
+     */
     function cardFromTelemetryClick(event) {
         if (!(event.target instanceof Element)) {
             return null;
@@ -306,6 +376,11 @@
         return event.target.closest('[data-lightbox-image], [data-lightbox-source]');
     }
 
+    /**
+     * Handle setup lightbox fallback observers.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function setupLightboxFallbackObservers() {
         document.addEventListener('click', function (event) {
             const card = cardFromTelemetryClick(event);
@@ -344,6 +419,11 @@
         observer.observe(overlay, {attributes: true, attributeFilter: ['hidden']});
     }
 
+    /**
+     * Collect performance navigation.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function collectPerformanceNavigation() {
         const navigation = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
         if (!navigation) {

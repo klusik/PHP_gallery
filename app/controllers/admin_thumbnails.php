@@ -36,10 +36,11 @@ declare(strict_types=1);
 
 /**
  * Admin thumbnail controller model.
- * 
+ *
  * This module renders thumbnail maintenance notices and handles manual or batched thumbnail generation requests.
+ *
+ * @param array $summary Summary value.
  */
-
 function render_admin_thumbnail_maintenance_notice(array $summary): void
 {
     if (function_exists('view_render_admin_thumbnail_maintenance_notice')) {
@@ -86,8 +87,6 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
  * The dismissal is intentionally bound to a lightweight image inventory
  * fingerprint. Adding or importing a new image changes that fingerprint, which
  * makes the old dismissal invalid before its seven-day expiry.
- *
- * @return void
  */
 function cms_admin_dismiss_thumbnail_notice(): void
 {
@@ -232,7 +231,8 @@ function cms_admin_check_thumbnail_maintenance_batch(): void
 /**
  * Return the flash message for one completed dry thumbnail check.
  *
- * @param array<string, mixed> $report
+ * @param array $report Report value.
+ * @return string Text result for the caller.
  */
 function cms_admin_thumbnail_check_message(array $report): string
 {
@@ -254,7 +254,7 @@ function cms_admin_thumbnail_check_message(array $report): string
 /**
  * Write the admin log entry for one completed dry thumbnail check.
  *
- * @param array<string, mixed> $report
+ * @param array $report Report value.
  */
 function cms_admin_record_thumbnail_check_completion(array $report): void
 {
@@ -277,6 +277,9 @@ function cms_admin_record_thumbnail_check_completion(array $report): void
  * future, and the image inventory fingerprint must match the current summary.
  * If either value is stale, the dismissal settings are removed so later checks
  * start from a clean state.
+ *
+ * @param array $summary Summary value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
 {
@@ -303,7 +306,6 @@ function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
 
 /**
  * Handles cms admin create thumbnails logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_create_thumbnails(): void
 {
@@ -407,7 +409,6 @@ function cms_admin_create_thumbnails(): void
 
 /**
  * Handles cms admin create thumbnails batch logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_create_thumbnails_batch(): void
 {
@@ -609,7 +610,8 @@ function cms_admin_create_thumbnails_batch(): void
 /**
  * Return a JSON response for experimental thumbnail rebuild endpoints.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function cms_admin_thumbnail_experimental_json_response(array $payload, int $statusCode = 200): void
 {
@@ -721,8 +723,6 @@ function cms_admin_thumbnail_experimental_upload_batch(): void
  * destructive path can have its own CSRF check, explicit confirmation token,
  * admin flash message, and operational log entry. The confirmation word is not
  * a security mechanism. It is a human safety rail against accidental clicks.
- *
- * @return void
  */
 function cms_admin_delete_thumbnails(): void
 {
@@ -768,7 +768,7 @@ function cms_admin_delete_thumbnails(): void
  * confirming the destructive action. The JavaScript button uses the same words
  * from its data attribute and picks one randomly for the prompt.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function thumbnail_delete_confirmation_words(): array
 {
@@ -783,8 +783,8 @@ function thumbnail_delete_confirmation_words(): array
  * broader gallery/all-image selectors used by normal thumbnail jobs. This keeps
  * the AJAX batch path and the non-AJAX fallback on the same maintenance scope.
  *
- * @param array<string, mixed> $post Submitted thumbnail request fields.
- * @return array<int, int>
+ * @param array $post Post value.
+ * @return array<int int>.
  */
 function thumbnail_maintenance_request_image_ids(array $post): array
 {
@@ -803,6 +803,7 @@ function thumbnail_maintenance_request_image_ids(array $post): array
 
 /**
  * Handles thumbnail request image ids logic for the gallery application.
+ *
  * @param mixed $post Input used by this operation.
  * @return mixed Result produced by this operation.
  */

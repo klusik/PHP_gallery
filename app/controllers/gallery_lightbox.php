@@ -39,7 +39,6 @@ declare(strict_types=1);
  *
  * @param array $payload JSON-serializable response payload.
  * @param int $status HTTP status code.
- * @return void
  */
 function gallery_lightbox_json_response(array $payload, int $status = 200): void
 {
@@ -94,8 +93,6 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
 
 /**
  * Return an asynchronous ordered metadata window for the public gallery lightbox.
- *
- * @return void
  */
 function cms_gallery_lightbox_data(): void
 {

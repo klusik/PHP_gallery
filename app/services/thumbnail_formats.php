@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 /**
  * Handles thumbnail webp required for source logic for the gallery application.
+ *
  * @param mixed $sourcePath Input used by this operation.
  * @param mixed $mime Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -59,6 +60,8 @@ function thumbnail_webp_required_for_source(string $sourcePath, string $mime): b
  * In that state class_exists('Imagick') is true, but writeImage() still fails
  * for WebP targets. The maintenance scanner must not require WebP variants
  * that the generator will refuse or fail to create.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_imagick_webp_available(): bool
 {
@@ -82,7 +85,9 @@ function thumbnail_imagick_webp_available(): bool
  * dashboard counts, warmup repair, and upload thumbnail creation agree about
  * which output files should exist.
  *
- * @return array<int, string>
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return array<int string>.
  */
 function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
 {
@@ -108,6 +113,10 @@ function thumbnail_target_formats_for_source(string $sourcePath, string $mime): 
 
 /**
  * Return the number of WebP variants intentionally not required for one source image.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return int Integer result for the caller.
  */
 function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $mime): int
 {
@@ -123,6 +132,10 @@ function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $
 
 /**
  * Return why the current runtime cannot write WebP for one source image.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return ?string Text result for the caller.
  */
 function thumbnail_webp_unavailable_reason_for_source(string $sourcePath, string $mime): ?string
 {
@@ -141,8 +154,10 @@ function thumbnail_webp_unavailable_reason_for_source(string $sourcePath, string
 /**
  * Return the complete thumbnail generation policy for logging and diagnostics.
  *
- * @param array<int, int>|null $requestedSizes Sizes requested by the current operation. Null means all enabled sizes.
- * @return array<string, mixed>
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @param ?array $requestedSizes Requested sizes value.
+ * @return array<string mixed>.
  */
 function thumbnail_generation_policy_summary(string $sourcePath, string $mime, ?array $requestedSizes = null): array
 {

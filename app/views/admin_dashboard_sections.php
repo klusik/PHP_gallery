@@ -36,6 +36,9 @@ declare(strict_types=1);
 
 /**
  * Return true when an optional dashboard feature should be rendered.
+ *
+ * @param string $featureKey Feature key value.
+ * @return bool True when the condition matches.
  */
 function view_admin_dashboard_feature_enabled(string $featureKey): bool
 {
@@ -45,7 +48,9 @@ function view_admin_dashboard_feature_enabled(string $featureKey): bool
 /**
  * Return a safe boolean value from the dashboard model.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @return bool True when the condition matches.
  */
 function view_admin_dashboard_bool(array $model, string $key): bool
 {
@@ -55,7 +60,10 @@ function view_admin_dashboard_bool(array $model, string $key): bool
 /**
  * Return a safe integer value from the dashboard model.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function view_admin_dashboard_int(array $model, string $key, int $fallback = 0): int
 {
@@ -65,8 +73,9 @@ function view_admin_dashboard_int(array $model, string $key, int $fallback = 0):
 /**
  * Return a safe array value from the dashboard model.
  *
- * @param array<string, mixed> $model
- * @return array<string, mixed>
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @return array<string mixed>.
  */
 function view_admin_dashboard_array(array $model, string $key): array
 {
@@ -76,7 +85,7 @@ function view_admin_dashboard_array(array $model, string $key): array
 /**
  * Render the focused Overview tab.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_overview_panel(array $model): void
 {
@@ -116,7 +125,7 @@ function view_render_admin_dashboard_overview_panel(array $model): void
 /**
  * Render summary metric cards for the dashboard overview.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_metric_grid(array $model): void
 {
@@ -212,7 +221,7 @@ function view_render_admin_dashboard_open_maintenance_card(): void
 /**
  * Render the Maintenance tab as nested, logical tool groups.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_maintenance_panel(array $model): void
 {
@@ -256,7 +265,7 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
 /**
  * Render maintenance tools that affect public display and metadata policy.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_content_display_tools(array $model): void
 {
@@ -285,7 +294,7 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
 /**
  * Render maintenance tools for generated media and archives.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_media_tools(array $model): void
 {
@@ -310,7 +319,7 @@ function view_render_admin_dashboard_media_tools(array $model): void
 /**
  * Render maintenance tools for maps and flight navigation data.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_navigation_tools(array $model): void
 {
@@ -332,7 +341,7 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
 /**
  * Render maintenance tools for application health and diagnostics.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_system_tools(array $model): void
 {
@@ -367,6 +376,8 @@ function view_render_admin_dashboard_system_tools(array $model): void
 
 /**
  * Render the public search settings card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_public_search_card(string $className): void
 {
@@ -378,6 +389,8 @@ function view_render_admin_dashboard_public_search_card(string $className): void
 
 /**
  * Render the clean public-path regeneration card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_public_paths_card(string $className): void
 {
@@ -387,6 +400,8 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
 
 /**
  * Render public crawler safety settings.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_seo_guard_card(string $className): void
 {
@@ -416,7 +431,8 @@ function view_render_admin_dashboard_seo_guard_card(string $className): void
 /**
  * Render thumbnail cache actions.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_thumbnail_card(array $model, string $className): void
 {
@@ -527,7 +543,8 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 /**
  * Render the scheduled site-maintenance settings card.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_site_maintenance_card(array $model, string $className): void
 {
@@ -634,6 +651,8 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
 
 /**
  * Render the complete gallery archive card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_archive_card(string $className): void
 {
@@ -642,6 +661,8 @@ function view_render_admin_dashboard_archive_card(string $className): void
 
 /**
  * Render the media renamer shortcut card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_media_renamer_card(string $className): void
 {
@@ -650,6 +671,8 @@ function view_render_admin_dashboard_media_renamer_card(string $className): void
 
 /**
  * Render the pending database migration card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_migration_card(string $className): void
 {

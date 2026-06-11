@@ -42,6 +42,8 @@ declare(strict_types=1);
  * migrations afterwards. This feature gate prevents edit forms and public
  * rendering from touching columns that may not exist yet on partially-updated
  * installations.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_grid_schema_ready(): bool
 {
@@ -56,6 +58,9 @@ function gallery_grid_schema_ready(): bool
  * NULL columns intentionally mean "inherit". A gallery must have both columns
  * and rows filled before it becomes an override source, because rows are used by
  * pagination slicing while columns are used by the CSS grid.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_grid_has_explicit_override(array $gallery): bool
 {
@@ -73,6 +78,12 @@ function gallery_grid_has_explicit_override(array $gallery): bool
  * The grid_columns_enabled flag deliberately decouples visual grid columns from
  * pagination_enabled. This lets admins use a 5-column gallery grid even when
  * pagination itself is disabled.
+ *
+ * @param int $columns Columns value.
+ * @param int $rows Rows to process.
+ * @param bool $paginationEnabled Pagination enabled value.
+ * @param string $source Source value.
+ * @return array Structured result data for the caller.
  */
 function gallery_grid_settings_from_dimensions(int $columns, int $rows, bool $paginationEnabled, string $source): array
 {
@@ -97,6 +108,8 @@ function gallery_grid_settings_from_dimensions(int $columns, int $rows, bool $pa
  * The fallback intentionally uses the existing global pagination dimensions so
  * upgraded installations keep their current visual layout until the admin saves
  * a distinct main-page grid.
+ *
+ * @return array Structured result data for the caller.
  */
 function main_page_gallery_grid_settings(): array
 {
@@ -117,6 +130,9 @@ function main_page_gallery_grid_settings(): array
  * 1. The current gallery, when it has a custom grid.
  * 2. The nearest ancestor that has a custom grid and has enabled inheritance.
  * 3. The global Theme pagination dimensions, which preserve previous behavior.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function gallery_effective_grid_settings(array $gallery): array
 {
@@ -151,6 +167,8 @@ function gallery_effective_grid_settings(array $gallery): array
  * metadata source used by imports and repair workflows. Clearing only one of
  * them would allow stale custom grids to reappear after a rescan, so this helper
  * keeps both layers synchronized.
+ *
+ * @return array Structured result data for the caller.
  */
 function reset_all_gallery_grid_overrides(): array
 {
@@ -210,6 +228,9 @@ function reset_all_gallery_grid_overrides(): array
 
 /**
  * Return the selected custom-grid columns for an Admin form.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return int Integer result for the caller.
  */
 function gallery_grid_form_columns(array $gallery): int
 {
@@ -222,6 +243,9 @@ function gallery_grid_form_columns(array $gallery): int
 
 /**
  * Return the selected custom-grid rows for an Admin form.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return int Integer result for the caller.
  */
 function gallery_grid_form_rows(array $gallery): int
 {

@@ -39,7 +39,7 @@ const WRAPPER_CLASS = 'admin-date-picker-control';
 /**
  * Returns today's date in the YYYY-MM-DD format required by native date inputs.
  *
- * @returns {string} Current local date formatted for input[type="date"].
+ * @return {string} Current local date formatted for input[type="date"].
  */
 function todayInputValue() {
     const now = new Date();
@@ -53,7 +53,6 @@ function todayInputValue() {
  * Opens the native date picker when the browser exposes the picker API.
  *
  * @param {HTMLInputElement} input Date input owned by the enhanced control.
- * @returns {void}
  */
 function openNativeDatePicker(input) {
     input.focus({preventScroll: true});
@@ -72,7 +71,7 @@ function openNativeDatePicker(input) {
 /**
  * Creates an SVG calendar icon as inline markup.
  *
- * @returns {string} SVG icon markup.
+ * @return {string} SVG icon markup.
  */
 function calendarIconMarkup() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1.25A2.75 2.75 0 0 1 22 6.75v11.5A2.75 2.75 0 0 1 19.25 21H4.75A2.75 2.75 0 0 1 2 18.25V6.75A2.75 2.75 0 0 1 4.75 4H6V3a1 1 0 0 1 1-1Zm12.25 8.5H4v7.75c0 .69.56 1.25 1.25 1.25h14c.69 0 1.25-.56 1.25-1.25V10.5ZM4.75 5.5c-.69 0-1.25.56-1.25 1.25V9h17V6.75c0-.69-.56-1.25-1.25-1.25H18v1a1 1 0 1 1-2 0v-1H8v1a1 1 0 0 1-2 0v-1H4.75Z"/></svg>';
@@ -82,7 +81,6 @@ function calendarIconMarkup() {
  * Enhances one native date input in-place while keeping its original name/value.
  *
  * @param {HTMLInputElement} input Date input to enhance.
- * @returns {void}
  */
 function enhanceDateInput(input) {
     if (input.getAttribute(ENHANCED_ATTRIBUTE) === '1') {
@@ -139,7 +137,6 @@ function enhanceDateInput(input) {
  * Enhances date inputs in the supplied DOM root.
  *
  * @param {ParentNode} root DOM root to scan.
- * @returns {void}
  */
 function enhanceDateInputsInRoot(root) {
     root.querySelectorAll('input[type="date"]').forEach((input) => {
@@ -154,8 +151,6 @@ function enhanceDateInputsInRoot(root) {
  *
  * The mutation observer is intentionally narrow and only reacts to added nodes.
  * This covers side-panel content that is injected after the initial page boot.
- *
- * @returns {void}
  */
 export function setupAdminDatePickers() {
     enhanceDateInputsInRoot(document);

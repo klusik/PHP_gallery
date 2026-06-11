@@ -50,6 +50,16 @@
  * labels must stay stable across installations and screenshots.
  */
 if (!function_exists('admin_log_english_t')) {
+    /**
+     * Handle admin log english t.
+     *
+     * Part of the related application service.
+     *
+     * @param string $key Lookup key.
+     * @param string|array|null $fallback Fallback value.
+     * @param array $parameters Parameters value.
+     * @return string Text result for the caller.
+     */
     function admin_log_english_t(string $key, string|array|null $fallback = null, array $parameters = []): string
     {
         if (is_array($fallback)) {
@@ -80,6 +90,13 @@ if (!function_exists('admin_log_english_t')) {
     }
 }
 
+/**
+ * Handle admin log schema ready.
+ *
+ * Part of the related application service.
+ *
+ * @return bool True when the condition matches.
+ */
 function admin_log_schema_ready(): bool
 {
     try {
@@ -94,6 +111,9 @@ function admin_log_schema_ready(): bool
 
 /**
  * Return whether an optional admin log column is available.
+ *
+ * @param string $columnName Column name value.
+ * @return bool True when the condition matches.
  */
 function admin_log_column_exists(string $columnName): bool
 {
@@ -115,6 +135,8 @@ function admin_log_column_exists(string $columnName): bool
 
 /**
  * Return all admin log categories exposed by the observability layer.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_category_options(): array
 {
@@ -135,6 +157,8 @@ function admin_log_category_options(): array
 
 /**
  * Return all admin log severities exposed by the observability layer.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_severity_options(): array
 {
@@ -150,6 +174,8 @@ function admin_log_severity_options(): array
 
 /**
  * Return a safe admin log route name for the current request.
+ *
+ * @return string Text result for the caller.
  */
 function admin_log_current_route_name(): string
 {
@@ -161,6 +187,7 @@ function admin_log_current_route_name(): string
 
 /**
  * Handles ensure admin log status schema logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function ensure_admin_log_status_schema(): bool
@@ -194,11 +221,12 @@ function ensure_admin_log_status_schema(): bool
 
 /**
  * Handles admin log event logic for the gallery application.
+ *
  * @param mixed $level Input used by this operation.
  * @param mixed $eventKey Input used by this operation.
  * @param mixed $message Input used by this operation.
  * @param mixed $context Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param array $options Optional behavior flags.
  */
 function admin_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
@@ -286,6 +314,7 @@ function admin_log_event(string $level, string $eventKey, string $message, array
 
 /**
  * Handles admin log status options logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function admin_log_status_options(): array
@@ -300,6 +329,7 @@ function admin_log_status_options(): array
 
 /**
  * Handles admin log status label logic for the gallery application.
+ *
  * @param mixed $status Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -312,6 +342,7 @@ function admin_log_status_label(string $status): string
 
 /**
  * Handles admin log recent logic for the gallery application.
+ *
  * @param mixed $limit Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -328,6 +359,10 @@ function admin_log_recent(int $limit = 12): array
 
 /**
  * Return reusable SQL fragments for admin log list filters.
+ *
+ * @param ?string $status Status value.
+ * @param array $filters Filters value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_filter_sql(?string $status = null, array $filters = []): array
 {
@@ -394,6 +429,9 @@ function admin_log_filter_sql(?string $status = null, array $filters = []): arra
 
 /**
  * Return the normalized SQL sort direction for admin log time ordering.
+ *
+ * @param array $filters Filters value.
+ * @return string Text result for the caller.
  */
 function admin_log_time_sort_sql(array $filters): string
 {
@@ -402,6 +440,8 @@ function admin_log_time_sort_sql(array $filters): string
 
 /**
  * Return columns used for default grouped admin log rows.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_group_columns(): array
 {
@@ -418,6 +458,9 @@ function admin_log_group_columns(): array
 
 /**
  * Return the SQL expression used to identify one grouped admin log bucket.
+ *
+ * @param string $tableAlias Table alias value.
+ * @return string Text result for the caller.
  */
 function admin_log_group_hash_sql(string $tableAlias = 'l'): string
 {
@@ -431,8 +474,11 @@ function admin_log_group_hash_sql(string $tableAlias = 'l'): string
 
 /**
  * Handles admin log list logic for the gallery application.
+ *
  * @param mixed $status Input used by this operation.
  * @param mixed $limit Input used by this operation.
+ * @param array $filters Filters value.
+ * @param int $offset Starting offset.
  * @return mixed Result produced by this operation.
  */
 function admin_log_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
@@ -457,6 +503,10 @@ function admin_log_list(?string $status = null, int $limit = 100, array $filters
 
 /**
  * Return the number of admin log rows matching the active filters.
+ *
+ * @param ?string $status Status value.
+ * @param array $filters Filters value.
+ * @return int Integer result for the caller.
  */
 function admin_log_count(?string $status = null, array $filters = []): int
 {
@@ -473,6 +523,12 @@ function admin_log_count(?string $status = null, array $filters = []): int
 
 /**
  * Return grouped admin log rows matching the active filters.
+ *
+ * @param ?string $status Status value.
+ * @param int $limit Maximum number of items.
+ * @param array $filters Filters value.
+ * @param int $offset Starting offset.
+ * @return array Structured result data for the caller.
  */
 function admin_log_grouped_list(?string $status = null, int $limit = 100, array $filters = [], int $offset = 0): array
 {
@@ -508,6 +564,10 @@ function admin_log_grouped_list(?string $status = null, int $limit = 100, array 
 
 /**
  * Return the number of grouped admin log rows matching the active filters.
+ *
+ * @param ?string $status Status value.
+ * @param array $filters Filters value.
+ * @return int Integer result for the caller.
  */
 function admin_log_grouped_count(?string $status = null, array $filters = []): int
 {
@@ -528,6 +588,9 @@ function admin_log_grouped_count(?string $status = null, array $filters = []): i
 
 /**
  * Return every log row that belongs to the requested grouped hashes.
+ *
+ * @param array $groupHashes Group hashes value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_group_member_rows(array $groupHashes): array
 {
@@ -562,6 +625,9 @@ function admin_log_group_member_rows(array $groupHashes): array
 
 /**
  * Attach grouped member rows to grouped summary entries.
+ *
+ * @param array $logs Logs value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_attach_group_members(array $logs): array
 {
@@ -597,6 +663,8 @@ function admin_log_attach_group_members(array $logs): array
 
 /**
  * Return every admin log row available to the logs subsystem for full exports.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_export_rows(): array
 {
@@ -611,6 +679,8 @@ function admin_log_export_rows(): array
 
 /**
  * Return the stable admin log export column order used by CSV and JSON metadata.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_export_columns(): array
 {
@@ -640,6 +710,9 @@ function admin_log_export_columns(): array
 
 /**
  * Normalize one admin log database row for reusable export payloads.
+ *
+ * @param array $entry Entry value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_export_normalize_entry(array $entry): array
 {
@@ -671,6 +744,9 @@ function admin_log_export_normalize_entry(array $entry): array
 
 /**
  * Build the reusable JSON-ready admin log export payload.
+ *
+ * @param ?array $rows Rows to process.
+ * @return array Structured result data for the caller.
  */
 function admin_log_export_payload(?array $rows = null): array
 {
@@ -687,6 +763,9 @@ function admin_log_export_payload(?array $rows = null): array
 
 /**
  * Encode the reusable admin log JSON export payload.
+ *
+ * @param ?array $payload Payload value.
+ * @return string Text result for the caller.
  */
 function admin_log_export_json(?array $payload = null): string
 {
@@ -700,6 +779,9 @@ function admin_log_export_json(?array $payload = null): string
 
 /**
  * Build a CSV export from the same normalized payload used for JSON.
+ *
+ * @param array $payload Payload value.
+ * @return string Text result for the caller.
  */
 function admin_log_export_csv(array $payload): string
 {
@@ -736,6 +818,9 @@ function admin_log_export_csv(array $payload): string
 
 /**
  * Create a ZIP archive containing CSV and JSON exports of the same admin log payload.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param array $payload Payload value.
  */
 function admin_log_create_export_zip(string $filePath, array $payload): void
 {
@@ -756,6 +841,9 @@ function admin_log_create_export_zip(string $filePath, array $payload): void
 
 /**
  * Stream a generated admin log ZIP export to the browser.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param string $downloadName Download name value.
  */
 function admin_log_send_export_zip(string $filePath, string $downloadName): never
 {
@@ -774,6 +862,8 @@ function admin_log_send_export_zip(string $filePath, string $downloadName): neve
 
 /**
  * Return a temporary path for an admin log ZIP export.
+ *
+ * @return string Text result for the caller.
  */
 function admin_log_export_temp_path(): string
 {
@@ -786,6 +876,8 @@ function admin_log_export_temp_path(): string
 
 /**
  * Return a safe downloadable filename for a complete admin log export.
+ *
+ * @return string Text result for the caller.
  */
 function admin_log_export_zip_filename(): string
 {
@@ -793,6 +885,9 @@ function admin_log_export_zip_filename(): string
 }
 /**
  * Return one admin log entry with user information for detail display or export.
+ *
+ * @param int $logId Log id identifier.
+ * @return ?array Structured result data for the caller.
  */
 function admin_log_find(int $logId): ?array
 {
@@ -809,6 +904,9 @@ function admin_log_find(int $logId): ?array
 
 /**
  * Decode the structured context stored on an admin log entry.
+ *
+ * @param array $entry Entry value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_context_array(array $entry): array
 {
@@ -825,6 +923,9 @@ function admin_log_context_array(array $entry): array
 
 /**
  * Build a deterministic text export for one admin log entry.
+ *
+ * @param array $entry Entry value.
+ * @return string Text result for the caller.
  */
 function admin_log_export_text(array $entry): string
 {
@@ -858,6 +959,10 @@ function admin_log_export_text(array $entry): string
 
 /**
  * Build a plain-text diagnostic export for a grouped admin log summary.
+ *
+ * @param array $entry Entry value.
+ * @param array $groupMembers Group members value.
+ * @return string Text result for the caller.
  */
 function admin_log_export_group_text(array $entry, array $groupMembers): string
 {
@@ -882,6 +987,9 @@ function admin_log_export_group_text(array $entry, array $groupMembers): string
 
 /**
  * Handles admin log update status logic for the gallery application.
+ *
+ * @param string $whereSql Where sql value.
+ * @param array $whereParams Where params value.
  * @param mixed $status Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -910,9 +1018,9 @@ function admin_log_update_status_where(string $whereSql, array $whereParams, str
 
 /**
  * Handles admin log update status logic for the gallery application.
+ *
  * @param mixed $logId Input used by this operation.
  * @param mixed $status Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function admin_log_update_status(int $logId, string $status): void
 {
@@ -929,6 +1037,10 @@ function admin_log_update_status(int $logId, string $status): void
 
 /**
  * Update every admin log row that belongs to one grouped hash.
+ *
+ * @param string $groupHash Group hash value.
+ * @param string $status Status value.
+ * @return int Integer result for the caller.
  */
 function admin_log_update_group_status(string $groupHash, string $status): int
 {

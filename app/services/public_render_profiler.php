@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Return whether the current request should collect public render profiling data.
+ *
+ * @return bool True when the condition matches.
  */
 function public_render_profile_enabled(): bool
 {
@@ -50,6 +52,8 @@ function public_render_profile_enabled(): bool
 
 /**
  * Return the mutable profiler state for this request.
+ *
+ * @return array Structured result data for the caller.
  */
 function &public_render_profile_state(): array
 {
@@ -92,6 +96,9 @@ function &public_render_profile_state(): array
 
 /**
  * Start a named public render profile request.
+ *
+ * @param string $route Route value.
+ * @param ?int $galleryId Gallery identifier.
  */
 function public_render_profile_start(string $route, ?int $galleryId = null): void
 {
@@ -106,6 +113,8 @@ function public_render_profile_start(string $route, ?int $galleryId = null): voi
 
 /**
  * Set or update the current gallery id after the route has resolved it.
+ *
+ * @param ?int $galleryId Gallery identifier.
  */
 function public_render_profile_set_gallery(?int $galleryId): void
 {
@@ -118,6 +127,9 @@ function public_render_profile_set_gallery(?int $galleryId): void
 
 /**
  * Add to a named public render profile counter.
+ *
+ * @param string $counter Counter value.
+ * @param int $amount Amount value.
  */
 function public_render_profile_count(string $counter, int $amount = 1): void
 {
@@ -133,6 +145,8 @@ function public_render_profile_count(string $counter, int $amount = 1): void
 
 /**
  * Return the active thumbnail lookup purpose label for nested public render operations.
+ *
+ * @return string Text result for the caller.
  */
 function public_render_profile_thumbnail_purpose(): string
 {
@@ -150,9 +164,10 @@ function public_render_profile_thumbnail_purpose(): string
 /**
  * Run one callback with a thumbnail lookup purpose label.
  *
+ * @param string $purpose Purpose value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function public_render_profile_with_thumbnail_purpose(string $purpose, callable $callback)
 {
@@ -170,6 +185,12 @@ function public_render_profile_with_thumbnail_purpose(string $purpose, callable 
 
 /**
  * Record a thumbnail lookup under the current or explicit purpose label.
+ *
+ * @param ?string $purpose Purpose value.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @param string $kind Kind value.
+ * @param float $elapsedMs Elapsed ms value.
  */
 function public_render_profile_record_thumbnail_purpose(?string $purpose, int $size, string $format, string $kind, float $elapsedMs = 0.0): void
 {
@@ -210,6 +231,9 @@ function public_render_profile_record_thumbnail_purpose(?string $purpose, int $s
 
 /**
  * Add elapsed time to one named timer.
+ *
+ * @param string $timer Timer value.
+ * @param float $elapsedMs Elapsed ms value.
  */
 function public_render_profile_add_time(string $timer, float $elapsedMs): void
 {
@@ -232,9 +256,10 @@ function public_render_profile_add_time(string $timer, float $elapsedMs): void
 /**
  * Measure one callback and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function public_render_profile_span(string $timer, callable $callback)
 {
@@ -251,6 +276,8 @@ function public_render_profile_span(string $timer, callable $callback)
 
 /**
  * Record a database query duration and query count.
+ *
+ * @param float $elapsedMs Elapsed ms value.
  */
 function public_render_profile_record_db(float $elapsedMs): void
 {
@@ -261,9 +288,10 @@ function public_render_profile_record_db(float $elapsedMs): void
 /**
  * Measure one database callback and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function public_render_profile_db(string $timer, callable $callback)
 {
@@ -282,6 +310,8 @@ function public_render_profile_db(string $timer, callable $callback)
 
 /**
  * Record one filesystem existence check duration.
+ *
+ * @param float $elapsedMs Elapsed ms value.
  */
 function public_render_profile_record_filesystem_check(float $elapsedMs): void
 {
@@ -291,6 +321,9 @@ function public_render_profile_record_filesystem_check(float $elapsedMs): void
 
 /**
  * Measure is_file() while profiling public render filesystem pressure.
+ *
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function public_render_profile_is_file(string $path): bool
 {

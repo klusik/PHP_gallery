@@ -38,6 +38,10 @@ require_once __DIR__ . '/../app/services/upload_automation.php';
 
 /**
  * Throw when an expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_upload_automation_camera_same(mixed $expected, mixed $actual, string $label): void
 {

@@ -36,6 +36,9 @@ declare(strict_types=1);
 
 /**
  * Return whether one image row represents a DNG original that needs display derivatives.
+ *
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function image_uses_dng_display_derivatives(array $image): bool
 {
@@ -46,7 +49,7 @@ function image_uses_dng_display_derivatives(array $image): bool
 /**
  * Return supported DNG source policy values.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function dng_conversion_source_policy_options(): array
 {
@@ -56,7 +59,7 @@ function dng_conversion_source_policy_options(): array
 /**
  * Return supported DNG color policy values.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function dng_conversion_color_policy_options(): array
 {
@@ -65,6 +68,9 @@ function dng_conversion_color_policy_options(): array
 
 /**
  * Normalize one DNG source policy value.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function dng_normalize_conversion_source_policy(?string $value): string
 {
@@ -74,6 +80,9 @@ function dng_normalize_conversion_source_policy(?string $value): string
 
 /**
  * Normalize one DNG color policy value.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function dng_normalize_conversion_color_policy(?string $value): string
 {
@@ -83,6 +92,8 @@ function dng_normalize_conversion_color_policy(?string $value): string
 
 /**
  * Return the configured DNG source conversion policy.
+ *
+ * @return string Text result for the caller.
  */
 function dng_conversion_source_policy(): string
 {
@@ -91,6 +102,8 @@ function dng_conversion_source_policy(): string
 
 /**
  * Return the configured DNG color handling policy.
+ *
+ * @return string Text result for the caller.
  */
 function dng_conversion_color_policy(): string
 {
@@ -100,7 +113,7 @@ function dng_conversion_color_policy(): string
 /**
  * Return available DNG derivative source paths for the current runtime.
  *
- * @return array{raw:bool,preview_imagick:bool,preview_gd:bool}
+ * @return array{raw:bool,preview_imagick:bool,preview_gd:bool} Structured result data for the caller.
  */
 function dng_conversion_runtime_capabilities(): array
 {
@@ -114,8 +127,9 @@ function dng_conversion_runtime_capabilities(): array
 /**
  * Build the ordered source attempts for one configured DNG policy.
  *
- * @param array{raw?:bool,preview_imagick?:bool,preview_gd?:bool} $capabilities
- * @return array<int, string>
+ * @param string $sourcePolicy Source policy value.
+ * @param array{raw?:bool,preview_imagick?:bool,preview_gd?:bool} $capabilities Capabilities value.
+ * @return array<int string>.
  */
 function dng_conversion_attempt_order(string $sourcePolicy, array $capabilities): array
 {
@@ -141,6 +155,10 @@ function dng_conversion_attempt_order(string $sourcePolicy, array $capabilities)
 
 /**
  * Store the most recent DNG conversion diagnostic for this request.
+ *
+ * @param string $code Code value.
+ * @param string $message Message value.
+ * @param array $context Context value.
  */
 function dng_set_last_conversion_error(string $code, string $message, array $context = []): void
 {
@@ -150,7 +168,7 @@ function dng_set_last_conversion_error(string $code, string $message, array $con
 /**
  * Return the most recent DNG conversion diagnostic for this request.
  *
- * @return array{code:string,message:string,context:array<string,mixed>}|null
+ * @return array{code:string,message:string,context:array<string,mixed>}|null Structured result data for the caller.
  */
 function dng_last_conversion_error(): ?array
 {
@@ -167,6 +185,8 @@ function dng_clear_last_conversion_error(): void
 
 /**
  * Return whether DNG display derivative generation is available.
+ *
+ * @return bool True when the condition matches.
  */
 function dng_derivative_generation_supported(): bool
 {
@@ -178,6 +198,8 @@ function dng_derivative_generation_supported(): bool
 
 /**
  * Return a readable status explaining whether DNG derivative generation can run.
+ *
+ * @return array Structured result data for the caller.
  */
 function dng_derivative_generation_status(): array
 {
@@ -205,6 +227,9 @@ function dng_derivative_generation_status(): array
 
 /**
  * Return the generated WebP master filename for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function dng_display_master_filename(array $image): string
 {
@@ -218,6 +243,11 @@ function dng_display_master_filename(array $image): string
 
 /**
  * Return the absolute generated WebP master path for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $create Create value.
+ * @return string Text result for the caller.
  */
 function dng_display_master_abs_path(array $image, array $gallery, bool $create = false): string
 {
@@ -226,6 +256,10 @@ function dng_display_master_abs_path(array $image, array $gallery, bool $create 
 
 /**
  * Return a stable source MIME value for derivative decisions.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function image_source_mime_for_derivatives(string $sourcePath, array $image = []): string
 {
@@ -241,7 +275,10 @@ function image_source_mime_for_derivatives(string $sourcePath, array $image = []
 /**
  * Return the file that public media routes are allowed to stream for visible display.
  *
- * @return array{path:string,mime:string,filename:string,variant:string}|null
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $createIfMissing Create if missing value.
+ * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
  */
 function image_public_display_file(array $image, array $gallery, bool $createIfMissing = false): ?array
 {
@@ -292,6 +329,10 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
 
 /**
  * Create or refresh the full-size WebP display master for a DNG source.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @return bool True when the condition matches.
  */
 function create_dng_display_master(string $sourcePath, string $targetPath): bool
 {
@@ -301,6 +342,8 @@ function create_dng_display_master(string $sourcePath, string $targetPath): bool
 
 /**
  * Apply the configured color policy to an Imagick DNG or preview image.
+ *
+ * @param Imagick $image Image row or image data.
  */
 function dng_apply_imagick_color_policy(Imagick $image): void
 {
@@ -336,6 +379,12 @@ function dng_apply_imagick_color_policy(Imagick $image): void
 
 /**
  * Write one DNG derivative through Imagick.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_imagick_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
@@ -389,6 +438,12 @@ function write_dng_imagick_derivative(string $sourcePath, string $targetPath, st
 
 /**
  * Write one resized derivative from an extracted DNG JPEG preview through Imagick.
+ *
+ * @param string $previewPath Preview path filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_preview_derivative_with_imagick(string $previewPath, string $targetPath, string $format, int $maxSide): bool
 {
@@ -439,6 +494,13 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
 
 /**
  * Write one DNG derivative from the embedded JPEG preview fallback.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @param ?string $forcedPreviewPath Forced preview path filesystem path.
+ * @return bool True when the condition matches.
  */
 function write_dng_embedded_preview_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide, ?string $forcedPreviewPath = null): bool
 {
@@ -507,6 +569,12 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
 
 /**
  * Write one DNG derivative through the strongest available source path.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
@@ -541,6 +609,12 @@ function write_dng_derivative(string $sourcePath, string $targetPath, string $fo
 
 /**
  * Create thumbnails plus the WebP display master for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $sourcePath Source filesystem path.
+ * @param ?array $requestedSizes Requested sizes value.
+ * @return array Structured result data for the caller.
  */
 function create_dng_image_derivatives_result(array $image, array $gallery, string $sourcePath, ?array $requestedSizes = null): array
 {

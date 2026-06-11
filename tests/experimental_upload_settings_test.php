@@ -39,6 +39,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/services/experimental_uploads.php';
 require_once __DIR__ . '/../app/services/experimental_thumbnail_rebuild.php';
 
+/**
+ * Handle experimental upload test assert.
+ *
+ * Used by the project test harness.
+ *
+ * @param bool $condition Condition value.
+ * @param string $message Message value.
+ */
 function experimental_upload_test_assert(bool $condition, string $message): void
 {
     if (!$condition) {

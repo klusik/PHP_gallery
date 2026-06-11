@@ -37,6 +37,9 @@ declare(strict_types=1);
 
 /**
  * Emit one JSON response for migration routes.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function gallery_migration_json(array $payload, int $status = 200): void
 {
@@ -48,7 +51,7 @@ function gallery_migration_json(array $payload, int $status = 200): void
 /**
  * Resolve the existing gallery-scoped API key for a migration API request.
  *
- * @return array{token_row:array<string,mixed>,gallery:array<string,mixed>}
+ * @return array{token_row:array<string,mixed>,gallery:array<string,mixed>} Structured result data for the caller.
  */
 function gallery_migration_api_gallery(): array
 {
@@ -296,6 +299,9 @@ function cms_admin_gallery_migration(): void
 
 /**
  * Fetch a remote source manifest and prepare the local target gallery.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
 {
@@ -326,6 +332,9 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
 
 /**
  * Pull one source asset into the local target gallery.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_pull_asset(int $targetGalleryId): array
 {
@@ -353,6 +362,9 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
 
 /**
  * Send the local source manifest to a remote target gallery.
+ *
+ * @param int $sourceGalleryId Source gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
 {
@@ -382,6 +394,9 @@ function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
 
 /**
  * Push one local source asset to the remote target gallery.
+ *
+ * @param int $sourceGalleryId Source gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_asset(int $sourceGalleryId): array
 {
@@ -406,6 +421,8 @@ function gallery_migration_admin_push_asset(int $sourceGalleryId): array
 
 /**
  * Ask the remote target gallery which migration assets it already received.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_status(): array
 {
@@ -429,6 +446,8 @@ function gallery_migration_admin_push_status(): array
 
 /**
  * Ask the remote target gallery to finalize a pushed migration.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_complete(): array
 {
@@ -444,6 +463,8 @@ function gallery_migration_admin_push_complete(): array
 
 /**
  * Render the gallery migration controls for the API tab.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function render_admin_gallery_migration_panel(array $gallery): void
 {

@@ -36,10 +36,9 @@ declare(strict_types=1);
 
 /**
  * Public gallery controller model.
- * 
+ *
  * This module renders the public home page, gallery pages, gallery access gate, share redirects, gallery cards, lightbox markup, and public inline admin edit forms.
  */
-
 function cms_home(): void
 {
     public_render_profile_start('home');
@@ -144,6 +143,8 @@ function cms_public_search(): void
 
 /**
  * Return a public search context model from the current request.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function public_search_context_from_request(): ?array
 {
@@ -163,6 +164,8 @@ function public_search_context_from_request(): ?array
 
 /**
  * Render the optional thin public search bar above public gallery content.
+ *
+ * @param ?array $gallery Gallery row or gallery data.
  */
 function render_public_search_bar(?array $gallery = null): void
 {
@@ -191,7 +194,6 @@ function render_public_search_bar(?array $gallery = null): void
 
 /**
  * Handles cms gallery logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_gallery(): void
 {
@@ -527,6 +529,12 @@ function cms_gallery(): void
  * the current slice offset and item count to the save endpoint, and the server
  * verifies that the submitted ids still match that exact slice before writing
  * any sort_order values.
+ *
+ * @param string $kind Kind value.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $pagination Pagination value.
+ * @param int $visibleCount Visible count value.
+ * @param int $totalCount Total count value.
  */
 function render_public_page_reorder_toolbar(string $kind, array $gallery, array $pagination, int $visibleCount, int $totalCount): void
 {
@@ -553,6 +561,9 @@ function render_public_page_reorder_toolbar(string $kind, array $gallery, array 
  * The toolbar keeps discovery visible instead of relying only on hidden
  * modifier-key gestures. It intentionally stays on the public gallery page and
  * posts to small JSON endpoints that delegate mutation work to services.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $hasVisibleDropTargets Has visible drop targets flag.
  */
 function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTargets): void
 {
@@ -626,6 +637,10 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
  * The native Web Share API receives File objects, so clean names make the
  * receiving mobile application show meaningful media labels without exposing
  * internal gallery paths.
+ *
+ * @param array $image Image row or image data.
+ * @param string $displayTitle Display title value.
+ * @return string Text result for the caller.
  */
 function picture_manager_share_filename(array $image, string $displayTitle): string
 {
@@ -644,6 +659,13 @@ function picture_manager_share_filename(array $image, string $displayTitle): str
     return $baseName . '.' . $extension;
 }
 
+/**
+ * Render public gallery preview toolbar.
+ *
+ * Used by HTTP controller routing for this workflow.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ */
 function render_public_gallery_preview_toolbar(array $gallery): void
 {
     if (!current_user()) {
@@ -673,6 +695,10 @@ function render_public_gallery_preview_toolbar(array $gallery): void
  * The text title remains in the h1 for accessibility and SEO even when a banner
  * image visually replaces it. The logo is decorative here because it appears
  * beside an existing text or banner title and would otherwise duplicate content.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $seo Seo value.
+ * @param bool $publicOnly Public only value.
  */
 function render_public_gallery_branding_header(array $gallery, array $seo, bool $publicOnly): void
 {
@@ -705,6 +731,9 @@ function render_public_gallery_branding_header(array $gallery, array $seo, bool 
 
 /**
  * Render the optional horizontal branding separator below the gallery title area.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
  */
 function render_public_gallery_branding_separator(array $gallery, bool $publicOnly): void
 {
@@ -722,8 +751,8 @@ function render_public_gallery_branding_separator(array $gallery, bool $publicOn
 
 /**
  * Handles render breadcrumbs logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_breadcrumbs(?array $gallery = null): void
 {
@@ -740,9 +769,10 @@ function render_breadcrumbs(?array $gallery = null): void
 
 /**
  * Handles render gallery access gate logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $error Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param ?array $image Image row or image data.
  */
 function render_gallery_access_gate(array $gallery, string $error = '', ?array $image = null): void
 {
@@ -782,7 +812,6 @@ function render_gallery_access_gate(array $gallery, string $error = '', ?array $
 
 /**
  * Handles cms gallery access logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_gallery_access(): void
 {
@@ -834,7 +863,6 @@ function cms_gallery_access(): void
 
 /**
  * Handles cms share logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_share(): void
 {
@@ -867,6 +895,7 @@ function cms_share(): void
 
 /**
  * Handles gallery share url logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $token Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -883,6 +912,9 @@ function gallery_share_url(int $galleryId, string $token): string
  * lazy-loading a whole first row can leave empty thumbnail slots that then pop
  * in one by one. Later rows remain lazy so large galleries do not start too
  * many image requests at once.
+ *
+ * @param int $index Index value.
+ * @return string Text result for the caller.
  */
 function public_thumbnail_loading_attributes(int $index): string
 {
@@ -897,10 +929,12 @@ function public_thumbnail_loading_attributes(int $index): string
 
 /**
  * Handles render gallery card logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
+ * @param bool $showPublicReorderHandle Show public reorder handle value.
+ * @param bool $showSubgalleryBadge Show subgallery badge value.
  * @param mixed $cardIndex Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0): void
 {
@@ -1006,7 +1040,6 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
  *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $placement Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_public_gallery_admin_add_child_link(array $gallery, string $placement = 'card'): void
 {
@@ -1028,7 +1061,6 @@ function render_public_gallery_admin_add_child_link(array $gallery, string $plac
  *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $placement Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_public_gallery_admin_edit_link(array $gallery, string $placement = 'card'): void
 {
@@ -1050,7 +1082,6 @@ function render_public_gallery_admin_edit_link(array $gallery, string $placement
  *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $placement Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_public_gallery_admin_delete_form(array $gallery, string $placement = 'card'): void
 {
@@ -1075,7 +1106,6 @@ function render_public_gallery_admin_delete_form(array $gallery, string $placeme
  * side-panel loader when the gallery JavaScript is active.
  *
  * @param mixed $image Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_public_image_admin_edit_link(array $image): void
 {
@@ -1097,7 +1127,6 @@ function render_public_image_admin_edit_link(array $image): void
  * when JavaScript is unavailable.
  *
  * @param mixed $image Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_public_image_admin_delete_form(array $image): void
 {
@@ -1120,6 +1149,20 @@ function render_public_image_admin_delete_form(array $image): void
  *
  * Keeping visible cards and hidden pagination sources on the same attribute
  * contract prevents the lightbox from having a separate pagination-specific path.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $mediaUrl Media url URL.
+ * @param string $previewUrl Preview url URL.
+ * @param string $imagePageUrl Image page url URL.
+ * @param string $displayTitle Display title value.
+ * @param int $score Score value.
+ * @param int $vote Vote value.
+ * @param ?array $imageMapPoint Image map point value.
+ * @param string $sourceAttribute Source attribute value.
+ * @param bool $votingAllowed Voting allowed value.
+ * @param ?int $lightboxIndex Lightbox index value.
+ * @return string Text result for the caller.
  */
 function lightbox_image_data_attributes(array $image, array $gallery, string $mediaUrl, string $previewUrl, string $imagePageUrl, string $displayTitle, int $score, int $vote, ?array $imageMapPoint, string $sourceAttribute, bool $votingAllowed = true, ?int $lightboxIndex = null): string
 {
@@ -1154,6 +1197,11 @@ function lightbox_image_data_attributes(array $image, array $gallery, string $me
  * pagination source nodes need the same server-rendered widget without creating
  * another live form on the page. The browser does not submit or bind controls
  * inside <template>, so the lightbox can safely clone it when that image opens.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $score Score value.
+ * @param int $vote Vote value.
+ * @param bool $votingAllowed Voting allowed value.
  */
 function render_lightbox_vote_template(int $imageId, int $score, int $vote, bool $votingAllowed): void
 {
@@ -1172,6 +1220,11 @@ function render_lightbox_vote_template(int $imageId, int $score, int $vote, bool
  * Pagination limits visible photo cards, but fullscreen navigation should still
  * move through the complete sorted gallery. These hidden nodes are metadata only
  * and do not affect the public grid layout.
+ *
+ * @param array $allImages All images value.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $mapsAllowed Maps allowed value.
+ * @param array $votesById Votes by id identifier.
  */
 function render_lightbox_source_nodes(array $allImages, array $gallery, bool $mapsAllowed, array $votesById): void
 {
@@ -1208,8 +1261,12 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
 
 /**
  * Handles render lightbox logic for the gallery application.
+ *
  * @param mixed $votingAllowed Input used by this operation.
- * @return mixed Result produced by this operation.
+ * @param bool $mapsAllowed Maps allowed value.
+ * @param string $galleryMapUrl Gallery map url URL.
+ * @param string $galleryMapTitle Gallery map title value.
+ * @param string $lightboxBrowsingMode Lightbox browsing mode value.
  */
 function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, string $galleryMapUrl = '', string $galleryMapTitle = '', string $lightboxBrowsingMode = 'single'): void
 {

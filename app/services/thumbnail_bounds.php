@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 /**
  * Return true when thumbnail-bound columns are available for galleries and images.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_bounds_schema_ready(): bool
 {
@@ -48,6 +50,8 @@ function thumbnail_bounds_schema_ready(): bool
 
 /**
  * Return slider options as integers with the virtual Auto sentinel at both ends.
+ *
+ * @return array Structured result data for the caller.
  */
 function thumbnail_bound_slider_values(): array
 {
@@ -56,6 +60,9 @@ function thumbnail_bound_slider_values(): array
 
 /**
  * Convert a stored thumbnail-bound value to the slider sentinel when unset.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function thumbnail_bound_form_value(mixed $value): int
 {
@@ -65,6 +72,9 @@ function thumbnail_bound_form_value(mixed $value): int
 
 /**
  * Sanitize a posted thumbnail-bound value.
+ *
+ * @param mixed $value Value to process.
+ * @return ?int Integer result for the caller.
  */
 function thumbnail_bound_post_value(mixed $value): ?int
 {
@@ -77,6 +87,9 @@ function thumbnail_bound_post_value(mixed $value): ?int
 
 /**
  * Normalize a submitted thumbnail-bound pair, preserving Auto when either side is unset.
+ *
+ * @param string $prefix Prefix value.
+ * @return array Structured result data for the caller.
  */
 function thumbnail_bound_pair_from_post(string $prefix): array
 {
@@ -92,6 +105,9 @@ function thumbnail_bound_pair_from_post(string $prefix): array
 
 /**
  * Return gallery IDs for one gallery and all descendants based on folder paths.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function thumbnail_bound_gallery_branch_ids(array $gallery): array
 {
@@ -107,6 +123,12 @@ function thumbnail_bound_gallery_branch_ids(array $gallery): array
 
 /**
  * Apply gallery thumbnail bounds to one gallery or its whole descendant branch.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?int $minSize Min size value.
+ * @param ?int $maxSize Max size value.
+ * @param bool $recursive Recursive value.
+ * @return int Integer result for the caller.
  */
 function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxSize, bool $recursive): int
 {
@@ -131,6 +153,12 @@ function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxS
 
 /**
  * Render a dual-pin thumbnail-bound slider for Admin forms.
+ *
+ * @param string $prefix Prefix value.
+ * @param ?int $storedMinSize Stored min size value.
+ * @param ?int $storedMaxSize Stored max size value.
+ * @param string $label Label value.
+ * @param string $description Description value.
  */
 function render_admin_thumbnail_bound_slider(string $prefix, ?int $storedMinSize, ?int $storedMaxSize, string $label, string $description): void
 {
@@ -164,6 +192,11 @@ function render_admin_thumbnail_bound_slider(string $prefix, ?int $storedMinSize
 
 /**
  * Return the nearest generated thumbnail size inside the supplied bounds.
+ *
+ * @param int $size Size value.
+ * @param ?int $minSize Min size value.
+ * @param ?int $maxSize Max size value.
+ * @return int Integer result for the caller.
  */
 function thumbnail_bound_clamp_size(int $size, ?int $minSize, ?int $maxSize): int
 {
@@ -183,6 +216,10 @@ function thumbnail_bound_clamp_size(int $size, ?int $minSize, ?int $maxSize): in
 
 /**
  * Return effective thumbnail bounds for one image, with image values taking precedence over gallery values.
+ *
+ * @param array $image Image row or image data.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function thumbnail_bound_effective_pair(array $image, ?array $gallery = null): array
 {
@@ -211,6 +248,11 @@ function thumbnail_bound_effective_pair(array $image, ?array $gallery = null): a
 
 /**
  * Filter responsive thumbnail candidates so browser auto-selection respects configured guardrails.
+ *
+ * @param array $sizes Sizes value.
+ * @param array $image Image row or image data.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function thumbnail_bound_filter_sizes(array $sizes, array $image, ?array $gallery = null): array
 {
@@ -241,6 +283,11 @@ function thumbnail_bound_filter_sizes(array $sizes, array $image, ?array $galler
 
 /**
  * Clamp a requested fallback thumbnail size to the effective guardrails for one image.
+ *
+ * @param array $image Image row or image data.
+ * @param int $fallbackSize Fallback size value.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @return int Integer result for the caller.
  */
 function thumbnail_bound_fallback_size(array $image, int $fallbackSize, ?array $gallery = null): int
 {

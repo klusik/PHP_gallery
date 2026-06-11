@@ -42,7 +42,7 @@ const tempStoreName = 'prepared_batches';
  * Return whether the admin explicitly selected the experimental path.
  *
  * @param {HTMLFormElement} form Upload form.
- * @returns {boolean} True when the opt-in checkbox is checked.
+ * @return {boolean} True when the opt-in checkbox is checked.
  */
 export function experimentalUploadRequested(form) {
     const toggle = form.querySelector('[data-experimental-upload-toggle]');
@@ -54,7 +54,7 @@ export function experimentalUploadRequested(form) {
  *
  * @param {HTMLFormElement} form Upload form.
  * @param {HTMLElement} progress Progress container.
- * @returns {Promise<Record<string, *> | {fallback: true, reason: string}>} Upload result or fallback request.
+ * @return {Promise<Record<string, *> | {fallback: true, reason: string} >} Upload result or fallback request.
  */
 export async function runExperimentalGalleryUpload(form, progress) {
     const config = experimentalUploadConfig(form);
@@ -124,7 +124,7 @@ export async function runExperimentalGalleryUpload(form, progress) {
  * Read JSON configuration emitted by PHP near the opt-in checkbox.
  *
  * @param {HTMLFormElement} form Upload form.
- * @returns {Record<string, *>} Normalized browser configuration.
+ * @return {Record<string, *>} Normalized browser configuration.
  */
 function experimentalUploadConfig(form) {
     const toggle = form.querySelector('[data-experimental-upload-toggle]');
@@ -168,7 +168,7 @@ function experimentalUploadConfig(form) {
  * @param {number} fallback Fallback value.
  * @param {number} minimum Minimum value.
  * @param {number} maximum Maximum value.
- * @returns {number} Clamped integer.
+ * @return {number} Clamped integer.
  */
 function clampInteger(value, fallback, minimum, maximum) {
     const parsed = Number.parseInt(String(value), 10);
@@ -181,7 +181,7 @@ function clampInteger(value, fallback, minimum, maximum) {
  *
  * @param {*} value Input value.
  * @param {number} fallback Fallback percentage.
- * @returns {number} Canvas quality from 0.1 to 0.95.
+ * @return {number} Canvas quality from 0.1 to 0.95.
  */
 function clampQuality(value, fallback) {
     const parsed = Number.parseFloat(String(value));
@@ -193,7 +193,7 @@ function clampQuality(value, fallback) {
  * Return selected files from the upload form.
  *
  * @param {HTMLFormElement} form Upload form.
- * @returns {File[]} Selected files.
+ * @return {File[]} Selected files.
  */
 function selectedExperimentalUploadFiles(form) {
     const input = form.querySelector('input[type="file"][name="images[]"]');
@@ -208,7 +208,7 @@ function selectedExperimentalUploadFiles(form) {
  *
  * @param {Record<string, *>} config Browser configuration.
  * @param {File[]} files Selected files.
- * @returns {{ok: boolean, reason: string}} Capability result.
+ * @return {{ok: boolean, reason: string} } Capability result.
  */
 function experimentalUploadCapability(config, files) {
     if (!config.endpoint || !window.Worker || !window.Blob || !window.File || !window.FormData || !window.TextEncoder || !window.crypto) {
@@ -238,7 +238,7 @@ function experimentalUploadCapability(config, files) {
 /**
  * Generate a per-run upload session id for server idempotency.
  *
- * @returns {string} Session id.
+ * @return {string} Session id.
  */
 function experimentalUploadSessionId() {
     const bytes = new Uint8Array(16);
@@ -252,7 +252,7 @@ function experimentalUploadSessionId() {
  * @param {File[]} files Selected files.
  * @param {Record<string, *>} config Browser configuration.
  * @param {(item: Record<string, *>, completed: number, total: number) => Promise<void>} onItem Prepared item callback.
- * @returns {Promise<void>}
+ * @return {Promise<void>} Result value for the caller.
  */
 function processFilesWithWorkerPool(files, config, onItem) {
     const total = files.length;
@@ -263,9 +263,21 @@ function processFilesWithWorkerPool(files, config, onItem) {
     const workers = [];
 
     return new Promise((resolve, reject) => {
+        /**
+         * Stop workers.
+         *
+         * Used by browser-side gallery behavior.
+         */
         const stopWorkers = () => {
             workers.forEach((worker) => worker.terminate());
         };
+        /**
+         * Handle reject once.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {*} error Error value.
+         */
         const rejectOnce = (error) => {
             if (rejected) {
                 return;
@@ -274,6 +286,11 @@ function processFilesWithWorkerPool(files, config, onItem) {
             stopWorkers();
             reject(error instanceof Error ? error : new Error(String(error)));
         };
+        /**
+         * Handle assign.
+         *
+         * @param {*} worker Worker value.
+         */
         const assign = (worker) => {
             if (rejected) {
                 return;
@@ -333,7 +350,7 @@ function processFilesWithWorkerPool(files, config, onItem) {
  *
  * @param {Record<string, *>} config Browser configuration.
  * @param {string} uploadSessionId Upload session id.
- * @returns {Promise<Record<string, Function>>} Batcher object.
+ * @return {Promise<Record<string, Function>>} Batcher object.
  */
 async function createExperimentalBatcher(config, uploadSessionId) {
     const tempStore = await openPreparedBatchStore();
@@ -346,6 +363,11 @@ async function createExperimentalBatcher(config, uploadSessionId) {
     let nextBatchIndex = 0;
     const batches = [];
 
+    /**
+     * Handle finalize current.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const finalizeCurrent = async () => {
         if (!currentItems.length) {
             return;
@@ -405,7 +427,7 @@ async function createExperimentalBatcher(config, uploadSessionId) {
  * Return ZIP entries for one prepared item.
  *
  * @param {Record<string, *>} item Prepared worker result.
- * @returns {Array<{path: string, blob: Blob}>} ZIP entries.
+ * @return {Array<{path: string, blob: Blob} >} ZIP entries.
  */
 function entriesForPreparedItem(item) {
     const entries = [{path: item.originalPath, blob: item.originalFile}];
@@ -419,7 +441,7 @@ function entriesForPreparedItem(item) {
  * Return the manifest-safe shape for one prepared item.
  *
  * @param {Record<string, *>} item Prepared worker result.
- * @returns {Record<string, *>} Manifest item.
+ * @return {Record<string, *>} Manifest item.
  */
 function manifestItemForPreparedItem(item) {
     return {
@@ -439,7 +461,7 @@ function manifestItemForPreparedItem(item) {
 /**
  * Open the IndexedDB store used as the temporary upload working area.
  *
- * @returns {Promise<{put: Function, delete: Function}>} Store wrapper.
+ * @return {Promise<{put: Function, delete: Function} >} Store wrapper.
  */
 function openPreparedBatchStore() {
     return new Promise((resolve, reject) => {
@@ -467,7 +489,7 @@ function openPreparedBatchStore() {
  * @param {IDBDatabase} database Database connection.
  * @param {IDBTransactionMode} mode Transaction mode.
  * @param {(store: IDBObjectStore) => IDBRequest} operation Store operation.
- * @returns {Promise<*>} Request result.
+ * @return {Promise<*>} Request result.
  */
 function indexedDbRequest(database, mode, operation) {
     return new Promise((resolve, reject) => {
@@ -483,7 +505,7 @@ function indexedDbRequest(database, mode, operation) {
  * Send the create-gallery form without files before experimental batch upload.
  *
  * @param {HTMLFormElement} form Upload form.
- * @returns {Promise<Record<string, *>>} Server response.
+ * @return {Promise<Record<string, *>>} Server response.
  */
 async function createGalleryForExperimentalUpload(form) {
     const body = new FormData(form);
@@ -512,7 +534,7 @@ async function createGalleryForExperimentalUpload(form) {
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
- * @returns {Promise<Record<string, *>>} Server response.
+ * @return {Promise<Record<string, *>>} Server response.
  */
 async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches) {
     let lastError = null;
@@ -539,7 +561,7 @@ async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessi
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Batch index.
  * @param {number} totalBatches Total batches.
- * @returns {Promise<Record<string, *>>} Server response.
+ * @return {Promise<Record<string, *>>} Server response.
  */
 async function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches) {
     const body = new FormData();
@@ -572,7 +594,7 @@ async function uploadPreparedBatch(form, config, galleryId, uploadSessionId, bat
  *
  * @param {Response} response Fetch response.
  * @param {string} fallbackMessage Fallback error message.
- * @returns {Promise<Record<string, *>>} Parsed JSON.
+ * @return {Promise<Record<string, *>>} Parsed JSON.
  */
 async function readJsonResponseSafely(response, fallbackMessage) {
     const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
@@ -596,7 +618,7 @@ async function readJsonResponseSafely(response, fallbackMessage) {
  * Return selected gallery id from select or hidden field.
  *
  * @param {HTMLFormElement} form Upload form.
- * @returns {number} Gallery id or zero.
+ * @return {number} Gallery id or zero.
  */
 function selectedExperimentalGalleryId(form) {
     const select = form.querySelector('select[name="gallery_id"]');
@@ -616,7 +638,7 @@ function selectedExperimentalGalleryId(form) {
  * @param {Record<string, *> | null} seed Initial create-gallery response.
  * @param {number} galleryId Gallery id.
  * @param {number} totalBatches Total batches.
- * @returns {Record<string, *>} Aggregate response.
+ * @return {Record<string, *>} Aggregate response.
  */
 function emptyExperimentalAggregate(seed, galleryId, totalBatches) {
     return {
@@ -652,7 +674,6 @@ function emptyExperimentalAggregate(seed, galleryId, totalBatches) {
  *
  * @param {Record<string, *>} aggregate Aggregate response.
  * @param {Record<string, *>} result Batch response.
- * @returns {void}
  */
 function mergeExperimentalResult(aggregate, result) {
     aggregate.gallery_id = Number(result.gallery_id || aggregate.gallery_id || 0);
@@ -686,7 +707,7 @@ function mergeExperimentalResult(aggregate, result) {
  * @param {number} scanned Scanned count.
  * @param {number} thumbnails Thumbnail count.
  * @param {number} thumbnailFailed Failed thumbnail count.
- * @returns {string} URL with counters.
+ * @return {string} URL with counters.
  */
 function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumbnailFailed = 0) {
     const url = new URL(urlValue || window.location.href, window.location.href);
@@ -703,7 +724,7 @@ function appendUploadResultParams(urlValue, uploaded, scanned, thumbnails, thumb
  * Delay execution for retry backoff.
  *
  * @param {number} milliseconds Delay length.
- * @returns {Promise<void>} Delay promise.
+ * @return {Promise<void>} Delay promise.
  */
 function delay(milliseconds) {
     return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
@@ -712,8 +733,8 @@ function delay(milliseconds) {
 /**
  * Package entries in a worker so ZIP creation does not run on the main thread.
  *
- * @param {Array<{path: string, blob: Blob}>} entries ZIP entries.
- * @returns {Promise<Blob>} ZIP blob.
+ * @param {*} entries Entries value.
+ * @return {Promise<Blob>} ZIP blob.
  */
 function createStoreOnlyZipInWorker(entries) {
     return new Promise((resolve, reject) => {
@@ -724,6 +745,11 @@ function createStoreOnlyZipInWorker(entries) {
             reject(error);
             return;
         }
+        /**
+         * Handle cleanup.
+         *
+         * @return {*} Result value for the caller.
+         */
         const cleanup = () => worker.terminate();
         worker.addEventListener('message', (event) => {
             const data = event.data || {};

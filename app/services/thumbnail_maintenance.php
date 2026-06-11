@@ -39,8 +39,11 @@ const THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING = 'thumbnail_maintenance_last_che
 /**
  * Return maintenance status for a limited set of thumbnail sizes.
  *
- * @param array<int, int> $sizes Thumbnail sizes to check.
- * @return array<string, mixed>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $sizes Sizes value.
+ * @param bool $mutate Mutate value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, array $sizes, bool $mutate = true): array
 {
@@ -126,8 +129,10 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
 
 /**
  * Handles thumbnail maintenance status logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
+ * @param bool $mutate Mutate value.
  * @return mixed Result produced by this operation.
  */
 function thumbnail_maintenance_status(array $image, array $gallery, bool $mutate = true): array
@@ -158,6 +163,7 @@ function thumbnail_maintenance_status(array $image, array $gallery, bool $mutate
 
 /**
  * Handles thumbnail maintenance summary logic for the gallery application.
+ *
  * @param mixed $galleryIds Input used by this operation.
  * @param mixed $maxImagesToScan Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -236,8 +242,9 @@ function thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImages
  * missing or stale thumbnail files so the admin can rebuild the affected set
  * without scanning or processing every image in the library.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
- * @return array<int, int>
+ * @param ?array $galleryIds Gallery ids value.
+ * @param int $maxImagesToScan Max images to scan value.
+ * @return array<int int>.
  */
 function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImagesToScan = 1000): array
 {
@@ -301,8 +308,9 @@ function thumbnail_maintenance_image_ids(?array $galleryIds = null, int $maxImag
  * asks the checker not to generate, delete, or record files. A non-positive
  * scan limit means every imported direct image is checked.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
- * @return array<string, mixed>
+ * @param ?array $galleryIds Gallery ids value.
+ * @param int $maxImagesToScan Max images to scan value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxImagesToScan = 0): array
 {
@@ -344,9 +352,11 @@ function thumbnail_maintenance_check_report(?array $galleryIds = null, int $maxI
 /**
  * Build one dry-run thumbnail report from already selected image rows.
  *
- * @param array<int, array<string, mixed>> $rows Image rows joined with gallery display columns.
- * @param array<int, int>|null $galleryIds Optional gallery filter.
- * @return array<string, mixed>
+ * @param array $rows Rows to process.
+ * @param ?array $galleryIds Gallery ids value.
+ * @param bool $limited Limited value.
+ * @param bool $finalize Finalize value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galleryIds = null, bool $limited = false, bool $finalize = true): array
 {
@@ -425,8 +435,10 @@ function thumbnail_maintenance_check_report_from_rows(array $rows, ?array $galle
 /**
  * Build one dry-run thumbnail check batch.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
- * @return array<string, mixed>
+ * @param ?array $galleryIds Gallery ids value.
+ * @param int $offset Starting offset.
+ * @param int $batchSize Batch size value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offset = 0, int $batchSize = 150): array
 {
@@ -476,9 +488,9 @@ function thumbnail_maintenance_check_batch(?array $galleryIds = null, int $offse
 /**
  * Merge two dry-run thumbnail check reports.
  *
- * @param array<string, mixed> $base Existing aggregate report.
- * @param array<string, mixed> $addition One batch report to merge.
- * @return array<string, mixed>
+ * @param array $base Base value.
+ * @param array $addition Addition value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_merge_check_reports(array $base, array $addition): array
 {
@@ -537,8 +549,8 @@ function thumbnail_maintenance_merge_check_reports(array $base, array $addition)
 /**
  * Normalize a dry-run thumbnail check report before storing or displaying it.
  *
- * @param array<string, mixed> $report
- * @return array<string, mixed>
+ * @param array $report Report value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_finalize_check_report(array $report): array
 {
@@ -556,8 +568,8 @@ function thumbnail_maintenance_finalize_check_report(array $report): array
 /**
  * Return an empty dry thumbnail check report.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter.
- * @return array<string, mixed>
+ * @param ?array $galleryIds Gallery ids value.
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_empty_check_report(?array $galleryIds = null): array
 {
@@ -579,7 +591,7 @@ function thumbnail_maintenance_empty_check_report(?array $galleryIds = null): ar
 /**
  * Persist the latest full dry thumbnail check for the Admin media card.
  *
- * @param array<string, mixed> $report
+ * @param array $report Report value.
  */
 function thumbnail_maintenance_store_last_check(array $report): void
 {
@@ -593,7 +605,7 @@ function thumbnail_maintenance_store_last_check(array $report): void
 /**
  * Return the latest full dry thumbnail check when it still matches the image inventory.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function thumbnail_maintenance_last_check(): array
 {
@@ -620,8 +632,8 @@ function thumbnail_maintenance_last_check(): array
 /**
  * Return compact diagnostic data for thumbnail repair logs.
  *
- * @param array<int, int> $imageIds Image IDs selected by the maintenance repair scope.
- * @return array<int, array<string, mixed>>
+ * @param array $imageIds Image ids value.
+ * @return array<int array<string, mixed>>.
  */
 function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
 {
@@ -684,7 +696,10 @@ function thumbnail_maintenance_debug_image_statuses(array $imageIds): array
  * generation invalidation makes thumbnail creation and deletion visible on the
  * next admin load.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ * @param ?array $galleryIds Gallery ids value.
+ * @param int $maxImagesToScan Max images to scan value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return array Structured result data for the caller.
  */
 function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
 {
@@ -738,7 +753,10 @@ function cached_thumbnail_maintenance_summary(?array $galleryIds = null, int $ma
  * spend seconds checking thumbnail files on disk. Explicit thumbnail maintenance
  * actions still use thumbnail_maintenance_summary() and can refresh the cache.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ * @param ?array $galleryIds Gallery ids value.
+ * @param int $maxImagesToScan Max images to scan value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return array Structured result data for the caller.
  */
 function cached_thumbnail_maintenance_summary_if_available(?array $galleryIds = null, int $maxImagesToScan = 1000, int $ttlSeconds = 180): array
 {
@@ -818,7 +836,8 @@ function thumbnail_maintenance_summary_cache_clear(): void
  * information. A newly imported image changes the count, maximum image id, or
  * newest creation timestamp and therefore invalidates the old dismissal.
  *
- * @param array<int, int>|null $galleryIds Optional gallery filter matching thumbnail_maintenance_summary().
+ * @param ?array $galleryIds Gallery ids value.
+ * @return string Text result for the caller.
  */
 function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
 {
@@ -857,7 +876,7 @@ function thumbnail_inventory_fingerprint(?array $galleryIds = null): string
  * files outside the configured gallery root. The returned counters are used by
  * the admin notice and by the operational log.
  *
- * @return array{files_deleted:int,directories_removed:int,directories_scanned:int}
+ * @return array{files_deleted:int,directories_removed:int,directories_scanned:int} Structured result data for the caller.
  */
 function delete_all_thumbnail_files(): array
 {
@@ -912,6 +931,8 @@ function delete_all_thumbnail_files(): array
  * experimental version created nested cache folders. The safety boundary remains
  * the configured gallery root and every path is checked before deletion.
  *
+ * @param string $thumbsDirectory Thumbs directory value.
+ * @param string $allowedRoot Allowed root value.
  * @return int Number of removed files.
  */
 function delete_thumbnail_directory_contents(string $thumbsDirectory, string $allowedRoot): int

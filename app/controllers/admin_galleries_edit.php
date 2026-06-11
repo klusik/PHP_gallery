@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 /**
  * Handles cms admin scan images logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_scan_images(): void
 {
@@ -59,6 +58,9 @@ function cms_admin_scan_images(): void
 
 /**
  * Normalize an edit-gallery admin tab identifier.
+ *
+ * @param string $tab Tab value.
+ * @return string Text result for the caller.
  */
 function admin_edit_gallery_tab_id(string $tab): string
 {
@@ -69,6 +71,10 @@ function admin_edit_gallery_tab_id(string $tab): string
 
 /**
  * Return an edit-gallery admin URL with an optional tab fragment.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $tab Tab value.
+ * @return string Text result for the caller.
  */
 function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
 {
@@ -84,6 +90,10 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
 
 /**
  * Build the gallery editor renamer URL while preserving a custom pattern.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Pattern value.
+ * @return string Text result for the caller.
  */
 function admin_edit_gallery_tab_url_with_renamer_pattern(int $galleryId, string $pattern): string
 {
@@ -96,6 +106,9 @@ function admin_edit_gallery_tab_url_with_renamer_pattern(int $galleryId, string 
 
 /**
  * Return the admin edit tab requested by a submitted form.
+ *
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function admin_return_tab_from_post(string $fallback = ''): string
 {
@@ -106,6 +119,11 @@ function admin_return_tab_from_post(string $fallback = ''): string
 
 /**
  * Build the JSON payload consumed after a gallery is saved in side-panel mode.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $notice Notice value.
+ * @param string $returnTab Return tab value.
+ * @return array Structured result data for the caller.
  */
 function admin_edit_gallery_success_response(array $gallery, string $notice, string $returnTab): array
 {
@@ -123,6 +141,13 @@ function admin_edit_gallery_success_response(array $gallery, string $notice, str
 
 /**
  * Build the JSON payload consumed after a gallery image bulk action runs in side-panel mode.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $notice Notice value.
+ * @param string $returnTab Return tab value.
+ * @param string $action Action value.
+ * @param array $imageIds Image ids value.
+ * @return array Structured result data for the caller.
  */
 function admin_bulk_images_success_response(array $gallery, string $notice, string $returnTab, string $action, array $imageIds = []): array
 {
@@ -136,6 +161,10 @@ function admin_bulk_images_success_response(array $gallery, string $notice, stri
 
 /**
  * Persist a gallery title picture from either the bulk image route or a panel-routed edit request.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $imageIds Image ids value.
+ * @param string $returnTab Return tab value.
  */
 function admin_save_gallery_title_picture(array $gallery, array $imageIds, string $returnTab): void
 {
@@ -181,6 +210,9 @@ function admin_save_gallery_title_picture(array $gallery, array $imageIds, strin
 
 /**
  * Build the JSON payload consumed after an image is saved in side-panel mode.
+ *
+ * @param array $image Image row or image data.
+ * @return array Structured result data for the caller.
  */
 function admin_edit_image_success_response(array $image): array
 {
@@ -204,6 +236,9 @@ function admin_edit_image_success_response(array $image): array
 
 /**
  * Sends a JSON error response for side-panel save failures.
+ *
+ * @param string $message Message value.
+ * @param int $statusCode Status code value.
  */
 function admin_panel_error_response(string $message, int $statusCode = 422): void
 {
@@ -218,7 +253,6 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  * Render the SimBrief draft generator for the existing description textarea.
  *
  * @param int $galleryId Gallery edited by the current form.
- * @return void
  */
 function render_admin_simbrief_description_tool(int $galleryId): void
 {
@@ -242,6 +276,10 @@ function render_admin_simbrief_description_tool(int $galleryId): void
 
 /**
  * Return true when a partial gallery save contains any value from a field group.
+ *
+ * @param array $input Input value.
+ * @param array $keys Keys value.
+ * @return bool True when the condition matches.
  */
 function admin_gallery_input_has_any_key(array $input, array $keys): bool
 {
@@ -255,6 +293,11 @@ function admin_gallery_input_has_any_key(array $input, array $keys): bool
 
 /**
  * Read a checkbox value while allowing partial workflows to preserve existing data.
+ *
+ * @param array $input Input value.
+ * @param string $key Lookup key.
+ * @param bool $defaultWhenMissing Default when missing value.
+ * @return int Integer result for the caller.
  */
 function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWhenMissing): int
 {
@@ -266,6 +309,13 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
 
 /**
  * Persist gallery edits through the shared admin edit implementation.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $input Input value.
+ * @param array $files Files value.
+ * @param string $returnTab Return tab value.
+ * @param bool $completeForm Complete form value.
+ * @return array Structured result data for the caller.
  */
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
@@ -655,6 +705,8 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
 
 /**
  * Apply the current gallery branch EXIF date suggestion directly from the gallery editor.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function admin_apply_gallery_date_exif_suggestion(array $gallery): void
 {
@@ -665,7 +717,6 @@ function admin_apply_gallery_date_exif_suggestion(array $gallery): void
 
 /**
  * Handles cms admin edit gallery logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_edit_gallery(): void
 {
@@ -1287,7 +1338,6 @@ function cms_admin_edit_gallery(): void
  * polls the gallery API again.
  *
  * @param array<string,mixed> $gallery Gallery currently being edited.
- * @return void
  */
 function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 {
@@ -1320,6 +1370,8 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
  * The standard select keeps existing bulk behavior intact. Moving photos uses a
  * staged panel so admins first choose whether the target is an existing gallery
  * or a new child gallery, then confirm the exact physical move.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function render_admin_image_bulk_toolbar(array $gallery): void
 {
@@ -1371,6 +1423,8 @@ function render_admin_image_bulk_toolbar(array $gallery): void
  *
  * Banner replaces the visible public title text, logo is supplementary, and the
  * separator acts as a visual divider below the public title area.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function render_admin_gallery_branding_fields(array $gallery): void
 {
@@ -1423,7 +1477,7 @@ function render_admin_image_reorder_script(): void
     /**
      * Finds the single Admin image ordering table on the edit-gallery page.
      *
-     * @returns {HTMLTableElement|null} Reorder table, or null on other pages.
+     * @return {HTMLTableElement|null} Reorder table, or null on other pages.
      */
     function findImageOrderTable() {
         return document.querySelector('[data-admin-image-order-table]');
@@ -1434,7 +1488,7 @@ function render_admin_image_reorder_script(): void
      *
      * @param {string} message Message displayed to the gallery administrator.
      * @param {string} state Small state token used by CSS for color feedback.
-     * @returns {void}
+     * @return {void}
      */
     function setImageOrderStatus(message, state) {
         var status = document.querySelector('[data-admin-image-order-status]');
@@ -1449,7 +1503,7 @@ function render_admin_image_reorder_script(): void
      * Returns the current visual image id order from the table body.
      *
      * @param {HTMLTableSectionElement} tableBody Body containing image rows.
-     * @returns {string[]} Ordered image ids as strings for JSON submission.
+     * @return {string[]} Ordered image ids as strings for JSON submission.
      */
     function readImageOrder(tableBody) {
         return Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]'))
@@ -1465,7 +1519,7 @@ function render_admin_image_reorder_script(): void
      * Builds a floating copy of the row so movement is visible immediately.
      *
      * @param {HTMLTableRowElement} sourceRow Row being moved.
-     * @returns {HTMLTableElement} Fixed-position table containing cloned row.
+     * @return {HTMLTableElement} Fixed-position table containing cloned row.
      */
     function buildImageOrderGhost(sourceRow) {
         var sourceBox = sourceRow.getBoundingClientRect();
@@ -1499,7 +1553,7 @@ function render_admin_image_reorder_script(): void
      * Creates the placeholder row that marks where the real row will be dropped.
      *
      * @param {HTMLTableRowElement} sourceRow Row being moved.
-     * @returns {HTMLTableRowElement} Placeholder row with matching height.
+     * @return {HTMLTableRowElement} Placeholder row with matching height.
      */
     function buildImageOrderPlaceholder(sourceRow) {
         var placeholderRow = document.createElement('tr');
@@ -1517,7 +1571,7 @@ function render_admin_image_reorder_script(): void
      *
      * @param {HTMLTableSectionElement} tableBody Body containing sortable rows.
      * @param {number} pointerY Current pointer Y coordinate in viewport space.
-     * @returns {HTMLTableRowElement|null} Row to insert before, or null to append.
+     * @return {HTMLTableRowElement|null} Row to insert before, or null to append.
      */
     function findImageOrderInsertionRow(tableBody, pointerY) {
         var rows = Array.prototype.slice.call(tableBody.querySelectorAll('[data-admin-image-order-row]:not(.is-reorder-hidden)'));
@@ -1542,7 +1596,7 @@ function render_admin_image_reorder_script(): void
      * @param {HTMLTableSectionElement} tableBody Body containing ordered image rows.
      * @param {HTMLFormElement} form Existing bulk form containing CSRF and gallery id.
      * @param {string} reorderUrl Endpoint generated by PHP for image sorting.
-     * @returns {Promise<void>} Completes after the request succeeds or fails.
+     * @return {Promise<void>} Completes after the request succeeds or fails.
      */
     function saveImageOrder(tableBody, form, reorderUrl) {
         var csrfInput = form.querySelector('input[name="csrf_token"]');
@@ -1588,7 +1642,7 @@ function render_admin_image_reorder_script(): void
      * update or while a browser has a stale admin page open.
      *
      * @param {HTMLTableRowElement} row Image row rendered by the edit-gallery table.
-     * @returns {string} Name used for locale-aware filename sorting.
+     * @return {string} Name used for locale-aware filename sorting.
      */
     function readSortableImageName(row) {
         var fallbackCell = row.querySelector('[data-admin-image-name-cell]');
@@ -1601,7 +1655,7 @@ function render_admin_image_reorder_script(): void
      * @param {HTMLButtonElement} sortButton Header button that starts name sorting.
      * @param {string} nextDirection Direction that the next click will apply.
      * @param {string} currentDirection Direction currently represented by the table.
-     * @returns {void}
+     * @return {void}
      */
     function updateNameSortHeader(sortButton, nextDirection, currentDirection) {
         var sortHeader = sortButton.closest('th');
@@ -1625,7 +1679,7 @@ function render_admin_image_reorder_script(): void
      * and admin logging are identical for manual and automatic ordering.
      *
      * @param {MouseEvent} clickEvent Click event from the Name header button.
-     * @returns {void}
+     * @return {void}
      */
     function handleNameSortClick(clickEvent) {
         var sortButton = clickEvent.target.closest('[data-admin-image-name-sort]');
@@ -1675,7 +1729,7 @@ function render_admin_image_reorder_script(): void
      * Starts the fallback sorter from the first captured mouse or pointer press.
      *
      * @param {MouseEvent|PointerEvent} startEvent Original press event on the handle.
-     * @returns {void}
+     * @return {void}
      */
     function startImageOrderDrag(startEvent) {
         var handle = startEvent.target.closest('[data-admin-image-drag-handle]');
@@ -1716,7 +1770,7 @@ function render_admin_image_reorder_script(): void
          * Moves the ghost and placeholder to the pointer position.
          *
          * @param {MouseEvent|PointerEvent} moveEvent Movement event captured on document.
-         * @returns {void}
+         * @return {void}
          */
         function moveDrag(moveEvent) {
             var beforeRow;
@@ -1737,7 +1791,7 @@ function render_admin_image_reorder_script(): void
          * Removes all temporary drag state and optionally commits the row move.
          *
          * @param {boolean} commit Whether the row should be inserted at placeholder.
-         * @returns {HTMLTableRowElement} The moved row.
+         * @return {HTMLTableRowElement} The moved row.
          */
         function cleanupDrag(commit) {
             active = false;
@@ -1764,7 +1818,7 @@ function render_admin_image_reorder_script(): void
          * Commits the new position and saves it when the row actually moved.
          *
          * @param {MouseEvent|PointerEvent} finishEvent Release event captured on document.
-         * @returns {void}
+         * @return {void}
          */
         function finishDrag(finishEvent) {
             var finalRow;
@@ -1787,7 +1841,7 @@ function render_admin_image_reorder_script(): void
          * Cancels the active drag, used by pointer cancellation and Escape.
          *
          * @param {Event} cancelEvent Cancellation event.
-         * @returns {void}
+         * @return {void}
          */
         function cancelDrag(cancelEvent) {
             if (!active) {
@@ -1802,7 +1856,7 @@ function render_admin_image_reorder_script(): void
          * Lets the administrator cancel a drag with Escape.
          *
          * @param {KeyboardEvent} keyEvent Keyboard event captured during drag.
-         * @returns {void}
+         * @return {void}
          */
         function handleKeydown(keyEvent) {
             if (keyEvent.key === 'Escape') {

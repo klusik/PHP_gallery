@@ -36,10 +36,12 @@ declare(strict_types=1);
 
 /**
  * Upload service model.
- * 
+ *
  * This module validates uploaded files, chooses safe target names, stores gallery images, and records the uploaded image IDs. It deliberately keeps thumbnail generation as a separate service concern.
+ *
+ * @param ?array $files Files value.
+ * @return array Structured result data for the caller.
  */
-
 function gallery_upload_entries(?array $files): array
 {
     if (!$files || empty($files['name']) || !is_array($files['name'])) {
@@ -106,6 +108,9 @@ function gallery_upload_entries(?array $files): array
 
 /**
  * Return upload entries when files were provided, or an empty list when the file picker was left empty.
+ *
+ * @param ?array $files Files value.
+ * @return array Structured result data for the caller.
  */
 function gallery_upload_entries_or_empty(?array $files): array
 {
@@ -123,6 +128,7 @@ function gallery_upload_entries_or_empty(?array $files): array
 
 /**
  * Handles heic conversion supported logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function heic_conversion_supported(): bool
@@ -146,6 +152,7 @@ function heic_conversion_supported(): bool
 
 /**
  * Handles raw conversion supported logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function raw_conversion_supported(): bool
@@ -155,6 +162,9 @@ function raw_conversion_supported(): bool
 
 /**
  * Return whether one Imagick format delegate is available.
+ *
+ * @param string $format Format value.
+ * @return bool True when the condition matches.
  */
 function imagick_format_supported(string $format): bool
 {
@@ -172,6 +182,8 @@ function imagick_format_supported(string $format): bool
 
 /**
  * Return whether this server can decode DNG originals and write WebP display masters.
+ *
+ * @return bool True when the condition matches.
  */
 function dng_conversion_supported(): bool
 {
@@ -180,6 +192,9 @@ function dng_conversion_supported(): bool
 
 /**
  * Normalize the browser-side upload format preference.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function admin_upload_client_format_mode_normalize(mixed $value): string
 {
@@ -193,6 +208,8 @@ function admin_upload_client_format_mode_normalize(mixed $value): string
  *
  * server_supported keeps the historic picker behavior. phone_jpeg asks mobile
  * browsers for browser-ready image formats and intentionally avoids RAW/DNG.
+ *
+ * @return string Text result for the caller.
  */
 function admin_upload_client_format_mode(): string
 {
@@ -204,6 +221,8 @@ function admin_upload_client_format_mode(): string
  *
  * The default is intentionally enabled so fresh uploads follow the same deterministic
  * filename policy as the manual media renamer without requiring extra admin action.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_upload_auto_rename_enabled(): bool
 {
@@ -212,6 +231,8 @@ function admin_upload_auto_rename_enabled(): bool
 
 /**
  * Persist the upload-time auto-rename preference.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_admin_upload_auto_rename_enabled(bool $enabled): void
 {
@@ -220,6 +241,11 @@ function set_admin_upload_auto_rename_enabled(bool $enabled): void
 
 /**
  * Build the upload accept attribute for the selected browser-side format policy.
+ *
+ * @param string $mode Mode value.
+ * @param bool $heicSupported Heic supported value.
+ * @param bool $rawSupported Raw supported value.
+ * @return string Text result for the caller.
  */
 function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, bool $rawSupported): string
 {
@@ -244,6 +270,8 @@ function admin_upload_accept_value_for_mode(string $mode, bool $heicSupported, b
 
 /**
  * Return whether this server can use an embedded DNG JPEG preview as a derivative source.
+ *
+ * @return bool True when the condition matches.
  */
 function dng_embedded_preview_supported(): bool
 {
@@ -256,6 +284,11 @@ function dng_embedded_preview_supported(): bool
 
 /**
  * Read one unsigned 16-bit TIFF value from a binary string.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @param string $endian Endian value.
+ * @return ?int Integer result for the caller.
  */
 function dng_tiff_uint16(string $data, int $offset, string $endian): ?int
 {
@@ -271,6 +304,11 @@ function dng_tiff_uint16(string $data, int $offset, string $endian): ?int
 
 /**
  * Read one unsigned 32-bit TIFF value from a binary string.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @param string $endian Endian value.
+ * @return ?int Integer result for the caller.
  */
 function dng_tiff_uint32(string $data, int $offset, string $endian): ?int
 {
@@ -286,6 +324,9 @@ function dng_tiff_uint32(string $data, int $offset, string $endian): ?int
 
 /**
  * Return the byte width for a TIFF field type.
+ *
+ * @param int $type Type value.
+ * @return int Integer result for the caller.
  */
 function dng_tiff_type_size(int $type): int
 {
@@ -301,7 +342,13 @@ function dng_tiff_type_size(int $type): int
 /**
  * Read unsigned SHORT or LONG values from a TIFF IFD entry.
  *
- * @return array<int, int>
+ * @param string $data Input data.
+ * @param int $entryOffset Entry offset value.
+ * @param string $endian Endian value.
+ * @param int $type Type value.
+ * @param int $count Count value.
+ * @param int $valueOffset Value offset value.
+ * @return array<int int>.
  */
 function dng_tiff_entry_values(string $data, int $entryOffset, string $endian, int $type, int $count, int $valueOffset): array
 {
@@ -336,7 +383,8 @@ function dng_tiff_entry_values(string $data, int $entryOffset, string $endian, i
 /**
  * Find embedded JPEG preview byte ranges inside a DNG/TIFF container.
  *
- * @return array<int, array{offset:int,length:int,source:string}>
+ * @param string $data Input data.
+ * @return array<int array{offset:int,length:int,source:string}>.
  */
 function dng_embedded_jpeg_candidates(string $data): array
 {
@@ -439,6 +487,9 @@ function dng_embedded_jpeg_candidates(string $data): array
 
 /**
  * Return the first JPEG start-of-frame marker that determines decoder compatibility.
+ *
+ * @param string $jpeg Jpeg value.
+ * @return ?int Integer result for the caller.
  */
 function dng_jpeg_sof_marker(string $jpeg): ?int
 {
@@ -490,6 +541,9 @@ function dng_jpeg_sof_marker(string $jpeg): ?int
 
 /**
  * Return whether a JPEG candidate is suitable for browser display derivative generation.
+ *
+ * @param string $jpeg Jpeg value.
+ * @return bool True when the condition matches.
  */
 function dng_jpeg_preview_candidate_is_safe(string $jpeg): bool
 {
@@ -509,7 +563,8 @@ function dng_jpeg_preview_candidate_is_safe(string $jpeg): bool
 /**
  * Find JPEG preview byte ranges by scanning for JPEG markers.
  *
- * @return array<int, array{offset:int,length:int,source:string}>
+ * @param string $data Input data.
+ * @return array<int array{offset:int,length:int,source:string}>.
  */
 function dng_jpeg_signature_candidates(string $data): array
 {
@@ -536,6 +591,10 @@ function dng_jpeg_signature_candidates(string $data): array
 
 /**
  * Extract the largest readable embedded JPEG preview from a DNG file.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @return bool True when the condition matches.
  */
 function dng_extract_embedded_jpeg_preview(string $sourcePath, string $targetPath): bool
 {
@@ -573,7 +632,8 @@ function dng_extract_embedded_jpeg_preview(string $sourcePath, string $targetPat
 /**
  * Read dimensions from an embedded DNG preview if RAW decoding is unavailable.
  *
- * @return array{width:int,height:int,mime:string}|null
+ * @param string $path Filesystem path.
+ * @return array{width:int,height:int,mime:string}|null Structured result data for the caller.
  */
 function dng_embedded_preview_metadata(string $path): ?array
 {
@@ -603,7 +663,8 @@ function dng_embedded_preview_metadata(string $path): ?array
 /**
  * Read basic dimensions for a DNG file without treating browser display support as available.
  *
- * @return array{width:int,height:int,mime:string}|null
+ * @param string $path Filesystem path.
+ * @return array{width:int,height:int,mime:string}|null Structured result data for the caller.
  */
 function dng_image_metadata(string $path): ?array
 {
@@ -639,6 +700,7 @@ function dng_image_metadata(string $path): ?array
 
 /**
  * Handles upload error message logic for the gallery application.
+ *
  * @param mixed $error Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -656,6 +718,7 @@ function upload_error_message(int $error): string
 
 /**
  * Handles safe uploaded image filename logic for the gallery application.
+ *
  * @param mixed $name Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -670,6 +733,7 @@ function safe_uploaded_image_filename(string $name): string
 
 /**
  * Handles unique gallery upload target logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $filename Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -698,8 +762,10 @@ function unique_gallery_upload_target(array $gallery, string $filename): array
 
 /**
  * Handles store uploaded gallery images logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $entries Input used by this operation.
+ * @param ?bool $renameOnUpload Rename on upload value.
  * @return mixed Result produced by this operation.
  */
 function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
@@ -757,8 +823,9 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
 /**
  * Return uploaded filenames that could not be resolved to indexed image rows after scanning.
  *
- * @param array<int,string> $filenames
- * @return array<int,string>
+ * @param int $galleryId Gallery identifier.
+ * @param array<int,string> $filenames Filenames value.
+ * @return array<int,string> Structured result data for the caller.
  */
 function gallery_upload_scan_failed_filenames(int $galleryId, array $filenames): array
 {
@@ -777,6 +844,10 @@ function gallery_upload_scan_failed_filenames(int $galleryId, array $filenames):
 
 /**
  * Return one image row without using request-local finder caches.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $relativePath Relative path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath): ?array
 {
@@ -794,8 +865,9 @@ function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath
 /**
  * Rename uploaded image rows with the same deterministic template used by the media renamer.
  *
- * @param array<int,int|string> $imageIds
- * @return array<string,mixed>|null
+ * @param int $galleryId Gallery identifier.
+ * @param array<int,int|string> $imageIds Image ids value.
+ * @return array<string,mixed>|null Structured result data for the caller.
  */
 function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): ?array
 {
@@ -825,8 +897,9 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
 /**
  * Keep only submitted image ids that still exist in the target gallery.
  *
- * @param array<int,int|string> $imageIds
- * @return array<int,int>
+ * @param int $galleryId Gallery identifier.
+ * @param array<int,int|string> $imageIds Image ids value.
+ * @return array<int,int> Structured result data for the caller.
  */
 function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): array
 {
@@ -845,8 +918,9 @@ function uploaded_gallery_existing_image_ids(int $galleryId, array $imageIds): a
 /**
  * Return final relative filenames for uploaded image ids after optional auto-renaming.
  *
- * @param array<int,int|string> $imageIds
- * @return array<int,string>
+ * @param int $galleryId Gallery identifier.
+ * @param array<int,int|string> $imageIds Image ids value.
+ * @return array<int,string> Structured result data for the caller.
  */
 function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageIds): array
 {
@@ -874,6 +948,7 @@ function uploaded_gallery_filenames_for_image_ids(int $galleryId, array $imageId
 
 /**
  * Handles uploaded gallery image ids logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $filenames Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -897,6 +972,7 @@ function uploaded_gallery_image_ids(int $galleryId, array $filenames): array
 
 /**
  * Handles store uploaded gallery cover logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $file Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -956,6 +1032,7 @@ function store_uploaded_gallery_cover(int $galleryId, array $file): string
 
 /**
  * Store one uploaded gallery branding asset inside the gallery folder.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $kind Input used by this operation.
  * @param mixed $file Input used by this operation.

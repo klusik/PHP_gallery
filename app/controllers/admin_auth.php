@@ -42,6 +42,9 @@ declare(strict_types=1);
 
 /**
  * Normalize an optional account email value before validation or storage.
+ *
+ * @param string $email Email value.
+ * @return string Text result for the caller.
  */
 function cms_normalize_account_email(string $email): string
 {
@@ -53,6 +56,9 @@ function cms_normalize_account_email(string $email): string
  *
  * Email is tried first to keep username-or-email login deterministic when one
  * user's username happens to be the same string as another user's email.
+ *
+ * @param string $identifier Identifier value.
+ * @return ?array Structured result data for the caller.
  */
 function cms_find_admin_user_by_identifier(string $identifier): ?array
 {
@@ -84,6 +90,8 @@ function cms_find_admin_user_by_identifier(string $identifier): ?array
 
 /**
  * Return password reset settings with safe defaults.
+ *
+ * @return array Structured result data for the caller.
  */
 function cms_password_reset_settings(): array
 {
@@ -116,6 +124,9 @@ function cms_password_reset_settings(): array
 
 /**
  * Persist admin-managed password reset delivery settings.
+ *
+ * @param array $input Input value.
+ * @return array Structured result data for the caller.
  */
 function cms_save_password_reset_settings(array $input): array
 {
@@ -205,6 +216,8 @@ function cms_save_password_reset_settings(array $input): array
 
 /**
  * Return true when the password reset token table exists.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_password_reset_schema_ready(): bool
 {
@@ -226,6 +239,9 @@ function cms_cleanup_password_reset_tokens(): void
 
 /**
  * Create a one-time password reset token and return the public selector/token pair.
+ *
+ * @param int $userId User id identifier.
+ * @return ?array Structured result data for the caller.
  */
 function cms_create_password_reset_token(int $userId): ?array
 {
@@ -261,6 +277,10 @@ function cms_create_password_reset_token(int $userId): ?array
 
 /**
  * Build an absolute password reset URL suitable for email messages.
+ *
+ * @param string $selector Selector value.
+ * @param string $token Token value.
+ * @return string Text result for the caller.
  */
 function cms_password_reset_url(string $selector, string $token): string
 {
@@ -269,6 +289,9 @@ function cms_password_reset_url(string $selector, string $token): string
 
 /**
  * Return a privacy-safe masked email string for diagnostic logs.
+ *
+ * @param string $email Email value.
+ * @return string Text result for the caller.
  */
 function cms_mask_email_for_log(string $email): string
 {
@@ -285,6 +308,9 @@ function cms_mask_email_for_log(string $email): string
 
 /**
  * Sanitize a mail header value so user-controlled newlines cannot inject extra headers.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function cms_mail_header_value(string $value): string
 {
@@ -293,6 +319,9 @@ function cms_mail_header_value(string $value): string
 
 /**
  * Read one SMTP response and return its numeric code plus raw lines for diagnostics.
+ *
+ * @param mixed $socket Socket value.
+ * @return array Structured result data for the caller.
  */
 function cms_smtp_read_response($socket): array
 {
@@ -317,6 +346,13 @@ function cms_smtp_read_response($socket): array
 
 /**
  * Send an SMTP command and validate the response code.
+ *
+ * @param mixed $socket Socket value.
+ * @param string $command Command value.
+ * @param array $expectedCodes Expected codes value.
+ * @param array $details Details value.
+ * @param string $stage Stage value.
+ * @return bool True when the condition matches.
  */
 function cms_smtp_command($socket, string $command, array $expectedCodes, array &$details, string $stage): bool
 {
@@ -331,6 +367,13 @@ function cms_smtp_command($socket, string $command, array $expectedCodes, array 
 
 /**
  * Send a plain text message through an explicitly configured SMTP server.
+ *
+ * @param array $settings Settings used by this workflow.
+ * @param string $recipient Recipient value.
+ * @param string $subject Subject value.
+ * @param string $body Body value.
+ * @param array $details Details value.
+ * @return bool True when the condition matches.
  */
 function cms_send_smtp_email(array $settings, string $recipient, string $subject, string $body, array &$details): bool
 {
@@ -470,6 +513,12 @@ function cms_send_smtp_email(array $settings, string $recipient, string $subject
 
 /**
  * Send a plain text email using the configured password reset transport.
+ *
+ * @param string $recipient Recipient value.
+ * @param string $subject Subject value.
+ * @param string $body Body value.
+ * @param string $expiresAt Expires at value.
+ * @return array Structured result data for the caller.
  */
 function cms_send_configured_password_reset_mail(string $recipient, string $subject, string $body, string $expiresAt = ''): array
 {
@@ -534,6 +583,11 @@ function cms_send_configured_password_reset_mail(string $recipient, string $subj
 
 /**
  * Send a password reset message using the configured transport.
+ *
+ * @param array $user User value.
+ * @param string $resetUrl Reset url URL.
+ * @param string $expiresAt Expires at value.
+ * @return array Structured result data for the caller.
  */
 function cms_send_password_reset_email(array $user, string $resetUrl, string $expiresAt): array
 {
@@ -551,6 +605,10 @@ function cms_send_password_reset_email(array $user, string $resetUrl, string $ex
 
 /**
  * Resolve and validate a selector/token pair from a reset link.
+ *
+ * @param string $selector Selector value.
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function cms_find_valid_password_reset_token(string $selector, string $token): ?array
 {
@@ -676,6 +734,11 @@ function cms_admin_google_callback(): void
 }
 
 
+/**
+ * Handle cms admin login.
+ *
+ * Used by HTTP controller routing for this workflow.
+ */
 function cms_admin_login(): void
 {
     // $returnTarget stores the local page that should reopen after successful authentication.
@@ -907,7 +970,6 @@ function cms_admin_reset_password(): void
 
 /**
  * Handles cms admin logout logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_logout(): void
 {
@@ -922,7 +984,6 @@ function cms_admin_logout(): void
 
 /**
  * Handles cms admin account logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_account(): void
 {
@@ -1302,7 +1363,6 @@ function cms_admin_account(): void
 
 /**
  * Handles cms admin reset logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_reset(): void
 {

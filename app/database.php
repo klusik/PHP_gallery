@@ -40,6 +40,8 @@ declare(strict_types=1);
  * The connection is cached in a static variable because controllers and services
  * call db() frequently while rendering one page. The optional port field is used
  * by the browser installer and local stacks such as Laragon/XAMPP.
+ *
+ * @return PDO Result value for the caller.
  */
 function db(): PDO
 {

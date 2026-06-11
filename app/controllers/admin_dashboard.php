@@ -105,8 +105,8 @@ function cms_admin_storage_statistics_update(): void
 /**
  * Build the JSON payload for a storage statistics Ajax response.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_controller_payload(array $state): array
 {
@@ -140,7 +140,7 @@ function admin_storage_statistics_controller_payload(array $state): array
 /**
  * Emit a JSON response for storage statistics endpoints.
  *
- * @param array<string, mixed> $payload
+ * @param array $payload Payload value.
  */
 function admin_storage_statistics_json_response(array $payload): void
 {
@@ -158,6 +158,8 @@ function render_admin_url_rewrite_warning(): void
 
 /**
  * Backward-compatible wrapper for older controller/view code.
+ *
+ * @param string $className Class name value.
  */
 function render_admin_url_rewrite_card(string $className): void
 {
@@ -262,6 +264,9 @@ function cms_admin_seo_guard_settings(): void
 
 /**
  * Backward-compatible wrapper for older controller/view code.
+ *
+ * @param bool $flightNavdataReady Flight navdata ready value.
+ * @param array $flightNavdataStatus Flight navdata status value.
  */
 function render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void
 {
@@ -323,6 +328,8 @@ function cms_admin_devmode(): void
 
 /**
  * Backward-compatible wrapper for older controller/view code.
+ *
+ * @param string $message Message value.
  */
 function render_admin_migration_notice(string $message): void
 {

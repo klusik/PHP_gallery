@@ -80,6 +80,8 @@ function cms_admin_mobile_uploads(): void
 
 /**
  * Render credentials for a newly created token.
+ *
+ * @param array $created Created value.
  */
 function render_mobile_webdav_created_credentials(array $created): void
 {
@@ -110,6 +112,8 @@ function render_mobile_webdav_create_form(): void
 
 /**
  * Render existing mobile WebDAV tokens.
+ *
+ * @param array $tokens Tokens value.
  */
 function render_mobile_webdav_token_list(array $tokens): void
 {
@@ -198,6 +202,8 @@ function cms_mobile_webdav(): void
 
 /**
  * Return a minimal PROPFIND XML response for WebDAV connection tests.
+ *
+ * @param string $pathToken Path token filesystem path.
  */
 function mobile_webdav_propfind_response(string $pathToken): void
 {

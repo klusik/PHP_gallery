@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 /**
  * Handles visibility options logic for the gallery application.
+ *
  * @param mixed $selected Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -53,6 +54,7 @@ function visibility_options(string $selected): string
 
 /**
  * Handles image visibility options logic for the gallery application.
+ *
  * @param mixed $selected Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -68,7 +70,6 @@ function image_visibility_options(string $selected): string
 
 /**
  * Handles render tag datalist logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function render_tag_datalist(): void
 {
@@ -81,6 +82,9 @@ function render_tag_datalist(): void
 
 /**
  * Return an escaped JSON attribute containing context-aware tag advice.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return string Text result for the caller.
  */
 function admin_weighted_tag_suggestions_attribute(int $galleryId): string
 {
@@ -96,6 +100,7 @@ function admin_weighted_tag_suggestions_attribute(int $galleryId): string
 
 /**
  * Handles gallery parent options logic for the gallery application.
+ *
  * @param mixed $currentGallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -125,6 +130,8 @@ function gallery_parent_options(array $currentGallery): string
 
 /**
  * Handles gallery parent options for new logic for the gallery application.
+ *
+ * @param int $selectedGalleryId Selected gallery id identifier.
  * @return mixed Result produced by this operation.
  */
 function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
@@ -152,7 +159,7 @@ function gallery_parent_options_for_new(int $selectedGalleryId = 0): string
  * @param string $fieldName Submitted hidden input name. Use an empty string for JSON-only widgets.
  * @param int $selectedGalleryId Initial committed gallery ID, usually zero for safe bulk actions.
  * @param int $excludedGalleryId Gallery that must not be selected as a destination.
- * @param array<string, mixed> $options Rendering options: id, placeholder, label, hidden_attributes, prefill_gallery_id, disable_prefill.
+ * @param array $options Optional behavior flags.
  * @return string Complete HTML for the picker.
  */
 function render_gallery_search_picker(string $fieldName, int $selectedGalleryId = 0, int $excludedGalleryId = 0, array $options = []): string
@@ -224,6 +231,9 @@ function render_gallery_search_picker(string $fieldName, int $selectedGalleryId 
 
 /**
  * Handles gallery options for select logic for the gallery application.
+ *
+ * @param int $selectedGalleryId Selected gallery id identifier.
+ * @param int $excludedGalleryId Excluded gallery id identifier.
  * @return mixed Result produced by this operation.
  */
 function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGalleryId = 0): string
@@ -261,6 +271,9 @@ function gallery_options_for_select(int $selectedGalleryId = 0, int $excludedGal
  * Contextual admin shortcuts pass gallery IDs through GET parameters. Validating the
  * identifier here keeps form pre-selection defensive and prevents stale or manually
  * edited URLs from selecting a non-existent gallery row.
+ *
+ * @param string $parameterName Parameter name value.
+ * @return int Integer result for the caller.
  */
 function selected_gallery_id_from_query(string $parameterName): int
 {
@@ -274,6 +287,7 @@ function selected_gallery_id_from_query(string $parameterName): int
 
 /**
  * Handles gallery cover options logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $selectedImageId Input used by this operation.
  * @param mixed $includeDescendants Input used by this operation.
@@ -303,6 +317,7 @@ function gallery_cover_options(int $galleryId, int $selectedImageId, bool $inclu
 
 /**
  * Handles unique slug for value logic for the gallery application.
+ *
  * @param mixed $slug Input used by this operation.
  * @param mixed $excludeGalleryId Input used by this operation.
  * @return mixed Result produced by this operation.

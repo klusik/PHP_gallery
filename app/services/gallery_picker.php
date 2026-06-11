@@ -44,7 +44,7 @@ declare(strict_types=1);
  *
  * @param int $selectedGalleryId Gallery that may be marked as committed initially.
  * @param int $excludedGalleryId Gallery that must not be selectable as a destination.
- * @return array<int, array<string, mixed>> Searchable gallery option rows.
+ * @return array<int array<string, mixed>> Searchable gallery option rows.
  */
 function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGalleryId = 0): array
 {

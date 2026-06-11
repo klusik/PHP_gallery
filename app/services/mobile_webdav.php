@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Return whether the WebDAV token table is available.
+ *
+ * @return bool True when the condition matches.
  */
 function mobile_webdav_ready(): bool
 {
@@ -44,6 +46,8 @@ function mobile_webdav_ready(): bool
 
 /**
  * Return all configured mobile WebDAV upload tokens for the admin UI.
+ *
+ * @return array Structured result data for the caller.
  */
 function mobile_webdav_tokens(): array
 {
@@ -59,6 +63,11 @@ function mobile_webdav_tokens(): array
 
 /**
  * Create a scoped mobile WebDAV credential and return the plaintext password once.
+ *
+ * @param int $userId User id identifier.
+ * @param int $galleryId Gallery identifier.
+ * @param string $label Label value.
+ * @return array Structured result data for the caller.
  */
 function mobile_webdav_create_token(int $userId, int $galleryId, string $label): array
 {
@@ -89,6 +98,8 @@ function mobile_webdav_create_token(int $userId, int $galleryId, string $label):
 
 /**
  * Delete one mobile WebDAV token.
+ *
+ * @param int $tokenId Token id identifier.
  */
 function mobile_webdav_delete_token(int $tokenId): void
 {
@@ -101,6 +112,8 @@ function mobile_webdav_delete_token(int $tokenId): void
 
 /**
  * Return a generated app password for mobile WebDAV clients.
+ *
+ * @return string Text result for the caller.
  */
 function mobile_webdav_plain_password(): string
 {
@@ -109,6 +122,9 @@ function mobile_webdav_plain_password(): string
 
 /**
  * Return the absolute WebDAV collection URL for one path token.
+ *
+ * @param string $pathToken Path token filesystem path.
+ * @return string Text result for the caller.
  */
 function mobile_webdav_absolute_url(string $pathToken): string
 {
@@ -117,6 +133,9 @@ function mobile_webdav_absolute_url(string $pathToken): string
 
 /**
  * Resolve a mobile WebDAV token row by its path token.
+ *
+ * @param string $pathToken Path token filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function mobile_webdav_find_by_path_token(string $pathToken): ?array
 {
@@ -135,6 +154,9 @@ function mobile_webdav_find_by_path_token(string $pathToken): ?array
 
 /**
  * Authenticate one mobile WebDAV request with Basic Auth.
+ *
+ * @param string $pathToken Path token filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function mobile_webdav_authenticated_token(string $pathToken): ?array
 {
@@ -160,6 +182,9 @@ function mobile_webdav_authenticated_token(string $pathToken): ?array
 
 /**
  * Decode a Basic Authorization header when PHP did not populate PHP_AUTH_*.
+ *
+ * @param string $header Header value.
+ * @return array Structured result data for the caller.
  */
 function mobile_webdav_decode_basic_authorization(string $header): array
 {
@@ -176,6 +201,9 @@ function mobile_webdav_decode_basic_authorization(string $header): array
 
 /**
  * Sanitize a WebDAV target path into one filename.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function mobile_webdav_filename_from_path(string $path): string
 {
@@ -189,6 +217,11 @@ function mobile_webdav_filename_from_path(string $path): string
 
 /**
  * Store one WebDAV PUT body into the token destination gallery.
+ *
+ * @param array $token Token value.
+ * @param string $filename Filename value.
+ * @param string $sourcePath Source filesystem path.
+ * @return array Structured result data for the caller.
  */
 function mobile_webdav_store_put(array $token, string $filename, string $sourcePath): array
 {

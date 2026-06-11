@@ -41,7 +41,7 @@ declare(strict_types=1);
 /**
  * Minimal config shim used by helpers.php in this isolated test process.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function cms_config(): array
 {
@@ -53,6 +53,10 @@ require_once __DIR__ . '/../app/helpers.php';
 
 /**
  * Throw when an expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_url_rewrite_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -63,6 +67,9 @@ function assert_url_rewrite_same(mixed $expected, mixed $actual, string $label):
 
 /**
  * Create a temporary project root with optional rewrite marker files.
+ *
+ * @param bool $withMarkers With markers value.
+ * @return string Text result for the caller.
  */
 function make_url_rewrite_test_root(bool $withMarkers): string
 {
@@ -83,6 +90,8 @@ function make_url_rewrite_test_root(bool $withMarkers): string
 
 /**
  * Remove a temporary test root recursively.
+ *
+ * @param string $root Root value.
  */
 function remove_url_rewrite_test_root(string $root): void
 {

@@ -39,6 +39,10 @@ require_once __DIR__ . '/../app/services/admin_database_usage.php';
 
 /**
  * Throw when a database-usage expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_admin_database_usage_same(mixed $expected, mixed $actual, string $label): void
 {

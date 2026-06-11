@@ -51,6 +51,9 @@ declare(strict_types=1);
 
 /**
  * Return the stored favicon file path, if present.
+ *
+ * @param int $size Size value.
+ * @return ?string Text result for the caller.
  */
 function favicon_path(int $size = 32): ?string
 {
@@ -68,6 +71,8 @@ function favicon_path(int $size = 32): ?string
 
 /**
  * Return the public URL for the stored favicon asset.
+ *
+ * @return string Text result for the caller.
  */
 function favicon_asset_url(): string
 {
@@ -76,6 +81,8 @@ function favicon_asset_url(): string
 
 /**
  * Return the storage directory for generated favicon assets.
+ *
+ * @return string Text result for the caller.
  */
 function favicon_storage_dir(): string
 {
@@ -89,6 +96,9 @@ function favicon_storage_dir(): string
 
 /**
  * Clamp favicon size requests to generated variants.
+ *
+ * @param int $size Size value.
+ * @return int Integer result for the caller.
  */
 function favicon_safe_size(int $size): int
 {
@@ -103,6 +113,10 @@ function favicon_safe_size(int $size): int
 
 /**
  * Store an uploaded favicon image after applying an optional square crop.
+ *
+ * @param array $file File value.
+ * @param ?string $croppedPngData Cropped png data value.
+ * @return string Text result for the caller.
  */
 function store_uploaded_favicon(array $file, ?string $croppedPngData): string
 {
@@ -183,6 +197,14 @@ function store_uploaded_favicon(array $file, ?string $croppedPngData): string
 
 /**
  * Crop an image resource to a square GD image.
+ *
+ * @param GdImage $source Source value.
+ * @param int $width Width value.
+ * @param int $height Height value.
+ * @param int $cropX Crop x value.
+ * @param int $cropY Crop y value.
+ * @param int $cropSide Crop side value.
+ * @return GdImage Result value for the caller.
  */
 function crop_image_square(GdImage $source, int $width, int $height, int $cropX, int $cropY, int $cropSide): GdImage
 {
@@ -206,6 +228,13 @@ function crop_image_square(GdImage $source, int $width, int $height, int $cropX,
 
 /**
  * Resize an image to a square PNG while preserving alpha where possible.
+ *
+ * @param GdImage $source Source value.
+ * @param int $width Width value.
+ * @param int $height Height value.
+ * @param int $targetSize Target size value.
+ * @param string $targetPath Target filesystem path.
+ * @return bool True when the condition matches.
  */
 function write_resized_png(GdImage $source, int $width, int $height, int $targetSize, string $targetPath): bool
 {

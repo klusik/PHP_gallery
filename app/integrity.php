@@ -38,6 +38,8 @@ const CMS_INTEGRITY_CACHE_TTL = 86400;
 
 /**
  * Return the application root directory used by the integrity checker.
+ *
+ * @return string Text result for the caller.
  */
 function integrity_root_path(): string
 {
@@ -46,6 +48,8 @@ function integrity_root_path(): string
 
 /**
  * Return the expected core manifest path.
+ *
+ * @return string Text result for the caller.
  */
 function integrity_manifest_path(): string
 {
@@ -54,6 +58,8 @@ function integrity_manifest_path(): string
 
 /**
  * Return the cached integrity status path.
+ *
+ * @return string Text result for the caller.
  */
 function integrity_cache_path(): string
 {
@@ -62,6 +68,8 @@ function integrity_cache_path(): string
 
 /**
  * Return paths that should never be reported as unknown installation files.
+ *
+ * @return array Structured result data for the caller.
  */
 function integrity_ignored_unknown_patterns(): array
 {
@@ -84,6 +92,9 @@ function integrity_ignored_unknown_patterns(): array
 
 /**
  * Return true when a relative path should be ignored as an unknown extra file.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return bool True when the condition matches.
  */
 function integrity_is_ignored_unknown_path(string $relativePath): bool
 {
@@ -104,6 +115,9 @@ function integrity_is_ignored_unknown_path(string $relativePath): bool
  * Shared hosting deployments and FTP clients may convert CRLF line endings to LF.
  * The integrity checker intentionally normalizes line endings so equivalent text files
  * do not appear modified only because they were deployed from Windows to Linux.
+ *
+ * @param string $absolutePath Absolute path filesystem path.
+ * @return string Text result for the caller.
  */
 function integrity_hash_file(string $absolutePath): string
 {
@@ -125,6 +139,8 @@ function integrity_hash_file(string $absolutePath): string
 
 /**
  * Return a fingerprint of the manifest content for cache invalidation.
+ *
+ * @return string Text result for the caller.
  */
 function integrity_manifest_fingerprint(): string
 {
@@ -145,6 +161,8 @@ function integrity_manifest_fingerprint(): string
 
 /**
  * Load the core manifest from disk.
+ *
+ * @return array Structured result data for the caller.
  */
 function integrity_load_manifest(): array
 {
@@ -187,6 +205,8 @@ function integrity_load_manifest(): array
 
 /**
  * Return a sorted list of core-like files currently present in the installation.
+ *
+ * @return array Structured result data for the caller.
  */
 function integrity_discover_core_like_files(): array
 {
@@ -271,6 +291,8 @@ function integrity_discover_core_like_files(): array
 
 /**
  * Calculate the current integrity status against the manifest.
+ *
+ * @return array Structured result data for the caller.
  */
 function integrity_calculate_status(): array
 {
@@ -355,6 +377,8 @@ function integrity_calculate_status(): array
 
 /**
  * Save the integrity status cache if the cache directory is writable.
+ *
+ * @param array $status Status value.
  */
 function integrity_write_cached_status(array $status): void
 {
@@ -375,6 +399,9 @@ function integrity_write_cached_status(array $status): void
 
 /**
  * Return the cached integrity status or calculate a fresh status when needed.
+ *
+ * @param bool $forceRefresh Force refresh value.
+ * @return array Structured result data for the caller.
  */
 function integrity_status(bool $forceRefresh = false): array
 {
@@ -410,6 +437,9 @@ function integrity_status(bool $forceRefresh = false): array
 
 /**
  * Return the human readable label for an integrity status code.
+ *
+ * @param string $status Status value.
+ * @return string Text result for the caller.
  */
 function integrity_status_label(string $status): string
 {

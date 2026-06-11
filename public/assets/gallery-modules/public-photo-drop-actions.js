@@ -40,7 +40,7 @@ const PHOTO_IDS_TRANSFER_TYPE = 'application/x-php-gallery-image-ids';
  * Returns a stable gallery ID from a public subgallery target.
  *
  * @param {Element|null} target Candidate subgallery card or nested child.
- * @returns {string} Gallery ID, or an empty string when unavailable.
+ * @return {string} Gallery ID, or an empty string when unavailable.
  */
 export function publicPhotoDropTargetGalleryId(target) {
     if (!(target instanceof Element)) {
@@ -55,7 +55,7 @@ export function publicPhotoDropTargetGalleryId(target) {
  *
  * @param {string} sourceGalleryId Gallery ID of the currently opened gallery.
  * @param {ParentNode} root DOM root used for querying targets.
- * @returns {HTMLElement[]} Drop targets excluding the current source gallery.
+ * @return {HTMLElement[]} Drop targets excluding the current source gallery.
  */
 export function publicPhotoDropTargets(sourceGalleryId, root = document) {
     return Array.from(root.querySelectorAll(PUBLIC_SUBGALLERY_TARGET_SELECTOR))
@@ -71,8 +71,8 @@ export function publicPhotoDropTargets(sourceGalleryId, root = document) {
  *
  * @param {number} clientX Pointer X coordinate.
  * @param {number} clientY Pointer Y coordinate.
- * @param {{sourceGalleryId?: string, ignoreWithinSelector?: string}} options Hit-test options.
- * @returns {HTMLElement|null} Destination subgallery card, or null.
+ * @param {object} options Optional behavior flags.
+ * @return {HTMLElement|null} Destination subgallery card, or null.
  */
 export function publicPhotoDropTargetAtPoint(clientX, clientY, options = {}) {
     const sourceGalleryId = String(options.sourceGalleryId || '');
@@ -106,7 +106,6 @@ export function publicPhotoDropTargetAtPoint(clientX, clientY, options = {}) {
  *
  * @param {string} sourceGalleryId Current source gallery ID.
  * @param {boolean} isActive Whether drop targets should look available.
- * @returns {void}
  */
 export function setPublicPhotoDropTargetsActive(sourceGalleryId, isActive) {
     publicPhotoDropTargets(sourceGalleryId).forEach((target) => {
@@ -122,7 +121,6 @@ export function setPublicPhotoDropTargetsActive(sourceGalleryId, isActive) {
  *
  * @param {HTMLElement|null} activeTarget Target currently under the pointer.
  * @param {string} sourceGalleryId Current source gallery ID.
- * @returns {void}
  */
 export function highlightPublicPhotoDropTarget(activeTarget, sourceGalleryId) {
     publicPhotoDropTargets(sourceGalleryId).forEach((target) => {
@@ -134,7 +132,7 @@ export function highlightPublicPhotoDropTarget(activeTarget, sourceGalleryId) {
  * Collects image IDs from dragged public photo items in visual order.
  *
  * @param {HTMLElement[]} items Dragged public photo cards.
- * @returns {string[]} Image IDs suitable for Picture manager move requests.
+ * @return {string[]} Image IDs suitable for Picture manager move requests.
  */
 export function publicPhotoImageIdsFromItems(items) {
     return items
@@ -148,7 +146,7 @@ export function publicPhotoImageIdsFromItems(items) {
  * Reads dragged image IDs from a native drag data transfer.
  *
  * @param {DataTransfer|null} dataTransfer Browser native drag data.
- * @returns {string[]} Image IDs carried by the drag session.
+ * @return {string[]} Image IDs carried by the drag session.
  */
 export function publicPhotoImageIdsFromDataTransfer(dataTransfer) {
     if (!dataTransfer) {
@@ -166,7 +164,6 @@ export function publicPhotoImageIdsFromDataTransfer(dataTransfer) {
  *
  * @param {DataTransfer|null} dataTransfer Browser native drag data.
  * @param {string[]} imageIds Image IDs selected for movement.
- * @returns {void}
  */
 export function writePublicPhotoImageIdsToDataTransfer(dataTransfer, imageIds) {
     if (!dataTransfer) {
@@ -186,7 +183,6 @@ export function writePublicPhotoImageIdsToDataTransfer(dataTransfer, imageIds) {
  *
  * @param {string} destinationGalleryId Destination gallery ID.
  * @param {string[]} imageIds Image IDs to move.
- * @returns {void}
  */
 export function dispatchPublicPhotoMove(destinationGalleryId, imageIds) {
     document.dispatchEvent(new CustomEvent(PUBLIC_PHOTO_MOVE_EVENT, {

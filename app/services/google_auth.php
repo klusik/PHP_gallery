@@ -41,6 +41,8 @@ const CMS_GOOGLE_JWKS_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/certs';
 
 /**
  * Return Google login configuration merged with safe defaults.
+ *
+ * @return array Structured result data for the caller.
  */
 function google_auth_config(): array
 {
@@ -65,6 +67,8 @@ function google_auth_config(): array
 
 /**
  * Return true when Google login has configuration and database support.
+ *
+ * @return bool True when the condition matches.
  */
 function google_auth_ready(): bool
 {
@@ -79,6 +83,8 @@ function google_auth_ready(): bool
 
 /**
  * Return true when the Google account link table exists.
+ *
+ * @return bool True when the condition matches.
  */
 function google_auth_schema_ready(): bool
 {
@@ -87,6 +93,10 @@ function google_auth_schema_ready(): bool
 
 /**
  * Return a Google authorization URL and remember its state in the session.
+ *
+ * @param string $mode Mode value.
+ * @param string $returnTarget Return target value.
+ * @return string Text result for the caller.
  */
 function google_auth_authorization_url(string $mode, string $returnTarget = ''): string
 {
@@ -129,6 +139,9 @@ function google_auth_authorization_url(string $mode, string $returnTarget = ''):
 
 /**
  * Consume and validate one stored Google OAuth state value.
+ *
+ * @param string $state State value.
+ * @return ?array Structured result data for the caller.
  */
 function google_auth_consume_state(string $state): ?array
 {
@@ -152,6 +165,10 @@ function google_auth_consume_state(string $state): ?array
 
 /**
  * Send an HTTPS form POST and decode the returned JSON document.
+ *
+ * @param string $url URL used by this workflow.
+ * @param array $fields Fields value.
+ * @return array Structured result data for the caller.
  */
 function google_auth_http_post_json(string $url, array $fields): array
 {
@@ -209,6 +226,9 @@ function google_auth_http_post_json(string $url, array $fields): array
 
 /**
  * Send an HTTPS GET and decode the returned JSON document.
+ *
+ * @param string $url URL used by this workflow.
+ * @return array Structured result data for the caller.
  */
 function google_auth_http_get_json(string $url): array
 {
@@ -251,6 +271,9 @@ function google_auth_http_get_json(string $url): array
 
 /**
  * Decode one base64url string.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function google_auth_base64url_decode(string $value): string
 {
@@ -267,6 +290,9 @@ function google_auth_base64url_decode(string $value): string
 
 /**
  * Encode an ASN.1 DER length field.
+ *
+ * @param int $length Length value.
+ * @return string Text result for the caller.
  */
 function google_auth_asn1_length(int $length): string
 {
@@ -285,6 +311,10 @@ function google_auth_asn1_length(int $length): string
 
 /**
  * Encode one ASN.1 DER tag with content.
+ *
+ * @param int $tag Tag value.
+ * @param string $content Content value.
+ * @return string Text result for the caller.
  */
 function google_auth_asn1_tag(int $tag, string $content): string
 {
@@ -293,6 +323,9 @@ function google_auth_asn1_tag(int $tag, string $content): string
 
 /**
  * Encode a positive ASN.1 integer.
+ *
+ * @param string $integer Integer value.
+ * @return string Text result for the caller.
  */
 function google_auth_asn1_integer(string $integer): string
 {
@@ -308,6 +341,9 @@ function google_auth_asn1_integer(string $integer): string
 
 /**
  * Encode an ASN.1 object identifier.
+ *
+ * @param string $oid Oid value.
+ * @return string Text result for the caller.
  */
 function google_auth_asn1_oid(string $oid): string
 {
@@ -337,6 +373,9 @@ function google_auth_asn1_oid(string $oid): string
 
 /**
  * Convert an RSA JWK public key to PEM.
+ *
+ * @param array $jwk Jwk value.
+ * @return string Text result for the caller.
  */
 function google_auth_jwk_to_pem(array $jwk): string
 {
@@ -362,6 +401,8 @@ function google_auth_jwk_to_pem(array $jwk): string
 
 /**
  * Return cached Google public keys, refreshing them when the local cache expires.
+ *
+ * @return array Structured result data for the caller.
  */
 function google_auth_jwks(): array
 {
@@ -389,6 +430,9 @@ function google_auth_jwks(): array
 
 /**
  * Verify a Google ID token and return its claims.
+ *
+ * @param string $idToken Id token value.
+ * @return array Structured result data for the caller.
  */
 function google_auth_verify_id_token(string $idToken): array
 {
@@ -462,6 +506,9 @@ function google_auth_verify_id_token(string $idToken): array
 
 /**
  * Exchange a Google authorization code for verified OpenID Connect claims.
+ *
+ * @param string $code Code value.
+ * @return array Structured result data for the caller.
  */
 function google_auth_claims_from_code(string $code): array
 {
@@ -485,6 +532,9 @@ function google_auth_claims_from_code(string $code): array
 
 /**
  * Return the Google account linked to one user, if present.
+ *
+ * @param int $userId User id identifier.
+ * @return ?array Structured result data for the caller.
  */
 function google_auth_linked_account(int $userId): ?array
 {
@@ -502,6 +552,9 @@ function google_auth_linked_account(int $userId): ?array
 
 /**
  * Return the admin user linked to a Google subject id, if present.
+ *
+ * @param string $subject Subject value.
+ * @return ?array Structured result data for the caller.
  */
 function google_auth_user_by_subject(string $subject): ?array
 {
@@ -519,6 +572,9 @@ function google_auth_user_by_subject(string $subject): ?array
 
 /**
  * Link or refresh one Google identity for an existing admin account.
+ *
+ * @param int $userId User id identifier.
+ * @param array $claims Claims value.
  */
 function google_auth_link_account(int $userId, array $claims): void
 {
@@ -554,6 +610,8 @@ function google_auth_link_account(int $userId, array $claims): void
 
 /**
  * Disconnect Google login from one user profile.
+ *
+ * @param int $userId User id identifier.
  */
 function google_auth_disconnect_account(int $userId): void
 {
@@ -568,6 +626,8 @@ function google_auth_disconnect_account(int $userId): void
 
 /**
  * Record a successful Google login timestamp.
+ *
+ * @param int $googleAccountId Google account id identifier.
  */
 function google_auth_touch_login(int $googleAccountId): void
 {

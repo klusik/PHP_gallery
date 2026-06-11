@@ -49,7 +49,7 @@ const THEME_FAVORITE_GALLERIES_HOME_TOKEN = 'home';
  *
  * @param mixed $value Raw stored setting or submitted form value.
  * @param bool $limit Whether the result should be limited to the supported maximum.
- * @return array<int, int|string> Ordered shortcut entries.
+ * @return array<int int|string> Ordered shortcut entries.
  */
 function theme_favorite_gallery_ids_normalize(mixed $value, bool $limit = true): array
 {
@@ -101,7 +101,7 @@ function theme_favorite_gallery_ids_normalize(mixed $value, bool $limit = true):
 /**
  * Return the configured favorite gallery IDs from app settings.
  *
- * @return array<int, int|string> Ordered configured shortcuts.
+ * @return array<int int|string> Ordered configured shortcuts.
  */
 function theme_favorite_gallery_ids(): array
 {
@@ -110,6 +110,9 @@ function theme_favorite_gallery_ids(): array
 
 /**
  * Encode favorite gallery IDs for the structured app setting value.
+ *
+ * @param array $ids Ids value.
+ * @return string Text result for the caller.
  */
 function theme_favorite_gallery_ids_encode(array $ids): string
 {
@@ -123,8 +126,8 @@ function theme_favorite_gallery_ids_encode(array $ids): string
 /**
  * Resolve gallery rows for selected IDs while preserving enough data for links.
  *
- * @param array<int, int|string> $ids Shortcut entries chosen by the admin.
- * @return array<int, array<string, mixed>> Rows keyed by gallery ID.
+ * @param array $ids Ids value.
+ * @return array<int array<string, mixed>> Rows keyed by gallery ID.
  */
 function theme_favorite_gallery_rows_by_ids(array $ids): array
 {
@@ -175,9 +178,9 @@ function theme_favorite_gallery_rows_by_ids(array $ids): array
 /**
  * Return submitted favorite IDs that exist in a resolved gallery row set.
  *
- * @param array<int, int|string> $ids Submitted favorite shortcuts.
- * @param array<int, array<string, mixed>>|array<int, mixed> $rows Existing gallery rows keyed by ID or as a plain list.
- * @return array<int, int|string> Submitted shortcuts that still resolve safely.
+ * @param array $ids Ids value.
+ * @param array $rows Rows to process.
+ * @return array<int int|string> Submitted shortcuts that still resolve safely.
  */
 function theme_favorite_gallery_existing_ids_from_rows(array $ids, array $rows): array
 {
@@ -216,7 +219,7 @@ function theme_favorite_gallery_existing_ids_from_rows(array $ids, array $rows):
  *
  * @param mixed $types Submitted slot types: empty, home, or gallery.
  * @param mixed $galleryIds Submitted gallery picker IDs aligned by slot index.
- * @return array<int, int|string> Ordered shortcut entries ready for validation and saving.
+ * @return array<int int|string> Ordered shortcut entries ready for validation and saving.
  */
 function theme_favorite_gallery_entries_from_form(mixed $types, mixed $galleryIds): array
 {
@@ -250,7 +253,7 @@ function theme_favorite_gallery_entries_from_form(mixed $types, mixed $galleryId
  *
  * @param mixed $types Submitted slot types.
  * @param mixed $galleryIds Submitted gallery IDs aligned by slot index.
- * @return array<string, array<int, int|string>> Saved shortcuts and removed submitted entries.
+ * @return array<string array<int, int|string>> Saved shortcuts and removed submitted entries.
  */
 function save_theme_favorite_gallery_slots(mixed $types, mixed $galleryIds): array
 {
@@ -261,7 +264,7 @@ function save_theme_favorite_gallery_slots(mixed $types, mixed $galleryIds): arr
  * Save submitted favorite galleries after removing duplicates and missing rows.
  *
  * @param mixed $input Submitted form value, usually favorite_gallery_ids[].
- * @return array<string, array<int, int>> Saved IDs and removed submitted IDs.
+ * @return array<string array<int, int>> Saved IDs and removed submitted IDs.
  */
 function save_theme_favorite_gallery_ids(mixed $input): array
 {
@@ -283,10 +286,10 @@ function save_theme_favorite_gallery_ids(mixed $input): array
 /**
  * Convert resolved rows into public header navigation items.
  *
- * @param array<int, int|string> $ids Preferred favorite order.
- * @param array<int, array<string, mixed>>|array<int, mixed> $rows Gallery rows keyed by ID or as a plain list.
+ * @param array $ids Ids value.
+ * @param array $rows Rows to process.
  * @param bool $publicOnly Whether private and unlisted rows must be filtered out.
- * @return array<int, array<string, mixed>> Navigation items with id, title, url, and gallery row.
+ * @return array<int array<string, mixed>> Navigation items with id, title, url, and gallery row.
  */
 function theme_favorite_gallery_navigation_items_from_rows(array $ids, array $rows, bool $publicOnly): array
 {
@@ -348,7 +351,7 @@ function theme_favorite_gallery_navigation_items_from_rows(array $ids, array $ro
  * Return favorite gallery buttons for the current header request.
  *
  * @param bool $publicOnly Whether the caller is rendering for an anonymous public visitor.
- * @return array<int, array<string, mixed>> Navigation items in configured order.
+ * @return array<int array<string, mixed>> Navigation items in configured order.
  */
 function theme_favorite_gallery_navigation_items(bool $publicOnly): array
 {

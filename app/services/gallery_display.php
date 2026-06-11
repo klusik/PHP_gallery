@@ -46,6 +46,8 @@ declare(strict_types=1);
  *
  * Runtime capability checks let the application keep rendering safely on servers
  * where code was uploaded before the administrator ran the newest migration.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_filename_display_schema_ready(): bool
 {
@@ -63,6 +65,9 @@ function gallery_filename_display_schema_ready(): bool
  *
  * The default is intentionally false. Gallery cards and lightbox metadata should
  * not expose raw uploaded filenames unless the admin opts in per gallery.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_shows_filenames(array $gallery): bool
 {
@@ -74,6 +79,10 @@ function gallery_shows_filenames(array $gallery): bool
  *
  * Manually authored image titles remain visible. Raw file names are used only
  * when the containing gallery has enabled filename display in gallery settings.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function public_image_display_title(array $image, array $gallery): string
 {

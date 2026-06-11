@@ -37,8 +37,11 @@
 declare(strict_types=1);
 
 if (!function_exists('e')) {
-    /**
+        /**
      * Minimal HTML escaping shim for layout helper tests.
+     *
+     * @param ?string $value Value to process.
+     * @return string Text result for the caller.
      */
     function e(?string $value): string
     {
@@ -50,6 +53,10 @@ require_once __DIR__ . '/../app/views/layout.php';
 
 /**
  * Throw when two values are not identical.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_public_asset_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -60,6 +67,10 @@ function assert_public_asset_same(mixed $expected, mixed $actual, string $label)
 
 /**
  * Throw when an array does not contain an expected value.
+ *
+ * @param string $needle Needle value.
+ * @param array $haystack Haystack value.
+ * @param string $label Label value.
  */
 function assert_public_asset_contains(string $needle, array $haystack, string $label): void
 {
@@ -70,6 +81,10 @@ function assert_public_asset_contains(string $needle, array $haystack, string $l
 
 /**
  * Throw when an array contains an unexpected value.
+ *
+ * @param string $needle Needle value.
+ * @param array $haystack Haystack value.
+ * @param string $label Label value.
  */
 function assert_public_asset_not_contains(string $needle, array $haystack, string $label): void
 {

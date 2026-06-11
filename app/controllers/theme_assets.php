@@ -130,7 +130,6 @@ function cms_favicon_asset(): void
 /**
  * Render dynamic theme CSS without using HTML style attributes.
  */
-
 function cms_theme_css(): void
 {
     // $updatePendingCss stores an intermediate value used by the surrounding gallery workflow.

@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 /**
  * Handles cms admin bulk galleries logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_bulk_galleries(): void
 {
@@ -237,7 +236,6 @@ function cms_admin_bulk_galleries(): void
 
 /**
  * Handles cms admin regenerate paths logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_regenerate_paths(): void
 {
@@ -260,7 +258,6 @@ function cms_admin_regenerate_paths(): void
 
 /**
  * Handles cms admin save gallery collapse logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_save_gallery_collapse(): void
 {

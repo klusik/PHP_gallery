@@ -34,16 +34,41 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle view render meta tag.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $attributeName Attribute name value.
+ * @param string $attributeValue Attribute value value.
+ * @param string $content Content value.
+ */
 function view_render_meta_tag(string $attributeName, string $attributeValue, string $content): void
 {
     echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
 }
 
+/**
+ * Handle view render link tag.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $rel Rel value.
+ * @param string $href Href value.
+ */
 function view_render_link_tag(string $rel, string $href): void
 {
     echo '<link rel="' . e($rel) . '" href="' . e($href) . '">' . "\n";
 }
 
+/**
+ * Handle view render public seo tags.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ */
 function view_render_public_seo_tags(array $gallery, array $images = []): void
 {
     $title = gallery_seo_title($gallery);
@@ -84,6 +109,14 @@ function view_render_public_seo_tags(array $gallery, array $images = []): void
     }
 }
 
+/**
+ * Handle view render gallery json ld.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ */
 function view_render_gallery_json_ld(array $gallery, array $images = []): void
 {
     $items = [];

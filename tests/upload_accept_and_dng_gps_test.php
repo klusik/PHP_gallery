@@ -39,8 +39,10 @@ require_once __DIR__ . '/../app/services/app_settings.php';
 require_once __DIR__ . '/../app/services/uploads.php';
 
 if (!function_exists('now_sql')) {
-    /**
+        /**
      * Minimal clock shim used by the isolated metadata test.
+     *
+     * @return string Text result for the caller.
      */
     function now_sql(): string
     {
@@ -52,6 +54,9 @@ require_once __DIR__ . '/../app/services/exif.php';
 
 /**
  * Assert that a condition is true.
+ *
+ * @param bool $condition Condition value.
+ * @param string $message Message value.
  */
 function assert_upload_dng_true(bool $condition, string $message): void
 {
@@ -63,6 +68,10 @@ function assert_upload_dng_true(bool $condition, string $message): void
 
 /**
  * Assert that two values are close enough for coordinate extraction.
+ *
+ * @param float $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $message Message value.
  */
 function assert_upload_dng_float_close(float $expected, mixed $actual, string $message): void
 {
@@ -78,6 +87,10 @@ function assert_upload_dng_float_close(float $expected, mixed $actual, string $m
 
 /**
  * Write one byte string into a binary buffer.
+ *
+ * @param string $buffer Buffer value.
+ * @param int $offset Starting offset.
+ * @param string $value Value to process.
  */
 function test_buffer_put(string &$buffer, int $offset, string $value): void
 {
@@ -86,6 +99,12 @@ function test_buffer_put(string &$buffer, int $offset, string $value): void
 
 /**
  * Build one little-endian TIFF IFD entry.
+ *
+ * @param int $tag Tag value.
+ * @param int $type Type value.
+ * @param int $count Count value.
+ * @param string $valueArea Value area value.
+ * @return string Text result for the caller.
  */
 function test_tiff_entry(int $tag, int $type, int $count, string $valueArea): string
 {
@@ -95,7 +114,8 @@ function test_tiff_entry(int $tag, int $type, int $count, string $valueArea): st
 /**
  * Build little-endian rational values.
  *
- * @param array<int, array{0:int,1:int}> $values
+ * @param array $values Values value.
+ * @return string Text result for the caller.
  */
 function test_tiff_rationals(array $values): string
 {
@@ -108,6 +128,8 @@ function test_tiff_rationals(array $values): string
 
 /**
  * Build a tiny DNG-like TIFF file containing only a GPS IFD.
+ *
+ * @return string Text result for the caller.
  */
 function make_test_dng_with_gps(): string
 {

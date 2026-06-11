@@ -36,6 +36,9 @@ declare(strict_types=1);
 
 /**
  * Return a stable request-local cache key for one image thumbnail bundle.
+ *
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function thumbnail_bundle_cache_key(array $image): string
 {
@@ -48,6 +51,9 @@ function thumbnail_bundle_cache_key(array $image): string
 
 /**
  * Return a normalized thumbnail format name supported by the gallery.
+ *
+ * @param string $format Format value.
+ * @return string Text result for the caller.
  */
 function thumbnail_bundle_normalize_format(string $format): string
 {
@@ -56,6 +62,10 @@ function thumbnail_bundle_normalize_format(string $format): string
 
 /**
  * Return the safe browser media URL used when no generated thumbnail exists.
+ *
+ * @param array $image Image row or image data.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function thumbnail_bundle_media_url(array $image, ?array $gallery): string
 {
@@ -74,14 +84,8 @@ function thumbnail_bundle_media_url(array $image, ?array $gallery): string
  * derivatives continue to use the existing safe fallback behavior on the next
  * request.
  *
- * @return array{
- *     image:array,
- *     gallery:?array,
- *     media_url:string,
- *     sizes:array<int,int>,
- *     variants:array<string,array<int,string>>,
- *     warmup_sizes:array<int,int>
- * }
+ * @param array $image Image row or image data.
+ * @return array{ Structured result data for the caller.
  */
 function thumbnail_bundle(array $image): array
 {
@@ -187,6 +191,10 @@ function thumbnail_bundle(array $image): array
 
 /**
  * Return the effective requested thumbnail size for a bundle URL lookup.
+ *
+ * @param array $bundle Bundle value.
+ * @param int $preferredSize Preferred size value.
+ * @return int Integer result for the caller.
  */
 function thumbnail_bundle_effective_size(array $bundle, int $preferredSize): int
 {
@@ -201,7 +209,10 @@ function thumbnail_bundle_effective_size(array $bundle, int $preferredSize): int
 /**
  * Select the best generated thumbnail variant from a precomputed request bundle.
  *
- * @return array{url:string,size:int,format:string,is_media_fallback:bool,is_exact:bool}
+ * @param array $bundle Bundle value.
+ * @param int $preferredSize Preferred size value.
+ * @param string $preferredFormat Preferred format value.
+ * @return array{url:string,size:int,format:string,is_media_fallback:bool,is_exact:bool} Structured result data for the caller.
  */
 function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, string $preferredFormat = ''): array
 {
@@ -263,6 +274,11 @@ function thumbnail_bundle_select_variant(array $bundle, int $preferredSize, stri
 
 /**
  * Return one safe thumbnail URL from a request-local thumbnail bundle.
+ *
+ * @param array $bundle Bundle value.
+ * @param int $preferredSize Preferred size value.
+ * @param string $preferredFormat Preferred format value.
+ * @return string Text result for the caller.
  */
 function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferredFormat = ''): string
 {
@@ -275,6 +291,11 @@ function thumbnail_bundle_url(array $bundle, int $preferredSize, string $preferr
 
 /**
  * Return a srcset string using only variants already resolved in a thumbnail bundle.
+ *
+ * @param array $bundle Bundle value.
+ * @param array $sizes Sizes value.
+ * @param string $format Format value.
+ * @return string Text result for the caller.
  */
 function thumbnail_bundle_srcset(array $bundle, array $sizes, string $format): string
 {

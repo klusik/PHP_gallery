@@ -32,11 +32,27 @@
 
 
 // Function `currentLightboxVoteForm` returns the injected shared vote form.
+/**
+ * Handle current lightbox vote form.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLElement} lightboxVotePanel Lightbox vote panel value.
+ * @return {*} Result value for the caller.
+ */
 export function currentLightboxVoteForm(lightboxVotePanel) {
     return lightboxVotePanel?.querySelector('[data-vote-form]') || null;
 }
 
 // Function `visibleVoteFormForImage` finds the already-rendered gallery-card vote form for an image.
+/**
+ * Handle visible vote form for image.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {number} imageId Image identifier.
+ * @return {*} Result value for the caller.
+ */
 function visibleVoteFormForImage(imageId) {
     if (!imageId) {
         return null;
@@ -55,6 +71,14 @@ function visibleVoteFormForImage(imageId) {
 }
 
 // Function `templateVoteFormForCard` returns the inert vote form for hidden source-only images.
+/**
+ * Handle template vote form for card.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} card Card value.
+ * @return {*} Result value for the caller.
+ */
 function templateVoteFormForCard(card) {
     const template = card.querySelector('[data-lightbox-vote-template]');
     if (template instanceof HTMLTemplateElement) {
@@ -77,6 +101,14 @@ function templateVoteFormForCard(card) {
 }
 
 // Function `clonedVoteFormForCard` clones the same server-rendered widget used by gallery cards.
+/**
+ * Handle cloned vote form for card.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} card Card value.
+ * @return {*} Result value for the caller.
+ */
 function clonedVoteFormForCard(card) {
     const imageId = card.dataset.imageId || '';
     const form = card.querySelector('[data-vote-form]') || visibleVoteFormForImage(imageId) || templateVoteFormForCard(card);
@@ -84,6 +116,14 @@ function clonedVoteFormForCard(card) {
 }
 
 // Function `syncLightboxVote` injects the same server-rendered vote widget used by gallery cards.
+/**
+ * Synchronize lightbox vote.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} card Card value.
+ * @param {HTMLElement} lightboxVotePanel Lightbox vote panel value.
+ */
 export function syncLightboxVote(card, lightboxVotePanel) {
     if (!lightboxVotePanel) {
         return;
@@ -114,6 +154,14 @@ export function syncLightboxVote(card, lightboxVotePanel) {
 }
 
 // Function `updateLightboxVoteButtons` executes this focused behavior.
+/**
+ * Update lightbox vote buttons.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLElement} lightboxVotePanel Lightbox vote panel value.
+ * @param {*} vote Vote value.
+ */
 export function updateLightboxVoteButtons(lightboxVotePanel, vote) {
     const form = currentLightboxVoteForm(lightboxVotePanel);
     if (!(form instanceof HTMLFormElement)) {

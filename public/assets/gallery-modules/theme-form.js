@@ -50,7 +50,6 @@
  *
  * @param {string} controlSelector CSS selector for the range input.
  * @param {string} displaySelector CSS selector for the text value.
- * @returns {void}
  */
 function syncGridRangeDisplay(controlSelector, displaySelector) {
     // controls stores every slider matching the requested control selector.
@@ -69,10 +68,8 @@ function syncGridRangeDisplay(controlSelector, displaySelector) {
             return;
         }
 
-        /**
+                /**
          * Copies the sanitized slider value to the visible display element.
-         *
-         * @returns {void}
          */
         const syncValue = () => {
             display.textContent = String(Math.max(1, parseInt(control.value, 10) || 1));
@@ -93,7 +90,6 @@ function syncGridRangeDisplay(controlSelector, displaySelector) {
  * English in JavaScript.
  *
  * @param {HTMLFormElement} form Theme form containing the background controls.
- * @returns {void}
  */
 function setupThemeBackgroundOptimizedSizeDisplay(form) {
     // control stores the slider deciding the longest side of the generated WebP copy.
@@ -104,10 +100,8 @@ function setupThemeBackgroundOptimizedSizeDisplay(form) {
         return;
     }
 
-    /**
+        /**
      * Copies the current slider value into the localized readout template.
-     *
-     * @returns {void}
      */
     const syncValue = () => {
         // size stores the clamped pixel value accepted by the PHP controller.
@@ -127,7 +121,6 @@ function setupThemeBackgroundOptimizedSizeDisplay(form) {
  * Keeps the visual gallery-description layout picker synchronized with the saved select field.
  *
  * @param {HTMLFormElement} form Theme form containing the layout controls.
- * @returns {void}
  */
 function setupThemeDescriptionLayoutPicker(form) {
     // select stores the real persisted field submitted to the PHP controller.
@@ -138,10 +131,8 @@ function setupThemeDescriptionLayoutPicker(form) {
         return;
     }
 
-    /**
+        /**
      * Updates pressed state for every visual layout card.
-     *
-     * @returns {void}
      */
     const syncPressedState = () => {
         options.forEach((option) => {
@@ -171,8 +162,6 @@ function setupThemeDescriptionLayoutPicker(form) {
  * This keeps the UI forgiving: an admin can move Columns or Rows directly and the
  * form will persist those numbers as a custom gallery grid, instead of silently
  * treating the gallery as inherited because the override checkbox was forgotten.
- *
- * @returns {void}
  */
 function setupGalleryGridOverrideAutoEnable() {
     // overrideControl stores the checkbox deciding whether this gallery owns a grid.
@@ -198,7 +187,7 @@ function setupGalleryGridOverrideAutoEnable() {
 /**
  * Keeps the dual thumbnail-bound sliders ordered and copies their selected sizes to hidden inputs.
  *
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function setupThumbnailBoundControls() {
     document.querySelectorAll('[data-thumbnail-bound-control]').forEach((root) => {
@@ -218,12 +207,12 @@ function setupThumbnailBoundControls() {
             return;
         }
 
-        /**
+                /**
          * Formats one selected size for the visible summary.
          *
          * @param {number} value Selected thumbnail size, or zero for Auto.
          * @param {'min'|'max'} side Which edge is being displayed.
-         * @returns {string} Human-readable size label.
+         * @return {string} Human-readable size label.
          */
         const formatSize = (value, side) => {
             if (value === 0) {
@@ -232,11 +221,10 @@ function setupThumbnailBoundControls() {
             return `${value}px`;
         };
 
-        /**
+                /**
          * Synchronizes slider order, hidden form values, and the text summary.
          *
          * @param {HTMLInputElement|null} changedControl Control that initiated the update, if any.
-         * @returns {void}
          */
         const sync = (changedControl = null) => {
             let minIndex = parseInt(minIndexControl.value, 10) || 0;
@@ -293,7 +281,7 @@ function setupThumbnailBoundControls() {
  * @param {HTMLFormElement} form Theme form containing the appearance controls.
  * @param {string} selector CSS selector for the desired control.
  * @param {string} fallback Value used when the control is missing.
- * @returns {string} Current control value or fallback.
+ * @return {string} Current control value or fallback.
  */
 function themeControlValue(form, selector, fallback) {
     // control stores the matching input, select, or range element used by the preview.
@@ -309,7 +297,7 @@ function themeControlValue(form, selector, fallback) {
  * Converts the two stored font modes into the real preview CSS font stack.
  *
  * @param {string} fontMode Theme font mode from the Admin select control.
- * @returns {string} CSS font-family value for the live preview.
+ * @return {string} CSS font-family value for the live preview.
  */
 function themePreviewFontFamily(fontMode) {
     if (fontMode === 'sans') {
@@ -323,7 +311,7 @@ function themePreviewFontFamily(fontMode) {
  * Clamps the custom page-width value shared by the slider, number input, preview, and PHP validator.
  *
  * @param {string|number} value Raw value coming from either width control.
- * @returns {number} Safe pixel width between 1024 and 2048.
+ * @return {number} Safe pixel width between 1024 and 2048.
  */
 function customPageWidthValue(value) {
     // width stores the parsed pixel width before clamping to the supported public layout range.
@@ -343,7 +331,7 @@ function customPageWidthValue(value) {
  * changing the real Admin page while the user is still editing.
  *
  * @param {HTMLFormElement} form Theme form containing the appearance controls.
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function setupThemeLivePreview(form) {
     // previewRoot stores the split Appearance editor that owns all preview state.
@@ -382,11 +370,11 @@ function setupThemeLivePreview(form) {
     // customWidthDisplay stores the visible px readout beside the slider.
     const customWidthDisplay = form.querySelector('[data-theme-custom-width-display]');
 
-    /**
+        /**
      * Synchronizes the custom-width slider, number input, readout, and preview scale.
      *
      * @param {HTMLInputElement|null} sourceControl Control that initiated the update, if any.
-     * @returns {number} Safe custom width in pixels.
+     * @return {number} Safe custom width in pixels.
      */
     const syncCustomWidthControls = (sourceControl = null) => {
         // sourceValue stores the value from the changed control, preferring the number input when called during initial setup.
@@ -406,10 +394,8 @@ function setupThemeLivePreview(form) {
         return customWidth;
     };
 
-    /**
+        /**
      * Copies all unsaved visual settings into the preview CSS variables.
-     *
-     * @returns {void}
      */
     const syncPreview = () => {
         // colorMap stores form field names and their corresponding preview CSS variables.
@@ -514,7 +500,7 @@ function setupThemeLivePreview(form) {
  * @param {string} key Translation key emitted by the server.
  * @param {string} fallback Safe English fallback.
  * @param {Object<string, string|number>} parameters Placeholder values.
- * @returns {string} Browser-facing translated text.
+ * @return {string} Browser-facing translated text.
  */
 function i18n(key, fallback, parameters = {}) {
     const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
@@ -526,6 +512,11 @@ function i18n(key, fallback, parameters = {}) {
     return text;
 }
 
+/**
+ * Handle setup theme override form.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupThemeOverrideForm() {
     syncGridRangeDisplay('[data-home-grid-columns]', '[data-home-grid-columns-display]');
     syncGridRangeDisplay('[data-home-grid-rows]', '[data-home-grid-rows-display]');
@@ -560,9 +551,8 @@ export function setupThemeOverrideForm() {
     // opacityDisplay stores state or configuration for the gallery front-end flow.
     const opacityDisplay = form.querySelector('[data-theme-background-opacity-display]');
     if (opacityControl && opacityDisplay) {
-        /**
+                /**
          * Handles sync opacity behavior for the gallery UI.
-         * @returns {*} Result of the UI operation, when a value is produced.
          */
         const syncOpacity = () => {
             opacityDisplay.textContent = `${opacityControl.value}%`;
@@ -582,9 +572,8 @@ export function setupThemeOverrideForm() {
     // itemsPreview stores state or configuration for the gallery front-end flow.
     const itemsPreview = form.querySelector('[data-pagination-items-preview]');
     if (columnsControl && rowsControl && columnsDisplay && rowsDisplay && itemsPreview) {
-        /**
+                /**
          * Handles sync pagination preview behavior for the gallery UI.
-         * @returns {*} Result of the UI operation, when a value is produced.
          */
         const syncPaginationPreview = () => {
             // columns stores state or configuration for the gallery front-end flow.

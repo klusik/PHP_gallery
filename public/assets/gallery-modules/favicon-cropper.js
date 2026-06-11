@@ -40,7 +40,6 @@
  * import { setupExample } from './gallery-modules/example.js';
  * setupExample();
  */
-
 export function setupFaviconCropper() {
     // input stores state or configuration for the gallery front-end flow.
     const input = document.querySelector('[data-favicon-input]');
@@ -76,9 +75,8 @@ export function setupFaviconCropper() {
     // offsetY stores state or configuration for the gallery front-end flow.
     let offsetY = 0;
 
-    /**
+        /**
      * Handles draw favicon crop behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function drawFaviconCrop() {
         if (!imageLoaded) {

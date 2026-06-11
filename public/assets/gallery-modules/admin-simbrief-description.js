@@ -35,8 +35,6 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Attach SimBrief draft-generation behavior to admin editor controls.
- *
- * @returns {void}
  */
 export function setupSimbriefDescriptionGenerator() {
     if (document.body?.dataset.simbriefDescriptionGeneratorBound === '1') {
@@ -65,7 +63,6 @@ export function setupSimbriefDescriptionGenerator() {
  *
  * @param {HTMLElement} tool SimBrief tool root.
  * @param {HTMLButtonElement} button Generate button.
- * @returns {Promise<void>}
  */
 async function generateSimbriefDescription(tool, button) {
     const form = tool.closest('form');
@@ -139,18 +136,10 @@ async function generateSimbriefDescription(tool, button) {
 }
 
 /**
- * Parse an admin JSON response and convert HTML errors into a readable message.
- *
- * @param {Response} response Fetch response.
- * @returns {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
- */
-
-/**
  * Write the route text returned by SimBrief into the existing route-map editor.
  *
  * @param {HTMLFormElement} form Gallery editor form.
  * @param {Record<string, *>} result Server response.
- * @returns {void}
  */
 function updateSimbriefRouteTextarea(form, result) {
     const routeText = String(result?.route?.route_text || '').trim();
@@ -173,7 +162,6 @@ function updateSimbriefRouteTextarea(form, result) {
  *
  * @param {HTMLElement} tool SimBrief tool root.
  * @param {Record<string, *>} result Server response.
- * @returns {void}
  */
 function updateSimbriefRouteStatus(tool, result) {
     const status = tool.querySelector('[data-simbrief-route-status]');
@@ -194,6 +182,14 @@ function updateSimbriefRouteStatus(tool, result) {
     status.hidden = parts.length === 0;
 }
 
+/**
+ * Parse an admin JSON response and convert HTML errors into a readable message.
+ *
+ * The SimBrief tool calls this after fetch so HTML error pages become readable JSON errors.
+ *
+ * @param {Response} response Fetch response.
+ * @return {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
+ */
 async function readSimbriefJson(response) {
     const text = await response.text();
     try {
@@ -215,7 +211,6 @@ async function readSimbriefJson(response) {
  * @param {HTMLElement} tool SimBrief tool root.
  * @param {string} message Status text.
  * @param {boolean} failed True when the status is an error.
- * @returns {void}
  */
 function setSimbriefStatus(tool, message, failed) {
     const status = tool.querySelector('[data-simbrief-status]');

@@ -204,9 +204,19 @@ function cms_admin_media_renamer(): void
 /**
  * Render the site-wide renamer workspace for normal and AJAX requests.
  *
- * @param array<int,array<string,mixed>> $galleryRows
- * @param array<int> $selectedGalleryIds
- * @param array<int,array<string,mixed>> $plans
+ * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
+ * @param string $selectedScope Selected scope value.
+ * @param array<int> $selectedGalleryIds Selected gallery ids value.
+ * @param int $selectedSingleGalleryId Selected single gallery id identifier.
+ * @param string $pattern Pattern value.
+ * @param array<int,array<string,mixed>> $plans Plans value.
+ * @param string $notice Notice value.
+ * @param ?array $lastResult Last result value.
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
+ * @param bool $renameAvailabilityChecked Rename availability checked value.
+ * @param array $renameAvailability Rename availability value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_render_site_workspace(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, array $plans, string $notice = '', ?array $lastResult = null, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): string
 {
@@ -234,6 +244,8 @@ function admin_media_renamer_render_site_workspace(array $galleryRows, string $s
 
 /**
  * Render the gallery editor panel for the current gallery only.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function render_admin_media_renamer_gallery_panel(array $gallery): void
 {
@@ -243,6 +255,12 @@ function render_admin_media_renamer_gallery_panel(array $gallery): void
 
 /**
  * Render the gallery-level renamer panel HTML so normal and AJAX requests share one view.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $pattern Pattern value.
+ * @param string $notice Notice value.
+ * @param ?array $result Result value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_render_gallery_panel_html(array $gallery, string $pattern, string $notice = '', ?array $result = null): string
 {
@@ -286,6 +304,9 @@ function admin_media_renamer_render_gallery_panel_html(array $gallery, string $p
 
 /**
  * Render a gallery-level GET form that changes only the dry-run pattern.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Pattern value.
  */
 function render_admin_media_renamer_pattern_preview_form(int $galleryId, string $pattern): void
 {
@@ -301,8 +322,15 @@ function render_admin_media_renamer_pattern_preview_form(int $galleryId, string 
 /**
  * Render the site-wide gallery selection form.
  *
- * @param array<int,array<string,mixed>> $galleryRows
- * @param array<int> $selectedGalleryIds
+ * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
+ * @param string $selectedScope Selected scope value.
+ * @param array<int> $selectedGalleryIds Selected gallery ids value.
+ * @param int $selectedSingleGalleryId Selected single gallery id identifier.
+ * @param string $pattern Pattern value.
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
+ * @param bool $renameAvailabilityChecked Rename availability checked value.
+ * @param array $renameAvailability Rename availability value.
  */
 function render_admin_media_renamer_scope_form(array $galleryRows, string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): void
 {
@@ -353,7 +381,14 @@ function render_admin_media_renamer_scope_form(array $galleryRows, string $selec
 /**
  * Render the apply form for a previously previewed site-wide plan.
  *
- * @param array<int> $selectedGalleryIds
+ * @param string $selectedScope Selected scope value.
+ * @param array<int> $selectedGalleryIds Selected gallery ids value.
+ * @param int $selectedSingleGalleryId Selected single gallery id identifier.
+ * @param string $pattern Pattern value.
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
+ * @param bool $renameAvailabilityChecked Rename availability checked value.
+ * @param array $renameAvailability Rename availability value.
  */
 function render_admin_media_renamer_apply_form(string $selectedScope, array $selectedGalleryIds, int $selectedSingleGalleryId, string $pattern, bool $hideEmptyGalleries = true, bool $hideGalleriesWithoutRenameCandidates = false, bool $renameAvailabilityChecked = false, array $renameAvailability = []): void
 {
@@ -387,7 +422,7 @@ function render_admin_media_renamer_apply_form(string $selectedScope, array $sel
 /**
  * Render dry-run plan tables grouped by gallery.
  *
- * @param array<int,array<string,mixed>> $plans
+ * @param array<int,array<string,mixed>> $plans Plans value.
  */
 function render_admin_media_renamer_plan_table(array $plans): void
 {
@@ -428,7 +463,7 @@ function render_admin_media_renamer_plan_table(array $plans): void
 /**
  * Render the execution detail table after an apply run.
  *
- * @param array<int,array<string,mixed>> $details
+ * @param array<int,array<string,mixed>> $details Details value.
  */
 function render_admin_media_renamer_execution_details(array $details): void
 {
@@ -455,8 +490,8 @@ function render_admin_media_renamer_execution_details(array $details): void
 /**
  * Return image ids that are planned for physical rename.
  *
- * @param array<int,array<string,mixed>> $plans
- * @return array<int>
+ * @param array<int,array<string,mixed>> $plans Plans value.
+ * @return array<int> Structured result data for the caller.
  */
 function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
 {
@@ -474,7 +509,8 @@ function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
 /**
  * Read image ids from a posted array field.
  *
- * @return array<int>
+ * @param string $field Field value.
+ * @return array<int> Structured result data for the caller.
  */
 function admin_media_renamer_image_ids_from_post(string $field): array
 {
@@ -484,7 +520,9 @@ function admin_media_renamer_image_ids_from_post(string $field): array
 /**
  * Trim large batch results before returning them through AJAX.
  *
- * @return array<string,mixed>
+ * @param array $result Result value.
+ * @param int $detailLimit Detail limit value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function admin_media_renamer_bounded_result(array $result, int $detailLimit = 300): array
 {
@@ -503,7 +541,7 @@ function admin_media_renamer_bounded_result(array $result, int $detailLimit = 30
 /**
  * Decode the aggregate result produced by the AJAX batch runner.
  *
- * @return array<string,mixed>
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function admin_media_renamer_result_payload_from_post(): array
 {
@@ -526,8 +564,8 @@ function admin_media_renamer_result_payload_from_post(): array
 /**
  * Aggregate summary counters across rendered plans.
  *
- * @param array<int,array<string,mixed>> $plans
- * @return array<string,int>
+ * @param array<int,array<string,mixed>> $plans Plans value.
+ * @return array<string,int> Structured result data for the caller.
  */
 function admin_media_renamer_aggregate_plans(array $plans): array
 {
@@ -553,6 +591,9 @@ function admin_media_renamer_aggregate_plans(array $plans): array
 
 /**
  * Return a concise UI status label for one plan row.
+ *
+ * @param string $status Status value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_status_label(string $status): string
 {
@@ -568,6 +609,8 @@ function admin_media_renamer_status_label(string $status): string
 
 /**
  * Read the selected site-wide renamer scope from POST data.
+ *
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_scope_from_post(): string
 {
@@ -578,7 +621,11 @@ function admin_media_renamer_scope_from_post(): string
 /**
  * Resolve gallery ids from the submitted site-wide form.
  *
- * @return array<int>
+ * @param string $scope Scope value.
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @param bool $hideGalleriesWithoutRenameCandidates Hide galleries without rename candidates value.
+ * @param string $pattern Pattern value.
+ * @return array<int> Structured result data for the caller.
  */
 function admin_media_renamer_gallery_ids_from_post(string $scope, bool $hideEmptyGalleries = false, bool $hideGalleriesWithoutRenameCandidates = false, string $pattern = ''): array
 {
@@ -601,6 +648,8 @@ function admin_media_renamer_gallery_ids_from_post(string $scope, bool $hideEmpt
 
 /**
  * Read whether zero-image galleries should be hidden from the site-wide selector.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_media_renamer_hide_empty_from_post(): bool
 {
@@ -611,6 +660,8 @@ function admin_media_renamer_hide_empty_from_post(): bool
 
 /**
  * Read whether already-renamed galleries should be hidden after availability was checked.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_media_renamer_hide_done_from_post(): bool
 {
@@ -620,6 +671,9 @@ function admin_media_renamer_hide_done_from_post(): bool
 
 /**
  * Read whether the expensive rename availability scan has already been requested.
+ *
+ * @param string $action Action value.
+ * @return bool True when the condition matches.
  */
 function admin_media_renamer_availability_checked_from_post(string $action): bool
 {
@@ -635,7 +689,7 @@ function admin_media_renamer_availability_checked_from_post(string $action): boo
 /**
  * Decode a submitted availability payload produced by the on-demand batch checker.
  *
- * @return array<int,array<string,int>>
+ * @return array<int,array<string,int>> Structured result data for the caller.
  */
 function admin_media_renamer_availability_payload_from_post(): array
 {
@@ -667,7 +721,8 @@ function admin_media_renamer_availability_payload_from_post(): array
 /**
  * Encode availability counts for hidden form transport between AJAX refreshes.
  *
- * @param array<int,array<string,int>> $availability
+ * @param array<int,array<string,int>> $availability Availability value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_encode_availability_payload(array $availability): string
 {
@@ -681,9 +736,9 @@ function admin_media_renamer_encode_availability_payload(array $availability): s
 /**
  * Keep only gallery ids that still have at least one pending rename candidate.
  *
- * @param array<int|string> $galleryIds
- * @param array<int,array<string,int>> $availability
- * @return array<int>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @param array<int,array<string,int>> $availability Availability value.
+ * @return array<int> Structured result data for the caller.
  */
 function admin_media_renamer_filter_gallery_ids_by_availability(array $galleryIds, array $availability): array
 {
@@ -699,6 +754,8 @@ function admin_media_renamer_filter_gallery_ids_by_availability(array $galleryId
 
 /**
  * Verify CSRF for media-renamer AJAX routes and emit JSON/logs on failure.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_media_renamer_verify_csrf_for_ajax(): bool
 {
@@ -751,6 +808,9 @@ function admin_media_renamer_handle_client_error(): void
 
 /**
  * Emit a JSON response and stop the current media-renamer request.
+ *
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function admin_media_renamer_json_response(array $payload, int $statusCode = 200): never
 {
@@ -763,6 +823,11 @@ function admin_media_renamer_json_response(array $payload, int $statusCode = 200
 
 /**
  * Log a media-renamer exception with bounded context.
+ *
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param Throwable $exception Exception value.
+ * @param array $context Context value.
  */
 function admin_media_renamer_log_exception(string $eventKey, string $message, Throwable $exception, array $context = []): void
 {
@@ -779,6 +844,12 @@ function admin_media_renamer_log_exception(string $eventKey, string $message, Th
 
 /**
  * Write to Admin Logs when available and always mirror diagnostics to the PHP error log.
+ *
+ * @param string $level Level value.
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param array $context Context value.
+ * @param array $options Optional behavior flags.
  */
 function admin_media_renamer_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
@@ -796,6 +867,13 @@ function admin_media_renamer_log_event(string $level, string $eventKey, string $
  * This is intentionally independent from admin_log_event() because this feature
  * is used to diagnose routing and AJAX failures. A swallowed exception inside
  * the generic log service would otherwise hide the exact failure we need to see.
+ *
+ * @param string $level Level value.
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param array $context Context value.
+ * @param array $options Optional behavior flags.
+ * @return bool True when the condition matches.
  */
 function admin_media_renamer_write_admin_log_direct(string $level, string $eventKey, string $message, array $context = [], array $options = []): bool
 {
@@ -870,6 +948,9 @@ function admin_media_renamer_write_admin_log_direct(string $level, string $event
 
 /**
  * Return a bounded exception trace suitable for the admin log context JSON.
+ *
+ * @param Throwable $exception Exception value.
+ * @return array Structured result data for the caller.
  */
 function admin_media_renamer_compact_trace(Throwable $exception): array
 {
@@ -886,6 +967,8 @@ function admin_media_renamer_compact_trace(Throwable $exception): array
 
 /**
  * Return request metadata useful when diagnosing AJAX JSON failures.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_media_renamer_request_log_context(): array
 {
@@ -900,6 +983,9 @@ function admin_media_renamer_request_log_context(): array
 
 /**
  * Remove bulky per-image detail rows before writing aggregate results to logs.
+ *
+ * @param array $result Result value.
+ * @return array Structured result data for the caller.
  */
 function admin_media_renamer_loggable_result(array $result): array
 {
@@ -915,6 +1001,9 @@ function admin_media_renamer_loggable_result(array $result): array
 
 /**
  * Build a visible result notice after a physical rename run.
+ *
+ * @param array $result Result value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_result_notice(array $result): string
 {
@@ -947,6 +1036,9 @@ function admin_media_renamer_result_notice(array $result): string
 
 /**
  * Return the Admin Logs severity for a completed media rename run.
+ *
+ * @param array $result Result value.
+ * @return string Text result for the caller.
  */
 function admin_media_renamer_result_log_severity(array $result): string
 {

@@ -34,8 +34,6 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Attach navigation-data page helpers.
- *
- * @returns {void}
  */
 export function setupAdminNavigationDataPanel() {
     setupNavigationDataCopyButtons();
@@ -44,8 +42,6 @@ export function setupAdminNavigationDataPanel() {
 
 /**
  * Attach copy buttons for route-data diagnostics when the page renders them.
- *
- * @returns {void}
  */
 function setupNavigationDataCopyButtons() {
     document.querySelectorAll('[data-navdata-copy]').forEach((button) => {
@@ -70,7 +66,7 @@ function setupNavigationDataCopyButtons() {
  * Return the value associated with one copy button.
  *
  * @param {HTMLButtonElement} button Copy button.
- * @returns {string}
+ * @return {string} Text result for the caller.
  */
 function navigationDataCopyValue(button) {
     const directValue = String(button.dataset.navdataCopyValue || '');
@@ -100,7 +96,7 @@ function navigationDataCopyValue(button) {
  * Copy text with a fallback for older browsers.
  *
  * @param {string} value Text to copy.
- * @returns {Promise<boolean>}
+ * @return {Promise<boolean>} True when the condition matches.
  */
 async function copyNavigationDataText(value) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -135,7 +131,6 @@ async function copyNavigationDataText(value) {
  *
  * @param {HTMLButtonElement} button Copy button.
  * @param {boolean} copied Whether copying succeeded.
- * @returns {void}
  */
 function showNavigationDataButtonFeedback(button, copied) {
     const originalText = button.dataset.originalText || button.textContent || '';
@@ -148,8 +143,6 @@ function showNavigationDataButtonFeedback(button, copied) {
 
 /**
  * Attach AJAX lookup tests to resolver forms.
- *
- * @returns {void}
  */
 function setupNavigationDataLookupForms() {
     document.querySelectorAll('[data-admin-navdata-lookup]').forEach((form) => {
@@ -169,7 +162,6 @@ function setupNavigationDataLookupForms() {
  * Run one navigation-data lookup and render the JSON result in a compact view.
  *
  * @param {HTMLFormElement} form Lookup form.
- * @returns {void}
  */
 async function runNavigationDataLookup(form) {
     const result = form.querySelector('[data-admin-navdata-lookup-result]');
@@ -220,7 +212,7 @@ async function runNavigationDataLookup(form) {
  * Render a resolved point as small safe HTML.
  *
  * @param {Record<string, unknown>} point Resolved point payload.
- * @returns {string}
+ * @return {string} Text result for the caller.
  */
 function renderNavigationDataPoint(point) {
     const ident = escapeNavigationDataHtml(String(point.ident || ''));
@@ -241,7 +233,7 @@ function renderNavigationDataPoint(point) {
  * Escape text before inserting it into the lookup result HTML.
  *
  * @param {string} value Raw value.
- * @returns {string}
+ * @return {string} Text result for the caller.
  */
 function escapeNavigationDataHtml(value) {
     return value.replace(/[&<>'"]/g, (char) => ({

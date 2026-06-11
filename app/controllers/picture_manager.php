@@ -40,7 +40,6 @@ declare(strict_types=1);
  *
  * @param array<string,mixed> $payload JSON-serializable response payload.
  * @param int $status HTTP status code.
- * @return void
  */
 function picture_manager_json_response(array $payload, int $status = 200): void
 {
@@ -131,8 +130,6 @@ function picture_manager_copy_result_message(int $copied, int $skipped, string $
 
 /**
  * Move selected pictures from the current public gallery into another gallery.
- *
- * @return void
  */
 function cms_picture_manager_move(): void
 {
@@ -203,8 +200,6 @@ function cms_picture_manager_move(): void
 
 /**
  * Copy selected pictures from the current public gallery into another existing gallery.
- *
- * @return void
  */
 function cms_picture_manager_copy(): void
 {
@@ -278,8 +273,6 @@ function cms_picture_manager_copy(): void
 
 /**
  * Create a child gallery from selected pictures by copying source files and image metadata.
- *
- * @return void
  */
 function cms_picture_manager_create_gallery(): void
 {

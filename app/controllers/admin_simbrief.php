@@ -38,9 +38,8 @@ declare(strict_types=1);
 /**
  * Send a SimBrief JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
  * @param int $statusCode HTTP status code.
- * @return void
  */
 function admin_simbrief_json_response(array $payload, int $statusCode = 200): void
 {
@@ -51,8 +50,6 @@ function admin_simbrief_json_response(array $payload, int $statusCode = 200): vo
 
 /**
  * Generate a gallery-description draft from the latest SimBrief OFP.
- *
- * @return void
  */
 function cms_admin_simbrief_description(): void
 {

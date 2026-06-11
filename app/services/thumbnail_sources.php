@@ -36,10 +36,11 @@ declare(strict_types=1);
 
 /**
  * Thumbnail generation model.
- * 
+ *
  * This module owns thumbnail naming, thumbnail URLs, srcset generation, maintenance status, and image resize/write operations. It does not change gallery theme, favicon, or custom CSS settings.
+ *
+ * @return array Structured result data for the caller.
  */
-
 function thumbnail_sizes(): array
 {
     return [300, 600, 800, 960, 1280, 1600];
@@ -47,11 +48,12 @@ function thumbnail_sizes(): array
 
 /**
  * Handles thumbnail srcset logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $sizes Input used by this operation.
+ * @return mixed Result produced by this operation.
  * @param mixed 600 Input used by this operation.
  * @param mixed 800] Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
@@ -61,11 +63,12 @@ function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 
 /**
  * Handles thumbnail webp srcset logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $sizes Input used by this operation.
+ * @return mixed Result produced by this operation.
  * @param mixed 600 Input used by this operation.
  * @param mixed 800] Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
@@ -74,6 +77,7 @@ function thumbnail_webp_srcset(array $image, array $sizes = [300, 600, 800]): st
 
 /**
  * Handles thumbnail srcset for format logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $sizes Input used by this operation.
  * @param mixed $format Input used by this operation.
@@ -146,6 +150,7 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
 
 /**
  * Handles gallery thumbs dir logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $create Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -180,6 +185,10 @@ function gallery_thumbs_dir(array $gallery, bool $create = false): string
  * before deciding there is nothing to delete. This helper keeps the realpath()
  * protection for the gallery root, then normalizes the candidate path manually
  * so non-existing thumbnail directories can still be validated safely.
+ *
+ * @param string $galleryRoot Gallery root value.
+ * @param string $thumbnailPath Thumbnail path filesystem path.
+ * @return bool True when the condition matches.
  */
 function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thumbnailPath): bool
 {
@@ -204,6 +213,9 @@ function thumbnail_path_inside_existing_gallery(string $galleryRoot, string $thu
  * duplicate separators, `.` segments, and `..` segments in the supplied string,
  * but it does not dereference symlinks. The trusted gallery root is still based
  * on realpath(), so symlink boundary protection remains anchored at the root.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function normalize_filesystem_path(string $path): string
 {
@@ -247,6 +259,7 @@ function normalize_filesystem_path(string $path): string
 
 /**
  * Handles thumbnail filename logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $size Input used by this operation.
  * @param mixed $format Input used by this operation.
@@ -262,6 +275,7 @@ function thumbnail_filename(array $image, int $size, string $format = 'jpg'): st
 
 /**
  * Handles thumbnail abs path logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
  * @param mixed $size Input used by this operation.
@@ -278,6 +292,7 @@ function thumbnail_abs_path(array $image, array $gallery, int $size, string $for
 
 /**
  * Handles thumbnail can use static public url logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -289,6 +304,7 @@ function thumbnail_can_use_static_public_url(array $image, array $gallery): bool
 
 /**
  * Handles gallery static file url logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $relativeFilePath Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -308,6 +324,7 @@ function gallery_static_file_url(array $gallery, string $relativeFilePath): stri
 
 /**
  * Handles thumbnail url logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $size Input used by this operation.
  * @param mixed $format Input used by this operation.
@@ -403,6 +420,7 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
 
 /**
  * Handles thumbnail serving url logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
  * @param mixed $size Input used by this operation.
@@ -422,6 +440,7 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
 
 /**
  * Handles thumbnail existing fallback logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $gallery Input used by this operation.
  * @param mixed $preferredSize Input used by this operation.

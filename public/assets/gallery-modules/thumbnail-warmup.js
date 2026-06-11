@@ -39,7 +39,7 @@ const REQUEST_DELAY_MS = 1800;
  * Parse a comma separated thumbnail size attribute into a compact integer array.
  *
  * @param {string} value Raw data-thumbnail-warmup-sizes attribute value.
- * @returns {number[]} Parsed thumbnail sizes.
+ * @return {number[]} Parsed thumbnail sizes.
  */
 function parseWarmupSizes(value) {
     return value
@@ -51,7 +51,7 @@ function parseWarmupSizes(value) {
 /**
  * Return unique signed warmup candidates from the current document.
  *
- * @returns {{endpoint: string, items: Array<{id: number, token: string, sizes: number[]}>}|null} Warmup payload or null when nothing is pending.
+ * @return {{endpoint: string, items: Array<{id: number, token: string, sizes: number[]} >}|null} Warmup payload or null when nothing is pending.
  */
 function collectWarmupCandidates() {
     const nodes = Array.from(document.querySelectorAll('img[data-thumbnail-warmup-id][data-thumbnail-warmup-token][data-thumbnail-warmup-endpoint]'));
@@ -103,7 +103,6 @@ function collectWarmupCandidates() {
  * Wait until the browser is idle enough to start non-critical warmup work.
  *
  * @param {() => void} callback Callback to run after idle or timeout.
- * @returns {void}
  */
 function runWhenIdle(callback) {
     if ('requestIdleCallback' in window) {
@@ -117,8 +116,8 @@ function runWhenIdle(callback) {
  * Send one small warmup request to the server.
  *
  * @param {string} endpoint Warmup endpoint URL.
- * @param {Array<{id: number, token: string, sizes: number[]}>} items Candidate items for this request.
- * @returns {Promise<object|null>} Parsed JSON response or null when the request failed.
+ * @param {*} items Items value.
+ * @return {Promise<object|null>} Parsed JSON response or null when the request failed.
  */
 async function sendWarmupRequest(endpoint, items) {
     const form = new URLSearchParams();
@@ -143,8 +142,6 @@ async function sendWarmupRequest(endpoint, items) {
 
 /**
  * Start a slow, guarded warmup queue for thumbnail fallbacks rendered on the page.
- *
- * @returns {void}
  */
 export function setupThumbnailWarmup() {
     const payload = collectWarmupCandidates();
@@ -155,6 +152,11 @@ export function setupThumbnailWarmup() {
     let requestCount = 0;
     let offset = 0;
 
+    /**
+     * Run next request.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const runNextRequest = async () => {
         if (document.visibilityState === 'hidden' || requestCount >= MAX_BROWSER_REQUESTS_PER_PAGE || offset >= payload.items.length) {
             return;

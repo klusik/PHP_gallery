@@ -54,7 +54,7 @@ const EXPERIMENTAL_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES = 128 * 1024 * 1024;
 /**
  * Return default settings for the experimental client-side upload pipeline.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_default_settings(): array
 {
@@ -73,6 +73,12 @@ function experimental_upload_default_settings(): array
 
 /**
  * Clamp an integer setting while tolerating missing or malformed input.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallback Fallback value.
+ * @param int $minimum Minimum value.
+ * @param int $maximum Maximum value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_clamped_int(mixed $value, int $fallback, int $minimum, int $maximum): int
 {
@@ -89,6 +95,10 @@ function experimental_upload_clamped_int(mixed $value, int $fallback, int $minim
 
 /**
  * Clamp a ratio setting while tolerating missing or malformed input.
+ *
+ * @param mixed $value Value to process.
+ * @param float $fallback Fallback value.
+ * @return float Numeric result for the caller.
  */
 function experimental_upload_clamped_ratio(mixed $value, float $fallback): float
 {
@@ -105,6 +115,10 @@ function experimental_upload_clamped_ratio(mixed $value, float $fallback): float
 
 /**
  * Convert a human-editable megabyte setting into bytes for ZIP batch caps.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallbackBytes Fallback bytes value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_megabytes_to_bytes(mixed $value, int $fallbackBytes): int
 {
@@ -124,8 +138,8 @@ function experimental_upload_megabytes_to_bytes(mixed $value, int $fallbackBytes
 /**
  * Normalize raw settings from POST data, migrations, or app_settings rows.
  *
- * @param array<string, mixed> $raw
- * @return array<string, mixed>
+ * @param array $raw Raw value.
+ * @return array<string mixed>.
  */
 function experimental_upload_normalize_settings(array $raw): array
 {
@@ -184,7 +198,7 @@ function experimental_upload_normalize_settings(array $raw): array
 /**
  * Read normalized experimental upload settings from app_settings.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_settings(): array
 {
@@ -204,8 +218,8 @@ function experimental_upload_settings(): array
 /**
  * Persist experimental upload settings submitted by an administrator.
  *
- * @param array<string, mixed> $input
- * @return array<string, mixed>
+ * @param array $input Input value.
+ * @return array<string mixed>.
  */
 function set_experimental_upload_settings(array $input): array
 {
@@ -238,6 +252,9 @@ function set_experimental_upload_settings(array $input): array
 
 /**
  * Convert a PHP shorthand byte value, for example 128M, into bytes.
+ *
+ * @param string $value Value to process.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_php_size_to_bytes(string $value): int
 {
@@ -261,6 +278,8 @@ function experimental_upload_php_size_to_bytes(string $value): int
 
 /**
  * Return the effective PHP request upload ceiling in bytes.
+ *
+ * @return int Integer result for the caller.
  */
 function experimental_upload_server_upload_limit_bytes(): int
 {
@@ -275,6 +294,10 @@ function experimental_upload_server_upload_limit_bytes(): int
 
 /**
  * Derive a safe target ZIP size from the PHP upload limit and configured ratio.
+ *
+ * @param int $uploadLimitBytes Upload limit bytes value.
+ * @param float $ratio Ratio value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_batch_target_bytes(int $uploadLimitBytes, float $ratio): int
 {
@@ -287,6 +310,11 @@ function experimental_upload_batch_target_bytes(int $uploadLimitBytes, float $ra
 
 /**
  * Return the final browser ZIP target after PHP limits and the admin absolute cap are both applied.
+ *
+ * @param int $uploadLimitBytes Upload limit bytes value.
+ * @param float $ratio Ratio value.
+ * @param int $maxZipBatchBytes Max zip batch bytes value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_effective_batch_target_bytes(int $uploadLimitBytes, float $ratio, int $maxZipBatchBytes): int
 {
@@ -303,7 +331,7 @@ function experimental_upload_effective_batch_target_bytes(int $uploadLimitBytes,
 /**
  * Return the current browser-facing experimental upload configuration.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_browser_config(): array
 {
@@ -337,6 +365,10 @@ function experimental_upload_browser_config(): array
 
 /**
  * Read a little-endian unsigned 16-bit value from binary data.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_zip_uint16(string $data, int $offset): int
 {
@@ -346,6 +378,10 @@ function experimental_upload_zip_uint16(string $data, int $offset): int
 
 /**
  * Read a little-endian unsigned 32-bit value from binary data.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_zip_uint32(string $data, int $offset): int
 {
@@ -356,7 +392,9 @@ function experimental_upload_zip_uint32(string $data, int $offset): int
 /**
  * Parse a browser-created store-only ZIP file into safe named entries.
  *
- * @return array<string, string>
+ * @param string $zipPath Zip path filesystem path.
+ * @param int $maxBytes Max bytes value.
+ * @return array<string string>.
  */
 function experimental_upload_parse_store_zip(string $zipPath, int $maxBytes): array
 {
@@ -424,6 +462,8 @@ function experimental_upload_parse_store_zip(string $zipPath, int $maxBytes): ar
 
 /**
  * Return a safe idempotency cache directory for acknowledged batches.
+ *
+ * @return string Text result for the caller.
  */
 function experimental_upload_batch_cache_dir(): string
 {
@@ -438,6 +478,11 @@ function experimental_upload_batch_cache_dir(): string
 
 /**
  * Build a cache key for a processed client-side upload batch.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return string Text result for the caller.
  */
 function experimental_upload_batch_cache_key(int $galleryId, string $sessionId, int $batchIndex): string
 {
@@ -448,7 +493,10 @@ function experimental_upload_batch_cache_key(int $galleryId, string $sessionId, 
 /**
  * Read a cached success response for a previously acknowledged batch.
  *
- * @return array<string, mixed>|null
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return array<string mixed>|null.
  */
 function experimental_upload_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex): ?array
 {
@@ -464,7 +512,10 @@ function experimental_upload_cached_batch_response(int $galleryId, string $sessi
 /**
  * Cache a success response so client retries do not duplicate stored files.
  *
- * @param array<string, mixed> $response
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @param array $response Response data.
  */
 function experimental_upload_store_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex, array $response): void
 {
@@ -478,6 +529,9 @@ function experimental_upload_store_cached_batch_response(int $galleryId, string 
 
 /**
  * Validate one original image payload before it is placed into a gallery.
+ *
+ * @param string $filename Filename value.
+ * @param string $payload Payload value.
  */
 function experimental_upload_validate_original_payload(string $filename, string $payload): void
 {
@@ -504,6 +558,9 @@ function experimental_upload_validate_original_payload(string $filename, string 
 
 /**
  * Validate one browser-created thumbnail payload.
+ *
+ * @param string $format Format value.
+ * @param string $payload Payload value.
  */
 function experimental_upload_validate_thumbnail_payload(string $format, string $payload): void
 {
@@ -523,8 +580,8 @@ function experimental_upload_validate_thumbnail_payload(string $format, string $
 /**
  * Return database image rows keyed by image id.
  *
- * @param array<int, int> $imageIds
- * @return array<int, array<string, mixed>>
+ * @param array $imageIds Image ids value.
+ * @return array<int array<string, mixed>>.
  */
 function experimental_upload_image_rows_by_ids(array $imageIds): array
 {
@@ -545,8 +602,8 @@ function experimental_upload_image_rows_by_ids(array $imageIds): array
 /**
  * Decode and validate a browser upload manifest.
  *
- * @param array<string, string> $entries
- * @return array<string, mixed>
+ * @param array $entries Entries value.
+ * @return array<string mixed>.
  */
 function experimental_upload_manifest_from_entries(array $entries): array
 {
@@ -564,8 +621,11 @@ function experimental_upload_manifest_from_entries(array $entries): array
 /**
  * Store one browser-prepared ZIP package in a target gallery.
  *
- * @param array<string, mixed> $uploadedZip
- * @return array<string, mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param array $uploadedZip Uploaded zip value.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return array<string mixed>.
  */
 function experimental_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex): array
 {

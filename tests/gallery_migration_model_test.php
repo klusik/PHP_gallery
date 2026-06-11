@@ -38,6 +38,10 @@ require_once __DIR__ . '/../app/services/gallery_migration.php';
 
 /**
  * Throw when a migration expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_gallery_migration_same(mixed $expected, mixed $actual, string $label): void
 {

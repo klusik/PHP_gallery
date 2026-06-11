@@ -38,7 +38,7 @@ declare(strict_types=1);
 /**
  * Render database usage statistics for the Admin storage page.
  *
- * @param array<string, mixed>|null $usage
+ * @param ?array $usage Usage value.
  */
 function view_render_admin_database_usage_panel(?array $usage): void
 {
@@ -97,7 +97,7 @@ function view_render_admin_database_usage_panel(?array $usage): void
 /**
  * Render an unavailable database usage notice.
  *
- * @param array<string, mixed> $usage
+ * @param array $usage Usage value.
  */
 function view_render_admin_database_usage_unavailable(array $usage): void
 {
@@ -113,7 +113,10 @@ function view_render_admin_database_usage_unavailable(array $usage): void
 /**
  * Render one database usage chart.
  *
- * @param array<int, array<string, mixed>> $rows
+ * @param string $title Title value.
+ * @param string $hint Hint value.
+ * @param array $rows Rows to process.
+ * @param string $emptyText Empty text value.
  */
 function view_render_admin_database_usage_table_chart(string $title, string $hint, array $rows, string $emptyText): void
 {
@@ -156,7 +159,10 @@ function view_render_admin_database_usage_table_chart(string $title, string $hin
 /**
  * Return a safe integer from a database usage array.
  *
- * @param array<string, mixed> $usage
+ * @param array $usage Usage value.
+ * @param string $key Lookup key.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function view_admin_database_usage_int(array $usage, string $key, int $fallback = 0): int
 {
@@ -166,8 +172,9 @@ function view_admin_database_usage_int(array $usage, string $key, int $fallback 
 /**
  * Return a safe row array from a database usage array.
  *
- * @param array<string, mixed> $usage
- * @return array<int, array<string, mixed>>
+ * @param array $usage Usage value.
+ * @param string $key Lookup key.
+ * @return array<int array<string, mixed>>.
  */
 function view_admin_database_usage_array(array $usage, string $key): array
 {

@@ -82,7 +82,6 @@ self.addEventListener('message', (event) => {
  * Process one image file and return generated variants.
  *
  * @param {Record<string, *>} payload Worker payload.
- * @returns {Promise<void>} Completion promise.
  */
 async function processUploadImage(payload) {
     if (!self.OffscreenCanvas || !self.createImageBitmap) {
@@ -144,7 +143,7 @@ async function processUploadImage(payload) {
  * Process one downloaded source image for the experimental thumbnail rebuild path.
  *
  * @param {Record<string, *>} payload Worker payload.
- * @returns {Promise<void>} Completion promise.
+ * @return {Promise<void>} Completion promise.
  */
 async function processRebuildImage(payload) {
     if (!self.OffscreenCanvas || !self.createImageBitmap) {
@@ -212,7 +211,7 @@ async function processRebuildImage(payload) {
  * @param {number} sourceWidth Source width.
  * @param {number} sourceHeight Source height.
  * @param {number} maxSide Maximum side.
- * @returns {{width: number, height: number}} Expected dimensions.
+ * @return {{width: number, height: number} } Expected dimensions.
  */
 function expectedDimensions(sourceWidth, sourceHeight, maxSide) {
     const width = Math.max(1, Number(sourceWidth) || 1);
@@ -228,7 +227,7 @@ function expectedDimensions(sourceWidth, sourceHeight, maxSide) {
  * Create a conservative filename compatible with the PHP-side sanitizer.
  *
  * @param {string} filename Original filename.
- * @returns {string} Prepared filename.
+ * @return {string} Prepared filename.
  */
 function safePreparedFilename(filename) {
     const dot = filename.lastIndexOf('.');
@@ -245,8 +244,8 @@ function safePreparedFilename(filename) {
 /**
  * Create a store-only ZIP blob from named blob entries.
  *
- * @param {Array<{path: string, blob: Blob}>} entries ZIP entries.
- * @returns {Promise<Blob>} ZIP blob.
+ * @param {*} entries Entries value.
+ * @return {Promise<Blob>} ZIP blob.
  */
 async function createStoreOnlyZipBlob(entries) {
     const encoder = new TextEncoder();
@@ -318,7 +317,7 @@ async function createStoreOnlyZipBlob(entries) {
  * Parse a store-only ZIP blob without inflating the full archive into memory.
  *
  * @param {Blob} zipBlob ZIP payload.
- * @returns {Promise<{manifest: Record<string, *>, entries: Array<{path: string, blob: Blob}>}>} Parsed archive.
+ * @return {Promise<{manifest: Record<string, *>, entries: Array<{path: string, blob: Blob} >}>} Parsed archive.
  */
 async function parseStoreOnlyZipBlob(zipBlob) {
     if (!(zipBlob instanceof Blob)) {
@@ -381,7 +380,7 @@ async function parseStoreOnlyZipBlob(zipBlob) {
  * Calculate CRC32 for a ZIP entry payload.
  *
  * @param {Uint8Array} data Entry payload.
- * @returns {number} Unsigned CRC32.
+ * @return {number} Unsigned CRC32.
  */
 function crc32(data) {
     const table = crc32Table();
@@ -395,7 +394,7 @@ function crc32(data) {
 /**
  * Return a cached CRC32 lookup table.
  *
- * @returns {Uint32Array} CRC32 table.
+ * @return {Uint32Array} CRC32 table.
  */
 function crc32Table() {
     if (self.__experimentalUploadCrcTable) {
@@ -417,7 +416,7 @@ function crc32Table() {
  * Return DOS time for ZIP headers.
  *
  * @param {Date} date Timestamp.
- * @returns {number} DOS time.
+ * @return {number} DOS time.
  */
 function dosTime(date) {
     return (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
@@ -427,7 +426,7 @@ function dosTime(date) {
  * Return DOS date for ZIP headers.
  *
  * @param {Date} date Timestamp.
- * @returns {number} DOS date.
+ * @return {number} DOS date.
  */
 function dosDate(date) {
     return ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();

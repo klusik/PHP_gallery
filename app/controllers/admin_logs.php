@@ -50,6 +50,16 @@
  * controller is updated during a partial deployment.
  */
 if (!function_exists('admin_log_english_t')) {
+    /**
+     * Handle admin log english t.
+     *
+     * Used by HTTP controller routing for this workflow.
+     *
+     * @param string $key Lookup key.
+     * @param string|array|null $fallback Fallback value.
+     * @param array $parameters Parameters value.
+     * @return string Text result for the caller.
+     */
     function admin_log_english_t(string $key, string|array|null $fallback = null, array $parameters = []): string
     {
         if (is_array($fallback)) {
@@ -80,6 +90,15 @@ if (!function_exists('admin_log_english_t')) {
     }
 }
 
+/**
+ * Render admin log row.
+ *
+ * Used by HTTP controller routing for this workflow.
+ *
+ * @param array $entry Entry value.
+ * @param bool $withActions With actions value.
+ * @return string Text result for the caller.
+ */
 function render_admin_log_row(array $entry, bool $withActions = false): string
 {
     unset($withActions);
@@ -103,6 +122,7 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
 
 /**
  * Handles render admin feature flag logic for the gallery application.
+ *
  * @param mixed $enabled Input used by this operation.
  * @param mixed $symbol Input used by this operation.
  * @param mixed $label Input used by this operation.
@@ -123,6 +143,9 @@ function render_admin_feature_flag(bool $enabled, string $symbol, string $label)
 
 /**
  * Return a normalized admin log time order key.
+ *
+ * @param ?string $timeSort Time sort value.
+ * @return string Text result for the caller.
  */
 function admin_log_normalize_time_sort(?string $timeSort): string
 {
@@ -131,6 +154,8 @@ function admin_log_normalize_time_sort(?string $timeSort): string
 
 /**
  * Return the app-settings key used for the persistent admin log severity filter.
+ *
+ * @return string Text result for the caller.
  */
 function admin_log_severity_filter_setting_key(): string
 {
@@ -139,6 +164,9 @@ function admin_log_severity_filter_setting_key(): string
 
 /**
  * Return validated severity values while preserving the visible option order.
+ *
+ * @param mixed $rawValues Raw values value.
+ * @return array Structured result data for the caller.
  */
 function admin_log_normalize_severity_filter(mixed $rawValues): array
 {
@@ -174,6 +202,8 @@ function admin_log_normalize_severity_filter(mixed $rawValues): array
 
 /**
  * Decode the persistent severity filter from app settings.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_persisted_severity_filter(): array
 {
@@ -186,6 +216,8 @@ function admin_log_persisted_severity_filter(): array
 
 /**
  * Persist or clear the severity filter depending on the selected values.
+ *
+ * @param array $severities Severities value.
  */
 function admin_log_save_severity_filter(array $severities): void
 {
@@ -199,6 +231,8 @@ function admin_log_save_severity_filter(array $severities): void
 
 /**
  * Return true when the current request intentionally changes the severity filter.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_log_request_has_severity_filter_input(): bool
 {
@@ -209,6 +243,8 @@ function admin_log_request_has_severity_filter_input(): bool
 
 /**
  * Resolve selected severities from reset action, request data, or persisted settings.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_resolve_selected_severities(): array
 {
@@ -230,6 +266,9 @@ function admin_log_resolve_selected_severities(): array
 
 /**
  * Build compact human-readable text for the active severity filter.
+ *
+ * @param array $selectedSeverities Selected severities value.
+ * @return string Text result for the caller.
  */
 function admin_log_severity_filter_summary(array $selectedSeverities): string
 {
@@ -249,6 +288,8 @@ function admin_log_severity_filter_summary(array $selectedSeverities): string
 
 /**
  * Return supported admin log page-size choices.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_log_page_size_options(): array
 {
@@ -257,6 +298,9 @@ function admin_log_page_size_options(): array
 
 /**
  * Return a validated admin log page size.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function admin_log_normalize_page_size(mixed $value): int
 {
@@ -267,6 +311,9 @@ function admin_log_normalize_page_size(mixed $value): int
 
 /**
  * Return a validated admin log page number.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function admin_log_normalize_page_number(mixed $value): int
 {
@@ -275,6 +322,9 @@ function admin_log_normalize_page_number(mixed $value): int
 
 /**
  * Return whether similar admin log events should be grouped.
+ *
+ * @param mixed $value Value to process.
+ * @return bool True when the condition matches.
  */
 function admin_log_grouping_enabled(mixed $value): bool
 {
@@ -283,6 +333,11 @@ function admin_log_grouping_enabled(mixed $value): bool
 
 /**
  * Return the compact result count text used above the admin log table.
+ *
+ * @param int $shown Shown value.
+ * @param int $total Total value.
+ * @param bool $grouped Grouped value.
+ * @return string Text result for the caller.
  */
 function admin_log_result_count_text(int $shown, int $total, bool $grouped): string
 {
@@ -299,6 +354,11 @@ function admin_log_result_count_text(int $shown, int $total, bool $grouped): str
 
 /**
  * Return the visible range text for the current admin log page.
+ *
+ * @param int $page Page number or page data.
+ * @param int $perPage Items per page.
+ * @param int $total Total value.
+ * @return string Text result for the caller.
  */
 function admin_log_page_range_text(int $page, int $perPage, int $total): string
 {
@@ -318,6 +378,12 @@ function admin_log_page_range_text(int $page, int $perPage, int $total): string
 
 /**
  * Render admin log pagination controls.
+ *
+ * @param int $page Page number or page data.
+ * @param int $totalPages Total pages value.
+ * @param int $total Total value.
+ * @param int $perPage Items per page.
+ * @return string Text result for the caller.
  */
 function render_admin_log_pagination(int $page, int $totalPages, int $total, int $perPage): string
 {
@@ -357,6 +423,9 @@ function render_admin_log_pagination(int $page, int $totalPages, int $total, int
 
 /**
  * Build the admin log URL while preserving active filters.
+ *
+ * @param array $overrides Overrides value.
+ * @return string Text result for the caller.
  */
 function admin_log_filter_url(array $overrides = []): string
 {
@@ -393,6 +462,9 @@ function admin_log_filter_url(array $overrides = []): string
 
 /**
  * Render the admin log table rows for normal page loads and live search responses.
+ *
+ * @param array $logs Logs value.
+ * @return string Text result for the caller.
  */
 function render_admin_log_table_rows(array $logs): string
 {
@@ -498,7 +570,6 @@ function render_admin_log_table_rows(array $logs): string
 
 /**
  * Handles cms admin logs logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_logs(): void
 {
@@ -624,7 +695,6 @@ function cms_admin_logs(): void
 
 /**
  * Handles cms admin log update logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_log_update(): void
 {

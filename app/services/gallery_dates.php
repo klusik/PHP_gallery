@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 /**
  * Return true when gallery rows can store the optional manual gallery date.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_date_schema_ready(): bool
 {
@@ -45,6 +47,8 @@ function gallery_date_schema_ready(): bool
 
 /**
  * Return true when gallery rows can store a manual date range end value.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_date_range_schema_ready(): bool
 {
@@ -53,6 +57,8 @@ function gallery_date_range_schema_ready(): bool
 
 /**
  * Return true when scanned image EXIF capture dates can drive gallery date suggestions.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_date_exif_suggestions_schema_ready(): bool
 {
@@ -61,6 +67,9 @@ function gallery_date_exif_suggestions_schema_ready(): bool
 
 /**
  * Normalize an admin-submitted gallery date for database storage.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function gallery_date_storage_value(mixed $value): ?string
 {
@@ -79,7 +88,9 @@ function gallery_date_storage_value(mixed $value): ?string
 /**
  * Normalize a submitted gallery date range for database storage.
  *
- * @return array{start:?string,end:?string}
+ * @param mixed $startValue Start value value.
+ * @param mixed $endValue End value value.
+ * @return array{start:?string,end:?string} Structured result data for the caller.
  */
 function gallery_date_range_storage_values(mixed $startValue, mixed $endValue): array
 {
@@ -97,6 +108,9 @@ function gallery_date_range_storage_values(mixed $startValue, mixed $endValue): 
 
 /**
  * Normalize a sidecar gallery date without letting malformed legacy metadata stop scanning.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function gallery_date_sidecar_value(mixed $value): ?string
 {
@@ -110,7 +124,9 @@ function gallery_date_sidecar_value(mixed $value): ?string
 /**
  * Normalize sidecar gallery date-range metadata without letting malformed values stop scanning.
  *
- * @return array{start:?string,end:?string}
+ * @param mixed $startValue Start value value.
+ * @param mixed $endValue End value value.
+ * @return array{start:?string,end:?string} Structured result data for the caller.
  */
 function gallery_date_sidecar_range_values(mixed $startValue, mixed $endValue): array
 {
@@ -123,6 +139,9 @@ function gallery_date_sidecar_range_values(mixed $startValue, mixed $endValue): 
 
 /**
  * Return a valid input[type=date] value for admin forms.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_date_input_value(mixed $value): string
 {
@@ -135,6 +154,9 @@ function gallery_date_input_value(mixed $value): string
 
 /**
  * Format one stored gallery date for public display.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_date_single_display_value(mixed $value): string
 {
@@ -155,6 +177,8 @@ function gallery_date_single_display_value(mixed $value): string
 
 /**
  * Format a stored gallery date or date range for public display.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_date_range_separator(): string
 {
@@ -163,6 +187,10 @@ function gallery_date_range_separator(): string
 
 /**
  * Format a stored gallery date or date range for public display.
+ *
+ * @param mixed $startValue Start value value.
+ * @param mixed $endValue End value value.
+ * @return string Text result for the caller.
  */
 function gallery_date_range_display_value(mixed $startValue, mixed $endValue = null): string
 {
@@ -189,6 +217,9 @@ function gallery_date_range_display_value(mixed $startValue, mixed $endValue = n
 
 /**
  * Format a stored gallery date for public display.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_date_display_value(mixed $value): string
 {
@@ -197,6 +228,10 @@ function gallery_date_display_value(mixed $value): string
 
 /**
  * Return a compact storage label for admin tables.
+ *
+ * @param mixed $startValue Start value value.
+ * @param mixed $endValue End value value.
+ * @return string Text result for the caller.
  */
 function gallery_date_range_storage_label(mixed $startValue, mixed $endValue = null): string
 {
@@ -219,6 +254,12 @@ function gallery_date_range_storage_label(mixed $startValue, mixed $endValue = n
 
 /**
  * Return true when the current stored gallery range equals the suggested range.
+ *
+ * @param mixed $currentStart Current start value.
+ * @param mixed $currentEnd Current end value.
+ * @param mixed $suggestedStart Suggested start value.
+ * @param mixed $suggestedEnd Suggested end value.
+ * @return bool True when the condition matches.
  */
 function gallery_date_range_matches(mixed $currentStart, mixed $currentEnd, mixed $suggestedStart, mixed $suggestedEnd): bool
 {
@@ -229,7 +270,10 @@ function gallery_date_range_matches(mixed $currentStart, mixed $currentEnd, mixe
 /**
  * Persist a validated gallery date range and refresh its sidecar metadata.
  *
- * @return array{gallery:array<string,mixed>,start:?string,end:?string}
+ * @param int $galleryId Gallery identifier.
+ * @param mixed $startValue Start value value.
+ * @param mixed $endValue End value value.
+ * @return array{gallery:array<string,mixed>,start:?string,end:?string} Structured result data for the caller.
  */
 function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endValue): array
 {
@@ -271,6 +315,9 @@ function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endVa
 
 /**
  * Return the best stored end date for a gallery row on partially migrated installs.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return ?string Text result for the caller.
  */
 function gallery_date_end_value(array $gallery): ?string
 {
@@ -282,6 +329,9 @@ function gallery_date_end_value(array $gallery): ?string
 
 /**
  * Render the optional public gallery date or date range when one was manually assigned.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $class Class value.
  */
 function render_gallery_date(array $gallery, string $class = 'gallery-date'): void
 {
@@ -310,7 +360,7 @@ function render_gallery_date(array $gallery, string $class = 'gallery-date'): vo
 /**
  * Return all gallery rows with columns needed for EXIF date-range suggestions.
  *
- * @return array<int, array<string, mixed>>
+ * @return array<int array<string, mixed>>.
  */
 function gallery_date_suggestion_gallery_rows(): array
 {
@@ -333,7 +383,7 @@ function gallery_date_suggestion_gallery_rows(): array
 /**
  * Return direct gallery EXIF date aggregates from scanned image rows.
  *
- * @return array<int, array<string, mixed>>
+ * @return array<int array<string, mixed>>.
  */
 function gallery_date_direct_exif_ranges(): array
 {
@@ -351,8 +401,8 @@ function gallery_date_direct_exif_ranges(): array
 /**
  * Merge one direct EXIF date aggregate into one ancestor gallery suggestion.
  *
- * @param array<string, mixed> $suggestion
- * @param array<string, mixed> $directRange
+ * @param array $suggestion Suggestion value.
+ * @param array $directRange Direct range value.
  */
 function gallery_date_merge_direct_range(array &$suggestion, array $directRange): void
 {
@@ -376,7 +426,10 @@ function gallery_date_merge_direct_range(array &$suggestion, array $directRange)
 /**
  * Return true when one gallery belongs to another gallery branch.
  *
- * @param array<int, array<string, mixed>> $byId
+ * @param array $byId By id identifier.
+ * @param int $galleryId Gallery identifier.
+ * @param int $branchRootId Branch root id identifier.
+ * @return bool True when the condition matches.
  */
 function gallery_date_gallery_is_in_branch(array $byId, int $galleryId, int $branchRootId): bool
 {
@@ -399,7 +452,8 @@ function gallery_date_gallery_is_in_branch(array $byId, int $galleryId, int $bra
  * omitted because they cannot provide a safe suggestion. When $scopeGalleryId is
  * provided, only that gallery and its descendants are returned.
  *
- * @return array<int, array<string, mixed>>
+ * @param ?int $scopeGalleryId Scope gallery id identifier.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
 {
@@ -476,7 +530,8 @@ function gallery_date_exif_suggestion_rows(?int $scopeGalleryId = null): array
 /**
  * Return the EXIF-derived date suggestion for exactly one gallery branch.
  *
- * @return array<string, mixed>|null
+ * @param int $galleryId Gallery identifier.
+ * @return array<string mixed>|null.
  */
 function gallery_date_exif_suggestion_for_gallery(int $galleryId): ?array
 {
@@ -496,7 +551,8 @@ function gallery_date_exif_suggestion_for_gallery(int $galleryId): ?array
  * operation safe for parent trip galleries while branch review remains
  * available for approving daily child galleries separately.
  *
- * @return array{gallery:array<string,mixed>,start:?string,end:?string,suggestion:array<string,mixed>,range_label:string}
+ * @param int $galleryId Gallery identifier.
+ * @return array{gallery:array<string,mixed>,start:?string,end:?string,suggestion:array<string,mixed>,range_label:string} Structured result data for the caller.
  */
 function gallery_date_apply_exif_suggestion_to_gallery(int $galleryId): array
 {
@@ -532,6 +588,9 @@ function gallery_date_apply_exif_suggestion_to_gallery(int $galleryId): array
 
 /**
  * Count galleries that can receive an EXIF-derived date suggestion.
+ *
+ * @param ?int $scopeGalleryId Scope gallery id identifier.
+ * @return int Integer result for the caller.
  */
 function gallery_date_exif_suggestion_count(?int $scopeGalleryId = null): int
 {

@@ -40,7 +40,7 @@ const SUGGESTION_SELECTOR = '[data-admin-gallery-date-suggestion]';
  * Return a JSON object from a fetch response, including useful diagnostics for HTML error pages.
  *
  * @param {Response} response Server response returned by fetch.
- * @returns {Promise<Record<string, *>>} Parsed JSON response.
+ * @return {Promise<Record<string, *>>} Parsed JSON response.
  */
 async function readJsonResponse(response) {
     const text = await response.text();
@@ -56,7 +56,7 @@ async function readJsonResponse(response) {
 /**
  * Find or create the admin notice element used for in-place feedback.
  *
- * @returns {HTMLElement} Notice container.
+ * @return {HTMLElement} Notice container.
  */
 function ensureAdminNotice() {
     const existing = document.querySelector('.notice');
@@ -83,7 +83,6 @@ function ensureAdminNotice() {
  * Show an admin notice without replacing the current editor page.
  *
  * @param {string} message Human-readable message returned by the server.
- * @returns {void}
  */
 function showAdminNotice(message) {
     const notice = ensureAdminNotice();
@@ -95,7 +94,7 @@ function showAdminNotice(message) {
  * Return the suggestion panel that owns an apply button.
  *
  * @param {HTMLButtonElement} button Button that started the action.
- * @returns {HTMLElement|null} Owning suggestion panel, if present.
+ * @return {HTMLElement|null} Owning suggestion panel, if present.
  */
 function suggestionPanelForButton(button) {
     const panel = button.closest(SUGGESTION_SELECTOR);
@@ -107,7 +106,7 @@ function suggestionPanelForButton(button) {
  *
  * @param {HTMLFormElement|null} form Parent editor form, when the button belongs to one.
  * @param {HTMLElement|null} panel Owning suggestion panel.
- * @returns {string} Gallery id value for the request payload.
+ * @return {string} Gallery id value for the request payload.
  */
 function galleryIdForRequest(form, panel) {
     const panelGalleryId = panel?.dataset.adminGalleryDateGalleryId || '';
@@ -124,7 +123,7 @@ function galleryIdForRequest(form, panel) {
  *
  * @param {HTMLFormElement|null} form Parent editor form, when the button belongs to one.
  * @param {HTMLElement|null} panel Owning suggestion panel.
- * @returns {string} CSRF token value for the request payload.
+ * @return {string} CSRF token value for the request payload.
  */
 function csrfTokenForRequest(form, panel) {
     const panelToken = panel?.dataset.adminGalleryDateCsrf || '';
@@ -142,7 +141,7 @@ function csrfTokenForRequest(form, panel) {
  * @param {HTMLFormElement|null} form Parent editor form, when the button belongs to one.
  * @param {HTMLButtonElement} button Button that started the action.
  * @param {HTMLElement|null} panel Owning suggestion panel.
- * @returns {string} URL used for the apply request.
+ * @return {string} URL used for the apply request.
  */
 function endpointForRequest(form, button, panel) {
     return button.getAttribute('formaction')
@@ -157,7 +156,6 @@ function endpointForRequest(form, button, panel) {
  * @param {HTMLFormElement} form Gallery editor form.
  * @param {string} name Input name to update.
  * @param {string} value New input value.
- * @returns {void}
  */
 function updateDateInput(form, name, value) {
     const input = form.querySelector(`input[name="${name}"]`);
@@ -174,7 +172,6 @@ function updateDateInput(form, name, value) {
  *
  * @param {HTMLButtonElement} button Button that started the action.
  * @param {string} html New suggestion panel HTML.
- * @returns {void}
  */
 function replaceSuggestionPanel(button, html) {
     if (!html) {
@@ -192,7 +189,6 @@ function replaceSuggestionPanel(button, html) {
  *
  * @param {HTMLFormElement|null} form Gallery editor form, if the button belongs to one.
  * @param {HTMLButtonElement} button Suggestion apply button.
- * @returns {Promise<void>}
  */
 async function applyGalleryDateSuggestion(form, button) {
     const originalText = button.textContent || '';
@@ -244,8 +240,6 @@ async function applyGalleryDateSuggestion(form, button) {
 
 /**
  * Initialize in-place EXIF date suggestion handling for gallery editor forms.
- *
- * @returns {void}
  */
 export function setupAdminGalleryDateSuggestions() {
     if (document.body?.dataset.adminGalleryDateSuggestionsBound === '1') {

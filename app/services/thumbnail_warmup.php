@@ -37,6 +37,8 @@ declare(strict_types=1);
 
 /**
  * Return true when public media fallbacks may request background thumbnail repair.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_warmup_enabled(): bool
 {
@@ -45,6 +47,8 @@ function thumbnail_warmup_enabled(): bool
 
 /**
  * Return the writable directory used for lightweight warmup locks and cooldown files.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_cache_dir(): string
 {
@@ -58,6 +62,8 @@ function thumbnail_warmup_cache_dir(): string
 
 /**
  * Return the HMAC secret used for short public warmup tokens.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_secret(): string
 {
@@ -73,6 +79,10 @@ function thumbnail_warmup_secret(): string
 
 /**
  * Build the stable token payload for one rendered warmup candidate.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_token_payload(array $image, array $gallery): string
 {
@@ -87,6 +97,10 @@ function thumbnail_warmup_token_payload(array $image, array $gallery): string
 
 /**
  * Return a browser-submittable token proving that the server rendered this image as a warmup candidate.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_token(array $image, array $gallery): string
 {
@@ -95,6 +109,11 @@ function thumbnail_warmup_token(array $image, array $gallery): string
 
 /**
  * Verify a submitted warmup token for one image and gallery.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $token Token value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_warmup_token_is_valid(array $image, array $gallery, string $token): bool
 {
@@ -105,7 +124,10 @@ function thumbnail_warmup_token_is_valid(array $image, array $gallery, string $t
 /**
  * Return a compact HTML attribute string for an image that used original media as thumbnail fallback.
  *
- * @param array<int, int> $sizes Thumbnail sizes that would make the current rendered context stop using /media.
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $sizes Sizes value.
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_candidate_attributes(array $image, array $gallery, array $sizes): string
 {
@@ -136,8 +158,8 @@ function thumbnail_warmup_candidate_attributes(array $image, array $gallery, arr
 /**
  * Return a normalized list of thumbnail sizes accepted by the warmup endpoint.
  *
- * @param array<int|string, mixed> $sizes Raw size values from server rendering or browser JSON.
- * @return array<int, int>
+ * @param array $sizes Sizes value.
+ * @return array<int int>.
  */
 function thumbnail_warmup_normalize_sizes(array $sizes): array
 {
@@ -157,6 +179,10 @@ function thumbnail_warmup_normalize_sizes(array $sizes): array
 
 /**
  * Return true when the current visitor may ask the server to repair thumbnails for this image.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function thumbnail_warmup_current_visitor_can_process(array $image, array $gallery): bool
 {
@@ -168,6 +194,9 @@ function thumbnail_warmup_current_visitor_can_process(array $image, array $galle
 
 /**
  * Return the per-image cooldown file path used to avoid repeated expensive repair attempts.
+ *
+ * @param int $imageId Image identifier.
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_cooldown_path(int $imageId): string
 {
@@ -176,6 +205,10 @@ function thumbnail_warmup_cooldown_path(int $imageId): string
 
 /**
  * Return true when a recently attempted image should be skipped for this request.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $cooldownSeconds Cooldown seconds value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_warmup_image_is_cooling_down(int $imageId, int $cooldownSeconds = 60): bool
 {
@@ -186,6 +219,8 @@ function thumbnail_warmup_image_is_cooling_down(int $imageId, int $cooldownSecon
 
 /**
  * Mark one image as recently attempted by the background warmup worker.
+ *
+ * @param int $imageId Image identifier.
  */
 function thumbnail_warmup_touch_cooldown(int $imageId): void
 {
@@ -194,6 +229,8 @@ function thumbnail_warmup_touch_cooldown(int $imageId): void
 
 /**
  * Return the global non-waiting lock file path for public warmup processing.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_lock_path(): string
 {
@@ -203,6 +240,8 @@ function thumbnail_warmup_lock_path(): string
 
 /**
  * Return a compact visitor label for thumbnail warmup logging.
+ *
+ * @return string Text result for the caller.
  */
 function thumbnail_warmup_log_visitor_type(): string
 {
@@ -214,6 +253,8 @@ function thumbnail_warmup_log_visitor_type(): string
 
 /**
  * Return request metadata that helps admins understand why a warmup event happened.
+ *
+ * @return array Structured result data for the caller.
  */
 function thumbnail_warmup_log_request_context(): array
 {
@@ -231,6 +272,12 @@ function thumbnail_warmup_log_request_context(): array
 
 /**
  * Write a guarded thumbnail warmup event to the admin log when the log schema is available.
+ *
+ * @param string $level Level value.
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param array $context Context value.
+ * @param array $options Optional behavior flags.
  */
 function thumbnail_warmup_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
@@ -251,8 +298,8 @@ function thumbnail_warmup_log_event(string $level, string $eventKey, string $mes
 /**
  * Return a compact, non-secret summary of normalized warmup candidates.
  *
- * @param array<int, array{id:int,token:string,sizes:array<int,int>}> $items Normalized warmup candidates.
- * @return array<int, array{id:int,sizes:array<int,int>}>
+ * @param array $items Items value.
+ * @return array<int array{id:int,sizes:array<int,int>}>.
  */
 function thumbnail_warmup_log_candidate_summary(array $items): array
 {
@@ -270,8 +317,8 @@ function thumbnail_warmup_log_candidate_summary(array $items): array
 /**
  * Return the active thumbnail policy for one warmup request before source-specific checks.
  *
- * @param array<int, array{id:int,token:string,sizes:array<int,int>}> $items Normalized warmup candidates.
- * @return array<string, mixed>
+ * @param array $items Items value.
+ * @return array<string mixed>.
  */
 function thumbnail_warmup_request_policy_summary(array $items): array
 {
@@ -300,6 +347,14 @@ function thumbnail_warmup_request_policy_summary(array $items): array
 
 /**
  * Return a compact per-image warmup log detail without exposing private tokens.
+ *
+ * @param array $item Item value.
+ * @param ?array $image Image row or image data.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @param string $action Action value.
+ * @param string $reason Reason value.
+ * @param array $extra Extra value.
+ * @return array Structured result data for the caller.
  */
 function thumbnail_warmup_log_image_detail(array $item, ?array $image, ?array $gallery, string $action, string $reason, array $extra = []): array
 {
@@ -332,7 +387,7 @@ function thumbnail_warmup_log_image_detail(array $item, ?array $image, ?array $g
  * Normalize browser-submitted warmup items.
  *
  * @param mixed $rawItems Decoded JSON item list.
- * @return array<int, array{id:int,token:string,sizes:array<int,int>}>
+ * @return array<int array{id:int,token:string,sizes:array<int,int>}>.
  */
 function thumbnail_warmup_normalize_items(mixed $rawItems): array
 {
@@ -371,8 +426,8 @@ function thumbnail_warmup_normalize_items(mixed $rawItems): array
 /**
  * Process a small background thumbnail warmup batch.
  *
- * @param array<int, array{id:int,token:string,sizes:array<int,int>}> $items Normalized warmup candidates.
- * @return array<string, mixed>
+ * @param array $items Items value.
+ * @return array<string mixed>.
  */
 function thumbnail_warmup_process_items(array $items): array
 {

@@ -41,6 +41,8 @@ declare(strict_types=1);
  * scanning the filesystem. The value therefore represents source files already
  * imported into the gallery index and excludes generated thumbnails, DNG display
  * masters, caches, and any other derivative files stored beside the gallery.
+ *
+ * @return int Integer result for the caller.
  */
 function admin_dashboard_original_storage_bytes(): int
 {
@@ -59,6 +61,16 @@ function admin_dashboard_original_storage_bytes(): int
  * Optional columns are selected only when their migrations are present. This
  * keeps partially upgraded installations safe while avoiding SELECT * in the
  * dashboard hot path.
+ *
+ * @param bool $accessReady Access ready value.
+ * @param bool $gpsMapReady Gps map ready value.
+ * @param bool $backgroundSourceReady Background source ready value.
+ * @param bool $filenameDisplayReady Filename display ready value.
+ * @param bool $votingReady Voting ready value.
+ * @param bool $pictureGameReady Picture game ready value.
+ * @param bool $publicPathReady Public path ready filesystem path.
+ * @param bool $coverAssetReady Cover asset ready value.
+ * @return array Structured result data for the caller.
  */
 function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool $backgroundSourceReady, bool $filenameDisplayReady, bool $votingReady, bool $pictureGameReady, bool $publicPathReady, bool $coverAssetReady): array
 {
@@ -102,6 +114,8 @@ function admin_dashboard_gallery_rows(bool $accessReady, bool $gpsMapReady, bool
 
 /**
  * Build a cheap fingerprint for gallery hierarchy state used by parent-id repair.
+ *
+ * @return string Text result for the caller.
  */
 function admin_dashboard_parent_sync_fingerprint(): string
 {
@@ -123,7 +137,7 @@ function admin_dashboard_parent_sync_fingerprint(): string
 /**
  * Build the full read model consumed by the Admin dashboard view.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function admin_dashboard_view_model(): array
 {
@@ -290,8 +304,9 @@ function admin_dashboard_view_model(): array
 /**
  * Build dashboard notice text from request flags.
  *
- * @param array<string, mixed> $query
- * @return array<int, string>
+ * @param array $query Query value.
+ * @param string $adminNotice Admin notice value.
+ * @return array<int string>.
  */
 function admin_dashboard_notice_messages(array $query, string $adminNotice): array
 {
@@ -331,6 +346,10 @@ function admin_dashboard_notice_messages(array $query, string $adminNotice): arr
 
 /**
  * Format a byte count for compact dashboard display.
+ *
+ * @param int|float $bytes Bytes value.
+ * @param int $precision Precision value.
+ * @return string Text result for the caller.
  */
 function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): string
 {
@@ -363,8 +382,8 @@ function admin_dashboard_format_bytes(int|float $bytes, int $precision = 1): str
 /**
  * Return direct child gallery ids indexed by parent id for dashboard rendering.
  *
- * @param array<int, array<string, mixed>> $rows Gallery rows already loaded for the Admin table.
- * @return array<int, array<int, int>>
+ * @param array $rows Rows to process.
+ * @return array<int array<int, int>>.
  */
 function admin_gallery_children_by_parent(array $rows): array
 {
@@ -385,6 +404,9 @@ function admin_gallery_children_by_parent(array $rows): array
  * through the same cover-selection rules used by public gallery cards. Nothing
  * is generated while rendering the table, so repeated admin navigation stays
  * cheap.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function admin_gallery_preview_url(array $gallery): string
 {
@@ -417,6 +439,10 @@ function admin_gallery_preview_url(array $gallery): string
 
 /**
  * Return true when a periodic dashboard repair task may run again.
+ *
+ * @param string $settingKey Setting key value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return bool True when the condition matches.
  */
 function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): bool
 {
@@ -427,6 +453,8 @@ function admin_dashboard_self_heal_due(string $settingKey, int $ttlSeconds): boo
 
 /**
  * Remember that a periodic dashboard repair task was attempted.
+ *
+ * @param string $settingKey Setting key value.
  */
 function admin_dashboard_mark_self_heal(string $settingKey): void
 {
@@ -435,6 +463,8 @@ function admin_dashboard_mark_self_heal(string $settingKey): void
 
 /**
  * Return true when dashboard parent-id repair should run for current gallery rows.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_dashboard_parent_sync_needed(): bool
 {

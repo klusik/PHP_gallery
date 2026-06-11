@@ -97,7 +97,6 @@ import {
  * pointer handlers to late-rendered admin tables.
  *
  * @param {() => void} callback Feature setup function that expects parsed DOM nodes.
- * @returns {void}
  */
 function runWhenDomReady(callback) {
     if (document.readyState === 'loading') {
@@ -113,8 +112,6 @@ function runWhenDomReady(callback) {
  * Each setup function is null-safe. Pages that do not contain the corresponding
  * controls simply return from that module, so the same entrypoint can be loaded
  * on public gallery pages, admin pages, setup pages, and utility screens.
- *
- * @returns {void}
  */
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();

@@ -40,7 +40,10 @@ $GLOBALS['dng_policy_test_settings'] = [];
 /**
  * Translation shim used by isolated policy tests.
  *
- * @param array<string, string> $params
+ * @param string $key Lookup key.
+ * @param ?string $fallback Fallback value.
+ * @param array $params Params value.
+ * @return string Text result for the caller.
  */
 function t(string $key, ?string $fallback = null, array $params = []): string
 {
@@ -53,6 +56,10 @@ function t(string $key, ?string $fallback = null, array $params = []): string
 
 /**
  * App setting shim used by isolated policy tests.
+ *
+ * @param string $key Lookup key.
+ * @param ?string $default Default value when no explicit value is available.
+ * @return ?string Text result for the caller.
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
@@ -63,6 +70,10 @@ require_once __DIR__ . '/../app/services/dng_derivatives.php';
 
 /**
  * Throw when an expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_dng_policy_same(mixed $expected, mixed $actual, string $label): void
 {

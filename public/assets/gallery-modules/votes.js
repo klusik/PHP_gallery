@@ -40,7 +40,7 @@
  * ancestor selector.
  *
  * @param {EventTarget|null} target Raw event target from click or submit flow.
- * @returns {HTMLButtonElement|null} Vote button inside a managed vote form.
+ * @return {HTMLButtonElement|null} Vote button inside a managed vote form.
  */
 function voteButtonFromEventTarget(target) {
     // Variable `element` stores this steps working value.
@@ -79,7 +79,7 @@ function voteButtonFromEventTarget(target) {
  * button state directly from the form itself.
  *
  * @param {HTMLFormElement} form Vote form currently being submitted.
- * @returns {string} Active vote value as posted to the server.
+ * @return {string} Active vote value as posted to the server.
  */
 function currentVoteForForm(form) {
     // Variable `cardVote` stores this steps working value.
@@ -102,7 +102,6 @@ function currentVoteForForm(form) {
  *
  * @param {number|string} imageId Image ID returned by the server.
  * @param {number|string} vote Current viewer vote returned by the server.
- * @returns {void}
  */
 function syncVoteFormsForImage(imageId, vote) {
     document.querySelectorAll('[data-vote-form]').forEach((form) => {
@@ -126,7 +125,6 @@ function syncVoteFormsForImage(imageId, vote) {
  *
  * @param {HTMLFormElement} form Vote form currently being submitted.
  * @param {HTMLButtonElement|null} submitter Button that initiated the vote, when available.
- * @returns {Promise<void>} Resolves after the server response has been applied.
  */
 async function submitVoteForm(form, submitter = null) {
     if (form.dataset.voteSubmitting === '1') {
@@ -190,8 +188,6 @@ async function submitVoteForm(form, submitter = null) {
  * those values back to every matching public card first, then emits a CustomEvent
  * so stateful modules such as the lightbox can update their own controls without
  * this small module needing to import the full viewer implementation.
- *
- * @returns {void}
  */
 export function setupVoteForms() {
     if (document.documentElement.dataset.voteFormsBound === '1') {

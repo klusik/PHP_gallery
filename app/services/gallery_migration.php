@@ -46,7 +46,7 @@ const GALLERY_MIGRATION_RECONNECT_SECONDS = 30;
  *
  * @param string $key Translation key.
  * @param string $fallback English fallback text.
- * @param array<string, string|int|float> $parameters Placeholder values.
+ * @param array $parameters Parameters value.
  * @return string Resolved text.
  */
 function gallery_migration_t(string $key, string $fallback, array $parameters = []): string
@@ -64,7 +64,9 @@ function gallery_migration_t(string $key, string $fallback, array $parameters = 
 /**
  * Return compatibility details for a source and target version pair.
  *
- * @return array{ok:bool,source_version:string,target_version:string,policy:string,message:string}
+ * @param string $sourceVersion Source version value.
+ * @param string $targetVersion Target version value.
+ * @return array{ok:bool,source_version:string,target_version:string,policy:string,message:string} Structured result data for the caller.
  */
 function gallery_migration_compatibility_result(string $sourceVersion, string $targetVersion): array
 {
@@ -89,6 +91,10 @@ function gallery_migration_compatibility_result(string $sourceVersion, string $t
 
 /**
  * Return true when a source version can migrate into a target version.
+ *
+ * @param string $sourceVersion Source version value.
+ * @param string $targetVersion Target version value.
+ * @return bool True when the condition matches.
  */
 function gallery_migration_versions_compatible(string $sourceVersion, string $targetVersion): bool
 {
@@ -97,6 +103,8 @@ function gallery_migration_versions_compatible(string $sourceVersion, string $ta
 
 /**
  * Return the app version sent in migration manifests and API responses.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_migration_current_version(): string
 {
@@ -106,6 +114,9 @@ function gallery_migration_current_version(): string
 
 /**
  * Clamp a reconnect or HTTP timeout value to a safe server-side range.
+ *
+ * @param ?int $seconds Seconds value.
+ * @return int Integer result for the caller.
  */
 function gallery_migration_timeout_seconds(?int $seconds = null): int
 {
@@ -118,6 +129,8 @@ function gallery_migration_timeout_seconds(?int $seconds = null): int
 
 /**
  * Read the admin-selected reconnect interval from the current request.
+ *
+ * @return int Integer result for the caller.
  */
 function gallery_migration_request_timeout_seconds(): int
 {
@@ -126,6 +139,8 @@ function gallery_migration_request_timeout_seconds(): int
 
 /**
  * Return the private job-state directory.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_migration_job_dir(): string
 {
@@ -145,6 +160,9 @@ function gallery_migration_ensure_job_dir(): void
 
 /**
  * Normalize a job identifier from a request or manifest.
+ *
+ * @param string $jobId Job id identifier.
+ * @return string Text result for the caller.
  */
 function gallery_migration_normalize_job_id(string $jobId): string
 {
@@ -154,6 +172,10 @@ function gallery_migration_normalize_job_id(string $jobId): string
 
 /**
  * Build a stable job id for a target gallery and source manifest.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $manifest Manifest value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_job_id(int $targetGalleryId, array $manifest): string
 {
@@ -170,6 +192,9 @@ function gallery_migration_job_id(int $targetGalleryId, array $manifest): string
 
 /**
  * Return the path for one job-state file.
+ *
+ * @param string $jobId Job id identifier.
+ * @return string Text result for the caller.
  */
 function gallery_migration_job_path(string $jobId): string
 {
@@ -183,6 +208,8 @@ function gallery_migration_job_path(string $jobId): string
 
 /**
  * Persist one migration job state.
+ *
+ * @param array $job Job value.
  */
 function gallery_migration_save_job(array $job): void
 {
@@ -201,6 +228,9 @@ function gallery_migration_save_job(array $job): void
 
 /**
  * Load one migration job state.
+ *
+ * @param string $jobId Job id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_load_job(string $jobId): array
 {
@@ -219,6 +249,8 @@ function gallery_migration_load_job(string $jobId): array
 
 /**
  * Return a per-install source identifier that does not expose secrets.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_migration_instance_id(): string
 {
@@ -234,6 +266,9 @@ function gallery_migration_instance_id(): string
 
 /**
  * Return manifest-safe gallery settings.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_gallery_metadata(array $gallery): array
 {
@@ -278,6 +313,9 @@ function gallery_migration_gallery_metadata(array $gallery): array
 
 /**
  * Return manifest-safe image metadata.
+ *
+ * @param array $image Image row or image data.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_image_metadata(array $image): array
 {
@@ -326,6 +364,10 @@ function gallery_migration_image_metadata(array $image): array
 
 /**
  * Return a safe MIME type for one local asset.
+ *
+ * @param string $path Filesystem path.
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_asset_mime(string $path, string $fallback = 'application/octet-stream'): string
 {
@@ -346,6 +388,10 @@ function gallery_migration_asset_mime(string $path, string $fallback = 'applicat
 
 /**
  * Build an asset descriptor for one original image.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_migration_original_asset(array $image, array $gallery): ?array
 {
@@ -373,7 +419,9 @@ function gallery_migration_original_asset(array $image, array $gallery): ?array
 /**
  * Build asset descriptors for generated thumbnails that already exist.
  *
- * @return array<int, array<string, mixed>>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_migration_thumbnail_assets(array $image, array $gallery): array
 {
@@ -408,7 +456,8 @@ function gallery_migration_thumbnail_assets(array $image, array $gallery): array
 /**
  * Build descriptors for gallery-level visual assets stored under the gallery folder.
  *
- * @return array<int, array<string, mixed>>
+ * @param array $gallery Gallery row or gallery data.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_migration_gallery_assets(array $gallery): array
 {
@@ -441,7 +490,9 @@ function gallery_migration_gallery_assets(array $gallery): array
 /**
  * Return source asset descriptors for one image.
  *
- * @return array<int, array<string, mixed>>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_migration_image_assets(array $image, array $gallery): array
 {
@@ -456,6 +507,9 @@ function gallery_migration_image_assets(array $image, array $gallery): array
 
 /**
  * Return a stored flight map payload for migration.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_migration_flight_map_manifest(int $galleryId): ?array
 {
@@ -480,6 +534,9 @@ function gallery_migration_flight_map_manifest(int $galleryId): ?array
 
 /**
  * Build a complete migration manifest for one source gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_build_manifest(int $galleryId): array
 {
@@ -531,7 +588,8 @@ function gallery_migration_build_manifest(int $galleryId): array
 /**
  * Return flat asset references in transfer order.
  *
- * @return array<int, array<string, mixed>>
+ * @param array $manifest Manifest value.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_migration_manifest_asset_refs(array $manifest): array
 {
@@ -561,8 +619,8 @@ function gallery_migration_manifest_asset_refs(array $manifest): array
 /**
  * Return flat asset references with stable transfer keys attached.
  *
- * @param array<string, mixed> $manifest Migration manifest.
- * @return array<int, array<string, mixed>> Transfer assets with asset_key values.
+ * @param array $manifest Manifest value.
+ * @return array<int array<string, mixed>> Transfer assets with asset_key values.
  */
 function gallery_migration_manifest_asset_refs_with_keys(array $manifest): array
 {
@@ -578,6 +636,10 @@ function gallery_migration_manifest_asset_refs_with_keys(array $manifest): array
 
 /**
  * Find an image manifest by source id.
+ *
+ * @param array $manifest Manifest value.
+ * @param int $sourceImageId Source image id identifier.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_migration_manifest_image(array $manifest, int $sourceImageId): ?array
 {
@@ -592,6 +654,10 @@ function gallery_migration_manifest_image(array $manifest, int $sourceImageId): 
 
 /**
  * Compare a submitted asset reference with one manifest asset.
+ *
+ * @param array $asset Asset value.
+ * @param array $request Request data.
+ * @return bool True when the condition matches.
  */
 function gallery_migration_asset_matches(array $asset, array $request): bool
 {
@@ -617,6 +683,10 @@ function gallery_migration_asset_matches(array $asset, array $request): bool
 
 /**
  * Find the manifest asset matching a submitted transfer reference.
+ *
+ * @param array $manifest Manifest value.
+ * @param array $request Request data.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_migration_manifest_asset(array $manifest, array $request): ?array
 {
@@ -631,6 +701,9 @@ function gallery_migration_manifest_asset(array $manifest, array $request): ?arr
 
 /**
  * Read an asset reference from request input.
+ *
+ * @param array $input Input value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_asset_ref_from_input(array $input): array
 {
@@ -649,7 +722,9 @@ function gallery_migration_asset_ref_from_input(array $input): array
 /**
  * Resolve a source-side asset request to a local file descriptor.
  *
- * @return array{path:string,filename:string,mime_type:string}
+ * @param int $galleryId Gallery identifier.
+ * @param array $request Request data.
+ * @return array{path:string,filename:string,mime_type:string} Structured result data for the caller.
  */
 function gallery_migration_source_asset_descriptor(int $galleryId, array $request): array
 {
@@ -701,6 +776,11 @@ function gallery_migration_source_asset_descriptor(int $galleryId, array $reques
 
 /**
  * Create or update a target job from a source manifest.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $manifest Manifest value.
+ * @param string $mode Mode value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_prepare_target_job(int $targetGalleryId, array $manifest, string $mode): array
 {
@@ -772,8 +852,8 @@ function gallery_migration_prepare_target_job(int $targetGalleryId, array $manif
  *
  * @param string $jobId Stable job id for the target gallery and manifest.
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed> $manifest Current source manifest.
- * @return array<string, mixed>|null Existing job, or null when it cannot be safely reused.
+ * @param array $manifest Manifest value.
+ * @return array<string mixed>|null Existing job, or null when it cannot be safely reused.
  */
 function gallery_migration_load_existing_compatible_job(string $jobId, int $targetGalleryId, array $manifest): ?array
 {
@@ -797,6 +877,8 @@ function gallery_migration_load_existing_compatible_job(string $jobId, int $targ
 
 /**
  * Validate the minimum manifest shape before applying anything.
+ *
+ * @param array $manifest Manifest value.
  */
 function gallery_migration_validate_manifest(array $manifest): void
 {
@@ -816,6 +898,9 @@ function gallery_migration_validate_manifest(array $manifest): void
 
 /**
  * Apply target gallery metadata without moving its folder or copying secrets.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $manifest Manifest value.
  */
 function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $manifest): void
 {
@@ -873,6 +958,10 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
 
 /**
  * Normalize a gallery metadata value for SQL storage.
+ *
+ * @param string $column Column value.
+ * @param mixed $value Value to process.
+ * @return mixed Result value for the caller.
  */
 function gallery_migration_gallery_column_value(string $column, mixed $value): mixed
 {
@@ -894,6 +983,9 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
 
 /**
  * Apply stored flight route data without resolving it again on the target.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $manifest Manifest value.
  */
 function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifest): void
 {
@@ -952,6 +1044,12 @@ function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifes
 
 /**
  * Install one received or pulled asset into the target gallery.
+ *
+ * @param string $jobId Job id identifier.
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $request Request data.
+ * @param string $sourcePath Source filesystem path.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_install_asset_file(string $jobId, int $targetGalleryId, array $request, string $sourcePath): array
 {
@@ -1000,6 +1098,9 @@ function gallery_migration_install_asset_file(string $jobId, int $targetGalleryI
 
 /**
  * Return a stable key for one manifest asset.
+ *
+ * @param array $asset Asset value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_asset_key(array $asset): string
 {
@@ -1023,8 +1124,8 @@ function gallery_migration_asset_key(array $asset): string
  * gallery answer from its real state instead of relying only on the browser's
  * last successful AJAX response.
  *
- * @param array<string, mixed> $job Migration job state.
- * @return array<string, mixed> Updated job state.
+ * @param array $job Job value.
+ * @return array<string mixed> Updated job state.
  */
 function gallery_migration_sync_received_assets(array $job): array
 {
@@ -1069,10 +1170,10 @@ function gallery_migration_sync_received_assets(array $job): array
  * Return a result payload when a manifest asset already exists on the target.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed> $manifest Source manifest.
- * @param array<string, mixed> $asset Manifest asset row.
- * @param array<string, mixed> $job Current job state.
- * @return array<string, mixed>|null Existing-asset result, or null when the asset is still missing.
+ * @param array $manifest Manifest value.
+ * @param array $asset Asset value.
+ * @param array $job Job value.
+ * @return array<string mixed>|null Existing-asset result, or null when the asset is still missing.
  */
 function gallery_migration_recover_existing_asset(int $targetGalleryId, array $manifest, array $asset, array $job): ?array
 {
@@ -1104,6 +1205,10 @@ function gallery_migration_recover_existing_asset(int $targetGalleryId, array $m
 
 /**
  * Return whether one existing file matches an expected SHA-256 checksum.
+ *
+ * @param string $path Filesystem path.
+ * @param string $expectedChecksum Expected checksum value.
+ * @return bool True when the condition matches.
  */
 function gallery_migration_existing_file_matches(string $path, string $expectedChecksum): bool
 {
@@ -1121,8 +1226,8 @@ function gallery_migration_existing_file_matches(string $path, string $expectedC
  * Recover the received state for one gallery-level asset.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed> $asset Manifest asset row.
- * @return array<string, mixed>|null Existing-asset result, or null when missing.
+ * @param array $asset Asset value.
+ * @return array<string mixed>|null Existing-asset result, or null when missing.
  */
 function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, array $asset): ?array
 {
@@ -1161,9 +1266,9 @@ function gallery_migration_recover_existing_gallery_asset(int $targetGalleryId, 
  * Recover the received state for one original image.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed> $imageManifest Manifest image row.
- * @param array<string, mixed> $asset Manifest asset row.
- * @return array<string, mixed>|null Existing-asset result, or null when missing.
+ * @param array $imageManifest Image manifest value.
+ * @param array $asset Asset value.
+ * @return array<string mixed>|null Existing-asset result, or null when missing.
  */
 function gallery_migration_recover_existing_original(int $targetGalleryId, array $imageManifest, array $asset): ?array
 {
@@ -1202,10 +1307,10 @@ function gallery_migration_recover_existing_original(int $targetGalleryId, array
  * Recover the received state for one thumbnail.
  *
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed> $imageManifest Manifest image row.
- * @param array<string, mixed> $asset Manifest asset row.
- * @param array<string, mixed> $job Current job state.
- * @return array<string, mixed>|null Existing-asset result, or null when missing.
+ * @param array $imageManifest Image manifest value.
+ * @param array $asset Asset value.
+ * @param array $job Job value.
+ * @return array<string mixed>|null Existing-asset result, or null when missing.
  */
 function gallery_migration_recover_existing_thumbnail(int $targetGalleryId, array $imageManifest, array $asset, array $job): ?array
 {
@@ -1250,9 +1355,9 @@ function gallery_migration_recover_existing_thumbnail(int $targetGalleryId, arra
 /**
  * Return a JSON-safe status payload for one target-side migration job.
  *
- * @param array<string, mixed> $job Migration job state.
- * @param array<string, mixed>|null $asset Optional specific asset to check.
- * @return array<string, mixed> Status payload.
+ * @param array $job Job value.
+ * @param ?array $asset Asset value.
+ * @return array<string mixed> Status payload.
  */
 function gallery_migration_job_status_payload(array $job, ?array $asset = null): array
 {
@@ -1282,8 +1387,8 @@ function gallery_migration_job_status_payload(array $job, ?array $asset = null):
  *
  * @param string $jobId Migration job id.
  * @param int $targetGalleryId Target gallery id.
- * @param array<string, mixed>|null $request Optional asset request fields.
- * @return array<string, mixed> JSON-safe status payload.
+ * @param ?array $request Request data.
+ * @return array<string mixed> JSON-safe status payload.
  */
 function gallery_migration_job_status_response(string $jobId, int $targetGalleryId, ?array $request = null): array
 {
@@ -1304,6 +1409,11 @@ function gallery_migration_job_status_response(string $jobId, int $targetGallery
 
 /**
  * Install one gallery-level asset under the target gallery folder.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $asset Asset value.
+ * @param string $sourcePath Source filesystem path.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_install_gallery_asset(int $targetGalleryId, array $asset, string $sourcePath): array
 {
@@ -1344,6 +1454,13 @@ function gallery_migration_install_gallery_asset(int $targetGalleryId, array $as
 
 /**
  * Install one image original or thumbnail asset.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $manifest Manifest value.
+ * @param array $asset Asset value.
+ * @param string $sourcePath Source filesystem path.
+ * @param array $job Job value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_install_image_asset(int $targetGalleryId, array $manifest, array $asset, string $sourcePath, array $job): array
 {
@@ -1378,6 +1495,10 @@ function gallery_migration_install_image_asset(int $targetGalleryId, array $mani
 
 /**
  * Copy a source file to a target path, allowing idempotent retry.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $expectedChecksum Expected checksum value.
  */
 function gallery_migration_copy_if_same_or_missing(string $sourcePath, string $targetPath, string $expectedChecksum): void
 {
@@ -1396,6 +1517,12 @@ function gallery_migration_copy_if_same_or_missing(string $sourcePath, string $t
 
 /**
  * Install an original image file and upsert its metadata row.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $imageManifest Image manifest value.
+ * @param array $asset Asset value.
+ * @param string $sourcePath Source filesystem path.
+ * @return int Integer result for the caller.
  */
 function gallery_migration_install_original(int $targetGalleryId, array $imageManifest, array $asset, string $sourcePath): int
 {
@@ -1429,6 +1556,12 @@ function gallery_migration_install_original(int $targetGalleryId, array $imageMa
 
 /**
  * Insert or update the target image row from manifest metadata.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param array $imageManifest Image manifest value.
+ * @param string $targetPath Target filesystem path.
+ * @param array $info Info value.
+ * @return int Integer result for the caller.
  */
 function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $imageManifest, string $targetPath, array $info): int
 {
@@ -1508,6 +1641,9 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
 
 /**
  * Normalize image visibility for target storage.
+ *
+ * @param string $visibility Visibility value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_image_visibility(string $visibility): string
 {
@@ -1517,6 +1653,11 @@ function gallery_migration_image_visibility(string $visibility): string
 
 /**
  * Install one generated thumbnail file without regenerating it.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @param int $imageId Image identifier.
+ * @param array $asset Asset value.
+ * @param string $sourcePath Source filesystem path.
  */
 function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId, array $asset, string $sourcePath): void
 {
@@ -1557,6 +1698,10 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
 
 /**
  * Complete a migration job and refresh derived caches.
+ *
+ * @param string $jobId Job id identifier.
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_complete_job(string $jobId, int $targetGalleryId): array
 {
@@ -1608,6 +1753,9 @@ function gallery_migration_complete_job(string $jobId, int $targetGalleryId): ar
 
 /**
  * Normalize an admin-entered instance URL into a base app URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function gallery_migration_normalize_instance_base(string $url): string
 {
@@ -1642,6 +1790,11 @@ function gallery_migration_normalize_instance_base(string $url): string
 
 /**
  * Build a front-controller endpoint URL for another PHP Gallery instance.
+ *
+ * @param string $instanceUrl Instance url URL.
+ * @param string $page Page number or page data.
+ * @param array $params Params value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_endpoint_url(string $instanceUrl, string $page, array $params = []): string
 {
@@ -1652,6 +1805,11 @@ function gallery_migration_endpoint_url(string $instanceUrl, string $page, array
 
 /**
  * Fetch JSON from a remote migration endpoint.
+ *
+ * @param string $url URL used by this workflow.
+ * @param string $apiKey Api key value.
+ * @param ?int $timeoutSeconds Timeout seconds value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_http_get_json(string $url, string $apiKey, ?int $timeoutSeconds = null): array
 {
@@ -1673,6 +1831,12 @@ function gallery_migration_http_get_json(string $url, string $apiKey, ?int $time
 
 /**
  * POST form fields to a remote migration endpoint and decode JSON.
+ *
+ * @param string $url URL used by this workflow.
+ * @param array $fields Fields value.
+ * @param string $apiKey Api key value.
+ * @param ?int $timeoutSeconds Timeout seconds value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_http_post_form_json(string $url, array $fields, string $apiKey, ?int $timeoutSeconds = null): array
 {
@@ -1738,6 +1902,15 @@ function gallery_migration_http_post_form_json(string $url, array $fields, strin
 
 /**
  * POST one local file to a remote target migration endpoint.
+ *
+ * @param string $url URL used by this workflow.
+ * @param array $fields Fields value.
+ * @param string $filePath File path filesystem path.
+ * @param string $fileName File name value.
+ * @param string $mimeType Mime type value.
+ * @param string $apiKey Api key value.
+ * @param ?int $timeoutSeconds Timeout seconds value.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_http_post_file_json(string $url, array $fields, string $filePath, string $fileName, string $mimeType, string $apiKey, ?int $timeoutSeconds = null): array
 {
@@ -1791,6 +1964,11 @@ function gallery_migration_http_post_file_json(string $url, array $fields, strin
 
 /**
  * Fetch one remote asset to a temporary file.
+ *
+ * @param string $url URL used by this workflow.
+ * @param string $apiKey Api key value.
+ * @param ?int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function gallery_migration_http_get_to_file(string $url, string $apiKey, ?int $timeoutSeconds = null): string
 {

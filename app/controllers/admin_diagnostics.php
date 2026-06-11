@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle cms admin diagnostics.
+ *
+ * Used by HTTP controller routing for this workflow.
+ */
 function cms_admin_diagnostics(): void
 {
     require_admin();

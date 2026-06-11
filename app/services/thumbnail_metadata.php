@@ -38,6 +38,8 @@ declare(strict_types=1);
 
 /**
  * Return true when durable thumbnail metadata storage is available.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_schema_ready(): bool
 {
@@ -55,6 +57,9 @@ function thumbnail_metadata_schema_ready(): bool
 
 /**
  * Return an SQL datetime string for a filesystem timestamp.
+ *
+ * @param int $timestamp Timestamp value.
+ * @return string Text result for the caller.
  */
 function thumbnail_metadata_datetime_from_timestamp(int $timestamp): string
 {
@@ -63,6 +68,9 @@ function thumbnail_metadata_datetime_from_timestamp(int $timestamp): string
 
 /**
  * Return a normalized source modified-at value from an image row.
+ *
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function thumbnail_metadata_image_modified_at(array $image): string
 {
@@ -71,6 +79,11 @@ function thumbnail_metadata_image_modified_at(array $image): string
 
 /**
  * Return the relative thumbnail path stored for metadata diagnostics.
+ *
+ * @param array $image Image row or image data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @return string Text result for the caller.
  */
 function thumbnail_metadata_relative_path(array $image, int $size, string $format): string
 {
@@ -79,6 +92,9 @@ function thumbnail_metadata_relative_path(array $image, int $size, string $forma
 
 /**
  * Return a compact source EXIF and GPS summary already stored on the image row.
+ *
+ * @param array $image Image row or image data.
+ * @return ?string Text result for the caller.
  */
 function thumbnail_metadata_source_exif_json(array $image): ?string
 {
@@ -115,7 +131,10 @@ function thumbnail_metadata_source_exif_json(array $image): ?string
 /**
  * Return source metadata used for validating durable thumbnail rows.
  *
- * @return array<string, mixed>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?string $sourcePath Source filesystem path.
+ * @return array<string mixed>.
  */
 function thumbnail_metadata_source_payload(array $image, array $gallery, ?string $sourcePath = null): array
 {
@@ -154,6 +173,10 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
 
 /**
  * Return true when a stored metadata row still describes the current image row.
+ *
+ * @param array $row Row data.
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_row_matches_image_source(array $row, array $image): bool
 {
@@ -180,6 +203,9 @@ function thumbnail_metadata_row_matches_image_source(array $row, array $image): 
 
 /**
  * Return true when a stored thumbnail row preserves the stored source aspect ratio.
+ *
+ * @param array $row Row data.
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_row_has_valid_geometry(array $row): bool
 {
@@ -206,6 +232,10 @@ function thumbnail_metadata_row_has_valid_geometry(array $row): bool
 
 /**
  * Return true when a metadata row may be used for public rendering.
+ *
+ * @param array $row Row data.
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
 {
@@ -221,8 +251,9 @@ function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
 /**
  * Return renderable thumbnail metadata rows grouped by format and size.
  *
- * @param array<int, int> $sizes
- * @return array<string, array<int, array<string, mixed>>>
+ * @param array $image Image row or image data.
+ * @param array $sizes Sizes value.
+ * @return array<string array<int, array<string, mixed>>>.
  */
 function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
 {
@@ -260,6 +291,9 @@ function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
 
 /**
  * Return whether any metadata row exists for one image.
+ *
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_image_has_rows(array $image): bool
 {
@@ -274,6 +308,10 @@ function thumbnail_metadata_image_has_rows(array $image): bool
 
 /**
  * Remove one thumbnail metadata row.
+ *
+ * @param array|int $image Image row or image data.
+ * @param int $size Size value.
+ * @param string $format Format value.
  */
 function thumbnail_metadata_delete_variant(array|int $image, int $size, string $format): void
 {
@@ -295,6 +333,8 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
 
 /**
  * Remove every thumbnail metadata row for one image.
+ *
+ * @param array|int $image Image row or image data.
  */
 function thumbnail_metadata_delete_image_variants(array|int $image): void
 {
@@ -313,6 +353,11 @@ function thumbnail_metadata_delete_image_variants(array|int $image): void
 
 /**
  * Return true when one renderable metadata row exists for a concrete thumbnail variant.
+ *
+ * @param array $image Image row or image data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_metadata_has_renderable_variant(array $image, int $size, string $format): bool
 {
@@ -327,7 +372,14 @@ function thumbnail_metadata_has_renderable_variant(array $image, int $size, stri
 /**
  * Store metadata for one existing generated thumbnail file.
  *
- * @return array<string, mixed>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @param string $thumbnailPath Thumbnail path filesystem path.
+ * @param ?string $sourcePath Source filesystem path.
+ * @param bool $deleteInvalid Delete invalid value.
+ * @return array<string mixed>.
  */
 function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
 {
@@ -447,8 +499,11 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
 /**
  * Refresh metadata for all existing thumbnail files belonging to one image.
  *
- * @param array<int, int>|null $sizes Optional limited size set.
- * @return array<string, mixed>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $sizes Sizes value.
+ * @param bool $deleteInvalid Delete invalid value.
+ * @return array<string mixed>.
  */
 function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $sizes = null, bool $deleteInvalid = true): array
 {
@@ -510,8 +565,10 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
 /**
  * Return rows for rendering and the sizes that still need deliberate repair.
  *
- * @param array<int, int> $sizes
- * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool}
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $sizes Sizes value.
+ * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool} Structured result data for the caller.
  */
 function thumbnail_metadata_bundle_data(array $image, array $gallery, array $sizes): array
 {

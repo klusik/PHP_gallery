@@ -44,6 +44,10 @@ Read-oriented gallery and image lookup helpers.
 
 /**
  * Return direct child galleries for a parent gallery.
+ *
+ * @param int $parentId Parent id identifier.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function child_galleries(int $parentId, bool $publicOnly): array
 {
@@ -74,6 +78,10 @@ function child_galleries(int $parentId, bool $publicOnly): array
 
 /**
  * Walk from a gallery to its root ancestors for breadcrumb rendering.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function gallery_ancestors(array $gallery, bool $publicOnly): array
 {
@@ -108,6 +116,9 @@ function gallery_ancestors(array $gallery, bool $publicOnly): array
  * Breadcrumbs describe the structural gallery path. They intentionally include
  * unpublished ancestors because those galleries can still be opened by direct
  * URL and must not disappear from the path shown for a public child gallery.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function gallery_breadcrumb_ancestors(array $gallery): array
 {
@@ -120,6 +131,10 @@ function gallery_breadcrumb_ancestors(array $gallery): array
  * Public gallery cards are usually summaries of a whole folder branch. Counting
  * descendants makes parent/subgallery cards less misleading when a gallery node
  * contains only nested subgalleries and no direct pictures of its own.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param bool $publicOnly Public only value.
+ * @return int Integer result for the caller.
  */
 function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
 {
@@ -169,6 +184,10 @@ function gallery_branch_image_count(int $galleryId, bool $publicOnly): int
 
 /**
  * Fetch one gallery by numeric ID.
+ *
+ * @param int $id Identifier value.
+ * @param bool $fresh Fresh value.
+ * @return ?array Structured result data for the caller.
  */
 function find_gallery(int $id, bool $fresh = false): ?array
 {
@@ -189,6 +208,9 @@ function find_gallery(int $id, bool $fresh = false): ?array
 
 /**
  * Fetch one gallery by its public URL slug.
+ *
+ * @param string $slug Slug value.
+ * @return ?array Structured result data for the caller.
  */
 function find_gallery_by_slug(string $slug): ?array
 {
@@ -209,6 +231,9 @@ function find_gallery_by_slug(string $slug): ?array
 
 /**
  * Fetch one gallery by normalized folder path.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function find_gallery_by_folder_path(string $folderPath): ?array
 {
@@ -231,6 +256,9 @@ function find_gallery_by_folder_path(string $folderPath): ?array
 
 /**
  * Find the nearest already-imported parent folder for a gallery path.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function find_parent_gallery_for_path(string $folderPath): ?array
 {
@@ -249,6 +277,9 @@ function find_parent_gallery_for_path(string $folderPath): ?array
 
 /**
  * Fetch one image by numeric ID.
+ *
+ * @param int $id Identifier value.
+ * @return ?array Structured result data for the caller.
  */
 function find_image(int $id): ?array
 {
@@ -269,6 +300,10 @@ function find_image(int $id): ?array
 
 /**
  * Fetch one image by gallery and normalized relative image path.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $relativePath Relative path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function find_image_by_path(int $galleryId, string $relativePath): ?array
 {
@@ -293,6 +328,10 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
 
 /**
  * Fetch images for admin/public rendering, optionally public-only.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function gallery_images(int $galleryId, bool $publicOnly): array
 {

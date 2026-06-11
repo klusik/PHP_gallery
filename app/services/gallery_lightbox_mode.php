@@ -42,6 +42,8 @@ declare(strict_types=1);
  * Runtime schema checks intentionally match the existing gallery display helpers.
  * This lets the public site continue to render with the Theme default when code
  * is uploaded before the administrator runs the new database migration.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_lightbox_browsing_mode_schema_ready(): bool
 {
@@ -53,6 +55,8 @@ function gallery_lightbox_browsing_mode_schema_ready(): bool
  *
  * The values are persisted and emitted as data-lightbox-browsing-mode. Keep them
  * short, stable, and independent from translated labels.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_lightbox_browsing_mode_options(): array
 {
@@ -64,6 +68,10 @@ function gallery_lightbox_browsing_mode_options(): array
 
 /**
  * Normalize a submitted, stored, or sidecar lightbox browsing-mode value.
+ *
+ * @param mixed $value Value to process.
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback = 'single'): string
 {
@@ -86,6 +94,8 @@ function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback
 
 /**
  * Return the global Theme fallback for galleries without a lightbox override.
+ *
+ * @return string Text result for the caller.
  */
 function theme_lightbox_browsing_mode(): string
 {
@@ -101,6 +111,9 @@ function theme_lightbox_browsing_mode(): string
  * A null return value means the gallery inherits the global Theme setting. This
  * mirrors description-layout and count-badge persistence instead of storing a
  * separate boolean flag.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function gallery_lightbox_browsing_mode_storage_value(mixed $value): ?string
 {
@@ -123,6 +136,9 @@ function gallery_lightbox_browsing_mode_storage_value(mixed $value): ?string
  * 1. The gallery row, when the migration exists and an explicit override is set.
  * 2. The global Theme default stored in app_settings.
  * 3. The legacy single-image mode as a hard fallback.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_effective_lightbox_browsing_mode(array $gallery): string
 {
@@ -141,6 +157,9 @@ function gallery_effective_lightbox_browsing_mode(array $gallery): string
 
 /**
  * Return a translated label for one public lightbox browsing mode.
+ *
+ * @param string $mode Mode value.
+ * @return string Text result for the caller.
  */
 function gallery_lightbox_browsing_mode_label(string $mode): string
 {
@@ -153,6 +172,9 @@ function gallery_lightbox_browsing_mode_label(string $mode): string
 
 /**
  * Return a translated label for one gallery override select option.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_lightbox_browsing_mode_override_label(string $value): string
 {
@@ -164,6 +186,9 @@ function gallery_lightbox_browsing_mode_override_label(string $value): string
 
 /**
  * Return a readable summary of the current lightbox mode source for Admin forms.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_lightbox_browsing_mode_source_label(array $gallery): string
 {

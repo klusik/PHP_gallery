@@ -47,7 +47,7 @@ import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY }
  * table layout stable, gives immediate visual feedback, and makes movement
  * obvious even before the pointer crosses another row.
  *
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 export function setupAdminImageReordering() {
     // root stores the currently active panel body when the edit table was loaded dynamically.
@@ -104,12 +104,11 @@ export function setupAdminImageReordering() {
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
-    /**
+        /**
      * Updates the small status label above the image order table.
      *
      * @param {string} message Human-readable state shown to the admin.
      * @param {string} state Visual state name used by CSS.
-     * @returns {void}
      */
     function setStatus(message, state) {
         if (!status) {
@@ -119,10 +118,10 @@ export function setupAdminImageReordering() {
         status.dataset.state = state;
     }
 
-    /**
+        /**
      * Reads the current DOM row order as a list of image ids.
      *
-     * @returns {string[]} Ordered image ids exactly as displayed in the table.
+     * @return {string[]} Ordered image ids exactly as displayed in the table.
      */
     function currentImageOrder() {
         return Array.from(body.querySelectorAll('[data-admin-image-order-row]'))
@@ -130,34 +129,33 @@ export function setupAdminImageReordering() {
             .filter((imageId) => imageId !== '');
     }
 
-    /**
+        /**
      * Calculates the current zero-based position of a row in the reorder table.
      *
      * @param {Element} row Image table row whose current position should be measured.
-     * @returns {number} Current row index, or -1 when the row is not found.
+     * @return {number} Current row index, or -1 when the row is not found.
      */
     function rowIndex(row) {
         return Array.from(body.querySelectorAll('[data-admin-image-order-row]')).indexOf(row);
     }
 
-    /**
+        /**
      * Reads the filename value used by automatic Name-column sorting.
      *
      * @param {HTMLTableRowElement} row Image row from the edit-gallery table.
-     * @returns {string} Trimmed name used for locale-aware comparison.
+     * @return {string} Trimmed name used for locale-aware comparison.
      */
     function sortableImageName(row) {
         const fallbackCell = row.querySelector('[data-admin-image-name-cell]');
         return (row.dataset.imageName || fallbackCell?.textContent || '').trim();
     }
 
-    /**
+        /**
      * Synchronizes visual and accessibility state of the Name sorting header.
      *
      * @param {HTMLButtonElement} button Header button used to sort names.
      * @param {'asc'|'desc'} nextDirection Direction to apply on the next click.
      * @param {'asc'|'desc'} activeDirection Direction now represented by the table.
-     * @returns {void}
      */
     function updateNameSortHeader(button, nextDirection, activeDirection) {
         const sortHeader = button.closest('th');
@@ -170,7 +168,7 @@ export function setupAdminImageReordering() {
         }
     }
 
-    /**
+        /**
      * Sorts rows by filename and persists the generated order immediately.
      *
      * Automatic name sorting intentionally reuses the same save endpoint as
@@ -179,7 +177,7 @@ export function setupAdminImageReordering() {
      * stay identical for both ordering methods.
      *
      * @param {MouseEvent} event Click event from the Name header button.
-     * @returns {void}
+     * @return {void} Result value for the caller.
      */
     function handleNameSortClick(event) {
         if (draggedRow) {
@@ -212,21 +210,21 @@ export function setupAdminImageReordering() {
         saveOrder();
     }
 
-    /**
+        /**
      * Creates a placeholder row with the same height and column count as the dragged row.
      *
      * @param {HTMLTableRowElement} row Real row being reordered.
-     * @returns {HTMLTableRowElement|null} Placeholder inserted into the table body.
+     * @return {HTMLTableRowElement|null} Placeholder inserted into the table body.
      */
     function createPlaceholder(row) {
         return createTableDragPlaceholder(row, {className: 'admin-image-order-placeholder'});
     }
 
-    /**
+        /**
      * Creates the fixed-position visual copy used while dragging.
      *
      * @param {HTMLTableRowElement} row Real row being reordered.
-     * @returns {HTMLTableElement|null} Ghost table appended to the document body.
+     * @return {HTMLTableElement|null} Ghost table appended to the document body.
      */
     function createGhostTable(row) {
         return createTableDragGhost(row, {
@@ -235,21 +233,20 @@ export function setupAdminImageReordering() {
         });
     }
 
-    /**
+        /**
      * Moves the fixed ghost table to follow the current pointer position.
      *
      * @param {number} clientY Current viewport Y coordinate.
-     * @returns {void}
      */
     function moveGhost(clientY) {
         moveTableDragGhostY(ghostTable, clientY, pointerOffsetY);
     }
 
-    /**
+        /**
      * Finds the row before which the placeholder should be inserted.
      *
      * @param {number} pointerY Current pointer Y coordinate from the move event.
-     * @returns {Element|null} Row before which the placeholder should be inserted, or null for append.
+     * @return {Element|null} Row before which the placeholder should be inserted, or null for append.
      */
     function rowBeforePointer(pointerY) {
         const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]:not(.is-reorder-hidden)'));
@@ -263,11 +260,10 @@ export function setupAdminImageReordering() {
         }, {offset: Number.NEGATIVE_INFINITY, row: null}).row;
     }
 
-    /**
+        /**
      * Moves the placeholder to the insertion point under the pointer.
      *
      * @param {number} clientY Current viewport Y coordinate.
-     * @returns {void}
      */
     function movePlaceholder(clientY) {
         if (!placeholderRow) {
@@ -281,10 +277,8 @@ export function setupAdminImageReordering() {
         }
     }
 
-    /**
+        /**
      * Sends the current row order to PHP and persists sort_order in the database.
-     *
-     * @returns {Promise<void>} Promise resolved after the save attempt finishes.
      */
     async function saveOrder() {
         if (saveController) {
@@ -332,10 +326,8 @@ export function setupAdminImageReordering() {
         }
     }
 
-    /**
+        /**
      * Removes document-level movement listeners for any active input path.
-     *
-     * @returns {void}
      */
     function removeDocumentReorderListeners() {
         document.removeEventListener('pointermove', handleDocumentPointerMove, true);
@@ -346,10 +338,8 @@ export function setupAdminImageReordering() {
         document.removeEventListener('keydown', handleDocumentReorderKeydown, true);
     }
 
-    /**
+        /**
      * Cancels visual drag state and leaves the original order unchanged.
-     *
-     * @returns {void}
      */
     function cancelReorder() {
         if (!draggedRow) {
@@ -361,11 +351,11 @@ export function setupAdminImageReordering() {
         row.focus?.();
     }
 
-    /**
+        /**
      * Cleans temporary drag elements and optionally inserts the real row at the placeholder.
      *
      * @param {boolean} commit Whether the real row should move to the placeholder position.
-     * @returns {HTMLTableRowElement|null} Real row that was being reordered.
+     * @return {HTMLTableRowElement|null} Real row that was being reordered.
      */
     function cleanupReorderVisuals(commit) {
         if (!draggedRow) {
@@ -393,10 +383,8 @@ export function setupAdminImageReordering() {
         return row;
     }
 
-    /**
+        /**
      * Ends the current reorder operation and persists the new order when it changed.
-     *
-     * @returns {void}
      */
     function finishReorder() {
         if (!draggedRow) {
@@ -414,11 +402,10 @@ export function setupAdminImageReordering() {
         setStatus('Order unchanged.', 'idle');
     }
 
-    /**
+        /**
      * Handles pointer movement for the active drag session.
      *
      * @param {PointerEvent} event Pointer event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentPointerMove(event) {
         if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -429,11 +416,10 @@ export function setupAdminImageReordering() {
         movePlaceholder(event.clientY);
     }
 
-    /**
+        /**
      * Handles pointer release or cancellation for the active drag session.
      *
      * @param {PointerEvent} event Pointer event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentPointerEnd(event) {
         if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -443,11 +429,10 @@ export function setupAdminImageReordering() {
         finishReorder();
     }
 
-    /**
+        /**
      * Handles mouse movement for the fallback mouse path.
      *
      * @param {MouseEvent} event Mouse event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentMouseMove(event) {
         if (!activeMouseFallback) {
@@ -458,11 +443,10 @@ export function setupAdminImageReordering() {
         movePlaceholder(event.clientY);
     }
 
-    /**
+        /**
      * Handles mouse release for the fallback mouse path.
      *
      * @param {MouseEvent} event Mouse event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentMouseEnd(event) {
         if (!activeMouseFallback) {
@@ -472,11 +456,10 @@ export function setupAdminImageReordering() {
         finishReorder();
     }
 
-    /**
+        /**
      * Lets the admin cancel an active reorder operation with Escape.
      *
      * @param {KeyboardEvent} event Key event emitted during dragging.
-     * @returns {void}
      */
     function handleDocumentReorderKeydown(event) {
         if (event.key !== 'Escape') {
@@ -486,14 +469,13 @@ export function setupAdminImageReordering() {
         cancelReorder();
     }
 
-    /**
+        /**
      * Starts moving the row controlled by a drag handle.
      *
      * @param {HTMLElement} handle Gallery-column area dragged by the admin.
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
-     * @returns {void}
      */
     function startReorder(handle, clientY, pointerId, mouseFallback) {
         if (draggedRow) {

@@ -48,7 +48,7 @@ const NAVIGATION_DATA_BUNDLED_CYCLE = 'offline';
  * Existing installations may not have a navigation_data section in config.php.
  * This helper supplies conservative defaults so the feature degrades cleanly.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_config(): array
 {
@@ -79,6 +79,8 @@ function navigation_data_config(): array
 
 /**
  * Return the default bundled navigation-data CSV path.
+ *
+ * @return string Text result for the caller.
  */
 function navigation_data_default_bundled_path(): string
 {
@@ -87,6 +89,8 @@ function navigation_data_default_bundled_path(): string
 
 /**
  * Return whether the optional remote cache migration has been applied.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_cache_schema_ready(): bool
 {
@@ -104,6 +108,8 @@ function navigation_data_cache_schema_ready(): bool
 
 /**
  * Return whether per-admin Navigraph account storage is available.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_account_schema_ready(): bool
 {
@@ -121,6 +127,8 @@ function navigation_data_account_schema_ready(): bool
 
 /**
  * Return whether the existing local nav point table can be used.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_local_db_schema_ready(): bool
 {
@@ -139,7 +147,7 @@ function navigation_data_local_db_schema_ready(): bool
 /**
  * Build an admin and diagnostics status snapshot for the hybrid navdata layer.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_status(): array
 {
@@ -181,8 +189,9 @@ function navigation_data_status(): array
  * The default order is intentionally offline-first. Navigraph is used only when
  * the point is not known locally or when a caller explicitly asks for remote data.
  *
- * @param array<string, mixed> $options Resolver flags.
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @param array $options Optional behavior flags.
+ * @return array<string mixed>|null.
  */
 function navigation_data_resolve_ident(string $ident, array $options = []): ?array
 {
@@ -220,7 +229,8 @@ function navigation_data_resolve_ident(string $ident, array $options = []): ?arr
 /**
  * Resolve one identifier using only local offline providers.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_local_lookup(string $ident): ?array
 {
@@ -240,7 +250,8 @@ function navigation_data_local_lookup(string $ident): ?array
 /**
  * Resolve one identifier from the admin-imported local nav point table.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_local_db_lookup(string $ident): ?array
 {
@@ -280,7 +291,8 @@ function navigation_data_local_db_lookup(string $ident): ?array
 /**
  * Resolve one identifier from the bundled offline CSV file.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_bundled_lookup(string $ident): ?array
 {
@@ -295,7 +307,7 @@ function navigation_data_bundled_lookup(string $ident): ?array
  * The bundled dataset is deliberately small and safe to scan into memory. Large
  * imports belong in the database table, which supports indexed incremental lookup.
  *
- * @return array<string, array<string, mixed>>
+ * @return array<string array<string, mixed>>.
  */
 function navigation_data_bundled_index(): array
 {
@@ -367,8 +379,9 @@ function navigation_data_bundled_index(): array
 /**
  * Return all lookup identifiers represented by one bundled CSV row.
  *
- * @param array<string, mixed> $row
- * @return array<int, string>
+ * @param array $row Row data.
+ * @param string $fallbackIdent Fallback ident value.
+ * @return array<int string>.
  */
 function navigation_data_bundled_ident_candidates(array $row, string $fallbackIdent): array
 {
@@ -385,7 +398,15 @@ function navigation_data_bundled_ident_candidates(array $row, string $fallbackId
 /**
  * Build a normalized navigation point payload.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @param float $latitude Latitude value.
+ * @param float $longitude Longitude value.
+ * @param string $kind Kind value.
+ * @param string $source Source value.
+ * @param string $cycle Cycle value.
+ * @param string $region Region value.
+ * @param string $name Name value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_point_from_values(string $ident, float $latitude, float $longitude, string $kind, string $source, string $cycle = '', string $region = '', string $name = ''): ?array
 {
@@ -416,6 +437,9 @@ function navigation_data_point_from_values(string $ident, float $latitude, float
 
 /**
  * Normalize an airport, fix, or navaid identifier for provider lookup.
+ *
+ * @param string $ident Ident value.
+ * @return string Text result for the caller.
  */
 function navigation_data_normalize_ident(string $ident): string
 {
@@ -426,6 +450,9 @@ function navigation_data_normalize_ident(string $ident): string
 
 /**
  * Normalize provider kind labels to stable UI/API values.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function navigation_data_normalize_kind(string $kind): string
 {
@@ -449,6 +476,9 @@ function navigation_data_normalize_kind(string $kind): string
 
 /**
  * Convert a scalar value to float or null.
+ *
+ * @param mixed $value Value to process.
+ * @return ?float Numeric result for the caller.
  */
 function navigation_data_float_or_null(mixed $value): ?float
 {
@@ -463,7 +493,8 @@ function navigation_data_float_or_null(mixed $value): ?float
 /**
  * Read a cached remote point for one identifier.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_cache_read(string $ident): ?array
 {
@@ -513,7 +544,10 @@ function navigation_data_cache_read(string $ident): ?array
 /**
  * Persist a resolved remote point in the shared cache table.
  *
- * @param array<string, mixed> $point
+ * @param string $ident Ident value.
+ * @param array $point Point value.
+ * @param string $source Source value.
+ * @param string $cycle Cycle value.
  */
 function navigation_data_cache_write(string $ident, array $point, string $source, string $cycle): void
 {
@@ -577,6 +611,8 @@ function navigation_data_cache_write(string $ident, array $point, string $source
 
 /**
  * Return whether Navigraph is configured enough to start OAuth.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_navigraph_configured(): bool
 {
@@ -586,6 +622,8 @@ function navigation_data_navigraph_configured(): bool
 
 /**
  * Return whether the current admin session contains a Navigraph token set.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_navigraph_connected(): bool
 {
@@ -596,7 +634,7 @@ function navigation_data_navigraph_connected(): bool
 /**
  * Return the stored Navigraph session data.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_navigraph_session(): array
 {
@@ -617,7 +655,7 @@ function navigation_data_navigraph_session(): array
 /**
  * Store Navigraph session data after token exchange or refresh.
  *
- * @param array<string, mixed> $tokenPayload
+ * @param array $tokenPayload Token payload value.
  */
 function navigation_data_navigraph_store_tokens(array $tokenPayload): void
 {
@@ -661,7 +699,7 @@ function navigation_data_navigraph_disconnect(): void
 /**
  * Return a status snapshot for Navigraph UI and diagnostics.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_navigraph_status(): array
 {
@@ -695,6 +733,8 @@ function navigation_data_navigraph_status(): array
 
 /**
  * Return the current authenticated admin user id when available.
+ *
+ * @return int Integer result for the caller.
  */
 function navigation_data_current_user_id(): int
 {
@@ -707,6 +747,8 @@ function navigation_data_current_user_id(): int
 
 /**
  * Return whether a persistent Navigraph account row exists for this admin.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_navigraph_account_exists(): bool
 {
@@ -730,7 +772,7 @@ function navigation_data_navigraph_account_exists(): bool
 /**
  * Load a persisted Navigraph session for the current admin user.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_navigraph_load_account_session(): array
 {
@@ -783,7 +825,7 @@ function navigation_data_navigraph_load_account_session(): array
 /**
  * Persist the current Navigraph session for the active admin user.
  *
- * @param array<string, mixed> $session
+ * @param array $session Session value.
  */
 function navigation_data_navigraph_persist_session(array $session): void
 {
@@ -886,7 +928,8 @@ function navigation_data_navigraph_delete_account_session(): void
 /**
  * Return a display name from OAuth claims without trusting it for authorization.
  *
- * @param array<string, mixed> $claims
+ * @param array $claims Claims value.
+ * @return string Text result for the caller.
  */
 function navigation_data_navigraph_display_name(array $claims): string
 {
@@ -901,6 +944,9 @@ function navigation_data_navigraph_display_name(array $claims): string
 
 /**
  * Encrypt an OAuth token for database storage.
+ *
+ * @param string $secret Secret value.
+ * @return string Text result for the caller.
  */
 function navigation_data_encrypt_secret(string $secret): string
 {
@@ -927,6 +973,9 @@ function navigation_data_encrypt_secret(string $secret): string
 
 /**
  * Decrypt an OAuth token previously written by navigation_data_encrypt_secret().
+ *
+ * @param string $encoded Encoded value.
+ * @return string Text result for the caller.
  */
 function navigation_data_decrypt_secret(string $encoded): string
 {
@@ -956,6 +1005,8 @@ function navigation_data_decrypt_secret(string $encoded): string
 
 /**
  * Return the binary encryption key used for optional OAuth token persistence.
+ *
+ * @return string Text result for the caller.
  */
 function navigation_data_secret_key(): string
 {
@@ -975,6 +1026,8 @@ function navigation_data_secret_key(): string
 
 /**
  * Return the best known Navigraph AIRAC cycle for cache partitioning.
+ *
+ * @return string Text result for the caller.
  */
 function navigation_data_navigraph_cycle(): string
 {
@@ -985,6 +1038,8 @@ function navigation_data_navigraph_cycle(): string
 
 /**
  * Build the OAuth authorization URL and store PKCE state in the session.
+ *
+ * @return string Text result for the caller.
  */
 function navigation_data_navigraph_authorization_url(): string
 {
@@ -1019,6 +1074,9 @@ function navigation_data_navigraph_authorization_url(): string
 
 /**
  * Exchange an OAuth code for Navigraph tokens and store them in the session.
+ *
+ * @param string $code Code value.
+ * @param string $state State value.
  */
 function navigation_data_navigraph_exchange_code(string $code, string $state): void
 {
@@ -1056,6 +1114,8 @@ function navigation_data_navigraph_exchange_code(string $code, string $state): v
 
 /**
  * Refresh the Navigraph access token when possible.
+ *
+ * @return bool True when the condition matches.
  */
 function navigation_data_navigraph_refresh_token_if_needed(): bool
 {
@@ -1099,7 +1159,7 @@ function navigation_data_navigraph_refresh_token_if_needed(): bool
 /**
  * Refresh the cached Navigraph package metadata for the current session.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function navigation_data_navigraph_refresh_packages(): array
 {
@@ -1151,8 +1211,8 @@ function navigation_data_navigraph_refresh_packages(): array
 /**
  * Select the most useful package from a Navigraph packages response.
  *
- * @param array<int|string, mixed> $packages
- * @return array<string, mixed>|null
+ * @param array $packages Packages value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_navigraph_select_best_package(array $packages): ?array
 {
@@ -1181,7 +1241,8 @@ function navigation_data_navigraph_select_best_package(array $packages): ?array
  * approved custom formats or a thin private lookup endpoint without hard-coding
  * a non-existent public point-search API.
  *
- * @return array<string, mixed>|null
+ * @param string $ident Ident value.
+ * @return array<string mixed>|null.
  */
 function navigation_data_navigraph_lookup(string $ident): ?array
 {
@@ -1232,6 +1293,8 @@ function navigation_data_navigraph_lookup(string $ident): ?array
 
 /**
  * Build the effective Navigraph OAuth callback URI.
+ *
+ * @return string Text result for the caller.
  */
 function navigation_data_navigraph_redirect_uri(): string
 {
@@ -1244,6 +1307,9 @@ function navigation_data_navigraph_redirect_uri(): string
 
 /**
  * Return a random URL-safe token.
+ *
+ * @param int $bytes Bytes value.
+ * @return string Text result for the caller.
  */
 function navigation_data_random_url_token(int $bytes): string
 {
@@ -1256,7 +1322,8 @@ function navigation_data_random_url_token(int $bytes): string
  * The token was received directly from the token endpoint over HTTPS. The decoded
  * payload is used only for diagnostics and UI hints, not for granting admin access.
  *
- * @return array<string, mixed>
+ * @param string $jwt Jwt value.
+ * @return array<string mixed>.
  */
 function navigation_data_jwt_payload(string $jwt): array
 {
@@ -1277,7 +1344,10 @@ function navigation_data_jwt_payload(string $jwt): array
 /**
  * POST an application/x-www-form-urlencoded request.
  *
- * @param array<string, string> $fields
+ * @param string $url URL used by this workflow.
+ * @param array $fields Fields value.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function navigation_data_http_post_form(string $url, array $fields, int $timeoutSeconds): string
 {
@@ -1332,7 +1402,10 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
 /**
  * GET a JSON endpoint with optional headers.
  *
- * @param array<int, string> $headers
+ * @param string $url URL used by this workflow.
+ * @param array $headers Headers value.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function navigation_data_http_get_json(string $url, array $headers, int $timeoutSeconds): string
 {

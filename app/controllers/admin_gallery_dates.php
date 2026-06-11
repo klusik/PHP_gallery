@@ -37,7 +37,9 @@ declare(strict_types=1);
 /**
  * Send a JSON response for the reusable gallery EXIF date suggestion workflow.
  *
- * @param array<string, mixed> $payload Additional response values for the browser.
+ * @param bool $ok Ok value.
+ * @param string $message Message value.
+ * @param array $payload Payload value.
  */
 function admin_gallery_date_suggestion_json_response(bool $ok, string $message, array $payload = []): void
 {
@@ -50,6 +52,9 @@ function admin_gallery_date_suggestion_json_response(bool $ok, string $message, 
 
 /**
  * Render the refreshed per-gallery EXIF date suggestion panel for AJAX responses.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function admin_gallery_date_suggestion_panel_html(array $gallery): string
 {
@@ -64,6 +69,9 @@ function admin_gallery_date_suggestion_panel_html(array $gallery): string
 
 /**
  * Apply the current gallery branch EXIF date suggestion and answer as JSON or redirect.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $returnUrl Return url URL.
  */
 function admin_gallery_date_suggestion_handle_apply(int $galleryId, string $returnUrl): void
 {
@@ -152,7 +160,8 @@ function cms_admin_gallery_date_suggestion(): void
 /**
  * Apply selected gallery date-range rows submitted by the EXIF suggestion form.
  *
- * @return array{updated:int,errors:array<int,string>}
+ * @param array $post Post value.
+ * @return array{updated:int,errors:array<int,string>} Structured result data for the caller.
  */
 function admin_gallery_dates_apply_selected(array $post): array
 {
@@ -189,7 +198,7 @@ function admin_gallery_dates_apply_selected(array $post): array
 /**
  * Render one editable EXIF date suggestion row.
  *
- * @param array<string, mixed> $row
+ * @param array $row Row data.
  */
 function admin_gallery_dates_render_row(array $row): void
 {

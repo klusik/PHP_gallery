@@ -38,7 +38,7 @@
  * @param {string} key Translation key emitted by the server.
  * @param {string} fallback Safe English fallback.
  * @param {Object<string, string|number>} parameters Placeholder values.
- * @returns {string} Browser-facing translated text.
+ * @return {string} Browser-facing translated text.
  */
 export function i18n(key, fallback, parameters = {}) {
     const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
@@ -54,7 +54,7 @@ export function i18n(key, fallback, parameters = {}) {
  * Escape HTML text before inserting generated success markup.
  *
  * @param {string} value Raw value.
- * @returns {string} Escaped text.
+ * @return {string} Escaped text.
  */
 export function escapeHtmlText(value) {
     return String(value).replace(/[&<>"']/g, (character) => ({
@@ -70,7 +70,7 @@ export function escapeHtmlText(value) {
  * Escape an attribute value before inserting generated success markup.
  *
  * @param {string} value Raw value.
- * @returns {string} Escaped attribute value.
+ * @return {string} Escaped attribute value.
  */
 export function escapeHtmlAttribute(value) {
     return escapeHtmlText(value).replace(/`/g, '&#096;');
@@ -78,8 +78,9 @@ export function escapeHtmlAttribute(value) {
 
 /**
  * Handles admin url with params behavior for the gallery UI.
+ *
  * @param {*} params Value supplied by the caller or event context.
- * @returns {*} Result of the UI operation, when a value is produced.
+ * @return {*} Result of the UI operation, when a value is produced.
  */
 export function adminUrlWithParams(params) {
     // url stores state or configuration for the gallery front-end flow.
@@ -92,6 +93,15 @@ export function adminUrlWithParams(params) {
 }
 
 // Function `isThumbnailSubmission` executes this focused behavior.
+/**
+ * Return whether thumbnail submission.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLFormElement} form Form value.
+ * @param {*} submitter Submitter value.
+ * @return {*} Result value for the caller.
+ */
 export function isThumbnailSubmission(form, submitter) {
     // Variable `action` stores this steps working value.
     const action = submitter?.formAction || form.action || '';
@@ -101,6 +111,15 @@ export function isThumbnailSubmission(form, submitter) {
 }
 
 // Function `thumbnailEndpoint` executes this focused behavior.
+/**
+ * Handle thumbnail endpoint.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLFormElement} form Form value.
+ * @param {*} submitter Submitter value.
+ * @return {*} Result value for the caller.
+ */
 export function thumbnailEndpoint(form, submitter) {
     // Variable `action` stores this steps working value.
     const action = submitter?.formAction || form.action || window.location.href;
@@ -111,6 +130,14 @@ export function thumbnailEndpoint(form, submitter) {
 }
 
 // Function `ensureThumbnailProgress` executes this focused behavior.
+/**
+ * Ensure thumbnail progress.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLFormElement} form Form value.
+ * @return {*} Result value for the caller.
+ */
 export function ensureThumbnailProgress(form) {
     // Variable `targetSelector` stores this steps working value.
     const targetSelector = form.dataset.thumbnailProgressTarget || '';
@@ -159,6 +186,13 @@ export function ensureThumbnailProgress(form) {
 }
 
 // Function `createThumbnailProgress` executes this focused behavior.
+/**
+ * Create thumbnail progress.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {*} Result value for the caller.
+ */
 export function createThumbnailProgress() {
     // Variable `progress` stores this steps working value.
     const progress = document.createElement('div');
@@ -169,6 +203,18 @@ export function createThumbnailProgress() {
 }
 
 // Function `updateThumbnailProgress` executes this focused behavior.
+/**
+ * Update thumbnail progress.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} progress Progress value.
+ * @param {*} processed Processed value.
+ * @param {number} total Total value.
+ * @param {*} created Created value.
+ * @param {*} skipped Skipped value.
+ * @param {string} label Label value.
+ */
 export function updateThumbnailProgress(progress, processed, total, created, skipped, label) {
     progress.hidden = false;
     // Variable `percent` stores this steps working value.
@@ -179,6 +225,15 @@ export function updateThumbnailProgress(progress, processed, total, created, ski
 }
 
 // Function `updateBasicProgress` executes this focused behavior.
+/**
+ * Update basic progress.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} progress Progress value.
+ * @param {*} percent Percent value.
+ * @param {string} label Label value.
+ */
 export function updateBasicProgress(progress, percent, label) {
     progress.hidden = false;
     progress.querySelector('[data-thumbnail-progress-fill]').value = Math.max(0, Math.min(100, percent));
@@ -186,6 +241,15 @@ export function updateBasicProgress(progress, percent, label) {
 }
 
 // Function `setGalleryRowHiddenReason` executes this focused behavior.
+/**
+ * Set gallery row hidden reason.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} row Row data.
+ * @param {*} reason Reason value.
+ * @param {*} hidden Hidden value.
+ */
 export function setGalleryRowHiddenReason(row, reason, hidden) {
     if (!(row instanceof HTMLElement)) {
         return;

@@ -38,6 +38,8 @@ declare(strict_types=1);
 
 /**
  * Return the root directory used for file-backed GitHub API cache metadata.
+ *
+ * @return string Text result for the caller.
  */
 function cms_github_api_cache_dir(): string
 {
@@ -46,6 +48,9 @@ function cms_github_api_cache_dir(): string
 
 /**
  * Return a deterministic file-safe cache key for one GitHub API URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function cms_github_api_cache_key(string $url): string
 {
@@ -54,6 +59,9 @@ function cms_github_api_cache_key(string $url): string
 
 /**
  * Return the cache path for one GitHub API URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function cms_github_api_cache_path(string $url): string
 {
@@ -62,6 +70,9 @@ function cms_github_api_cache_path(string $url): string
 
 /**
  * Read cached GitHub API metadata and response body for one URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @return array Structured result data for the caller.
  */
 function cms_github_api_read_cache(string $url): array
 {
@@ -84,6 +95,11 @@ function cms_github_api_read_cache(string $url): array
 
 /**
  * Persist cached GitHub API metadata and response body for one URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $status Status value.
+ * @param array $headers Headers value.
+ * @param string $body Body value.
  */
 function cms_github_api_write_cache(string $url, int $status, array $headers, string $body): void
 {
@@ -115,6 +131,8 @@ function cms_github_api_write_cache(string $url, int $status, array $headers, st
 
 /**
  * Return the next safe GitHub request time according to saved policy data.
+ *
+ * @return array Structured result data for the caller.
  */
 function cms_github_api_wait_state(): array
 {
@@ -139,6 +157,11 @@ function cms_github_api_wait_state(): array
 
 /**
  * Persist GitHub response headers and calculate safe retry windows.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $status Status value.
+ * @param array $headers Headers value.
+ * @param bool $fromCache From cache value.
  */
 function cms_github_api_record_response(string $url, int $status, array $headers, bool $fromCache = false): void
 {
@@ -181,6 +204,8 @@ function cms_github_api_record_response(string $url, int $status, array $headers
 
 /**
  * Return persisted GitHub API diagnostics for the update page.
+ *
+ * @return array Structured result data for the caller.
  */
 function cms_github_api_status(): array
 {
@@ -220,6 +245,12 @@ function cms_github_api_status(): array
 
 /**
  * Fetch one GitHub REST API URL through the controlled gateway.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @param array $headers Headers value.
+ * @param bool $allowConditionalRequest Allow conditional request flag.
+ * @return array Structured result data for the caller.
  */
 function cms_github_api_get(string $url, int $timeoutSeconds, array $headers = [], bool $allowConditionalRequest = true): array
 {
@@ -290,6 +321,11 @@ function cms_github_api_get(string $url, int $timeoutSeconds, array $headers = [
 
 /**
  * Perform the low-level HTTP GET used only by the GitHub API gateway.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @param array $headers Headers value.
+ * @return array Structured result data for the caller.
  */
 function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers): array
 {

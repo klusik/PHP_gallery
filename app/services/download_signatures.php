@@ -45,6 +45,10 @@ declare(strict_types=1);
 
 /**
  * Build a content signature for one gallery ZIP cache entry.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param bool $publicOnly Public only value.
+ * @return string Text result for the caller.
  */
 function gallery_zip_signature(int $galleryId, bool $publicOnly): string
 {

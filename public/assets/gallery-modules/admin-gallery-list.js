@@ -35,6 +35,11 @@ import { createTableDragGhost, createTableDragPlaceholder, moveTableDragGhostY }
 import { dispatchPublicPhotoMove, highlightPublicPhotoDropTarget, publicPhotoDropTargetAtPoint, publicPhotoDropTargetGalleryId, publicPhotoImageIdsFromItems, setPublicPhotoDropTargetsActive } from './public-photo-drop-actions.js?v=20260519-public-photo-drop-v1';
 
 // Function `setupAdminGalleryFilters` executes this focused behavior.
+/**
+ * Handle setup admin gallery filters.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupAdminGalleryFilters() {
     // Variable `filter` stores this steps working value.
     const filter = document.querySelector('[data-gallery-visibility-filter]');
@@ -51,6 +56,11 @@ export function setupAdminGalleryFilters() {
     const selectAll = form ? form.querySelector('[data-select-all="gallery_ids[]"]') : null;
 
     // Function `updateSummary` executes this focused behavior.
+    /**
+     * Update summary.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function updateSummary() {
         // displayed stores state or configuration for the gallery front-end flow.
         let displayed = 0;
@@ -74,6 +84,11 @@ export function setupAdminGalleryFilters() {
     }
 
     // Function `applyFilter` executes this focused behavior.
+    /**
+     * Apply filter.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function applyFilter() {
         // selectedVisibility stores state or configuration for the gallery front-end flow.
         const selectedVisibility = filter.value || 'all';
@@ -100,6 +115,13 @@ export function setupAdminGalleryFilters() {
 }
 
 // Function `setupAdminGalleryTree` executes this focused behavior.
+/**
+ * Handle setup admin gallery tree.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {*} Result value for the caller.
+ */
 export function setupAdminGalleryTree() {
     // Variable `table` stores this steps working value.
     const table = document.querySelector('[data-admin-gallery-order-table]');
@@ -113,21 +135,46 @@ export function setupAdminGalleryTree() {
     saveUrl.search = '?page=admin_save_gallery_collapse';
 
     // Function `currentRows` executes this focused behavior.
+    /**
+     * Handle current rows.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function currentRows() {
         return Array.from(table.querySelectorAll('[data-gallery-row]'));
     }
 
     // Function `rowById` executes this focused behavior.
+    /**
+     * Handle row by id.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {number} galleryId Gallery identifier.
+     * @return {*} Result value for the caller.
+     */
     function rowById(galleryId) {
         return currentRows().find((candidate) => candidate.dataset.galleryId === String(galleryId)) || null;
     }
 
     // Function `collapsedIds` executes this focused behavior.
+    /**
+     * Handle collapsed ids.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function collapsedIds() {
         return currentRows().filter((row) => row.classList.contains('is-collapsed')).map((row) => row.dataset.galleryId);
     }
 
     // Function `save` executes this focused behavior.
+    /**
+     * Save save.
+     */
     function save() {
         // Variable `body` stores this steps working value.
         const body = new FormData();
@@ -136,7 +183,7 @@ export function setupAdminGalleryTree() {
         fetch(saveUrl.toString(), {method: 'POST', body, headers: {'Accept': 'application/json'}});
     }
 
-    /**
+        /**
      * Ensures the row has the correct expand/collapse control for its current children.
      *
      * Reordering can turn a leaf gallery into a parent or remove the last child
@@ -145,7 +192,6 @@ export function setupAdminGalleryTree() {
      *
      * @param {HTMLTableRowElement} row Gallery row to refresh.
      * @param {boolean} hasChildren Whether this row currently owns child rows.
-     * @returns {void}
      */
     function syncRowToggle(row, hasChildren) {
         const title = row.querySelector('.tree-title');
@@ -181,10 +227,8 @@ export function setupAdminGalleryTree() {
         }
     }
 
-    /**
+        /**
      * Rebuilds child-aware toggle controls from current parent_id metadata.
-     *
-     * @returns {void}
      */
     function syncTreeControls() {
         const childCounts = new Map();
@@ -201,6 +245,11 @@ export function setupAdminGalleryTree() {
     }
 
     // Function `refreshVisibility` executes this focused behavior.
+    /**
+     * Refresh visibility.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function refreshVisibility() {
         syncTreeControls();
         // Variable `rows` stores this steps working value.
@@ -290,7 +339,7 @@ export function setupAdminGalleryTree() {
  * order and derives each parent_id from that order before updating sort_order
  * and moving folders on disk when the parent changes.
  *
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 export function setupAdminGalleryReordering() {
     // table stores the reorder-enabled gallery table on the Admin dashboard.
@@ -346,12 +395,11 @@ export function setupAdminGalleryReordering() {
     // saveController stores the in-flight request controller so a newer drop can supersede an older save.
     let saveController = null;
 
-    /**
+        /**
      * Updates the small status label above the gallery order table.
      *
      * @param {string} message Human-readable state shown to the admin.
      * @param {string} state Visual state name used by CSS.
-     * @returns {void}
      */
     function setStatus(message, state) {
         if (!status) {
@@ -361,7 +409,7 @@ export function setupAdminGalleryReordering() {
         status.dataset.state = state;
     }
 
-    /**
+        /**
      * Converts accidental HTML output from a JSON endpoint into readable admin text.
      *
      * Shared hosting can print PHP warnings as HTML before JSON when display_errors
@@ -369,7 +417,7 @@ export function setupAdminGalleryReordering() {
      * cached PHP files from showing raw parser errors to the admin.
      *
      * @param {string} responseText Raw response returned by the reorder endpoint.
-     * @returns {string} Friendly status message for the toolbar.
+     * @return {string} Friendly status message for the toolbar.
      */
     function cleanAdminJsonParseMessage(responseText) {
         const plainText = String(responseText || '')
@@ -383,39 +431,39 @@ export function setupAdminGalleryReordering() {
         return i18n('admin.gallery_list.saved_empty_response', 'Gallery order was saved, but the server returned an empty response. Refresh the page to verify the current order.');
     }
 
-    /**
+        /**
      * Returns all real gallery rows in current DOM order.
      *
-     * @returns {HTMLTableRowElement[]} Gallery rows in flattened tree order.
+     * @return {HTMLTableRowElement[]} Gallery rows in flattened tree order.
      */
     function galleryRows() {
         return Array.from(body.querySelectorAll('[data-gallery-row]'));
     }
 
-    /**
+        /**
      * Reads the integer depth value from one gallery row.
      *
      * @param {Element|null} row Gallery row to inspect.
-     * @returns {number} Non-negative row depth.
+     * @return {number} Non-negative row depth.
      */
     function rowDepth(row) {
         return Math.max(0, Number(row?.dataset.depth || 0));
     }
 
-    /**
+        /**
      * Returns a compact signature used to detect whether anything changed.
      *
-     * @returns {string} Ordered id and parent-id signature.
+     * @return {string} Ordered id and parent-id signature.
      */
     function currentGallerySignature() {
         return galleryRows().map((row) => `${row.dataset.galleryId || ''}:${row.dataset.parentId || '0'}`).join('|');
     }
 
-    /**
+        /**
      * Collects the dragged root row and every following descendant row.
      *
      * @param {HTMLTableRowElement} rootRow Gallery row whose subtree should move.
-     * @returns {HTMLTableRowElement[]} Root row followed by its descendants.
+     * @return {HTMLTableRowElement[]} Root row followed by its descendants.
      */
     function collectMovedRows(rootRow) {
         const rows = galleryRows();
@@ -435,11 +483,11 @@ export function setupAdminGalleryReordering() {
         return moved;
     }
 
-    /**
+        /**
      * Creates a placeholder row matching the moved subtree height.
      *
      * @param {HTMLTableRowElement[]} rows Rows being moved.
-     * @returns {HTMLTableRowElement} Placeholder inserted into the table body.
+     * @return {HTMLTableRowElement} Placeholder inserted into the table body.
      */
     function createGalleryPlaceholder(rows) {
         const placeholder = createTableDragPlaceholder(rows, {
@@ -452,11 +500,11 @@ export function setupAdminGalleryReordering() {
         return placeholder;
     }
 
-    /**
+        /**
      * Creates the fixed visual copy used while a gallery subtree is moving.
      *
      * @param {HTMLTableRowElement[]} rows Real rows being moved.
-     * @returns {HTMLTableElement|null} Ghost table appended to the document body.
+     * @return {HTMLTableElement|null} Ghost table appended to the document body.
      */
     function createGalleryGhost(rows) {
         return createTableDragGhost(rows, {
@@ -465,30 +513,29 @@ export function setupAdminGalleryReordering() {
         });
     }
 
-    /**
+        /**
      * Moves the fixed ghost table to follow the current pointer position.
      *
      * @param {number} clientY Current viewport Y coordinate.
-     * @returns {void}
      */
     function moveGhost(clientY) {
         moveTableDragGhostY(ghostTable, clientY, pointerOffsetY);
     }
 
-    /**
+        /**
      * Returns rows available as insertion targets while a subtree is moving.
      *
-     * @returns {HTMLTableRowElement[]} Rows not currently hidden as part of the moved subtree.
+     * @return {HTMLTableRowElement[]} Rows not currently hidden as part of the moved subtree.
      */
     function availableRows() {
         return galleryRows().filter((row) => !row.classList.contains('is-reorder-hidden'));
     }
 
-    /**
+        /**
      * Finds the row before which the placeholder should be inserted.
      *
      * @param {number} pointerY Current pointer Y coordinate.
-     * @returns {HTMLTableRowElement|null} Row before the placeholder, or null to append.
+     * @return {HTMLTableRowElement|null} Row before the placeholder, or null to append.
      */
     function rowBeforePointer(pointerY) {
         return availableRows().reduce((closest, row) => {
@@ -501,10 +548,10 @@ export function setupAdminGalleryReordering() {
         }, {offset: Number.NEGATIVE_INFINITY, row: null}).row;
     }
 
-    /**
+        /**
      * Returns the row that would visually precede the placeholder.
      *
-     * @returns {HTMLTableRowElement|null} Previous real gallery row, or null at table start.
+     * @return {HTMLTableRowElement|null} Previous real gallery row, or null at table start.
      */
     function rowBeforePlaceholder() {
         let previous = placeholderRow?.previousElementSibling || null;
@@ -514,11 +561,11 @@ export function setupAdminGalleryReordering() {
         return previous;
     }
 
-    /**
+        /**
      * Calculates a legal tree depth from pointer X and the surrounding rows.
      *
      * @param {number} clientX Current pointer X coordinate.
-     * @returns {number} Candidate depth for the moved root gallery.
+     * @return {number} Candidate depth for the moved root gallery.
      */
     function depthFromPointer(clientX) {
         const previousRow = rowBeforePlaceholder();
@@ -527,11 +574,10 @@ export function setupAdminGalleryReordering() {
         return Math.max(0, Math.min(maxDepth, rawDepth));
     }
 
-    /**
+        /**
      * Updates placeholder indentation and status text for the current target depth.
      *
      * @param {number} depth Candidate depth for the moved gallery.
-     * @returns {void}
      */
     function applyPlaceholderDepth(depth) {
         proposedDepth = depth;
@@ -558,12 +604,11 @@ export function setupAdminGalleryReordering() {
         setStatus(message, 'dragging');
     }
 
-    /**
+        /**
      * Moves the placeholder to the insertion point under the pointer.
      *
      * @param {number} clientY Current viewport Y coordinate.
      * @param {number} clientX Current viewport X coordinate.
-     * @returns {void}
      */
     function movePlaceholder(clientY, clientX) {
         if (!placeholderRow) {
@@ -578,11 +623,10 @@ export function setupAdminGalleryReordering() {
         applyPlaceholderDepth(depthFromPointer(clientX));
     }
 
-    /**
+        /**
      * Applies a new depth to the moved rows while preserving descendant offsets.
      *
      * @param {number} newRootDepth New depth for the dragged root gallery.
-     * @returns {void}
      */
     function applyMovedDepths(newRootDepth) {
         const shift = newRootDepth - originalDepth;
@@ -592,12 +636,11 @@ export function setupAdminGalleryReordering() {
         });
     }
 
-    /**
+        /**
      * Updates depth-related row metadata and title indentation classes.
      *
      * @param {HTMLTableRowElement} row Row to update.
      * @param {number} depth New visible tree depth.
-     * @returns {void}
      */
     function setGalleryRowDepth(row, depth) {
         const title = row.querySelector('.tree-title');
@@ -623,10 +666,10 @@ export function setupAdminGalleryReordering() {
         }
     }
 
-    /**
+        /**
      * Derives parent ids for every visible row from the flattened depth values.
      *
-     * @returns {Array<{id: string, parent_id: string}>} Ordered rows with parent ids.
+     * @return {Array<{id: string, parent_id: string} >} Ordered rows with parent ids.
      */
     function serializeGalleryTree() {
         const stack = [];
@@ -641,7 +684,7 @@ export function setupAdminGalleryReordering() {
         }).filter((entry) => entry.id !== '');
     }
 
-    /**
+        /**
      * Returns the stable folder name segment for a gallery row.
      *
      * The Admin table can update visible paths immediately after a tree move
@@ -650,7 +693,7 @@ export function setupAdminGalleryReordering() {
      * recalculated under another parent.
      *
      * @param {HTMLTableRowElement} row Gallery row whose folder name is needed.
-     * @returns {string} Last folder path segment for this gallery.
+     * @return {string} Last folder path segment for this gallery.
      */
     function galleryFolderName(row) {
         if (row.dataset.galleryFolderName) {
@@ -663,11 +706,11 @@ export function setupAdminGalleryReordering() {
         return folderName;
     }
 
-    /**
+        /**
      * Returns the base public gallery URL prefix from the current link.
      *
      * @param {HTMLTableRowElement} row Gallery row whose public link should be refreshed.
-     * @returns {string} Public URL prefix ending at `/gallery/`, or the current href prefix.
+     * @return {string} Public URL prefix ending at `/gallery/`, or the current href prefix.
      */
     function galleryUrlPrefix(row) {
         if (row.dataset.galleryUrlPrefix) {
@@ -682,14 +725,14 @@ export function setupAdminGalleryReordering() {
         return prefix;
     }
 
-    /**
+        /**
      * Returns the gallery's canonical public URL segment from the current link.
      *
      * The admin tree must preserve the existing slug segment for the gallery
      * itself and only recompute the parent path when nesting changes.
      *
      * @param {HTMLTableRowElement} row Gallery row whose public segment is needed.
-     * @returns {string} Decoded canonical public URL segment.
+     * @return {string} Decoded canonical public URL segment.
      */
     function galleryUrlSegment(row) {
         if (row.dataset.galleryUrlSegment) {
@@ -710,7 +753,7 @@ export function setupAdminGalleryReordering() {
         return segment;
     }
 
-    /**
+        /**
      * Rebuilds the gallery link from the current tree path.
      *
      * The admin table already knows the live nesting order, so this keeps the
@@ -718,7 +761,6 @@ export function setupAdminGalleryReordering() {
      *
      * @param {HTMLTableRowElement} row Gallery row whose link should be refreshed.
      * @param {string} nextPath Newly computed gallery path.
-     * @returns {void}
      */
     function refreshGalleryLink(row, nextPath) {
         const link = row.querySelector('.admin-gallery-title-link');
@@ -735,10 +777,8 @@ export function setupAdminGalleryReordering() {
         row.dataset.galleryUrl = nextUrl;
     }
 
-    /**
+        /**
      * Updates visible parent labels and folder paths after a client-side tree move.
-     *
-     * @returns {void}
      */
     function refreshVisibleGalleryTreeMetadata() {
         const titlesById = new Map();
@@ -781,10 +821,8 @@ export function setupAdminGalleryReordering() {
         });
     }
 
-    /**
+        /**
      * Sends the complete gallery order to PHP for validation and persistence.
-     *
-     * @returns {Promise<void>} Promise resolved after the save attempt finishes.
      */
     async function saveGalleryTree() {
         if (saveController) {
@@ -831,10 +869,8 @@ export function setupAdminGalleryReordering() {
         }
     }
 
-    /**
+        /**
      * Removes document-level movement listeners for any active input path.
-     *
-     * @returns {void}
      */
     function removeDocumentListeners() {
         document.removeEventListener('pointermove', handleDocumentPointerMove, true);
@@ -845,11 +881,11 @@ export function setupAdminGalleryReordering() {
         document.removeEventListener('keydown', handleDocumentKeydown, true);
     }
 
-    /**
+        /**
      * Cleans temporary drag elements and optionally inserts the moved rows at the placeholder.
      *
      * @param {boolean} commit Whether the moved rows should move to the placeholder position.
-     * @returns {boolean} Whether cleanup found an active drag session.
+     * @return {boolean} Whether cleanup found an active drag session.
      */
     function cleanupVisuals(commit) {
         if (draggedRows.length === 0) {
@@ -878,10 +914,8 @@ export function setupAdminGalleryReordering() {
         return true;
     }
 
-    /**
+        /**
      * Cancels the active gallery reorder operation.
-     *
-     * @returns {void}
      */
     function cancelReorder() {
         if (!cleanupVisuals(false)) {
@@ -890,10 +924,8 @@ export function setupAdminGalleryReordering() {
         setStatus('Gallery order unchanged.', 'idle');
     }
 
-    /**
+        /**
      * Ends the current reorder operation and persists the new tree when it changed.
-     *
-     * @returns {void}
      */
     function finishReorder() {
         if (draggedRows.length === 0) {
@@ -911,11 +943,10 @@ export function setupAdminGalleryReordering() {
         setStatus('Gallery order unchanged.', 'idle');
     }
 
-    /**
+        /**
      * Handles pointer movement for the active drag session.
      *
      * @param {PointerEvent} event Pointer event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentPointerMove(event) {
         if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -926,11 +957,10 @@ export function setupAdminGalleryReordering() {
         movePlaceholder(event.clientY, event.clientX);
     }
 
-    /**
+        /**
      * Handles pointer release or cancellation for the active drag session.
      *
      * @param {PointerEvent} event Pointer event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentPointerEnd(event) {
         if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -940,11 +970,10 @@ export function setupAdminGalleryReordering() {
         finishReorder();
     }
 
-    /**
+        /**
      * Handles mouse movement for the fallback mouse path.
      *
      * @param {MouseEvent} event Mouse event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentMouseMove(event) {
         if (!activeMouseFallback) {
@@ -955,11 +984,10 @@ export function setupAdminGalleryReordering() {
         movePlaceholder(event.clientY, event.clientX);
     }
 
-    /**
+        /**
      * Handles mouse release for the fallback mouse path.
      *
      * @param {MouseEvent} event Mouse event emitted anywhere in the document.
-     * @returns {void}
      */
     function handleDocumentMouseEnd(event) {
         if (!activeMouseFallback) {
@@ -969,11 +997,10 @@ export function setupAdminGalleryReordering() {
         finishReorder();
     }
 
-    /**
+        /**
      * Lets the admin cancel an active gallery reorder operation with Escape.
      *
      * @param {KeyboardEvent} event Key event emitted during dragging.
-     * @returns {void}
      */
     function handleDocumentKeydown(event) {
         if (event.key !== 'Escape') {
@@ -983,11 +1010,11 @@ export function setupAdminGalleryReordering() {
         cancelReorder();
     }
 
-    /**
+        /**
      * Returns whether a pointer target should keep its native control behavior instead of starting gallery movement.
      *
      * @param {EventTarget|null} target Original pointer or mouse target.
-     * @returns {boolean} Whether the target should be ignored by the row drag controller.
+     * @return {boolean} Whether the target should be ignored by the row drag controller.
      */
     function isNativeGalleryControl(target) {
         if (!(target instanceof Element)) {
@@ -996,10 +1023,8 @@ export function setupAdminGalleryReordering() {
         return Boolean(target.closest('a[href], input, select, textarea, button, label, [contenteditable], [data-gallery-toggle], .gallery-row-action, .admin-gallery-row-action'));
     }
 
-    /**
+        /**
      * Removes listeners for a drag candidate that never crossed the movement threshold.
-     *
-     * @returns {void}
      */
     function removePendingDragListeners() {
         document.removeEventListener('pointermove', handlePendingPointerMove, true);
@@ -1009,22 +1034,19 @@ export function setupAdminGalleryReordering() {
         document.removeEventListener('mouseup', handlePendingMouseEnd, true);
     }
 
-    /**
+        /**
      * Clears a not-yet-started drag candidate and restores document listeners.
-     *
-     * @returns {void}
      */
     function clearPendingDrag() {
         removePendingDragListeners();
         pendingDrag = null;
     }
 
-    /**
+        /**
      * Starts row movement only after the pointer clearly becomes a drag gesture.
      *
      * @param {number} clientX Current viewport X coordinate.
      * @param {number} clientY Current viewport Y coordinate.
-     * @returns {void}
      */
     function maybeStartPendingDrag(clientX, clientY) {
         if (!pendingDrag || draggedRows.length > 0) {
@@ -1043,11 +1065,10 @@ export function setupAdminGalleryReordering() {
         movePlaceholder(clientY, clientX);
     }
 
-    /**
+        /**
      * Watches pointer movement for the gallery-column drag threshold.
      *
      * @param {PointerEvent} event Pointer movement emitted before a drag officially starts.
-     * @returns {void}
      */
     function handlePendingPointerMove(event) {
         if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
@@ -1059,11 +1080,10 @@ export function setupAdminGalleryReordering() {
         }
     }
 
-    /**
+        /**
      * Clears a pointer candidate when the admin clicked without dragging.
      *
      * @param {PointerEvent} event Pointer end event emitted before a drag officially starts.
-     * @returns {void}
      */
     function handlePendingPointerEnd(event) {
         if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) {
@@ -1072,11 +1092,10 @@ export function setupAdminGalleryReordering() {
         clearPendingDrag();
     }
 
-    /**
+        /**
      * Watches classic mouse movement for browsers that do not use Pointer Events for this input.
      *
      * @param {MouseEvent} event Mouse movement emitted before a drag officially starts.
-     * @returns {void}
      */
     function handlePendingMouseMove(event) {
         if (!pendingDrag || !pendingDrag.mouseFallback) {
@@ -1088,10 +1107,8 @@ export function setupAdminGalleryReordering() {
         }
     }
 
-    /**
+        /**
      * Clears a mouse candidate when the admin clicked without dragging.
-     *
-     * @returns {void}
      */
     function handlePendingMouseEnd() {
         if (!pendingDrag || !pendingDrag.mouseFallback) {
@@ -1100,7 +1117,7 @@ export function setupAdminGalleryReordering() {
         clearPendingDrag();
     }
 
-    /**
+        /**
      * Arms a gallery-column area so normal clicks still work and only movement starts reordering.
      *
      * @param {HTMLElement} zone Gallery-column area that can initiate row movement.
@@ -1108,7 +1125,6 @@ export function setupAdminGalleryReordering() {
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
-     * @returns {void}
      */
     function armGalleryDragZone(zone, clientX, clientY, pointerId, mouseFallback) {
         if (draggedRows.length > 0) {
@@ -1126,7 +1142,7 @@ export function setupAdminGalleryReordering() {
         document.addEventListener('pointercancel', handlePendingPointerEnd, true);
     }
 
-    /**
+        /**
      * Starts moving the gallery subtree controlled by a gallery-column drag zone.
      *
      * @param {HTMLElement} handle Gallery-column area dragged by the admin.
@@ -1134,7 +1150,6 @@ export function setupAdminGalleryReordering() {
      * @param {number} clientY Starting viewport Y coordinate.
      * @param {number|null} pointerId Pointer id for Pointer Events, or null for mouse fallback.
      * @param {boolean} mouseFallback Whether mouse events should be accepted for this session.
-     * @returns {void}
      */
     function startReorder(handle, clientX, clientY, pointerId, mouseFallback) {
         const row = handle.closest('[data-gallery-row]');
@@ -1221,7 +1236,7 @@ export function setupAdminGalleryReordering() {
  * plus the pagination offset/count rendered by PHP, then validates that exact
  * slice before saving.
  *
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 export function setupPublicGalleryPageReordering() {
     document.querySelectorAll('[data-public-reorder-toolbar]').forEach((toolbar) => {
@@ -1262,12 +1277,11 @@ export function setupPublicGalleryPageReordering() {
         let activeMouseFallback = false;
         let activePictureManagerTarget = null;
 
-        /**
+                /**
          * Updates the compact save status for one public reorder list.
          *
          * @param {string} message Text shown to the admin.
          * @param {string} state Visual state token used by CSS.
-         * @returns {void}
          */
         function setStatus(message, state) {
             if (!status) {
@@ -1277,30 +1291,30 @@ export function setupPublicGalleryPageReordering() {
             status.dataset.state = state;
         }
 
-        /**
+                /**
          * Returns direct sortable items for the current list.
          *
-         * @returns {HTMLElement[]} Sortable cards in current DOM order.
+         * @return {HTMLElement[]} Sortable cards in current DOM order.
          */
         function sortableItems() {
             return Array.from(list.querySelectorAll(itemSelector))
                 .filter((item) => item instanceof HTMLElement && item.parentElement === list);
         }
 
-        /**
+                /**
          * Returns direct sortable items that are still visible during dragging.
          *
-         * @returns {HTMLElement[]} Cards available as insertion targets.
+         * @return {HTMLElement[]} Cards available as insertion targets.
          */
         function availableItems() {
             return sortableItems().filter((item) => !item.classList.contains('is-public-reorder-hidden'));
         }
 
-        /**
+                /**
          * Returns the selected contiguous photo group that should move together.
          *
          * @param {HTMLElement} item Photo card where the drag started.
-         * @returns {HTMLElement[]} One item, or a contiguous selected set in DOM order.
+         * @return {HTMLElement[]} One item, or a contiguous selected set in DOM order.
          */
         function contiguousSelectedPhotoItems(item) {
             if (kind !== 'photo' || !item.classList.contains('is-picture-manager-selected')) {
@@ -1316,29 +1330,29 @@ export function setupPublicGalleryPageReordering() {
             return isContiguous ? selected : [item];
         }
 
-        /**
+                /**
          * Returns the current visible id order as strings.
          *
-         * @returns {string[]} Ordered ids from the current DOM.
+         * @return {string[]} Ordered ids from the current DOM.
          */
         function currentOrder() {
             return sortableItems().map((item) => item.dataset.publicOrderId || '').filter((id) => id !== '');
         }
 
-        /**
+                /**
          * Returns a compact id signature for change detection.
          *
-         * @returns {string} Ordered id signature.
+         * @return {string} Ordered id signature.
          */
         function currentSignature() {
             return currentOrder().join('|');
         }
 
-        /**
+                /**
          * Builds the fixed drag preview from the original card.
          *
          * @param {HTMLElement} sourceItem Card being moved.
-         * @returns {HTMLElement} Fixed-position clone appended to the body.
+         * @return {HTMLElement} Fixed-position clone appended to the body.
          */
         function buildGhost(sourceItem) {
             const box = sourceItem.getBoundingClientRect();
@@ -1363,11 +1377,11 @@ export function setupPublicGalleryPageReordering() {
             return ghost;
         }
 
-        /**
+                /**
          * Builds the card-shaped placeholder used as the drop marker.
          *
          * @param {HTMLElement} sourceItem Card being moved.
-         * @returns {HTMLElement} Placeholder inserted into the list.
+         * @return {HTMLElement} Placeholder inserted into the list.
          */
         function buildPlaceholder(sourceItem) {
             const box = sourceItem.getBoundingClientRect();
@@ -1379,11 +1393,11 @@ export function setupPublicGalleryPageReordering() {
             return placeholder;
         }
 
-        /**
+                /**
          * Returns the next real item after a target, skipping temporary nodes.
          *
          * @param {HTMLElement} target Current target card.
-         * @returns {HTMLElement|null} Next insertion reference, or null to append.
+         * @return {HTMLElement|null} Next insertion reference, or null to append.
          */
         function nextRealItem(target) {
             let next = target.nextElementSibling;
@@ -1396,12 +1410,12 @@ export function setupPublicGalleryPageReordering() {
             return null;
         }
 
-        /**
+                /**
          * Returns the card closest to the pointer when the pointer is over a gap.
          *
          * @param {number} clientX Pointer X coordinate.
          * @param {number} clientY Pointer Y coordinate.
-         * @returns {HTMLElement|null} Nearest sortable card.
+         * @return {HTMLElement|null} Nearest sortable card.
          */
         function nearestItem(clientX, clientY) {
             let closestItem = null;
@@ -1419,12 +1433,12 @@ export function setupPublicGalleryPageReordering() {
             return closestItem;
         }
 
-        /**
+                /**
          * Returns the best insertion target for the current pointer position.
          *
          * @param {number} clientX Pointer X coordinate.
          * @param {number} clientY Pointer Y coordinate.
-         * @returns {{target: HTMLElement|null, after: boolean}} Target card and side.
+         * @return {{target: HTMLElement|null, after: boolean} } Target card and side.
          */
         function insertionTarget(clientX, clientY) {
             const directTarget = document.elementFromPoint(clientX, clientY)?.closest(itemSelector);
@@ -1440,7 +1454,7 @@ export function setupPublicGalleryPageReordering() {
             return {target, after};
         }
 
-        /**
+                /**
          * Returns the visible subgallery card currently under the pointer.
          *
          * Photo reorder dragging is pointer-based, so native drop events do not fire
@@ -1449,7 +1463,7 @@ export function setupPublicGalleryPageReordering() {
          *
          * @param {number} clientX Pointer X coordinate.
          * @param {number} clientY Pointer Y coordinate.
-         * @returns {HTMLElement|null} Destination subgallery card, or null.
+         * @return {HTMLElement|null} Destination subgallery card, or null.
          */
         function pictureManagerTargetAt(clientX, clientY) {
             if (kind !== 'photo' || draggedItems.length === 0) {
@@ -1461,11 +1475,10 @@ export function setupPublicGalleryPageReordering() {
             });
         }
 
-        /**
+                /**
          * Updates the highlighted subgallery target during photo dragging.
          *
          * @param {HTMLElement|null} target Subgallery card under the pointer.
-         * @returns {void}
          */
         function setActivePictureManagerTarget(target) {
             if (activePictureManagerTarget === target) {
@@ -1475,11 +1488,10 @@ export function setupPublicGalleryPageReordering() {
             highlightPublicPhotoDropTarget(activePictureManagerTarget, galleryId);
         }
 
-        /**
+                /**
          * Enables or disables subgallery drop affordances during selected photo drag.
          *
          * @param {boolean} isActive Whether subgallery targets should look active.
-         * @returns {void}
          */
         function setPictureManagerTargetsActive(isActive) {
             if (kind !== 'photo') {
@@ -1491,12 +1503,11 @@ export function setupPublicGalleryPageReordering() {
             }
         }
 
-        /**
+                /**
          * Moves the placeholder to the candidate drop position.
          *
          * @param {number} clientX Pointer X coordinate.
          * @param {number} clientY Pointer Y coordinate.
-         * @returns {void}
          */
         function movePlaceholder(clientX, clientY) {
             if (!placeholderItem) {
@@ -1516,12 +1527,11 @@ export function setupPublicGalleryPageReordering() {
             list.insertBefore(placeholderItem, reference);
         }
 
-        /**
+                /**
          * Moves the fixed ghost to follow the pointer.
          *
          * @param {number} clientX Pointer X coordinate.
          * @param {number} clientY Pointer Y coordinate.
-         * @returns {void}
          */
         function moveGhost(clientX, clientY) {
             if (!ghostItem) {
@@ -1531,10 +1541,8 @@ export function setupPublicGalleryPageReordering() {
             ghostItem.style.top = `${clientY - pointerOffsetY}px`;
         }
 
-        /**
+                /**
          * Restores DOM order when the server rejects a save.
-         *
-         * @returns {void}
          */
         function restoreOriginalOrder() {
             originalItems.forEach((item) => {
@@ -1542,11 +1550,10 @@ export function setupPublicGalleryPageReordering() {
             });
         }
 
-        /**
+                /**
          * Keeps hidden lightbox source metadata aligned with a visible photo reorder.
          *
          * @param {string[]} orderedIds Visible photo ids after the drop.
-         * @returns {void}
          */
         function syncLightboxSourceOrder(orderedIds) {
             if (kind !== 'photo') {
@@ -1582,11 +1589,10 @@ export function setupPublicGalleryPageReordering() {
             document.dispatchEvent(new CustomEvent('publicGalleryPhotoOrderChanged'));
         }
 
-        /**
+                /**
          * Persists the current visible order to the matching PHP endpoint.
          *
          * @param {string[]} orderedIds Current visible ids after the drop.
-         * @returns {Promise<void>} Resolves after save handling completes.
          */
         async function saveOrder(orderedIds) {
             const body = new FormData();
@@ -1635,11 +1641,10 @@ export function setupPublicGalleryPageReordering() {
             }
         }
 
-        /**
+                /**
          * Removes temporary drag state.
          *
          * @param {boolean} commit Whether to insert the moved item at the placeholder.
-         * @returns {void}
          */
         function cleanupDrag(commit) {
             document.removeEventListener('pointermove', handlePointerMove, true);
@@ -1671,11 +1676,10 @@ export function setupPublicGalleryPageReordering() {
             activeMouseFallback = false;
         }
 
-        /**
+                /**
          * Handles pointer or mouse movement during an active drag.
          *
          * @param {MouseEvent|PointerEvent} event Movement event.
-         * @returns {void}
          */
         function handleMove(event) {
             if (!draggedItem) {
@@ -1686,11 +1690,10 @@ export function setupPublicGalleryPageReordering() {
             movePlaceholder(event.clientX, event.clientY);
         }
 
-        /**
+                /**
          * Handles the end of a pointer or mouse drag.
          *
          * @param {MouseEvent|PointerEvent} event Release event.
-         * @returns {void}
          */
         function finishDrag(event) {
             if (!draggedItem) {
@@ -1716,11 +1719,10 @@ export function setupPublicGalleryPageReordering() {
             saveOrder(currentOrder());
         }
 
-        /**
+                /**
          * Cancels the active drag and leaves the DOM unchanged.
          *
          * @param {Event} event Cancellation event.
-         * @returns {void}
          */
         function cancelDrag(event) {
             if (!draggedItem) {
@@ -1731,11 +1733,10 @@ export function setupPublicGalleryPageReordering() {
             setStatus('Order unchanged.', 'idle');
         }
 
-        /**
+                /**
          * Handles pointer movement for the active drag.
          *
          * @param {PointerEvent} event Pointer movement event.
-         * @returns {void}
          */
         function handlePointerMove(event) {
             if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -1744,11 +1745,10 @@ export function setupPublicGalleryPageReordering() {
             handleMove(event);
         }
 
-        /**
+                /**
          * Handles pointer release for the active drag.
          *
          * @param {PointerEvent} event Pointer release event.
-         * @returns {void}
          */
         function handlePointerEnd(event) {
             if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -1757,11 +1757,10 @@ export function setupPublicGalleryPageReordering() {
             finishDrag(event);
         }
 
-        /**
+                /**
          * Handles pointer cancellation for the active drag.
          *
          * @param {PointerEvent} event Pointer cancellation event.
-         * @returns {void}
          */
         function handlePointerCancel(event) {
             if (activePointerId !== null && event.pointerId !== activePointerId) {
@@ -1770,11 +1769,10 @@ export function setupPublicGalleryPageReordering() {
             cancelDrag(event);
         }
 
-        /**
+                /**
          * Handles mouse movement for browsers without PointerEvent support.
          *
          * @param {MouseEvent} event Mouse movement event.
-         * @returns {void}
          */
         function handleMouseMove(event) {
             if (!activeMouseFallback) {
@@ -1783,11 +1781,10 @@ export function setupPublicGalleryPageReordering() {
             handleMove(event);
         }
 
-        /**
+                /**
          * Handles mouse release for browsers without PointerEvent support.
          *
          * @param {MouseEvent} event Mouse release event.
-         * @returns {void}
          */
         function handleMouseEnd(event) {
             if (!activeMouseFallback) {
@@ -1796,11 +1793,10 @@ export function setupPublicGalleryPageReordering() {
             finishDrag(event);
         }
 
-        /**
+                /**
          * Lets the admin cancel a drag with Escape.
          *
          * @param {KeyboardEvent} event Keyboard event.
-         * @returns {void}
          */
         function handleKeydown(event) {
             if (event.key === 'Escape') {
@@ -1808,12 +1804,11 @@ export function setupPublicGalleryPageReordering() {
             }
         }
 
-        /**
+                /**
          * Starts card movement from a dedicated handle.
          *
          * @param {MouseEvent|PointerEvent} event Initial press event.
          * @param {boolean} mouseFallback Whether classic mouse events own this drag.
-         * @returns {void}
          */
         function startDrag(event, mouseFallback) {
             const handle = event.target instanceof Element ? event.target.closest('[data-public-reorder-handle]') : null;

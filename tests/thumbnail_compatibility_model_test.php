@@ -40,6 +40,11 @@ $GLOBALS['thumbnail_compatibility_test_root'] = '';
 
 /**
  * Minimal translation stub used by this standalone test.
+ *
+ * @param string $key Lookup key.
+ * @param string $fallback Fallback value.
+ * @param array $parameters Parameters value.
+ * @return string Text result for the caller.
  */
 function t(string $key, string $fallback = '', array $parameters = []): string
 {
@@ -52,6 +57,10 @@ function t(string $key, string $fallback = '', array $parameters = []): string
 
 /**
  * Minimal app setting reader used by this standalone test.
+ *
+ * @param string $key Lookup key.
+ * @param ?string $default Default value when no explicit value is available.
+ * @return ?string Text result for the caller.
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
@@ -62,6 +71,9 @@ function app_setting(string $key, ?string $default = null): ?string
 
 /**
  * Minimal app setting writer used by this standalone test.
+ *
+ * @param string $key Lookup key.
+ * @param string $value Value to process.
  */
 function set_app_setting(string $key, string $value): void
 {
@@ -70,6 +82,9 @@ function set_app_setting(string $key, string $value): void
 
 /**
  * Minimal DNG extension detector used by format policy tests.
+ *
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function is_dng_image_path(string $path): bool
 {
@@ -78,6 +93,8 @@ function is_dng_image_path(string $path): bool
 
 /**
  * Minimal DNG support stub used by format policy tests.
+ *
+ * @return bool True when the condition matches.
  */
 function dng_derivative_generation_supported(): bool
 {
@@ -87,7 +104,7 @@ function dng_derivative_generation_supported(): bool
 /**
  * Minimal thumbnail size list used by cleanup tests.
  *
- * @return array<int, int>
+ * @return array<int int>.
  */
 function thumbnail_sizes(): array
 {
@@ -96,6 +113,8 @@ function thumbnail_sizes(): array
 
 /**
  * Minimal gallery-root helper used by cleanup tests.
+ *
+ * @return string Text result for the caller.
  */
 function galleries_root(): string
 {
@@ -104,6 +123,10 @@ function galleries_root(): string
 
 /**
  * Minimal safe path containment check used by cleanup tests.
+ *
+ * @param string $root Root value.
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function path_inside(string $root, string $path): bool
 {
@@ -114,6 +137,12 @@ function path_inside(string $root, string $path): bool
 
 /**
  * Minimal thumbnail path resolver used by cleanup tests.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @return string Text result for the caller.
  */
 function thumbnail_abs_path(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
@@ -125,6 +154,10 @@ require_once __DIR__ . '/../app/services/thumbnail_compatibility.php';
 
 /**
  * Throw when a thumbnail compatibility expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_thumbnail_compatibility_same(mixed $expected, mixed $actual, string $label): void
 {

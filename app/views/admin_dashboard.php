@@ -37,7 +37,7 @@ declare(strict_types=1);
 /**
  * Render the Admin dashboard page from a controller-provided model.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard(array $model): void
 {
@@ -182,7 +182,11 @@ function view_render_admin_dashboard(array $model): void
 }
 
 /**
- * @param array<int, mixed> $notices
+ * Handle view render admin dashboard notices.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $notices Notices value.
  */
 function view_render_admin_dashboard_notices(array $notices): void
 {
@@ -214,6 +218,10 @@ function view_render_admin_url_rewrite_warning(): void
 
 /**
  * Render the shared EXIF/GPS default display settings card.
+ *
+ * @param string $className Class name value.
+ * @param bool $defaultEnabled Default enabled value.
+ * @param int $overrideCount Override count value.
  */
 function view_render_admin_exif_gps_defaults_card(string $className, bool $defaultEnabled, int $overrideCount): void
 {
@@ -228,6 +236,8 @@ function view_render_admin_exif_gps_defaults_card(string $className, bool $defau
 
 /**
  * Render a dashboard card linking to the gallery date suggestion workflow.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_gallery_dates_card(string $className): void
 {
@@ -236,6 +246,8 @@ function view_render_admin_gallery_dates_card(string $className): void
 
 /**
  * Render the URL rewrite setting and compatibility summary.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_url_rewrite_card(string $className): void
 {
@@ -261,6 +273,9 @@ function view_render_admin_url_rewrite_card(string $className): void
 
 /**
  * Render the admin maintenance card that refreshes local flight-map navdata.
+ *
+ * @param bool $flightNavdataReady Flight navdata ready value.
+ * @param array $flightNavdataStatus Flight navdata status value.
  */
 function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, array $flightNavdataStatus): void
 {
@@ -312,6 +327,8 @@ function view_render_admin_navdata_maintenance_card(bool $flightNavdataReady, ar
 
 /**
  * Render the reusable admin dev mode settings card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_devmode_card(string $className): void
 {
@@ -336,6 +353,8 @@ function view_render_admin_devmode_panel(): void
 
 /**
  * Render a migration notice with an inline migration action.
+ *
+ * @param string $message Message value.
  */
 function view_render_admin_migration_notice(string $message): void
 {

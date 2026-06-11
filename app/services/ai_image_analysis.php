@@ -54,6 +54,8 @@ const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
 
 /**
  * Return whether the AI image-analysis queue schema is available.
+ *
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_schema_ready(): bool
 {
@@ -122,6 +124,11 @@ function ai_image_analysis_schema_ready(): bool
 
 /**
  * Normalize a worker-supplied model name or version.
+ *
+ * @param string $value Value to process.
+ * @param string $fallback Fallback value.
+ * @param int $maxLength Max length value.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_normalize_label(string $value, string $fallback, int $maxLength = 120): string
 {
@@ -138,6 +145,9 @@ function ai_image_analysis_normalize_label(string $value, string $fallback, int 
 
 /**
  * Normalize a worker id used for lease ownership diagnostics.
+ *
+ * @param string $workerId Worker id identifier.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_normalize_worker_id(string $workerId): string
 {
@@ -154,6 +164,9 @@ function ai_image_analysis_normalize_worker_id(string $workerId): string
 
 /**
  * Clamp a requested lease length into the safe supported range.
+ *
+ * @param int $leaseSeconds Lease seconds value.
+ * @return int Integer result for the caller.
  */
 function ai_image_analysis_normalize_lease_seconds(int $leaseSeconds): int
 {
@@ -165,6 +178,9 @@ function ai_image_analysis_normalize_lease_seconds(int $leaseSeconds): int
 
 /**
  * Return a SQL datetime string offset from the current PHP process time.
+ *
+ * @param int $seconds Seconds value.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_time_offset(int $seconds): string
 {
@@ -173,6 +189,9 @@ function ai_image_analysis_time_offset(int $seconds): string
 
 /**
  * Return a compact hash for a raw worker claim token.
+ *
+ * @param string $claimToken Claim token value.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_claim_token_hash(string $claimToken): string
 {
@@ -186,6 +205,12 @@ function ai_image_analysis_claim_token_hash(string $claimToken): string
  * cheap and avoids a dedicated scheduler on shared hosting. Source file fields
  * are copied into each job so later image or model changes naturally create new
  * work without modifying older result rows.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $modelName Model name value.
+ * @param string $modelVersion Model version value.
+ * @param int $limit Maximum number of items.
+ * @return int Integer result for the caller.
  */
 function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelName, string $modelVersion, int $limit = AI_IMAGE_ANALYSIS_ENQUEUE_BATCH_SIZE): int
 {
@@ -269,6 +294,9 @@ function ai_image_analysis_enqueue_missing_jobs(int $galleryId, string $modelNam
 
 /**
  * Return expired claimed jobs to the queued state for one gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return int Integer result for the caller.
  */
 function ai_image_analysis_release_expired_claims(int $galleryId): int
 {
@@ -295,6 +323,11 @@ function ai_image_analysis_release_expired_claims(int $galleryId): int
 /**
  * Claim one queued AI-analysis job for a worker.
  *
+ * @param int $galleryId Gallery identifier.
+ * @param string $workerId Worker id identifier.
+ * @param string $modelName Model name value.
+ * @param string $modelVersion Model version value.
+ * @param int $leaseSeconds Lease seconds value.
  * @return array<string,mixed>|null Claimed job payload, or null when no work exists.
  */
 function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, string $modelName, string $modelVersion, int $leaseSeconds): ?array
@@ -384,6 +417,9 @@ function ai_image_analysis_claim_next_job(int $galleryId, string $workerId, stri
 
 /**
  * Fetch one AI-analysis job by id.
+ *
+ * @param int $jobId Job id identifier.
+ * @return ?array Structured result data for the caller.
  */
 function ai_image_analysis_find_job(int $jobId): ?array
 {
@@ -401,7 +437,9 @@ function ai_image_analysis_find_job(int $jobId): ?array
  * Build the JSON-safe claim payload returned to the worker.
  *
  * @param array<string,mixed> $job Claimed job row.
- * @return array<string,mixed>
+ * @param string $claimToken Claim token value.
+ * @param int $leaseSeconds Lease seconds value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function ai_image_analysis_job_payload(array $job, string $claimToken, int $leaseSeconds): array
 {
@@ -438,6 +476,9 @@ function ai_image_analysis_job_payload(array $job, string $claimToken, int $leas
 /**
  * Validate that one worker still owns a live claim.
  *
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
  * @return array<string,mixed>|null Matching job row, or null when the lease is invalid.
  */
 function ai_image_analysis_validate_claim(int $galleryId, int $jobId, string $claimToken): ?array
@@ -463,6 +504,11 @@ function ai_image_analysis_validate_claim(int $galleryId, int $jobId, string $cl
 
 /**
  * Return whether a completed job with the same claim token already exists.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_claim_already_completed(int $galleryId, int $jobId, string $claimToken): bool
 {
@@ -483,6 +529,14 @@ function ai_image_analysis_claim_already_completed(int $galleryId, int $jobId, s
 
 /**
  * Record a heartbeat for a long-running AI-analysis job.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
+ * @param int $leaseSeconds Lease seconds value.
+ * @param int $progressPercent Progress percent value.
+ * @param string $message Message value.
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $claimToken, int $leaseSeconds, int $progressPercent, string $message): bool
 {
@@ -518,7 +572,12 @@ function ai_image_analysis_record_heartbeat(int $galleryId, int $jobId, string $
 /**
  * Store a successful worker result and complete the owning job.
  *
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
  * @param array<string,mixed> $metadata Internal result payload produced by the worker.
+ * @param string $searchableText Searchable text value.
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $claimToken, array $metadata, string $searchableText): bool
 {
@@ -614,6 +673,12 @@ function ai_image_analysis_complete_success(int $galleryId, int $jobId, string $
 
 /**
  * Mark a worker failure and schedule retry with exponential backoff.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
+ * @param string $errorMessage Error message value.
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $claimToken, string $errorMessage): bool
 {
@@ -658,7 +723,10 @@ function ai_image_analysis_complete_failure(int $galleryId, int $jobId, string $
 /**
  * Return a local file descriptor for a claimed job asset.
  *
- * @return array{path:string,mime:string,filename:string,variant:string}|null
+ * @param int $galleryId Gallery identifier.
+ * @param int $jobId Job id identifier.
+ * @param string $claimToken Claim token value.
+ * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
  */
 function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $claimToken): ?array
 {
@@ -944,6 +1012,7 @@ function ai_image_analysis_metadata_pretty_json(array $metadataRow): string
  * Encode metadata JSON with a controlled failure mode.
  *
  * @param array<string,mixed> $metadata Internal metadata produced by the worker.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_encode_metadata(array $metadata): string
 {
@@ -960,6 +1029,8 @@ function ai_image_analysis_encode_metadata(array $metadata): string
  * Build searchable internal text from explicit worker text and metadata fields.
  *
  * @param array<string,mixed> $metadata Internal metadata produced by the worker.
+ * @param string $explicitText Explicit text value.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_searchable_text(array $metadata, string $explicitText): string
 {
@@ -978,6 +1049,7 @@ function ai_image_analysis_searchable_text(array $metadata, string $explicitText
  *
  * @param mixed $value Metadata value from the decoded worker payload.
  * @param array<int,string> $parts Collected text fragments.
+ * @param int $depth Depth value.
  */
 function ai_image_analysis_collect_search_terms(mixed $value, array &$parts, int $depth): void
 {
@@ -1018,6 +1090,9 @@ function ai_image_analysis_collect_search_terms(mixed $value, array &$parts, int
  * pollute user-facing gallery search results. This filter is defensive: even if
  * an older worker sends diagnostic fields, the server excludes them from the
  * generated searchable_text column.
+ *
+ * @param string $key Lookup key.
+ * @return bool True when the condition matches.
  */
 function ai_image_analysis_is_diagnostic_metadata_key(string $key): bool
 {
@@ -1054,6 +1129,10 @@ function ai_image_analysis_is_diagnostic_metadata_key(string $key): bool
 
 /**
  * Limit one user or worker supplied text field for database storage.
+ *
+ * @param string $text Text value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
  */
 function ai_image_analysis_limit_text(string $text, int $limit): string
 {

@@ -48,7 +48,6 @@ const optionalPublicModules = {
  * measures DOM nodes or upgrades server-rendered media.
  *
  * @param {() => void} callback Feature setup function that expects parsed DOM nodes.
- * @returns {void}
  */
 function runWhenDomReady(callback) {
     if (document.readyState === 'loading') {
@@ -63,7 +62,7 @@ function runWhenDomReady(callback) {
  * Returns whether the current document contains a selector needed by an optional public feature.
  *
  * @param {string} selector CSS selector tested against the parsed public markup.
- * @returns {boolean} True when the feature has matching markup on this page.
+ * @return {boolean} True when the feature has matching markup on this page.
  */
 function publicFeatureMarkupExists(selector) {
     return document.querySelector(selector) !== null;
@@ -75,7 +74,6 @@ function publicFeatureMarkupExists(selector) {
  * @param {string} moduleUrl Browser module URL relative to this entrypoint.
  * @param {string} exportName Named setup function exported by the target module.
  * @param {string} selector CSS selector that proves the feature is present.
- * @returns {void}
  */
 function setupOptionalPublicFeature(moduleUrl, exportName, selector) {
     if (!publicFeatureMarkupExists(selector)) {
@@ -96,8 +94,6 @@ function setupOptionalPublicFeature(moduleUrl, exportName, selector) {
  * These setup calls intentionally match the public subset from gallery.js. Admin
  * tools, upload workflows, side panels, reorder controls, and editors remain in
  * the legacy admin entrypoint so anonymous visitors do not fetch that module graph.
- *
- * @returns {void}
  */
 function bootPublicGalleryBrowserFeatures() {
     setupGalleryLightbox();

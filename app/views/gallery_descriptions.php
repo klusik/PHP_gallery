@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle view gallery description utf8 excerpt.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $text Text value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
+ */
 function view_gallery_description_utf8_excerpt(string $text, int $limit): string
 {
     if ($limit <= 0) {
@@ -51,6 +60,15 @@ function view_gallery_description_utf8_excerpt(string $text, int $limit): string
     return substr($text, 0, $limit);
 }
 
+/**
+ * Handle view gallery description markdown excerpt.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $markdown Markdown value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
+ */
 function view_gallery_description_markdown_excerpt(string $markdown, int $limit = 360): string
 {
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));
@@ -68,6 +86,14 @@ function view_gallery_description_markdown_excerpt(string $markdown, int $limit 
     return rtrim($excerpt, " \t\n\r\0\x0B.,;:") . ' (...)';
 }
 
+/**
+ * Handle view gallery description markdown html.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $markdown Markdown value.
+ * @return string Text result for the caller.
+ */
 function view_gallery_description_markdown_html(string $markdown): string
 {
     $normalized = trim(str_replace(["\r\n", "\r"], "\n", $markdown));

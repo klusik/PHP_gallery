@@ -44,6 +44,8 @@ declare(strict_types=1);
 
 /**
  * Return the project root directory.
+ *
+ * @return string Text result for the caller.
  */
 function manifest_root_path(): string
 {
@@ -52,6 +54,9 @@ function manifest_root_path(): string
 
 /**
  * Return true when a command-line flag was provided.
+ *
+ * @param string $flag Flag value.
+ * @return bool True when the condition matches.
  */
 function manifest_has_flag(string $flag): bool
 {
@@ -68,6 +73,9 @@ function manifest_has_flag(string $flag): bool
 
 /**
  * Return a command-line option value or null when the option was not provided.
+ *
+ * @param string $name Name value.
+ * @return ?string Text result for the caller.
  */
 function manifest_option_value(string $name): ?string
 {
@@ -86,6 +94,9 @@ function manifest_option_value(string $name): ?string
 
 /**
  * Return the current CMS version from app/bootstrap.php.
+ *
+ * @param string $rootPath Root path filesystem path.
+ * @return string Text result for the caller.
  */
 function manifest_detect_version(string $rootPath): string
 {
@@ -110,6 +121,8 @@ function manifest_detect_version(string $rootPath): string
 
 /**
  * Return paths that are part of the immutable release surface.
+ *
+ * @return array Structured result data for the caller.
  */
 function manifest_allowed_roots(): array
 {
@@ -123,6 +136,8 @@ function manifest_allowed_roots(): array
 
 /**
  * Return root-level files that are part of the immutable release surface.
+ *
+ * @return array Structured result data for the caller.
  */
 function manifest_allowed_root_files(): array
 {
@@ -140,6 +155,8 @@ function manifest_allowed_root_files(): array
 
 /**
  * Return file extensions that are part of the immutable release surface.
+ *
+ * @return array Structured result data for the caller.
  */
 function manifest_allowed_extensions(): array
 {
@@ -157,6 +174,8 @@ function manifest_allowed_extensions(): array
 
 /**
  * Return paths that should never be written into the manifest.
+ *
+ * @return array Structured result data for the caller.
  */
 function manifest_ignored_patterns(): array
 {
@@ -180,6 +199,9 @@ function manifest_ignored_patterns(): array
 
 /**
  * Return true when a relative path should be ignored by the manifest generator.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return bool True when the condition matches.
  */
 function manifest_is_ignored_path(string $relativePath): bool
 {
@@ -196,6 +218,9 @@ function manifest_is_ignored_path(string $relativePath): bool
 
 /**
  * Return true when a path is part of the immutable release surface.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return bool True when the condition matches.
  */
 function manifest_is_core_like_path(string $relativePath): bool
 {
@@ -229,6 +254,9 @@ function manifest_is_core_like_path(string $relativePath): bool
 
 /**
  * Return a sorted list of files that should be written into the manifest.
+ *
+ * @param string $rootPath Root path filesystem path.
+ * @return array Structured result data for the caller.
  */
 function manifest_discover_files(string $rootPath): array
 {
@@ -261,6 +289,9 @@ function manifest_discover_files(string $rootPath): array
 
 /**
  * Calculate the same normalized hash that the runtime integrity checker uses.
+ *
+ * @param string $absolutePath Absolute path filesystem path.
+ * @return string Text result for the caller.
  */
 function manifest_hash_file(string $absolutePath): string
 {

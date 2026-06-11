@@ -54,6 +54,8 @@ const SITE_MAINTENANCE_MIN_CHAIN_SECONDS_LEFT = 10;
 
 /**
  * Return whether scheduled automatic site maintenance is enabled.
+ *
+ * @return bool True when the condition matches.
  */
 function site_maintenance_enabled(): bool
 {
@@ -62,6 +64,8 @@ function site_maintenance_enabled(): bool
 
 /**
  * Return a normalized HH:MM UTC maintenance start time.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_utc_time(): string
 {
@@ -70,6 +74,9 @@ function site_maintenance_utc_time(): string
 
 /**
  * Normalize an admin-submitted UTC time into HH:MM format.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function site_maintenance_normalize_utc_time(string $value): string
 {
@@ -83,6 +90,8 @@ function site_maintenance_normalize_utc_time(string $value): string
 
 /**
  * Return the configured daily maintenance window length in minutes.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_window_minutes(): int
 {
@@ -91,6 +100,9 @@ function site_maintenance_window_minutes(): int
 
 /**
  * Clamp an Admin-submitted maintenance window length to safe bounds.
+ *
+ * @param int $minutes Minutes value.
+ * @return int Integer result for the caller.
  */
 function site_maintenance_normalize_window_minutes(int $minutes): int
 {
@@ -99,6 +111,9 @@ function site_maintenance_normalize_window_minutes(int $minutes): int
 
 /**
  * Convert an Admin-submitted hour value to bounded maintenance-window minutes.
+ *
+ * @param string $value Value to process.
+ * @return int Integer result for the caller.
  */
 function site_maintenance_window_hours_to_minutes(string $value): int
 {
@@ -112,6 +127,9 @@ function site_maintenance_window_hours_to_minutes(string $value): int
 
 /**
  * Return an HTML form value for the maintenance window expressed in hours.
+ *
+ * @param int $minutes Minutes value.
+ * @return string Text result for the caller.
  */
 function site_maintenance_window_hours_value(int $minutes): string
 {
@@ -121,6 +139,8 @@ function site_maintenance_window_hours_value(int $minutes): string
 
 /**
  * Return the maximum number of images checked in one persisted thumbnail step.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_batch_size(): int
 {
@@ -129,6 +149,8 @@ function site_maintenance_batch_size(): int
 
 /**
  * Return the per-invocation runtime budget in seconds.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_time_budget_seconds(): int
 {
@@ -137,6 +159,8 @@ function site_maintenance_time_budget_seconds(): int
 
 /**
  * Return the PHP request execution limit in seconds, or zero when unlimited.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_php_max_execution_seconds(): int
 {
@@ -146,6 +170,9 @@ function site_maintenance_php_max_execution_seconds(): int
 
 /**
  * Return a time budget that leaves room before PHP can terminate the request.
+ *
+ * @param int $requestedSeconds Requested seconds value.
+ * @return int Integer result for the caller.
  */
 function site_maintenance_effective_time_budget_seconds(int $requestedSeconds): int
 {
@@ -165,6 +192,8 @@ function site_maintenance_effective_time_budget_seconds(int $requestedSeconds): 
 
 /**
  * Return a smaller budget for the Admin button, which runs inside the browser request.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_manual_time_budget_seconds(): int
 {
@@ -173,6 +202,9 @@ function site_maintenance_manual_time_budget_seconds(): int
 
 /**
  * Return true while there is enough runtime left to start another image check.
+ *
+ * @param float $deadline Deadline value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_has_runtime(float $deadline): bool
 {
@@ -181,6 +213,9 @@ function site_maintenance_has_runtime(float $deadline): bool
 
 /**
  * Return the approximate seconds left in this maintenance invocation.
+ *
+ * @param float $deadline Deadline value.
+ * @return float Numeric result for the caller.
  */
 function site_maintenance_runtime_remaining_seconds(float $deadline): float
 {
@@ -189,6 +224,9 @@ function site_maintenance_runtime_remaining_seconds(float $deadline): float
 
 /**
  * Return whether a web request still has enough room to start one thumbnail repair.
+ *
+ * @param float $deadline Deadline value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_has_web_repair_runtime(float $deadline): bool
 {
@@ -202,6 +240,8 @@ function site_maintenance_has_web_repair_runtime(float $deadline): bool
 
 /**
  * Return whether normal page requests may trigger scheduled maintenance after the response.
+ *
+ * @return bool True when the condition matches.
  */
 function site_maintenance_request_trigger_enabled(): bool
 {
@@ -210,6 +250,8 @@ function site_maintenance_request_trigger_enabled(): bool
 
 /**
  * Return the minimum delay between automatic request-trigger attempts.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_request_trigger_interval_seconds(): int
 {
@@ -218,6 +260,13 @@ function site_maintenance_request_trigger_interval_seconds(): int
 
 /**
  * Persist Admin-configurable maintenance settings.
+ *
+ * @param bool $enabled Enabled flag.
+ * @param string $utcTime Utc time value.
+ * @param int $batchSize Batch size value.
+ * @param int $timeBudgetSeconds Time budget seconds value.
+ * @param bool $requestTriggerEnabled Request trigger enabled value.
+ * @param int $windowMinutes Window minutes value.
  */
 function set_site_maintenance_settings(bool $enabled, string $utcTime, int $batchSize, int $timeBudgetSeconds, bool $requestTriggerEnabled = true, int $windowMinutes = SITE_MAINTENANCE_DEFAULT_WINDOW_MINUTES): void
 {
@@ -231,6 +280,8 @@ function set_site_maintenance_settings(bool $enabled, string $utcTime, int $batc
 
 /**
  * Return the persistent secret used by the public cron URL.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_token(): string
 {
@@ -246,6 +297,8 @@ function site_maintenance_token(): string
 
 /**
  * Replace the public cron token and return the new token.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_rotate_token(): string
 {
@@ -256,6 +309,9 @@ function site_maintenance_rotate_token(): string
 
 /**
  * Return true when a submitted cron token matches the stored secret.
+ *
+ * @param string $token Token value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_token_is_valid(string $token): bool
 {
@@ -265,6 +321,8 @@ function site_maintenance_token_is_valid(string $token): bool
 
 /**
  * Return the query-string cron endpoint URL displayed in Admin.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_cron_url(): string
 {
@@ -273,6 +331,8 @@ function site_maintenance_cron_url(): string
 
 /**
  * Return the cache directory used for the site-maintenance lock file.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_cache_dir(): string
 {
@@ -285,6 +345,8 @@ function site_maintenance_cache_dir(): string
 
 /**
  * Return the non-waiting lock file path for site maintenance.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_lock_path(): string
 {
@@ -294,7 +356,7 @@ function site_maintenance_lock_path(): string
 /**
  * Read the persisted maintenance run state.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function site_maintenance_state(): array
 {
@@ -310,7 +372,7 @@ function site_maintenance_state(): array
 /**
  * Persist the current maintenance run state.
  *
- * @param array<string, mixed> $state
+ * @param array $state State value.
  */
 function site_maintenance_save_state(array $state): void
 {
@@ -329,7 +391,7 @@ function site_maintenance_reset_state(): void
 /**
  * Decode the last stored maintenance result for Admin display.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function site_maintenance_last_result(): array
 {
@@ -345,7 +407,7 @@ function site_maintenance_last_result(): array
 /**
  * Store a compact result summary for Admin display.
  *
- * @param array<string, mixed> $result
+ * @param array $result Result value.
  */
 function site_maintenance_store_last_result(array $result): void
 {
@@ -355,7 +417,8 @@ function site_maintenance_store_last_result(array $result): void
 /**
  * Return the maintenance schedule state for the current UTC day.
  *
- * @return array{due:bool,within_window:bool,date:string,scheduled_at:string,window_ends_at:string,seconds_until:int,seconds_until_window_end:int}
+ * @param ?int $now Now value.
+ * @return array{due:bool,within_window:bool,date:string,scheduled_at:string,window_ends_at:string,seconds_until:int,seconds_until_window_end:int} Structured result data for the caller.
  */
 function site_maintenance_schedule_due_state(?int $now = null): array
 {
@@ -407,7 +470,9 @@ function site_maintenance_schedule_due_state(?int $now = null): array
 /**
  * Return a fresh running state for one scheduled or manually forced cycle.
  *
- * @return array<string, mixed>
+ * @param string $cycleDate Cycle date value.
+ * @param string $source Source value.
+ * @return array<string mixed>.
  */
 function site_maintenance_new_state(string $cycleDate, string $source): array
 {
@@ -434,7 +499,7 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
 /**
  * Return zero counters for a maintenance run.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function site_maintenance_empty_totals(): array
 {
@@ -457,6 +522,8 @@ function site_maintenance_empty_totals(): array
 
 /**
  * Return the total number of original image rows in the gallery library.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_total_source_image_count(): int
 {
@@ -471,8 +538,9 @@ function site_maintenance_total_source_image_count(): int
 /**
  * Add one error message to a bounded diagnostic list.
  *
- * @param array<int, string> $errors
- * @return array<int, string>
+ * @param array $errors Error messages for the caller.
+ * @param string $error Error value.
+ * @return array<int string>.
  */
 function site_maintenance_append_error(array $errors, string $error): array
 {
@@ -489,8 +557,8 @@ function site_maintenance_append_error(array $errors, string $error): array
 /**
  * Run maintenance with a non-waiting filesystem lock.
  *
- * @param callable(): array<string, mixed> $callback
- * @return array<string, mixed>
+ * @param callable $callback Callback invoked by this workflow.
+ * @return array<string mixed>.
  */
 function site_maintenance_with_lock(callable $callback): array
 {
@@ -515,6 +583,8 @@ function site_maintenance_with_lock(callable $callback): array
 
 /**
  * Return the touch-file path used to throttle automatic request-trigger attempts.
+ *
+ * @return string Text result for the caller.
  */
 function site_maintenance_request_trigger_touch_path(): string
 {
@@ -523,6 +593,9 @@ function site_maintenance_request_trigger_touch_path(): string
 
 /**
  * Return whether the request trigger was attempted recently enough to skip it now.
+ *
+ * @param ?int $now Now value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_request_trigger_recently_attempted(?int $now = null): bool
 {
@@ -546,6 +619,9 @@ function site_maintenance_mark_request_trigger_attempt(): void
 
 /**
  * Return whether a route is suitable for opportunistic maintenance after response.
+ *
+ * @param string $page Page number or page data.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_route_allows_request_trigger(string $page): bool
 {
@@ -579,6 +655,9 @@ function site_maintenance_route_allows_request_trigger(string $page): bool
 
 /**
  * Return whether automatic request-triggered maintenance is due right now.
+ *
+ * @param ?int $now Now value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_request_trigger_due(?int $now = null): bool
 {
@@ -608,7 +687,8 @@ function site_maintenance_request_trigger_due(?int $now = null): bool
 /**
  * Fire the hidden web cron endpoint without waiting for its JSON response.
  *
- * @param array<string, scalar> $queryParams
+ * @param array $queryParams Query params value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_fire_web_cron_slice(array $queryParams = []): bool
 {
@@ -680,7 +760,8 @@ function site_maintenance_finish_response_before_background_work(): void
 /**
  * Return whether a maintenance result should immediately queue another safe web slice.
  *
- * @param array<string, mixed> $result
+ * @param array $result Result value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_should_chain_after_result(array $result): bool
 {
@@ -706,6 +787,8 @@ function site_maintenance_should_chain_after_result(array $result): bool
 
 /**
  * Queue the next web maintenance slice so a daily window can keep moving without another visitor.
+ *
+ * @return bool True when the condition matches.
  */
 function site_maintenance_queue_next_chained_slice(): bool
 {
@@ -718,6 +801,8 @@ function site_maintenance_queue_next_chained_slice(): bool
 
 /**
  * Register an after-response maintenance slice for suitable normal page requests.
+ *
+ * @param string $page Page number or page data.
  */
 function site_maintenance_register_request_trigger(string $page): void
 {
@@ -762,8 +847,8 @@ function site_maintenance_register_request_trigger(string $page): void
  * configured UTC time only decides when a new daily cycle may start. Active work
  * continues across later calls until all phases complete.
  *
- * @param array<string, mixed> $options Supported keys: force, source, time_budget_seconds, chain.
- * @return array<string, mixed>
+ * @param array $options Optional behavior flags.
+ * @return array<string mixed>.
  */
 function site_maintenance_run(array $options = []): array
 {
@@ -881,8 +966,10 @@ function site_maintenance_run(array $options = []): array
 /**
  * Continue the active maintenance state until the time budget is almost exhausted.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @param int $timeBudgetSeconds Time budget seconds value.
+ * @param bool $forced Forced value.
+ * @return array<string mixed>.
  */
 function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds, bool $forced): array
 {
@@ -942,8 +1029,9 @@ function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds,
 /**
  * Run one persisted maintenance step and mutate the supplied state.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @param float $deadline Deadline value.
+ * @return array<string mixed>.
  */
 function site_maintenance_run_one_step(array &$state, float $deadline): array
 {
@@ -964,8 +1052,9 @@ function site_maintenance_run_one_step(array &$state, float $deadline): array
 /**
  * Process a bounded thumbnail check and repair step.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @param float $deadline Deadline value.
+ * @return array<string mixed>.
  */
 function site_maintenance_process_thumbnail_step(array &$state, float $deadline): array
 {
@@ -1137,8 +1226,8 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
 /**
  * Clear the current image marker after one image was safely checked.
  *
- * @param array<string, mixed> $state
- * @param array<string, mixed> $totals
+ * @param array $state State value.
+ * @param array $totals Totals value.
  */
 function site_maintenance_finish_current_image(array &$state, array $totals): void
 {
@@ -1151,8 +1240,9 @@ function site_maintenance_finish_current_image(array &$state, array $totals): vo
 /**
  * Return a compact summary for the last thumbnail step.
  *
- * @param array<string, mixed> $step
- * @return array<string, mixed>
+ * @param array $step Step value.
+ * @param int $cursorImageId Cursor image id identifier.
+ * @return array<string mixed>.
  */
 function site_maintenance_step_summary(array $step, int $cursorImageId): array
 {
@@ -1172,6 +1262,9 @@ function site_maintenance_step_summary(array $step, int $cursorImageId): array
 
 /**
  * Return whether one maintenance source should attempt full thumbnail repairs.
+ *
+ * @param string $source Source value.
+ * @return bool True when the condition matches.
  */
 function site_maintenance_source_allows_full_thumbnail_repair(string $source): bool
 {
@@ -1188,7 +1281,11 @@ function site_maintenance_source_allows_full_thumbnail_repair(string $source): b
 /**
  * Decide whether a missing thumbnail repair may be attempted in this process.
  *
- * @return array{allowed:bool,reason:string,source_bytes:int,pixels:int}
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param float $deadline Deadline value.
+ * @param string $source Source value.
+ * @return array{allowed:bool,reason:string,source_bytes:int,pixels:int} Structured result data for the caller.
  */
 function site_maintenance_thumbnail_repair_decision(array $image, array $gallery, float $deadline, string $source = ''): array
 {
@@ -1241,7 +1338,7 @@ function site_maintenance_thumbnail_repair_decision(array $image, array $gallery
 /**
  * Convert a previously fatal thumbnail attempt into a recorded failure and move on.
  *
- * @param array<string, mixed> $state
+ * @param array $state State value.
  */
 function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): void
 {
@@ -1265,8 +1362,9 @@ function site_maintenance_record_interrupted_thumbnail_attempt(array &$state): v
 /**
  * Run lightweight cleanup tasks after thumbnail processing finishes.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @param float $deadline Deadline value.
+ * @return array<string mixed>.
  */
 function site_maintenance_process_cleanup_step(array &$state, float $deadline): array
 {
@@ -1306,6 +1404,8 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
 
 /**
  * Remove thumbnail metadata rows that no longer have matching image or gallery rows.
+ *
+ * @return int Integer result for the caller.
  */
 function site_maintenance_delete_orphan_thumbnail_metadata(): int
 {
@@ -1336,8 +1436,8 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
 /**
  * Return a compact state object safe to show in Admin or JSON responses.
  *
- * @param array<string, mixed> $state
- * @return array<string, mixed>
+ * @param array $state State value.
+ * @return array<string mixed>.
  */
 function site_maintenance_public_state(array $state): array
 {
@@ -1363,7 +1463,7 @@ function site_maintenance_public_state(array $state): array
 /**
  * Return dashboard-safe site maintenance status.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function site_maintenance_status(): array
 {
@@ -1396,8 +1496,11 @@ function site_maintenance_status(): array
 /**
  * Write an operational site-maintenance event when the admin log is available.
  *
- * @param array<string, mixed> $context
- * @param array<string, mixed> $options
+ * @param string $level Level value.
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param array $context Context value.
+ * @param array $options Optional behavior flags.
  */
 function site_maintenance_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {

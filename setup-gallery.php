@@ -97,6 +97,10 @@ gallery_bootstrap_render_page($messages, $errors, $downloadStarted);
 
 /**
  * Render the main bootstrap installer page.
+ *
+ * @param array $messages Status messages for the caller.
+ * @param array $errors Error messages for the caller.
+ * @param bool $downloadStarted Download started value.
  */
 function gallery_bootstrap_render_page(array $messages, array $errors, bool $downloadStarted): void
 {
@@ -169,6 +173,11 @@ function gallery_bootstrap_render_page(array $messages, array $errors, bool $dow
 
 /**
  * Run download, extraction, copy, and lock creation.
+ *
+ * @param string $root Root value.
+ * @param string $cachePath Cache path filesystem path.
+ * @param string $bootstrapLockFile Bootstrap lock file value.
+ * @return array Structured result data for the caller.
  */
 function gallery_bootstrap_run(string $root, string $cachePath, string $bootstrapLockFile): array
 {
@@ -226,6 +235,9 @@ function gallery_bootstrap_run(string $root, string $cachePath, string $bootstra
 
 /**
  * Download a remote file using cURL when available, otherwise PHP streams.
+ *
+ * @param string $url URL used by this workflow.
+ * @param string $targetPath Target filesystem path.
  */
 function gallery_bootstrap_download(string $url, string $targetPath): void
 {
@@ -298,6 +310,10 @@ function gallery_bootstrap_download(string $url, string $targetPath): void
 
 /**
  * Extract a ZIP archive and return the detected project root directory.
+ *
+ * @param string $archivePath Archive path filesystem path.
+ * @param string $extractPath Extract path filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_bootstrap_extract(string $archivePath, string $extractPath): string
 {
@@ -343,6 +359,9 @@ function gallery_bootstrap_extract(string $archivePath, string $extractPath): st
 
 /**
  * Check whether a ZIP entry can escape the extraction directory.
+ *
+ * @param string $entryName Entry name value.
+ * @return bool True when the condition matches.
  */
 function gallery_bootstrap_zip_entry_is_unsafe(string $entryName): bool
 {
@@ -356,6 +375,8 @@ function gallery_bootstrap_zip_entry_is_unsafe(string $entryName): bool
 
 /**
  * Confirm that the extracted archive looks like PHP Gallery CMS.
+ *
+ * @param string $projectRoot Project root value.
  */
 function gallery_bootstrap_validate_project_root(string $projectRoot): void
 {
@@ -370,6 +391,10 @@ function gallery_bootstrap_validate_project_root(string $projectRoot): void
 
 /**
  * Copy a directory tree into another directory while preserving existing excluded files.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param array $excludedRootFiles Excluded root files value.
  */
 function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, array $excludedRootFiles = []): void
 {
@@ -414,6 +439,9 @@ function gallery_bootstrap_copy_tree(string $sourcePath, string $targetPath, arr
 
 /**
  * Create a directory and verify that it is writable.
+ *
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function gallery_bootstrap_ensure_directory(string $path): bool
 {
@@ -426,6 +454,8 @@ function gallery_bootstrap_ensure_directory(string $path): bool
 
 /**
  * Write the bootstrap lock file.
+ *
+ * @param string $path Filesystem path.
  */
 function gallery_bootstrap_write_lock(string $path): void
 {
@@ -444,6 +474,8 @@ function gallery_bootstrap_write_lock(string $path): void
 
 /**
  * Remove a directory tree recursively.
+ *
+ * @param string $path Filesystem path.
  */
 function gallery_bootstrap_remove_tree(string $path): void
 {
@@ -474,6 +506,9 @@ function gallery_bootstrap_remove_tree(string $path): void
 
 /**
  * Build installer environment checks.
+ *
+ * @param string $root Root value.
+ * @return array Structured result data for the caller.
  */
 function gallery_bootstrap_environment_checks(string $root): array
 {
@@ -519,6 +554,9 @@ function gallery_bootstrap_environment_checks(string $root): array
 
 /**
  * Render the page shown after the real application already exists.
+ *
+ * @param string $configFile Config file value.
+ * @param string $installLockFile Install lock file value.
  */
 function gallery_bootstrap_render_locked(string $configFile, string $installLockFile): void
 {
@@ -544,6 +582,9 @@ function gallery_bootstrap_render_already_downloaded(): void
 
 /**
  * Escape one value for safe HTML output.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_bootstrap_e(string $value): string
 {
@@ -552,6 +593,8 @@ function gallery_bootstrap_e(string $value): string
 
 /**
  * Return the compact CSS used by the standalone installer.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_bootstrap_css(): string
 {

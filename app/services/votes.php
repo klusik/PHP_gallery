@@ -46,6 +46,9 @@ declare(strict_types=1);
 
 /**
  * Sum all votes for an image.
+ *
+ * @param int $imageId Image identifier.
+ * @return int Integer result for the caller.
  */
 function vote_score(int $imageId): int
 {
@@ -57,6 +60,9 @@ function vote_score(int $imageId): int
 
 /**
  * Return the current logged-in user or visitor's vote for one image.
+ *
+ * @param int $imageId Image identifier.
+ * @return int Integer result for the caller.
  */
 function current_vote_for_image(int $imageId): int
 {
@@ -76,6 +82,9 @@ function current_vote_for_image(int $imageId): int
 
 /**
  * Return votes for many images for the current viewer in one query, keyed by image ID.
+ *
+ * @param array $imageIds Image ids value.
+ * @return array Structured result data for the caller.
  */
 function current_votes_for_images(array $imageIds): array
 {

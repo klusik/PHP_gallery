@@ -40,7 +40,7 @@ const workerScriptUrl = new URL('./experimental-upload-worker.js?v=20260610-thum
  * Return whether the administrator requested browser-assisted thumbnail rebuild.
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
- * @returns {boolean} True when the opt-in checkbox is checked.
+ * @return {boolean} True when the opt-in checkbox is checked.
  */
 export function experimentalThumbnailRebuildRequested(form) {
     const toggle = form.querySelector('[data-experimental-thumbnail-rebuild-toggle]');
@@ -52,7 +52,8 @@ export function experimentalThumbnailRebuildRequested(form) {
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
  * @param {HTMLElement} progress Progress root.
- * @returns {Promise<Record<string, *>>} Aggregate result.
+ * @param {object} options Optional behavior flags.
+ * @return {Promise<Record<string, *>>} Aggregate result.
  */
 export async function runExperimentalThumbnailRebuild(form, progress, options = {}) {
     const config = experimentalThumbnailRebuildConfig(form);
@@ -106,7 +107,7 @@ export async function runExperimentalThumbnailRebuild(form, progress, options = 
  * @param {string} scope Source scope, either all or missing.
  * @param {number} startBatchIndex First global batch index.
  * @param {number} passIndex Repair pass number, zero for the full pass.
- * @returns {Promise<{batchIndex: number, total: number, sourceItemsProcessed: number}>} Scope result.
+ * @return {Promise<{batchIndex: number, total: number, sourceItemsProcessed: number} >} Scope result.
  */
 async function runExperimentalThumbnailRebuildScope(form, progress, config, sessionId, aggregate, scope, startBatchIndex, passIndex) {
     let offset = 0;
@@ -176,7 +177,7 @@ async function runExperimentalThumbnailRebuildScope(form, progress, config, sess
  * Read thumbnail rebuild configuration emitted by PHP near the opt-in checkbox.
  *
  * @param {HTMLFormElement} form Thumbnail maintenance form.
- * @returns {Record<string, *>} Normalized configuration.
+ * @return {Record<string, *>} Normalized configuration.
  */
 function experimentalThumbnailRebuildConfig(form) {
     const toggle = form.querySelector('[data-experimental-thumbnail-rebuild-toggle]');
@@ -222,7 +223,7 @@ function experimentalThumbnailRebuildConfig(form) {
  *
  * @param {*} formats Candidate format list.
  * @param {Array<string>} fallback Fallback formats from the page-level config.
- * @returns {Array<string>} Safe format names for worker payloads.
+ * @return {Array<string>} Safe format names for worker payloads.
  */
 function normalizeThumbnailFormats(formats, fallback) {
     const source = Array.isArray(formats) ? formats : fallback;
@@ -248,7 +249,7 @@ function normalizeThumbnailFormats(formats, fallback) {
  * @param {Array<Record<string, *>>} items Manifest source items.
  * @param {Map<string, Blob>} entries Parsed source ZIP entries.
  * @param {Record<string, *>} config Browser configuration.
- * @returns {Array<Record<string, *>>} Worker input items.
+ * @return {Array<Record<string, *>>} Worker input items.
  */
 function sourceItemsFromManifest(items, entries, config) {
     const sourceItems = [];
@@ -281,7 +282,7 @@ function sourceItemsFromManifest(items, entries, config) {
  *
  * @param {Record<string, *>} item Source or prepared item.
  * @param {Record<string, *>} config Browser configuration.
- * @returns {number} Required variant count.
+ * @return {number} Required variant count.
  */
 function expectedVariantCountForSourceItem(item, config) {
     const formats = normalizeThumbnailFormats(item.targetFormats, config.thumbnailFormats);
@@ -294,7 +295,6 @@ function expectedVariantCountForSourceItem(item, config) {
  *
  * @param {Record<string, *>} item Prepared worker result.
  * @param {Record<string, *>} config Browser configuration.
- * @returns {void}
  */
 function assertPreparedRebuildItemComplete(item, config) {
     const variants = Array.isArray(item.variants) ? item.variants : [];
@@ -308,7 +308,7 @@ function assertPreparedRebuildItemComplete(item, config) {
  * Verify browser support for the experimental rebuild path.
  *
  * @param {Record<string, *>} config Browser configuration.
- * @returns {{ok: boolean, reason: string}} Capability result.
+ * @return {{ok: boolean, reason: string} } Capability result.
  */
 function experimentalThumbnailRebuildCapability(config) {
     if (!config.sourceEndpoint || !config.uploadEndpoint) {
@@ -326,7 +326,7 @@ function experimentalThumbnailRebuildCapability(config) {
 /**
  * Generate a per-run session id.
  *
- * @returns {string} Session id.
+ * @return {string} Session id.
  */
 function experimentalThumbnailRebuildSessionId() {
     const bytes = new Uint8Array(16);
@@ -341,7 +341,8 @@ function experimentalThumbnailRebuildSessionId() {
  * @param {Record<string, *>} config Browser configuration.
  * @param {string} sessionId Rebuild session id.
  * @param {number} offset Source image offset.
- * @returns {Promise<Blob>} Source ZIP blob.
+ * @param {*} scope Scope value.
+ * @return {Promise<Blob>} Source ZIP blob.
  */
 async function downloadSourceChunk(form, config, sessionId, offset, scope = 'all') {
     const body = new FormData();
@@ -370,7 +371,7 @@ async function downloadSourceChunk(form, config, sessionId, offset, scope = 'all
  * Parse a source ZIP chunk in a worker.
  *
  * @param {Blob} zipBlob Source ZIP blob.
- * @returns {Promise<Record<string, *>>} Parsed source archive.
+ * @return {Promise<Record<string, *>>} Parsed source archive.
  */
 function parseZipInWorker(zipBlob) {
     return workerRoundTrip({action: 'parseZip', zipBlob}, i18n('admin.experimental_thumbnail_rebuild.parse_failed', 'Source ZIP parsing failed.')).then((data) => data.parsed || {});
@@ -382,7 +383,7 @@ function parseZipInWorker(zipBlob) {
  * @param {Array<Record<string, *>>} items Source items.
  * @param {Record<string, *>} config Browser configuration.
  * @param {(item: Record<string, *>, completed: number, total: number) => Promise<void>} onItem Prepared item callback.
- * @returns {Promise<void>}
+ * @return {Promise<void>} Result value for the caller.
  */
 function processSourceItemsWithWorkerPool(items, config, onItem) {
     const total = items.length;
@@ -399,6 +400,13 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
     const activeTimers = new Map();
 
     return new Promise((resolve, reject) => {
+        /**
+         * Clear worker timer.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {*} worker Worker value.
+         */
         const clearWorkerTimer = (worker) => {
             const timer = activeTimers.get(worker);
             if (timer) {
@@ -406,12 +414,24 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
                 activeTimers.delete(worker);
             }
         };
+        /**
+         * Stop workers.
+         *
+         * Used by browser-side gallery behavior.
+         */
         const stopWorkers = () => {
             workers.forEach((worker) => {
                 clearWorkerTimer(worker);
                 worker.terminate();
             });
         };
+        /**
+         * Handle reject once.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {*} error Error value.
+         */
         const rejectOnce = (error) => {
             if (rejected) {
                 return;
@@ -420,6 +440,11 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
             stopWorkers();
             reject(error instanceof Error ? error : new Error(String(error)));
         };
+        /**
+         * Handle assign.
+         *
+         * @param {*} worker Worker value.
+         */
         const assign = (worker) => {
             if (rejected) {
                 return;
@@ -499,7 +524,7 @@ function processSourceItemsWithWorkerPool(items, config, onItem) {
  * @param {string} sessionId Rebuild session id.
  * @param {number} chunkIndex Source chunk index.
  * @param {number} startBatchIndex First global batch index.
- * @returns {Record<string, Function>} Batcher object.
+ * @return {Record<string, Function>} Batcher object.
  */
 function createThumbnailRebuildBatcher(config, sessionId, chunkIndex, startBatchIndex) {
     const targetBytes = Number(config.batchTargetBytes || 1);
@@ -510,6 +535,11 @@ function createThumbnailRebuildBatcher(config, sessionId, chunkIndex, startBatch
     let localIndex = 0;
     const batches = [];
 
+    /**
+     * Handle finalize current.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const finalizeCurrent = async () => {
         if (!currentItems.length) {
             return;
@@ -562,7 +592,7 @@ function createThumbnailRebuildBatcher(config, sessionId, chunkIndex, startBatch
  * Return ZIP entries for one prepared thumbnail rebuild item.
  *
  * @param {Record<string, *>} item Prepared worker result.
- * @returns {Array<{path: string, blob: Blob}>} ZIP entries.
+ * @return {Array<{path: string, blob: Blob} >} ZIP entries.
  */
 function entriesForPreparedRebuildItem(item) {
     const entries = [];
@@ -576,7 +606,7 @@ function entriesForPreparedRebuildItem(item) {
  * Return the manifest-safe shape for one prepared thumbnail rebuild item.
  *
  * @param {Record<string, *>} item Prepared worker result.
- * @returns {Record<string, *>} Manifest item.
+ * @return {Record<string, *>} Manifest item.
  */
 function manifestItemForPreparedRebuildItem(item) {
     return {
@@ -602,7 +632,7 @@ function manifestItemForPreparedRebuildItem(item) {
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Global batch index.
  * @param {number} totalBatches Total batches inside current source chunk.
- * @returns {Promise<Record<string, *>>} Server response.
+ * @return {Promise<Record<string, *>>} Server response.
  */
 async function uploadPreparedThumbnailBatchWithRetry(form, config, sessionId, batch, batchIndex, totalBatches) {
     let lastError = null;
@@ -628,7 +658,7 @@ async function uploadPreparedThumbnailBatchWithRetry(form, config, sessionId, ba
  * @param {Record<string, *>} batch Prepared batch.
  * @param {number} batchIndex Global batch index.
  * @param {number} totalBatches Total batches inside current source chunk.
- * @returns {Promise<Record<string, *>>} Server response.
+ * @return {Promise<Record<string, *>>} Server response.
  */
 async function uploadPreparedThumbnailBatch(form, config, sessionId, batch, batchIndex, totalBatches) {
     const body = new FormData();
@@ -654,8 +684,8 @@ async function uploadPreparedThumbnailBatch(form, config, sessionId, batch, batc
 /**
  * Package entries in a worker so ZIP creation does not run on the main thread.
  *
- * @param {Array<{path: string, blob: Blob}>} entries ZIP entries.
- * @returns {Promise<Blob>} ZIP blob.
+ * @param {*} entries Entries value.
+ * @return {Promise<Blob>} ZIP blob.
  */
 function createStoreOnlyZipInWorker(entries) {
     return workerRoundTrip({action: 'zip', entries}, i18n('admin.experimental_thumbnail_rebuild.zip_failed', 'Prepared thumbnail ZIP packaging failed.')).then((data) => {
@@ -671,7 +701,7 @@ function createStoreOnlyZipInWorker(entries) {
  *
  * @param {Record<string, *>} payload Worker payload.
  * @param {string} fallbackMessage Fallback failure message.
- * @returns {Promise<Record<string, *>>} Worker response.
+ * @return {Promise<Record<string, *>>} Worker response.
  */
 function workerRoundTrip(payload, fallbackMessage) {
     return new Promise((resolve, reject) => {
@@ -682,6 +712,11 @@ function workerRoundTrip(payload, fallbackMessage) {
             reject(error);
             return;
         }
+        /**
+         * Handle cleanup.
+         *
+         * @return {*} Result value for the caller.
+         */
         const cleanup = () => worker.terminate();
         worker.addEventListener('message', (event) => {
             const data = event.data || {};
@@ -705,7 +740,7 @@ function workerRoundTrip(payload, fallbackMessage) {
  *
  * @param {Response} response Fetch response.
  * @param {string} fallbackMessage Fallback error message.
- * @returns {Promise<Record<string, *>>} Parsed response object.
+ * @return {Promise<Record<string, *>>} Parsed response object.
  */
 async function readJsonOrTextResponse(response, fallbackMessage) {
     const responseText = await response.text();
@@ -726,7 +761,6 @@ async function readJsonOrTextResponse(response, fallbackMessage) {
  *
  * @param {Record<string, *>} aggregate Aggregate counters.
  * @param {Record<string, *>} result Batch response.
- * @returns {void}
  */
 function mergeRebuildBatchResult(aggregate, result) {
     aggregate.created += Number(result.created || 0);
@@ -738,7 +772,7 @@ function mergeRebuildBatchResult(aggregate, result) {
 /**
  * Create empty counters for one browser rebuild run.
  *
- * @returns {Record<string, *>} Aggregate counters.
+ * @return {Record<string, *>} Aggregate counters.
  */
 function emptyRebuildAggregate() {
     return {
@@ -759,7 +793,6 @@ function emptyRebuildAggregate() {
  * @param {number} total Total source images.
  * @param {Record<string, *>} aggregate Aggregate counters.
  * @param {string} label Status label.
- * @returns {void}
  */
 function updateRebuildProgress(progress, processed, total, aggregate, label) {
     const skipped = Number(aggregate.skipped || 0) + Number(aggregate.sourceSkipped || 0);
@@ -779,7 +812,7 @@ function updateRebuildProgress(progress, processed, total, aggregate, label) {
  * @param {number} fallback Fallback value.
  * @param {number} minimum Minimum value.
  * @param {number} maximum Maximum value.
- * @returns {number} Clamped integer.
+ * @return {number} Clamped integer.
  */
 function clampInteger(value, fallback, minimum, maximum) {
     const parsed = Number.parseInt(String(value), 10);
@@ -792,7 +825,7 @@ function clampInteger(value, fallback, minimum, maximum) {
  *
  * @param {*} value Input value.
  * @param {number} fallback Fallback percentage.
- * @returns {number} Canvas quality from 0.1 to 0.95.
+ * @return {number} Canvas quality from 0.1 to 0.95.
  */
 function clampQuality(value, fallback) {
     const parsed = Number.parseFloat(String(value));
@@ -804,7 +837,7 @@ function clampQuality(value, fallback) {
  * Delay execution for retry backoff.
  *
  * @param {number} milliseconds Delay length.
- * @returns {Promise<void>} Delay promise.
+ * @return {Promise<void>} Delay promise.
  */
 function delay(milliseconds) {
     return new Promise((resolve) => window.setTimeout(resolve, milliseconds));

@@ -37,7 +37,8 @@ declare(strict_types=1);
 /**
  * Send a navigation-data JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function navigation_data_json_response(array $payload, int $statusCode = 200): void
 {

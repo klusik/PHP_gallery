@@ -108,7 +108,7 @@ function picture_manager_owned_images_for_selection(int $sourceGalleryId, array 
  * @param int $sourceGalleryId Gallery that currently owns the selected images.
  * @param int $destinationGalleryId Gallery that will receive the copied images.
  * @param array<int> $imageIds Image IDs selected by the logged-in user.
- * @return array{requested:int,copied:int,skipped:int,originals_copied:int,derivatives_copied:int,failures:array<int,string>,skipped_existing:array<int,string>,created_image_ids:array<int,int>,destination_cover_image_id:int|null}
+ * @return array{requested:int,copied:int,skipped:int,originals_copied:int,derivatives_copied:int,failures:array<int,string>,skipped_existing:array<int,string>,created_image_ids:array<int,int>,destination_cover_image_id:int|null} Structured result data for the caller.
  */
 function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
 {
@@ -360,7 +360,6 @@ function copy_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
  * Remove copied files after a later copy or database step fails.
  *
  * @param array<int,array{from:string,to:string,kind:string}> $copiedFiles File copies completed before failure.
- * @return void
  */
 function picture_manager_remove_copied_files(array $copiedFiles): void
 {

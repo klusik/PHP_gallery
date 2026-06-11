@@ -84,6 +84,8 @@ function cms_tag(): void
  * The edit action uses the reusable right-side admin panel. The delete action
  * remains a CSRF-protected form with a normal POST fallback, matching gallery
  * and photo contextual controls on public pages.
+ *
+ * @param array $tag Tag value.
  */
 function render_public_tag_admin_actions(array $tag): void
 {
@@ -100,6 +102,8 @@ function render_public_tag_admin_actions(array $tag): void
 
 /**
  * Render the public tag delete action for logged-in admins.
+ *
+ * @param array $tag Tag value.
  */
 function render_public_tag_admin_delete_form(array $tag): void
 {
@@ -119,6 +123,9 @@ function render_public_tag_admin_delete_form(array $tag): void
 
 /**
  * Render clickable tag pills.
+ *
+ * @param array $tags Tags value.
+ * @param ?string $label Label value.
  */
 function render_tag_list(array $tags, ?string $label = null): void
 {
@@ -142,6 +149,9 @@ function render_tag_list(array $tags, ?string $label = null): void
  * helper keeps card metadata visually stable beside the optional manual date
  * by showing the first tags inline and replacing the remaining tags with a
  * compact ellipsis indicator.
+ *
+ * @param array $tags Tags value.
+ * @param int $visibleLimit Visible limit value.
  */
 function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
 {

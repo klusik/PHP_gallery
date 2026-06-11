@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 /**
  * Handles cms admin public update gallery logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_public_update_gallery(): void
 {
@@ -108,7 +107,6 @@ function cms_admin_public_update_gallery(): void
 
 /**
  * Handles cms admin public update image logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_public_update_image(): void
 {
@@ -169,7 +167,6 @@ function cms_admin_public_update_image(): void
  * inspectable by admins without becoming authoritative human copy.
  *
  * @param array<string,mixed> $image Image row currently being edited.
- * @return void
  */
 function render_admin_image_ai_metadata_panel(array $image): void
 {
@@ -224,7 +221,6 @@ function render_admin_image_ai_metadata_panel(array $image): void
 
 /**
  * Handles cms admin edit image logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_edit_image(): void
 {

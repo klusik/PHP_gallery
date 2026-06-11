@@ -49,7 +49,7 @@ const deferredLightboxState = {
 /**
  * Loads the full lightbox module once.
  *
- * @returns {Promise<object>} Loaded lightbox module namespace.
+ * @return {Promise<object>} Loaded lightbox module namespace.
  */
 function loadLightboxModule() {
     if (!deferredLightboxState.modulePromise) {
@@ -63,8 +63,6 @@ function loadLightboxModule() {
 
 /**
  * Cancels only the lightweight deferred activation listeners and timers.
- *
- * @returns {void}
  */
 function cancelDeferredActivation() {
     if (deferredLightboxState.controller) {
@@ -87,7 +85,7 @@ function cancelDeferredActivation() {
 /**
  * Return the total number of photos declared by the current gallery markup.
  *
- * @returns {number} Visitor-visible lightbox image count, or 0 when unavailable.
+ * @return {number} Visitor-visible lightbox image count, or 0 when unavailable.
  */
 function deferredLightboxTotal() {
     const config = document.querySelector('[data-lightbox-config]');
@@ -98,7 +96,7 @@ function deferredLightboxTotal() {
  * Return the zero-based lightbox index declared on a clicked photo card.
  *
  * @param {Element|null} target Clicked activation target.
- * @returns {number} Zero-based index, or 0 when the markup does not expose one.
+ * @return {number} Zero-based index, or 0 when the markup does not expose one.
  */
 function deferredLightboxIndex(target) {
     if (!(target instanceof HTMLElement)) {
@@ -112,7 +110,6 @@ function deferredLightboxIndex(target) {
  * Show a small initial progress indicator while the real lightbox module loads.
  *
  * @param {Element|null} target Clicked activation target.
- * @returns {void}
  */
 function showDeferredLightboxLoader(target) {
     if (!(target instanceof HTMLElement) || !target.matches('[data-lightbox-image], [data-lightbox-source]')) {
@@ -154,8 +151,6 @@ function showDeferredLightboxLoader(target) {
 
 /**
  * Hide the bootstrap progress indicator if full viewer activation fails.
- *
- * @returns {void}
  */
 function hideDeferredLightboxLoader() {
     const overlay = document.querySelector('[data-lightbox]');
@@ -176,7 +171,6 @@ function hideDeferredLightboxLoader() {
  * Replays the visitor interaction that caused the full lightbox to load.
  *
  * @param {Element|null} target Element that should receive the second click.
- * @returns {void}
  */
 function replayDeferredClick(target) {
     if (!(target instanceof HTMLElement) || !target.isConnected) {
@@ -194,7 +188,6 @@ function replayDeferredClick(target) {
  *
  * @param {number} setupToken Token for the current server-rendered page state.
  * @param {Element|null} replayTarget Optional element to click again after setup.
- * @returns {Promise<void>}
  */
 async function activateFullLightbox(setupToken, replayTarget = null) {
     const module = await loadLightboxModule();
@@ -211,7 +204,7 @@ async function activateFullLightbox(setupToken, replayTarget = null) {
  * Returns the closest element that should bootstrap the real lightbox or map code.
  *
  * @param {EventTarget|null} target Original event target.
- * @returns {Element|null} Matching card or button.
+ * @return {Element|null} Matching card or button.
  */
 function deferredActivationTarget(target) {
     if (!(target instanceof Element)) {
@@ -227,13 +220,22 @@ function deferredActivationTarget(target) {
  * Schedules full viewer setup after the page load and an idle period.
  *
  * @param {number} setupToken Token for the current server-rendered page state.
- * @returns {void}
  */
 function scheduleIdleLightboxActivation(setupToken) {
+    /**
+     * Schedule idle.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const scheduleIdle = () => {
         if (setupToken !== deferredLightboxState.setupToken) {
             return;
         }
+        /**
+         * Run run.
+         *
+         * @return {*} Result value for the caller.
+         */
         const run = () => activateFullLightbox(setupToken).catch(() => {});
         if ('requestIdleCallback' in window) {
             deferredLightboxState.idleHandle = window.requestIdleCallback(run, {timeout: 4500});
@@ -242,6 +244,11 @@ function scheduleIdleLightboxActivation(setupToken) {
         deferredLightboxState.idleTimer = window.setTimeout(run, 1600);
     };
 
+    /**
+     * Schedule after load.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const scheduleAfterLoad = () => {
         deferredLightboxState.idleTimer = window.setTimeout(scheduleIdle, 700);
     };
@@ -259,8 +266,6 @@ function scheduleIdleLightboxActivation(setupToken) {
  * The full viewer still starts automatically after the page is loaded and idle,
  * which keeps keyboard navigation and deep-link behavior available after the
  * initial render settles. A direct photo or map click starts it immediately.
- *
- * @returns {void}
  */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
@@ -295,8 +300,6 @@ export function setupGalleryLightbox() {
 
 /**
  * Releases deferred and full lightbox lifecycle state before public content changes.
- *
- * @returns {void}
  */
 export function teardownGalleryLightbox() {
     deferredLightboxState.setupToken += 1;
@@ -310,7 +313,7 @@ export function teardownGalleryLightbox() {
 /**
  * Loads tag suggestions only on admin forms that actually render tag inputs.
  *
- * @returns {void}
+ * @param {*} root Root value.
  */
 export function setupTagSuggestions(root = document) {
     const scope = root && typeof root.querySelectorAll === 'function' ? root : document;

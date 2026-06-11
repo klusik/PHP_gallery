@@ -37,12 +37,20 @@
  * each other while still allowing panels to be rendered after the tab row.
  *
  * @param {HTMLElement} tabsRoot Subtab navigation element.
- * @returns {ParentNode} Scoped DOM root used to find matching panels.
+ * @return {ParentNode} Scoped DOM root used to find matching panels.
  */
 function adminSubtabScope(tabsRoot) {
     return tabsRoot.closest('[data-admin-subtab-scope]') || tabsRoot.parentElement || document;
 }
 
+/**
+ * Set admin subtab panel visibility.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLElement} panel Panel value.
+ * @param {boolean} isVisible Is visible flag.
+ */
 function setAdminSubtabPanelVisibility(panel, isVisible) {
     panel.classList.remove('is-admin-panel-entering');
     if (!isVisible) {
@@ -66,7 +74,6 @@ function setAdminSubtabPanelVisibility(panel, isVisible) {
  * Attach behavior to one reusable local subtab group.
  *
  * @param {HTMLElement} tabsRoot Subtab navigation root.
- * @returns {void}
  */
 function setupAdminNestedTabGroup(tabsRoot) {
     if (tabsRoot.dataset.adminSubtabsBound === '1') {
@@ -90,12 +97,11 @@ function setupAdminNestedTabGroup(tabsRoot) {
         return;
     }
 
-    /**
+        /**
      * Select one local subtab panel and hide the others.
      *
      * @param {string} targetId Panel id requested by a click or keyboard event.
-     * @param {{focusTab?: boolean}} options Activation options.
-     * @returns {void}
+     * @param {object} options Optional behavior flags.
      */
     const activateSubtab = (targetId, options = {}) => {
         // targetPanel stores the matching panel or the first available panel as a safe fallback.
@@ -167,7 +173,6 @@ function setupAdminNestedTabGroup(tabsRoot) {
  * Attach all reusable local Admin subtab groups in one DOM root.
  *
  * @param {ParentNode} root DOM root that contains admin subtab controls.
- * @returns {void}
  */
 export function setupAdminNestedTabs(root = document) {
     root.querySelectorAll('[data-admin-subtabs]').forEach((tabsRoot) => {

@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Return true when per-gallery count badge overrides can be stored.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_count_badge_schema_ready(): bool
 {
@@ -44,6 +46,8 @@ function gallery_count_badge_schema_ready(): bool
 
 /**
  * Return the override values supported on one gallery row.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_count_badge_override_values(): array
 {
@@ -52,6 +56,8 @@ function gallery_count_badge_override_values(): array
 
 /**
  * Normalize the global Theme default. The feature is enabled by default.
+ *
+ * @return bool True when the condition matches.
  */
 function theme_gallery_count_badge_enabled(): bool
 {
@@ -62,6 +68,9 @@ function theme_gallery_count_badge_enabled(): bool
  * Normalize a per-gallery override for database storage.
  *
  * A null return value means the gallery inherits the global Theme setting.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function gallery_count_badge_storage_value(mixed $value): ?string
 {
@@ -75,6 +84,9 @@ function gallery_count_badge_storage_value(mixed $value): ?string
 
 /**
  * Return whether one gallery card should show the contained-picture badge.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_effective_count_badge_enabled(array $gallery): bool
 {
@@ -90,6 +102,9 @@ function gallery_effective_count_badge_enabled(array $gallery): bool
 
 /**
  * Return a translated label for one override select option.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_count_badge_override_label(string $value): string
 {
@@ -102,6 +117,9 @@ function gallery_count_badge_override_label(string $value): string
 
 /**
  * Return a translated label for the effective public badge state.
+ *
+ * @param bool $enabled Enabled flag.
+ * @return string Text result for the caller.
  */
 function gallery_count_badge_state_label(bool $enabled): string
 {
@@ -110,6 +128,9 @@ function gallery_count_badge_state_label(bool $enabled): string
 
 /**
  * Return a readable summary of the current count badge source for Admin forms.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_count_badge_source_label(array $gallery): string
 {

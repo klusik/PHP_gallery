@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle view render gallery description formatting hint.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_gallery_description_formatting_hint(): void
 {
     echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">&#128161;</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
@@ -50,7 +55,7 @@ function view_render_gallery_description_formatting_hint(): void
 /**
  * Render the EXIF-derived date suggestion controls for one existing gallery.
  *
- * @param array<string, mixed> $gallery Existing gallery row.
+ * @param array $gallery Gallery row or gallery data.
  */
 function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
 {
@@ -92,7 +97,8 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
 /**
  * Render gallery date or date-range fields for admin forms.
  *
- * @param array<string, mixed> $gallery Existing gallery row or empty array for new galleries.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $panelMode Panel mode value.
  */
 function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false): void
 {
@@ -134,6 +140,15 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
     view_render_admin_gallery_date_exif_suggestion($gallery);
 }
 
+/**
+ * Handle view render admin new gallery fields.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param bool $panelMode Panel mode value.
+ * @param string $workflow Workflow value.
+ */
 function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
     if ($panelMode) {
@@ -181,6 +196,15 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
     view_render_gallery_description_formatting_hint();
 }
 
+/**
+ * Handle view render admin new gallery side panel.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param ?array $prefillParentGallery Prefill parent gallery value.
+ * @param string $error Error value.
+ */
 function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
@@ -199,6 +223,13 @@ function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $
     echo '</div>';
 }
 
+/**
+ * Handle view render admin simbrief description tool.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $galleryId Gallery identifier.
+ */
 function view_render_admin_simbrief_description_tool(int $galleryId): void
 {
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
@@ -217,7 +248,6 @@ function view_render_admin_simbrief_description_tool(int $galleryId): void
  * @param int $galleryId Gallery id used for gallery-level prompt context, or zero for photo-only editors.
  * @param int $imageId Image id used for photo-level prompt context, or zero for gallery editors.
  * @param string $mode UI mode, either gallery or image.
- * @return void
  */
 function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery'): void
 {

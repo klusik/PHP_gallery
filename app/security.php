@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Get or create the per-session CSRF token used by admin POST forms.
+ *
+ * @return string Text result for the caller.
  */
 function csrf_token(): string
 {
@@ -47,6 +49,8 @@ function csrf_token(): string
 
 /**
  * Render the hidden CSRF field for admin forms.
+ *
+ * @return string Text result for the caller.
  */
 function csrf_field(): string
 {
@@ -68,6 +72,8 @@ function verify_csrf(): void
 
 /**
  * Return the logged-in admin user, or null for anonymous visitors.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function current_user(): ?array
 {
@@ -124,6 +130,8 @@ function require_admin(): void
 
 /**
  * Build a stable anonymous identity for voting without storing raw IP addresses.
+ *
+ * @return string Text result for the caller.
  */
 function visitor_hash(): string
 {
@@ -180,6 +188,8 @@ function send_security_headers(): void
 
 /**
  * Reject public POST abuse by limiting fast repeated anonymous votes per image.
+ *
+ * @param int $imageId Image identifier.
  */
 function verify_vote_rate_limit(int $imageId): void
 {
@@ -199,6 +209,8 @@ function verify_vote_rate_limit(int $imageId): void
 
 /**
  * Return true when installer/setup functionality has been locked after install.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_setup_is_locked(): bool
 {
@@ -207,6 +219,8 @@ function cms_setup_is_locked(): bool
 
 /**
  * Return true when setup has already created at least one administrator.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_admin_user_exists(): bool
 {

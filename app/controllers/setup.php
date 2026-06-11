@@ -36,10 +36,9 @@ declare(strict_types=1);
 
 /**
  * Setup controller model.
- * 
+ *
  * This module owns the setup wizard controller. It remains independent from theme customization and runtime gallery rendering.
  */
-
 function cms_setup(): void
 {
     if (cms_setup_is_locked()) {

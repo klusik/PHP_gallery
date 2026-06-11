@@ -45,7 +45,11 @@ declare(strict_types=1);
  *
  * Invalid geometry is handled by the response resolver before streaming.
  *
- * @return array<string, mixed>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $path Filesystem path.
+ * @return array<string mixed>.
  */
 function cms_thumbnail_file_geometry_status_for_response(array $image, array $gallery, int $size, string $path): array
 {
@@ -58,6 +62,12 @@ function cms_thumbnail_file_geometry_status_for_response(array $image, array $ga
 
 /**
  * Return true when a generated thumbnail has valid geometry.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int $size, string $path): bool
 {
@@ -74,7 +84,11 @@ function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int
  * for a specific derivative. Invalid aspect-ratio variants are deleted and are
  * never streamed back to the client.
  *
- * @return array{path:string,geometry_status:array<string,mixed>}|null
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @return array{path:string,geometry_status:array<string,mixed>}|null Structured result data for the caller.
  */
 function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $size, string $format): ?array
 {
@@ -85,6 +99,11 @@ function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $
     return null;
 }
 
+/**
+ * Handle cms thumb.
+ *
+ * Used by HTTP controller routing for this workflow.
+ */
 function cms_thumb(): void
 {
     // Variable $image stores this steps working value.
@@ -131,7 +150,6 @@ function cms_thumb(): void
 
 /**
  * Handles cms public thumb logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_public_thumb(): void
 {
@@ -184,7 +202,6 @@ function cms_public_thumb(): void
 
 /**
  * Handles cms public media logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_public_media(): void
 {
@@ -230,7 +247,6 @@ function cms_public_media(): void
 
 /**
  * Handles cms gallery cover asset logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_gallery_cover_asset(): void
 {
@@ -308,7 +324,6 @@ function cms_gallery_cover_asset(): void
 
 /**
  * Stream one stored gallery branding asset.
- * @return mixed Result produced by this operation.
  */
 function cms_gallery_branding_asset(): void
 {
@@ -360,7 +375,6 @@ function cms_gallery_branding_asset(): void
 
 /**
  * Handles cms media logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_media(): void
 {
@@ -398,7 +412,6 @@ function cms_media(): void
 
 /**
  * Handles cms robots txt logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_robots_txt(): void
 {
@@ -417,7 +430,6 @@ function cms_robots_txt(): void
 
 /**
  * Handles cms sitemap xml logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_sitemap_xml(): void
 {

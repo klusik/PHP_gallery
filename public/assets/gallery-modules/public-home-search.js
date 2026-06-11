@@ -32,8 +32,6 @@
 
 /**
  * Attach behavior to every public search widget present on the current page.
- *
- * @returns {void}
  */
 export function setupPublicHomeSearch() {
     const roots = document.querySelectorAll('[data-public-home-search]');
@@ -48,7 +46,7 @@ export function setupPublicHomeSearch() {
  * Attach behavior to one public search widget.
  *
  * @param {HTMLElement} root Search widget root element.
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function setupOnePublicSearch(root) {
     const input = root.querySelector('[data-public-home-search-input]');
@@ -68,18 +66,35 @@ function setupOnePublicSearch(root) {
     let controller = null;
     let lastIssuedQuery = '';
 
+    /**
+     * Set clear visibility.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const setClearVisibility = () => {
         if (clearButton instanceof HTMLButtonElement) {
             clearButton.hidden = input.value.trim() === '';
         }
     };
 
+    /**
+     * Handle hide results.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const hideResults = () => {
         results.hidden = true;
         results.innerHTML = '';
         root.classList.remove('has-results', 'is-loading');
     };
 
+    /**
+     * Render status.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {string} message Message value.
+     */
     const renderStatus = (message) => {
         results.hidden = false;
         results.innerHTML = '';
@@ -90,6 +105,14 @@ function setupOnePublicSearch(root) {
         root.classList.add('has-results');
     };
 
+    /**
+     * Render results.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {object} payload Payload value.
+     * @param {*} query Query value.
+     */
     const renderResults = (payload, query) => {
         if (query !== lastIssuedQuery) {
             return;
@@ -136,6 +159,13 @@ function setupOnePublicSearch(root) {
         root.classList.add('has-results');
     };
 
+    /**
+     * Run search.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     const runSearch = () => {
         const query = input.value.trim();
         setClearVisibility();

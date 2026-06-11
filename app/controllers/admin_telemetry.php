@@ -41,6 +41,10 @@
 
 /**
  * Render one small metric card for the telemetry dashboard.
+ *
+ * @param string $label Label value.
+ * @param string $value Value to process.
+ * @param string $hint Hint value.
  */
 function render_telemetry_metric_card(string $label, string $value, string $hint = ''): void
 {
@@ -114,6 +118,10 @@ function cms_admin_telemetry(): void
 
 /**
  * Render one checkbox setting row.
+ *
+ * @param string $key Lookup key.
+ * @param string $label Label value.
+ * @param array $settings Settings used by this workflow.
  */
 function render_telemetry_checkbox(string $key, string $label, array $settings): void
 {
@@ -144,6 +152,10 @@ function render_telemetry_tables(): void
 
 /**
  * Render a photo telemetry table.
+ *
+ * @param array $rows Rows to process.
+ * @param string $valueKey Value key value.
+ * @param string $valueLabel Value label value.
  */
 function render_telemetry_photo_table(array $rows, string $valueKey, string $valueLabel): void
 {
@@ -160,6 +172,12 @@ function render_telemetry_photo_table(array $rows, string $valueKey, string $val
 
 /**
  * Render a simple key-value telemetry table.
+ *
+ * @param array $rows Rows to process.
+ * @param string $keyColumn Key column value.
+ * @param string $valueColumn Value column value.
+ * @param string $keyLabel Key label value.
+ * @param string $valueLabel Value label value.
  */
 function render_telemetry_key_value_table(array $rows, string $keyColumn, string $valueColumn, string $keyLabel, string $valueLabel): void
 {
@@ -177,6 +195,11 @@ function render_telemetry_key_value_table(array $rows, string $keyColumn, string
 
 /**
  * Render one telemetry report metric card for the standalone HTML export.
+ *
+ * @param string $label Label value.
+ * @param string $value Value to process.
+ * @param string $hint Hint value.
+ * @return string Text result for the caller.
  */
 function telemetry_export_metric_card(string $label, string $value, string $hint = ''): string
 {
@@ -185,6 +208,10 @@ function telemetry_export_metric_card(string $label, string $value, string $hint
 
 /**
  * Format one telemetry number for the standalone report.
+ *
+ * @param mixed $value Value to process.
+ * @param int $decimals Decimals value.
+ * @return string Text result for the caller.
  */
 function telemetry_report_number(mixed $value, int $decimals = 0): string
 {
@@ -196,6 +223,9 @@ function telemetry_report_number(mixed $value, int $decimals = 0): string
 
 /**
  * Format one duration for the standalone report.
+ *
+ * @param mixed $seconds Seconds value.
+ * @return string Text result for the caller.
  */
 function telemetry_report_duration(mixed $seconds): string
 {
@@ -213,6 +243,11 @@ function telemetry_report_duration(mixed $seconds): string
 
 /**
  * Render one generic telemetry report table.
+ *
+ * @param array $rows Rows to process.
+ * @param array $columns Columns value.
+ * @param string $emptyText Empty text value.
+ * @return string Text result for the caller.
  */
 function telemetry_export_table(array $rows, array $columns, string $emptyText = ''): string
 {
@@ -242,6 +277,11 @@ function telemetry_export_table(array $rows, array $columns, string $emptyText =
 
 /**
  * Render a photo engagement table for the standalone report.
+ *
+ * @param array $rows Rows to process.
+ * @param string $valueKey Value key value.
+ * @param string $valueLabel Value label value.
+ * @return string Text result for the caller.
  */
 function telemetry_export_photo_table(array $rows, string $valueKey, string $valueLabel): string
 {
@@ -259,6 +299,12 @@ function telemetry_export_photo_table(array $rows, string $valueKey, string $val
 
 /**
  * Render one compact bar chart from labeled rows.
+ *
+ * @param array $rows Rows to process.
+ * @param string $labelKey Label key value.
+ * @param string $valueKey Value key value.
+ * @param string $valueSuffix Value suffix value.
+ * @return string Text result for the caller.
  */
 function telemetry_export_bar_chart(array $rows, string $labelKey, string $valueKey, string $valueSuffix = ''): string
 {
@@ -284,6 +330,11 @@ function telemetry_export_bar_chart(array $rows, string $labelKey, string $value
 
 /**
  * Render a trend chart from daily aggregate rows.
+ *
+ * @param array $rows Rows to process.
+ * @param string $valueKey Value key value.
+ * @param string $label Label value.
+ * @return string Text result for the caller.
  */
 function telemetry_export_trend_chart(array $rows, string $valueKey, string $label): string
 {

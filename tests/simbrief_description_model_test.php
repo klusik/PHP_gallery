@@ -44,7 +44,6 @@ require_once __DIR__ . '/../app/services/simbrief_descriptions.php';
  * @param mixed $expected Expected value.
  * @param mixed $actual Actual value.
  * @param string $label Human-readable assertion label.
- * @return void
  */
 function assert_simbrief_description_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -59,7 +58,6 @@ function assert_simbrief_description_same(mixed $expected, mixed $actual, string
  * @param string $needle Required text.
  * @param string $haystack Generated description.
  * @param string $label Human-readable assertion label.
- * @return void
  */
 function assert_simbrief_description_contains(string $needle, string $haystack, string $label): void
 {

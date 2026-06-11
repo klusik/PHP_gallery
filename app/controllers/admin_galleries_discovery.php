@@ -36,10 +36,9 @@ declare(strict_types=1);
 
 /**
  * Admin gallery management controller model.
- * 
+ *
  * This module handles gallery discovery, import, creation, editing, bulk operations, public inline updates, and supporting select-list renderers.
  */
-
 function cms_admin_discover(): void
 {
     require_admin();
@@ -76,7 +75,6 @@ function cms_admin_discover(): void
 
 /**
  * Handles cms admin import logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_import(): void
 {
@@ -97,7 +95,6 @@ function cms_admin_import(): void
 
 /**
  * Handles cms admin new gallery logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_new_gallery(): void
 {
@@ -157,6 +154,8 @@ function cms_admin_new_gallery(): void
 
 /**
  * Return whether the create-gallery page is being requested as side-panel content.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_gallery_create_panel_request(): bool
 {
@@ -165,6 +164,8 @@ function admin_gallery_create_panel_request(): bool
 
 /**
  * Return whether the current admin route is being requested for side-panel use.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_side_panel_request(): bool
 {
@@ -173,6 +174,9 @@ function admin_side_panel_request(): bool
 
 /**
  * Normalize create-gallery input for every admin workflow.
+ *
+ * @param array $input Input value.
+ * @return array Structured result data for the caller.
  */
 function admin_new_gallery_input_from_array(array $input): array
 {
@@ -197,6 +201,8 @@ function admin_new_gallery_input_from_array(array $input): array
 
 /**
  * Read create-gallery POST values through the same input contract used by the direct admin page.
+ *
+ * @return array Structured result data for the caller.
  */
 function admin_new_gallery_input_from_post(): array
 {
@@ -205,6 +211,9 @@ function admin_new_gallery_input_from_post(): array
 
 /**
  * Create a gallery through the shared admin create implementation.
+ *
+ * @param array $input Input value.
+ * @return array Structured result data for the caller.
  */
 function admin_create_gallery_from_input(array $input): array
 {
@@ -219,6 +228,9 @@ function admin_create_gallery_from_input(array $input): array
 
 /**
  * Build the JSON payload consumed by the progressive side-panel workflow.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function admin_new_gallery_success_response(array $gallery): array
 {
@@ -265,6 +277,10 @@ function render_gallery_description_formatting_hint(): void
 
 /**
  * Render create-gallery fields shared by full admin pages and panel fragments.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param bool $panelMode Panel mode value.
+ * @param string $workflow Workflow value.
  */
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
@@ -333,6 +349,10 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
 
 /**
  * Render the focused side-panel create workflow without the normal admin shell.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param ?array $prefillParentGallery Prefill parent gallery value.
+ * @param string $error Error value.
  */
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {

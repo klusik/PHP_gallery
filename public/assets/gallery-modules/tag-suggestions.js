@@ -41,7 +41,6 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
  * comma-separated text that the PHP save routes already expect.
  *
  * @param {ParentNode} root DOM scope that may contain tag inputs.
- * @returns {void}
  */
 export function setupTagSuggestions(root = document) {
     const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
@@ -59,7 +58,7 @@ export function setupTagSuggestions(root = document) {
  * Build one enhanced tag editor around a normal text input.
  *
  * @param {HTMLInputElement} input Original server-rendered tag input.
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function createTagEditor(input) {
     const originalName = input.getAttribute('name') || '';
@@ -90,10 +89,8 @@ function createTagEditor(input) {
     input.autocomplete = 'off';
     input.placeholder = input.dataset.tagPlaceholder || i18n('tag_suggestions.placeholder', 'Type a tag, then press comma or Enter');
 
-    /**
+        /**
      * Sync the hidden comma-separated payload and redraw the visible controls.
-     *
-     * @returns {void}
      */
     function syncEditor() {
         hiddenInput.value = Array.from(selected).join(', ');
@@ -101,11 +98,11 @@ function createTagEditor(input) {
         renderSuggestions(suggestions, input, selected, knownNames, weightedSuggestions, chooseTag);
     }
 
-    /**
+        /**
      * Add a tag from the current text field, a separator commit, or a suggestion click.
      *
      * @param {string} rawName Raw tag entered or selected by the admin.
-     * @returns {boolean} True when a tag was added.
+     * @return {boolean} True when a tag was added.
      */
     function chooseTag(rawName) {
         const name = normalizeTagName(rawName);
@@ -123,11 +120,10 @@ function createTagEditor(input) {
         return true;
     }
 
-    /**
+        /**
      * Remove one selected tag pill.
      *
      * @param {string} rawName Raw tag name from the clicked pill.
-     * @returns {void}
      */
     function removeTag(rawName) {
         selected.delete(normalizeTagName(rawName));
@@ -137,10 +133,8 @@ function createTagEditor(input) {
         input.focus();
     }
 
-    /**
+        /**
      * Commit all complete tags typed into the input and keep an unfinished tail.
-     *
-     * @returns {void}
      */
     function commitSeparatedInput() {
         const text = String(input.value || '');
@@ -210,7 +204,7 @@ function createTagEditor(input) {
  * @param {HTMLInputElement} input Original visible input.
  * @param {string} originalName Original form field name.
  * @param {string[]} initialTags Initial normalized selected tags.
- * @returns {HTMLInputElement} Hidden payload input.
+ * @return {HTMLInputElement} Hidden payload input.
  */
 function createHiddenPayloadInput(input, originalName, initialTags) {
     const hiddenInput = document.createElement('input');
@@ -227,7 +221,7 @@ function createHiddenPayloadInput(input, originalName, initialTags) {
  * Convert arbitrary tag text into the canonical lowercase safe form used by PHP.
  *
  * @param {string} value Raw tag name.
- * @returns {string} Safe lowercase tag name.
+ * @return {string} Safe lowercase tag name.
  */
 function normalizeTagName(value) {
     return String(value || '')
@@ -243,7 +237,7 @@ function normalizeTagName(value) {
  * Parse comma-separated tag text into unique normalized names.
  *
  * @param {string} value Raw comma-separated input value.
- * @returns {string[]} Unique normalized tag names in original order.
+ * @return {string[]} Unique normalized tag names in original order.
  */
 function parseTagList(value) {
     const tags = [];
@@ -260,7 +254,7 @@ function parseTagList(value) {
  * Read all known tag names from the input datalist.
  *
  * @param {HTMLInputElement} input Tag input with an optional list attribute.
- * @returns {string[]} Known tag names.
+ * @return {string[]} Known tag names.
  */
 function readDatalistNames(input) {
     const listId = input.getAttribute('list') || '';
@@ -277,7 +271,7 @@ function readDatalistNames(input) {
  * Read server-ranked contextual suggestions from the input element.
  *
  * @param {HTMLInputElement} input Tag input with JSON suggestion data.
- * @returns {Array<{name: string, score: number, sources: string[]}>} Ranked suggestion entries.
+ * @return {Array<{name: string, score: number, sources: string[]} >} Ranked suggestion entries.
  */
 function readWeightedSuggestions(input) {
     const raw = input.dataset.tagWeightedSuggestions || '';
@@ -307,7 +301,6 @@ function readWeightedSuggestions(input) {
  * @param {HTMLElement} container Target pill container.
  * @param {Set<string>} selected Selected normalized tag names.
  * @param {(name: string) => void} removeTag Callback used by remove buttons.
- * @returns {void}
  */
 function renderSelectedPills(container, selected, removeTag) {
     container.innerHTML = '';
@@ -334,7 +327,7 @@ function renderSelectedPills(container, selected, removeTag) {
  * Return the current partial tag being typed.
  *
  * @param {HTMLInputElement} input Visible tag input.
- * @returns {string} Normalized fragment.
+ * @return {string} Normalized fragment.
  */
 function currentFragment(input) {
     return normalizeTagName(input.value || '');
@@ -345,7 +338,7 @@ function currentFragment(input) {
  *
  * @param {string} name Existing tag name.
  * @param {string} fragment Current normalized fragment.
- * @returns {number} Lower score is better. -1 means not a match.
+ * @return {number} Lower score is better. -1 means not a match.
  */
 function suggestionScore(name, fragment) {
     const normalized = normalizeTagName(name);
@@ -383,9 +376,9 @@ function suggestionScore(name, fragment) {
  * @param {HTMLInputElement} input Visible tag input.
  * @param {Set<string>} selected Selected normalized tag names.
  * @param {string[]} knownNames All known tag names.
- * @param {Array<{name: string, score: number, sources: string[]}>} weightedSuggestions Context-ranked suggestions.
+ * @param {*} weightedSuggestions Weighted suggestions value.
  * @param {(name: string) => void} chooseTag Callback used by suggestion buttons.
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function renderSuggestions(container, input, selected, knownNames, weightedSuggestions, chooseTag) {
     const fragment = currentFragment(input);

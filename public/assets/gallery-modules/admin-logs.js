@@ -31,6 +31,11 @@
  */
 
 // Function `setupAdminLogStatusForms` executes this focused behavior.
+/**
+ * Handle setup admin log status forms.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupAdminLogStatusForms() {
     document.querySelectorAll('[data-admin-log-status-select]').forEach((select) => {
         if (select.dataset.adminLogStatusReady === '1') {
@@ -82,6 +87,13 @@ export function setupAdminLogStatusForms() {
 }
 
 // Function `setupAdminLogLiveFilters` executes this focused behavior.
+/**
+ * Handle setup admin log live filters.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {string} Text result for the caller.
+ */
 export function setupAdminLogLiveFilters() {
     // Variable `form` stores this steps working value.
     const form = document.querySelector('[data-admin-log-filter-form]');
@@ -117,6 +129,13 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `setLiveState` writes compact search progress text for screen readers and admins.
+    /**
+     * Set live state.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {string} message Message value.
+     */
     const setLiveState = (message) => {
         if (stateLabel) {
             stateLabel.textContent = message;
@@ -124,6 +143,13 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `setPage` updates the hidden page input used by filtered requests.
+    /**
+     * Set page.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} page Page number or page data.
+     */
     const setPage = (page) => {
         if (pageInput) {
             pageInput.value = String(Math.max(1, Number(page) || 1));
@@ -131,6 +157,11 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `updateSeveritySummary` keeps the multi-select state readable during live filtering.
+    /**
+     * Update severity summary.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const updateSeveritySummary = () => {
         const severityField = form.querySelector('[data-admin-log-severity-filter]');
         const summary = form.querySelector('[data-admin-log-severity-summary]');
@@ -154,6 +185,14 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `buildUrl` creates the filtered request URL used by normal and live requests.
+    /**
+     * Build url.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} includeAjax Include ajax value.
+     * @return {string} Text result for the caller.
+     */
     const buildUrl = (includeAjax = true) => {
         // Variable `params` stores serialized filter controls from the visible form.
         const params = new URLSearchParams(new FormData(form));
@@ -172,6 +211,13 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `ensureEmptyContainer` creates the no-results message holder when live filtering needs it.
+    /**
+     * Ensure empty container.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     const ensureEmptyContainer = () => {
         if (emptyContainer) {
             return emptyContainer;
@@ -188,6 +234,11 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `refreshLogs` fetches matching rows without a full page navigation.
+    /**
+     * Refresh logs.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const refreshLogs = async () => {
         if (activeRequest) {
             activeRequest.abort();
@@ -244,6 +295,11 @@ export function setupAdminLogLiveFilters() {
     };
 
     // Function `scheduleRefresh` debounces typing so the server is not queried on every keystroke.
+    /**
+     * Schedule refresh.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const scheduleRefresh = () => {
         window.clearTimeout(debounceHandle);
         debounceHandle = window.setTimeout(refreshLogs, 250);

@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+/**
+ * Handle view simbrief description markdown.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $details Details value.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_description_markdown(array $details): string
 {
     $originCode = view_simbrief_markdown_code($details['origin_code'] ?? '');
@@ -110,6 +118,14 @@ function view_simbrief_description_markdown(array $details): string
     return trim(implode("\n\n", $paragraphs));
 }
 
+/**
+ * Handle view simbrief indefinite article.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $label Label value.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_indefinite_article(string $label): string
 {
     $trimmed = trim($label);
@@ -126,6 +142,14 @@ function view_simbrief_indefinite_article(string $label): string
     return in_array($first, ['a', 'e', 'i', 'o', 'u'], true) ? 'an' : 'a';
 }
 
+/**
+ * Handle view simbrief markdown text.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_markdown_text(string $value): string
 {
     $value = simbrief_description_plain_text($value);
@@ -133,6 +157,14 @@ function view_simbrief_markdown_text(string $value): string
     return trim($value);
 }
 
+/**
+ * Handle view simbrief markdown code.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_markdown_code(string $value): string
 {
     $value = simbrief_description_plain_text($value);
@@ -140,6 +172,15 @@ function view_simbrief_markdown_code(string $value): string
     return trim($value);
 }
 
+/**
+ * Handle view simbrief place label.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $name Name value.
+ * @param string $code Code value.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_place_label(string $name, string $code): string
 {
     $name = view_simbrief_markdown_text($name);
@@ -150,6 +191,15 @@ function view_simbrief_place_label(string $name, string $code): string
     return '`' . $code . '`';
 }
 
+/**
+ * Handle view simbrief shorten.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $value Value to process.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_shorten(string $value, int $limit): string
 {
     $value = simbrief_description_plain_text($value);
@@ -165,6 +215,14 @@ function view_simbrief_shorten(string $value, int $limit): string
     return rtrim($cut, ' ,;:') . ' (...)';
 }
 
+/**
+ * Handle view simbrief join phrase.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $parts Parts value.
+ * @return string Text result for the caller.
+ */
 function view_simbrief_join_phrase(array $parts): string
 {
     $parts = array_values(array_filter(array_map(static fn (string $part): string => trim($part), $parts), static fn (string $part): bool => $part !== ''));

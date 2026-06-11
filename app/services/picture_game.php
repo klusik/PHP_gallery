@@ -45,6 +45,8 @@ declare(strict_types=1);
 
 /**
  * Return whether the current database has the picture-game migration applied.
+ *
+ * @return bool True when the condition matches.
  */
 function picture_game_schema_ready(): bool
 {
@@ -64,6 +66,8 @@ function picture_game_schema_ready(): bool
 
 /**
  * Return whether gallery voting columns are available.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_voting_schema_ready(): bool
 {
@@ -78,6 +82,9 @@ function gallery_voting_schema_ready(): bool
 
 /**
  * Return true when a gallery allows public voting controls.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_voting_allowed(array $gallery): bool
 {
@@ -89,6 +96,8 @@ function gallery_voting_allowed(array $gallery): bool
 
 /**
  * Repair gallery voting/game inconsistencies when the admin dashboard is loaded.
+ *
+ * @return int Integer result for the caller.
  */
 function sync_gallery_voting_game_state(): int
 {
@@ -106,6 +115,9 @@ function sync_gallery_voting_game_state(): int
  *
  * Enabling a parent gallery makes its public descendants available for that
  * gallery's game, so meta-galleries can opt in their whole visible branch.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function picture_game_gallery_ids(array $gallery): array
 {
@@ -145,6 +157,9 @@ function picture_game_gallery_ids(array $gallery): array
 
 /**
  * Return public direct images that may participate in one gallery's game.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function picture_game_images(array $gallery): array
 {
@@ -183,6 +198,10 @@ function picture_game_images(array $gallery): array
 
 /**
  * Return whether one gallery has enough opted-in public images for a game.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $images Images value.
+ * @return bool True when the condition matches.
  */
 function picture_game_available(array $gallery, ?array $images = null): bool
 {
@@ -192,6 +211,8 @@ function picture_game_available(array $gallery, ?array $images = null): bool
 
 /**
  * Stable voter key for picture-game pair history.
+ *
+ * @return string Text result for the caller.
  */
 function picture_game_voter_hash(): string
 {
@@ -205,6 +226,10 @@ function picture_game_voter_hash(): string
 
 /**
  * Normalize a pair of image IDs so A/B order cannot create duplicate pairs.
+ *
+ * @param int $firstImageId First image id identifier.
+ * @param int $secondImageId Second image id identifier.
+ * @return array Structured result data for the caller.
  */
 function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 {
@@ -213,6 +238,10 @@ function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 
 /**
  * Return the next unplayed image pair for this voter in one gallery context.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $images Images value.
+ * @return ?array Structured result data for the caller.
  */
 function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 {
@@ -273,6 +302,12 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 
 /**
  * Record one picture-game selection and upvote only the chosen image.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $leftImageId Left image id identifier.
+ * @param int $rightImageId Right image id identifier.
+ * @param int $winnerImageId Winner image id identifier.
+ * @param ?array $images Images value.
  */
 function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
 {
@@ -315,6 +350,11 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
 
 /**
  * Return top global picture-game winners for one gallery context.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $limit Maximum number of items.
+ * @param ?array $images Images value.
+ * @return array Structured result data for the caller.
  */
 function picture_game_top_images(array $gallery, int $limit = 3, ?array $images = null): array
 {

@@ -100,6 +100,9 @@ function cms_picture_game(): void
 
 /**
  * Render one selectable picture-game choice.
+ *
+ * @param array $image Image row or image data.
+ * @param string $side Side value.
  */
 function render_picture_game_choice(array $image, string $side): void
 {
@@ -123,6 +126,8 @@ function render_picture_game_choice(array $image, string $side): void
 
 /**
  * Render top global picture-game winners for one gallery.
+ *
+ * @param array $topImages Top images value.
  */
 function render_picture_game_stats(array $topImages): void
 {

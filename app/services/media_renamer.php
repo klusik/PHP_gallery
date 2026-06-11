@@ -37,6 +37,9 @@ declare(strict_types=1);
 
 /**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
+ *
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @return array Structured result data for the caller.
  */
 function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 {
@@ -52,7 +55,8 @@ function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 /**
  * Return every gallery id in stable filesystem order.
  *
- * @return array<int>
+ * @param bool $hideEmptyGalleries Hide empty galleries value.
+ * @return array<int> Structured result data for the caller.
  */
 function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 {
@@ -75,8 +79,10 @@ function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
  * This scan is intentionally separated from the normal gallery-list query because each gallery needs
  * a deterministic dry-run plan for the current filename pattern.
  *
- * @param array<int,array<string,mixed>> $galleryRows
- * @return array{rows:array<int,array<string,mixed>>,availability:array<int,array<string,int>>}
+ * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
+ * @param string $pattern Pattern value.
+ * @param bool $hideWithoutRenameCandidates Hide without rename candidates value.
+ * @return array{rows:array<int,array<string,mixed>>,availability:array<int,array<string,int>>} Structured result data for the caller.
  */
 function media_renamer_gallery_rows_with_rename_availability(array $galleryRows, string $pattern = '', bool $hideWithoutRenameCandidates = false): array
 {
@@ -125,8 +131,9 @@ function media_renamer_gallery_rows_with_rename_availability(array $galleryRows,
 /**
  * Return pending-rename availability counts for selected gallery ids.
  *
- * @param array<int|string> $galleryIds
- * @return array<int,array<string,int>>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @param string $pattern Pattern value.
+ * @return array<int,array<string,int>> Structured result data for the caller.
  */
 function media_renamer_availability_for_gallery_ids(array $galleryIds, string $pattern = ''): array
 {
@@ -155,9 +162,10 @@ function media_renamer_availability_for_gallery_ids(array $galleryIds, string $p
 /**
  * Add previously checked pending-rename counts to gallery rows and optionally filter them.
  *
- * @param array<int,array<string,mixed>> $galleryRows
- * @param array<int,array<string,int>> $availability
- * @return array<int,array<string,mixed>>
+ * @param array<int,array<string,mixed>> $galleryRows Gallery rows value.
+ * @param array<int,array<string,int>> $availability Availability value.
+ * @param bool $hideWithoutRenameCandidates Hide without rename candidates value.
+ * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
 function media_renamer_gallery_rows_with_submitted_availability(array $galleryRows, array $availability, bool $hideWithoutRenameCandidates = false): array
 {
@@ -184,8 +192,9 @@ function media_renamer_gallery_rows_with_submitted_availability(array $galleryRo
 /**
  * Filter gallery ids to galleries that still have at least one pending rename candidate.
  *
- * @param array<int|string> $galleryIds
- * @return array<int>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @param string $pattern Pattern value.
+ * @return array<int> Structured result data for the caller.
  */
 function media_renamer_gallery_ids_with_pending_renames(array $galleryIds, string $pattern = ''): array
 {
@@ -210,8 +219,8 @@ function media_renamer_gallery_ids_with_pending_renames(array $galleryIds, strin
 /**
  * Normalize requested gallery ids to existing galleries only.
  *
- * @param array<int|string> $galleryIds
- * @return array<int>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @return array<int> Structured result data for the caller.
  */
 function media_renamer_existing_gallery_ids(array $galleryIds): array
 {
@@ -229,8 +238,9 @@ function media_renamer_existing_gallery_ids(array $galleryIds): array
 /**
  * Build rename plans for several galleries.
  *
- * @param array<int|string> $galleryIds
- * @return array<int,array<string,mixed>>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @param string $pattern Pattern value.
+ * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
 function media_renamer_plans_for_galleries(array $galleryIds, string $pattern = ''): array
 {
@@ -244,7 +254,9 @@ function media_renamer_plans_for_galleries(array $galleryIds, string $pattern = 
 /**
  * Build a complete dry-run rename plan for one gallery.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): array
 {
@@ -297,6 +309,9 @@ function media_renamer_plan_for_gallery(int $galleryId, string $pattern = ''): a
  * repeated preview/apply runs focused only on files that still need a physical
  * rename or require operator attention, while the deterministic sequence still
  * advances according to the gallery image order.
+ *
+ * @param array $item Item value.
+ * @return bool True when the condition matches.
  */
 function media_renamer_plan_item_is_hidden_noop(array $item): bool
 {
@@ -308,10 +323,16 @@ function media_renamer_plan_item_is_hidden_noop(array $item): bool
 /**
  * Build one row inside a dry-run plan.
  *
- * @param array<int,bool> $selectedImageIds
- * @param array<string,bool> $currentFileKeys
- * @param array<string,int> $usedTargetPaths
- * @return array<string,mixed>
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $galleryRoot Gallery root value.
+ * @param string $contextBase Context base value.
+ * @param string $pattern Pattern value.
+ * @param array $image Image row or image data.
+ * @param int $sequence Sequence value.
+ * @param array<int,bool> $selectedImageIds Selected image ids value.
+ * @param array<string,bool> $currentFileKeys Current file keys value.
+ * @param array<string,int> $usedTargetPaths Used target paths filesystem path.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_plan_item(array $gallery, string $galleryRoot, string $contextBase, string $pattern, array $image, int $sequence, array $selectedImageIds, array $currentFileKeys, array &$usedTargetPaths): array
 {
@@ -355,7 +376,16 @@ function media_renamer_plan_item(array $gallery, string $galleryRoot, string $co
 /**
  * Return a normalized plan row.
  *
- * @return array<string,mixed>
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $image Image row or image data.
+ * @param string $oldRelativePath Old relative path filesystem path.
+ * @param string $oldFilename Old filename value.
+ * @param string $newRelativePath New relative path filesystem path.
+ * @param string $newFilename New filename value.
+ * @param string $status Status value.
+ * @param array $warnings Warnings value.
+ * @param bool $canRename Can rename value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_item_result(array $gallery, array $image, string $oldRelativePath, string $oldFilename, string $newRelativePath, string $newFilename, string $status, array $warnings, bool $canRename): array
 {
@@ -384,11 +414,18 @@ function media_renamer_item_result(array $gallery, array $image, string $oldRela
 /**
  * Find a safe target filename for one image and reserve it inside the plan.
  *
- * @param array<int,bool> $selectedImageIds
- * @param array<string,bool> $currentFileKeys
- * @param array<string,int> $usedTargetPaths
- * @param array<int,string> $warnings
- * @return array{filename:string,relative_path:string}|null
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $galleryRoot Gallery root value.
+ * @param array $image Image row or image data.
+ * @param string $contextBase Context base value.
+ * @param string $pattern Pattern value.
+ * @param int $sequence Sequence value.
+ * @param string $extension Extension value.
+ * @param array<int,bool> $selectedImageIds Selected image ids value.
+ * @param array<string,bool> $currentFileKeys Current file keys value.
+ * @param array<string,int> $usedTargetPaths Used target paths filesystem path.
+ * @param array<int,string> $warnings Warnings value.
+ * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
  */
 function media_renamer_unique_target(array $gallery, string $galleryRoot, array $image, string $contextBase, string $pattern, int $sequence, string $extension, array $selectedImageIds, array $currentFileKeys, array &$usedTargetPaths, array &$warnings): ?array
 {
@@ -436,7 +473,11 @@ function media_renamer_unique_target(array $gallery, string $galleryRoot, array 
 /**
  * Return true when generated target derivative paths would overwrite stale files.
  *
- * @param array<string,bool> $currentFileKeys
+ * @param array $sourceImage Source image value.
+ * @param array $targetImage Target image value.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array<string,bool> $currentFileKeys Current file keys value.
+ * @return bool True when the condition matches.
  */
 function media_renamer_target_derivative_conflicts(array $sourceImage, array $targetImage, array $gallery, array $currentFileKeys): bool
 {
@@ -464,8 +505,9 @@ function media_renamer_target_derivative_conflicts(array $sourceImage, array $ta
 /**
  * Return current original and derivative file keys for selected images.
  *
- * @param array<int,array<string,mixed>> $images
- * @return array<string,bool>
+ * @param array<int,array<string,mixed>> $images Images value.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array<string,bool> Structured result data for the caller.
  */
 function media_renamer_current_file_keys(array $images, array $gallery): array
 {
@@ -489,6 +531,9 @@ function media_renamer_current_file_keys(array $images, array $gallery): array
 
 /**
  * Return a platform-aware comparable key for a filesystem path.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function media_renamer_path_key(string $path): string
 {
@@ -498,6 +543,9 @@ function media_renamer_path_key(string $path): string
 
 /**
  * Build the normalized context prefix from the gallery folder hierarchy.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function media_renamer_gallery_context_base(array $gallery): string
 {
@@ -513,6 +561,9 @@ function media_renamer_gallery_context_base(array $gallery): string
 
 /**
  * Convert text into a lowercase ASCII underscore identifier usable in filenames.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function media_renamer_ascii_slug(string $value): string
 {
@@ -538,6 +589,9 @@ function media_renamer_ascii_slug(string $value): string
 
 /**
  * Preserve the source extension while keeping the final suffix filesystem-safe.
+ *
+ * @param string $filename Filename value.
+ * @return string Text result for the caller.
  */
 function media_renamer_safe_extension(string $filename): string
 {
@@ -548,6 +602,8 @@ function media_renamer_safe_extension(string $filename): string
 
 /**
  * Return the default wildcard pattern used by the renamer UI.
+ *
+ * @return string Text result for the caller.
  */
 function media_renamer_default_pattern(): string
 {
@@ -556,6 +612,9 @@ function media_renamer_default_pattern(): string
 
 /**
  * Normalize a submitted wildcard pattern while preserving its placeholders.
+ *
+ * @param string $pattern Pattern value.
+ * @return string Text result for the caller.
  */
 function media_renamer_normalize_pattern(string $pattern): string
 {
@@ -565,6 +624,8 @@ function media_renamer_normalize_pattern(string $pattern): string
 
 /**
  * Render a short readable list of wildcard placeholders for the admin UI.
+ *
+ * @return string Text result for the caller.
  */
 function media_renamer_pattern_help_text(): string
 {
@@ -573,6 +634,13 @@ function media_renamer_pattern_help_text(): string
 
 /**
  * Build the target filename stem from a wildcard pattern.
+ *
+ * @param string $pattern Pattern value.
+ * @param string $contextBase Context base value.
+ * @param int $sequence Sequence value.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function media_renamer_pattern_stem(string $pattern, string $contextBase, int $sequence, array $gallery, array $image): string
 {
@@ -602,6 +670,15 @@ function media_renamer_pattern_stem(string $pattern, string $contextBase, int $s
 
 /**
  * Build a filename with context, order, optional collision suffix, and extension.
+ *
+ * @param string $contextBase Context base value.
+ * @param int $sequence Sequence value.
+ * @param string $extension Extension value.
+ * @param int $suffix Suffix value.
+ * @param string $pattern Pattern value.
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function media_renamer_build_filename(string $contextBase, int $sequence, string $extension, int $suffix = 0, string $pattern = '', array $gallery = [], array $image = []): string
 {
@@ -620,8 +697,8 @@ function media_renamer_build_filename(string $contextBase, int $sequence, string
 /**
  * Summarize plan item states for UI and final flash messages.
  *
- * @param array<int,array<string,mixed>> $items
- * @return array<string,int>
+ * @param array<int,array<string,mixed>> $items Items value.
+ * @return array<string,int> Structured result data for the caller.
  */
 function media_renamer_summarize_items(array $items): array
 {
@@ -652,7 +729,9 @@ function media_renamer_summarize_items(array $items): array
 /**
  * Execute a rename operation for one gallery from a freshly generated plan.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): array
 {
@@ -666,8 +745,10 @@ function media_renamer_execute_gallery(int $galleryId, string $pattern = ''): ar
  * collision checks remain based on complete gallery order. Only the requested image ids
  * are physically renamed in this request.
  *
- * @param array<int|string> $imageIds
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param array<int|string> $imageIds Image ids value.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageIds, string $pattern = ''): array
 {
@@ -687,8 +768,9 @@ function media_renamer_execute_gallery_image_batch(int $galleryId, array $imageI
  * This is used by the AJAX batch runner so long site-wide operations are split into
  * multiple short requests instead of one request that can hit shared-hosting timeouts.
  *
- * @param array<int|string> $imageIds
- * @return array<string,mixed>
+ * @param array<int|string> $imageIds Image ids value.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_image_batch(array $imageIds, string $pattern = ''): array
 {
@@ -730,7 +812,8 @@ function media_renamer_execute_image_batch(array $imageIds, string $pattern = ''
 /**
  * Return an initialized aggregate execution result.
  *
- * @return array<string,mixed>
+ * @param int $requestedGalleries Requested galleries value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_empty_execution_result(int $requestedGalleries = 0): array
 {
@@ -756,8 +839,8 @@ function media_renamer_empty_execution_result(int $requestedGalleries = 0): arra
 /**
  * Merge one gallery or batch result into an aggregate result.
  *
- * @param array<string,mixed> $target
- * @param array<string,mixed> $source
+ * @param array<string,mixed> $target Target value.
+ * @param array<string,mixed> $source Source value.
  */
 function media_renamer_merge_execution_result(array &$target, array $source): void
 {
@@ -778,8 +861,9 @@ function media_renamer_merge_execution_result(array &$target, array $source): vo
 /**
  * Execute rename operations for several galleries.
  *
- * @param array<int|string> $galleryIds
- * @return array<string,mixed>
+ * @param array<int|string> $galleryIds Gallery ids value.
+ * @param string $pattern Pattern value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''): array
 {
@@ -803,7 +887,8 @@ function media_renamer_execute_galleries(array $galleryIds, string $pattern = ''
 /**
  * Execute one precomputed plan with physical file renames and database updates.
  *
- * @return array<string,mixed>
+ * @param array $plan Plan value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function media_renamer_execute_plan(array $plan): array
 {
@@ -915,8 +1000,9 @@ function media_renamer_execute_plan(array $plan): array
 /**
  * Build human-readable execution details for every row in a plan.
  *
+ * @param array $plan Plan value.
  * @param array<int,int> $renamedImageIds Image ids that were physically renamed.
- * @return array<int,array<string,mixed>>
+ * @return array<int,array<string,mixed>> Structured result data for the caller.
  */
 function media_renamer_execution_details_for_plan(array $plan, array $renamedImageIds): array
 {
@@ -958,8 +1044,10 @@ function media_renamer_execution_details_for_plan(array $plan, array $renamedIma
 /**
  * Build physical file moves for originals and existing generated derivatives.
  *
- * @param array<int,array<string,mixed>> $items
- * @return array<int,array{from:string,to:string,kind:string,label:string}>
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $galleryRoot Gallery root value.
+ * @param array<int,array<string,mixed>> $items Items value.
+ * @return array<int,array{from:string,to:string,kind:string,label:string}> Structured result data for the caller.
  */
 function media_renamer_file_manifest(array $gallery, string $galleryRoot, array $items): array
 {
@@ -995,8 +1083,9 @@ function media_renamer_file_manifest(array $gallery, string $galleryRoot, array 
  * handle open. Invalidating them is more robust: the app will regenerate thumbnails for
  * the new filename when they are requested.
  *
- * @param array<int,array<string,mixed>> $items
- * @return array{cleaned:int,failures:int,warnings:array<int,string>}
+ * @param array<int,array<string,mixed>> $items Items value.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array{cleaned:int,failures:int,warnings:array<int,string>} Structured result data for the caller.
  */
 function media_renamer_cleanup_generated_derivatives(array $items, array $gallery): array
 {
@@ -1040,7 +1129,9 @@ function media_renamer_cleanup_generated_derivatives(array $items, array $galler
 /**
  * Return generated derivative paths belonging to one image row.
  *
- * @return array<int,string>
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array<int,string> Structured result data for the caller.
  */
 function media_renamer_generated_derivative_paths(array $image, array $gallery): array
 {
@@ -1061,8 +1152,15 @@ function media_renamer_generated_derivative_paths(array $image, array $gallery):
 /**
  * Add one source-to-target file move to a manifest after safety checks.
  *
- * @param array<int,array{from:string,to:string,kind:string,label:string,required:bool}> $manifest
- * @param array<string,bool> $targetKeys
+ * @param array<int,array{from:string,to:string,kind:string,label:string,required:bool}> $manifest Manifest value.
+ * @param array<string,bool> $targetKeys Target keys value.
+ * @param array $occupiedSourceKeys Occupied source keys value.
+ * @param string $galleryRoot Gallery root value.
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $kind Kind value.
+ * @param string $label Label value.
+ * @param bool $required Required value.
  */
 function media_renamer_add_manifest_entry(array &$manifest, array &$targetKeys, array $occupiedSourceKeys, string $galleryRoot, string $sourcePath, string $targetPath, string $kind, string $label, bool $required): void
 {
@@ -1096,6 +1194,9 @@ function media_renamer_add_manifest_entry(array &$manifest, array &$targetKeys, 
 
 /**
  * Return true when a manifest entry is a generated derivative that may be skipped safely.
+ *
+ * @param array $entry Entry value.
+ * @return bool True when the condition matches.
  */
 function media_renamer_manifest_entry_is_optional_derivative(array $entry): bool
 {
@@ -1104,6 +1205,10 @@ function media_renamer_manifest_entry_is_optional_derivative(array $entry): bool
 
 /**
  * Build a warning for a generated derivative that could not be moved.
+ *
+ * @param array $entry Entry value.
+ * @param string $phase Phase value.
+ * @return string Text result for the caller.
  */
 function media_renamer_derivative_move_warning(array $entry, string $phase): string
 {
@@ -1127,6 +1232,8 @@ function media_renamer_derivative_move_warning(array $entry, string $phase): str
 
 /**
  * Return the last PHP filesystem warning, if one was recorded.
+ *
+ * @return string Text result for the caller.
  */
 function media_renamer_last_filesystem_error(): string
 {
@@ -1137,6 +1244,8 @@ function media_renamer_last_filesystem_error(): string
 
 /**
  * Put a staged optional derivative back to its original filename.
+ *
+ * @param array $entry Entry value.
  */
 function media_renamer_restore_staged_entry(array $entry): void
 {
@@ -1152,6 +1261,9 @@ function media_renamer_restore_staged_entry(array $entry): void
 
 /**
  * Return a unique temporary path next to a source file.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @return string Text result for the caller.
  */
 function media_renamer_staging_path(string $sourcePath): string
 {
@@ -1169,8 +1281,8 @@ function media_renamer_staging_path(string $sourcePath): string
 /**
  * Restore files after a failed physical or database rename step.
  *
- * @param array<int,array<string,string>> $finalFiles
- * @param array<int,array<string,string>> $stagedFiles
+ * @param array<int,array<string,string>> $finalFiles Final files value.
+ * @param array<int,array<string,string>> $stagedFiles Staged files value.
  */
 function media_renamer_rollback_file_moves(array $finalFiles, array $stagedFiles): void
 {
@@ -1192,7 +1304,8 @@ function media_renamer_rollback_file_moves(array $finalFiles, array $stagedFiles
 /**
  * Update image rows after physical files have been moved into their final names.
  *
- * @param array<int,array<string,mixed>> $items
+ * @param array<int,array<string,mixed>> $items Items value.
+ * @return array Structured result data for the caller.
  */
 function media_renamer_update_database_rows(array $items): array
 {
@@ -1235,6 +1348,10 @@ function media_renamer_update_database_rows(array $items): array
  *
  * Titles created automatically from the old filename are moved to the new
  * filename stem. Manually authored titles are preserved.
+ *
+ * @param array $image Image row or image data.
+ * @param string $newFilename New filename value.
+ * @return ?string Text result for the caller.
  */
 function media_renamer_title_after_rename(array $image, string $newFilename): ?string
 {
@@ -1257,7 +1374,8 @@ function media_renamer_title_after_rename(array $image, string $newFilename): ?s
 /**
  * Remove stale generated ZIP archives after filenames change.
  *
- * @param array<int> $galleryIds
+ * @param array<int> $galleryIds Gallery ids value.
+ * @return int Integer result for the caller.
  */
 function media_renamer_clear_download_archives(array $galleryIds): int
 {

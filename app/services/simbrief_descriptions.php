@@ -47,7 +47,7 @@ const SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS = 30;
  *
  * @param string $key Translation key.
  * @param string $fallback English fallback text.
- * @param array<string, string|int|float> $parameters Placeholder values.
+ * @param array $parameters Parameters value.
  * @return string Resolved message.
  */
 function simbrief_description_t(string $key, string $fallback, array $parameters = []): string
@@ -122,8 +122,8 @@ function simbrief_description_identifier_text(string $value, int $limit): string
 /**
  * Fetch the latest SimBrief OFP for the chosen identifier.
  *
- * @param array{kind: string, value: string, label: string} $identifier Normalized identifier metadata.
- * @return array<string, mixed> Decoded OFP payload.
+ * @param array $identifier Identifier value.
+ * @return array<string mixed> Decoded OFP payload.
  */
 function simbrief_description_fetch_latest_ofp(array $identifier): array
 {
@@ -261,8 +261,8 @@ function simbrief_description_generate_for_identifier(string $pilotId, string $p
 /**
  * Extract the flight details used by the prose generator.
  *
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
- * @return array<string, string> Normalized dispatch details.
+ * @param array $payload Payload value.
+ * @return array<string string> Normalized dispatch details.
  */
 function simbrief_description_extract_details(array $payload): array
 {
@@ -309,12 +309,12 @@ function simbrief_description_extract_details(array $payload): array
  * When the OFP payload exposes a PDF document URL, the original PDF is saved
  * beside it for direct long-term reference.
  *
- * @param array<string, mixed> $gallery Gallery row that owns the OFP.
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
- * @param array{kind: string, value: string, label: string} $identifier Import identifier metadata.
- * @param array<string, string> $details Extracted flight details used for the manifest.
- * @param array<string, mixed> $routeResult Route extraction summary.
- * @return array{saved: bool, path: string, manifest_path: string, filename: string, pdf_saved: bool, pdf_path: string, pdf_filename: string, pdf_url: string, pdf_error: string, error: string}
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $payload Payload value.
+ * @param array $identifier Identifier value.
+ * @param array $details Details value.
+ * @param array $routeResult Route result value.
+ * @return array{saved: bool, path: string, manifest_path: string, filename: string, pdf_saved: bool, pdf_path: string, pdf_filename: string, pdf_url: string, pdf_error: string, error: string}.
  */
 function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
 {
@@ -407,7 +407,7 @@ function simbrief_description_save_ofp_for_gallery(array $gallery, array $payloa
  * JSON version and OFP layout. This helper first checks likely file nodes, then
  * performs a conservative recursive scan for PDF-looking values.
  *
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param array $payload Payload value.
  * @return string Absolute HTTPS PDF URL, or an empty string when none is exposed.
  */
 function simbrief_description_pdf_url(array $payload): string
@@ -462,7 +462,7 @@ function simbrief_description_pdf_url(array $payload): string
  * Collect possible PDF strings from nested SimBrief payload data.
  *
  * @param mixed $node Current JSON node.
- * @return array<int, string> PDF-looking strings.
+ * @return array<int string> PDF-looking strings.
  */
 function simbrief_description_collect_pdf_strings(mixed $node): array
 {
@@ -485,6 +485,10 @@ function simbrief_description_collect_pdf_strings(mixed $node): array
 
 /**
  * Convert one possible SimBrief PDF reference into a safe absolute URL.
+ *
+ * @param string $candidate Candidate value.
+ * @param string $fileRoot File root value.
+ * @return string Text result for the caller.
  */
 function simbrief_description_normalize_pdf_url(string $candidate, string $fileRoot = ''): string
 {
@@ -530,7 +534,9 @@ function simbrief_description_normalize_pdf_url(string $candidate, string $fileR
 /**
  * Download and save the original SimBrief PDF when a safe URL is available.
  *
- * @return array{saved: bool, path: string, filename: string, url: string, error: string}
+ * @param string $pdfUrl Pdf url URL.
+ * @param string $targetPath Target filesystem path.
+ * @return array{saved: bool, path: string, filename: string, url: string, error: string}.
  */
 function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targetPath): array
 {
@@ -560,6 +566,10 @@ function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targe
 
 /**
  * Fetch a trusted SimBrief PDF URL when the shared HTTP helper is unavailable.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds): string
 {
@@ -616,9 +626,9 @@ function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds):
  * Extract a display-ready route from the SimBrief OFP and persist it for maps.
  *
  * @param int $galleryId Gallery identifier.
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
- * @param array<string, string> $details Extracted flight details.
- * @return array<string, mixed> Route extraction and save summary.
+ * @param array $payload Payload value.
+ * @param array $details Details value.
+ * @return array<string mixed> Route extraction and save summary.
  */
 function simbrief_description_save_route_map_from_ofp(int $galleryId, array $payload, array $details): array
 {
@@ -652,9 +662,9 @@ function simbrief_description_save_route_map_from_ofp(int $galleryId, array $pay
 /**
  * Extract route geometry from SimBrief airport and navlog coordinates.
  *
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
- * @param array<string, string> $details Extracted flight details.
- * @return array<int, array<string, mixed>> Ordered route points.
+ * @param array $payload Payload value.
+ * @param array $details Details value.
+ * @return array<int array<string, mixed>> Ordered route points.
  */
 function simbrief_description_extract_route_points(array $payload, array $details): array
 {
@@ -704,11 +714,11 @@ function simbrief_description_extract_route_points(array $payload, array $detail
 /**
  * Build one airport route point from an OFP airport section.
  *
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
+ * @param array $payload Payload value.
  * @param string $section Airport section name.
  * @param string $fallbackCode ICAO or IATA fallback.
  * @param string $role Route role.
- * @return array<string, mixed>|null
+ * @return array<string mixed>|null.
  */
 function simbrief_description_airport_route_point(array $payload, string $section, string $fallbackCode, string $role): ?array
 {
@@ -742,8 +752,8 @@ function simbrief_description_airport_route_point(array $payload, string $sectio
 /**
  * Build one route point from a SimBrief navlog row.
  *
- * @param array<string, mixed> $row Navlog row.
- * @return array<string, mixed>|null
+ * @param array $row Row data.
+ * @return array<string mixed>|null.
  */
 function simbrief_description_navlog_route_point(array $row): ?array
 {
@@ -783,8 +793,8 @@ function simbrief_description_navlog_route_point(array $row): ?array
 /**
  * Return likely navlog rows from known SimBrief JSON shapes.
  *
- * @param array<string, mixed> $payload Decoded SimBrief OFP payload.
- * @return array<int, array<string, mixed>> Row list.
+ * @param array $payload Payload value.
+ * @return array<int array<string, mixed>> Row list.
  */
 function simbrief_description_navlog_rows(array $payload): array
 {
@@ -814,7 +824,7 @@ function simbrief_description_navlog_rows(array $payload): array
  * Normalize a possible SimBrief row collection.
  *
  * @param mixed $node Candidate row collection.
- * @return array<int, array<string, mixed>> Row list.
+ * @return array<int array<string, mixed>> Row list.
  */
 function simbrief_description_rows_from_node(mixed $node): array
 {
@@ -838,7 +848,8 @@ function simbrief_description_rows_from_node(mixed $node): array
 /**
  * Return true when an array looks like one coordinate-bearing navlog row.
  *
- * @param array<string|int, mixed> $row Candidate row.
+ * @param array $row Row data.
+ * @return bool True when the condition matches.
  */
 function simbrief_description_array_has_coordinate_shape(array $row): bool
 {
@@ -860,8 +871,9 @@ function simbrief_description_array_has_coordinate_shape(array $row): bool
 /**
  * Return true when a SimBrief row contains at least one named key.
  *
- * @param array<string|int, mixed> $row Row data.
- * @param array<int, string> $keys Candidate keys.
+ * @param array $row Row data.
+ * @param array $keys Keys value.
+ * @return bool True when the condition matches.
  */
 function simbrief_description_row_has_any_key(array $row, array $keys): bool
 {
@@ -876,8 +888,9 @@ function simbrief_description_row_has_any_key(array $row, array $keys): bool
 /**
  * Read the first text value from a SimBrief navlog row.
  *
- * @param array<string|int, mixed> $row Row data.
- * @param array<int, string> $keys Candidate keys.
+ * @param array $row Row data.
+ * @param array $keys Keys value.
+ * @return string Text result for the caller.
  */
 function simbrief_description_row_first_text(array $row, array $keys): string
 {
@@ -895,9 +908,10 @@ function simbrief_description_row_first_text(array $row, array $keys): string
 /**
  * Read one latitude or longitude value from a SimBrief row.
  *
- * @param array<string|int, mixed> $row Row data.
- * @param array<int, string> $keys Candidate keys.
+ * @param array $row Row data.
+ * @param array $keys Keys value.
  * @param string $axis Coordinate axis, lat or lon.
+ * @return ?float Numeric result for the caller.
  */
 function simbrief_description_row_coordinate(array $row, array $keys, string $axis): ?float
 {
@@ -915,6 +929,10 @@ function simbrief_description_row_coordinate(array $row, array $keys, string $ax
 
 /**
  * Normalize decimal, signed, and compact SimBrief coordinate strings.
+ *
+ * @param string $value Value to process.
+ * @param string $axis Axis value.
+ * @return ?float Numeric result for the caller.
  */
 function simbrief_description_coordinate_value(string $value, string $axis): ?float
 {
@@ -970,6 +988,10 @@ function simbrief_description_coordinate_value(string $value, string $axis): ?fl
 
 /**
  * Return whether a coordinate is valid for the requested axis.
+ *
+ * @param float $value Value to process.
+ * @param string $axis Axis value.
+ * @return bool True when the condition matches.
  */
 function simbrief_description_coordinate_in_range(float $value, string $axis): bool
 {
@@ -982,7 +1004,12 @@ function simbrief_description_coordinate_in_range(float $value, string $axis): b
 /**
  * Build a normalized SimBrief route point.
  *
- * @return array<string, mixed>|null
+ * @param string $name Name value.
+ * @param ?float $latitude Latitude value.
+ * @param ?float $longitude Longitude value.
+ * @param string $kind Kind value.
+ * @param string $role Role value.
+ * @return array<string mixed>|null.
  */
 function simbrief_description_route_point_from_values(string $name, ?float $latitude, ?float $longitude, string $kind, string $role): ?array
 {
@@ -1008,8 +1035,9 @@ function simbrief_description_route_point_from_values(string $name, ?float $lati
 /**
  * Return true when a candidate route point repeats the last stored point.
  *
- * @param array<int, array<string, mixed>> $points Existing route points.
- * @param array<string, mixed> $candidate Candidate point.
+ * @param array $points Points value.
+ * @param array $candidate Candidate value.
+ * @return bool True when the condition matches.
  */
 function simbrief_description_route_point_duplicate(array $points, array $candidate): bool
 {
@@ -1030,8 +1058,9 @@ function simbrief_description_route_point_duplicate(array $points, array $candid
 /**
  * Build the human-readable route text shown in the gallery editor.
  *
- * @param array<int, array<string, mixed>> $points Route point list.
- * @param array<string, string> $details Extracted flight details.
+ * @param array $points Points value.
+ * @param array $details Details value.
+ * @return string Text result for the caller.
  */
 function simbrief_description_route_text_from_points(array $points, array $details): string
 {
@@ -1054,7 +1083,7 @@ function simbrief_description_route_text_from_points(array $points, array $detai
 /**
  * Build a safe Markdown description from extracted SimBrief fields.
  *
- * @param array<string, string> $details Normalized dispatch details.
+ * @param array $details Details value.
  * @return string Editable Markdown description.
  */
 function simbrief_description_build_markdown(array $details): string
@@ -1162,7 +1191,7 @@ function simbrief_description_indefinite_article(string $label): string
 /**
  * Return one airport ICAO or IATA code from the SimBrief payload.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @param string $section Airport section name.
  * @return string Uppercase airport code.
  */
@@ -1181,7 +1210,7 @@ function simbrief_description_airport_code(array $payload, string $section): str
 /**
  * Return one airport display name from the SimBrief payload.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @param string $section Airport section name.
  * @return string Clean airport name or city.
  */
@@ -1197,7 +1226,7 @@ function simbrief_description_airport_name(array $payload, string $section): str
 /**
  * Return the first alternate airport code from common SimBrief shapes.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @return string Uppercase alternate code.
  */
 function simbrief_description_alternate_code(array $payload): string
@@ -1228,7 +1257,7 @@ function simbrief_description_alternate_code(array $payload): string
 /**
  * Return a readable aircraft label.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @return string Aircraft name and ICAO code when available.
  */
 function simbrief_description_aircraft_label(array $payload): string
@@ -1249,7 +1278,7 @@ function simbrief_description_aircraft_label(array $payload): string
 /**
  * Read the SimBrief weight unit preference.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @return string Display unit.
  */
 function simbrief_description_weight_unit(array $payload): string
@@ -1267,7 +1296,7 @@ function simbrief_description_weight_unit(array $payload): string
 /**
  * Return a clean passenger count.
  *
- * @param array<string, mixed> $payload Decoded OFP payload.
+ * @param array $payload Payload value.
  * @return string Passenger count or an empty string.
  */
 function simbrief_description_passenger_count(array $payload): string
@@ -1290,7 +1319,7 @@ function simbrief_description_passenger_count(array $payload): string
 /**
  * Return a nested value by dot path.
  *
- * @param array<string, mixed> $payload Data array.
+ * @param array $payload Payload value.
  * @param string $path Dot path.
  * @return mixed Matching node or null.
  */
@@ -1309,8 +1338,8 @@ function simbrief_description_node(array $payload, string $path): mixed
 /**
  * Return the first scalar text value from a list of dot paths.
  *
- * @param array<string, mixed> $payload Data array.
- * @param array<int, string> $paths Candidate dot paths.
+ * @param array $payload Payload value.
+ * @param array $paths Paths filesystem path.
  * @return string Clean text value.
  */
 function simbrief_description_first_text(array $payload, array $paths): string
@@ -1409,7 +1438,7 @@ function simbrief_description_shorten(string $value, int $limit): string
 /**
  * Join short phrases using natural English punctuation.
  *
- * @param array<int, string> $parts Phrase list.
+ * @param array $parts Parts value.
  * @return string Joined phrase.
  */
 function simbrief_description_join_phrase(array $parts): string

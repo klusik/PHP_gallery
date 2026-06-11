@@ -38,6 +38,8 @@ const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
 
 /**
  * Return true when the thin public search bar is enabled.
+ *
+ * @return bool True when the condition matches.
  */
 function public_home_search_enabled(): bool
 {
@@ -49,6 +51,8 @@ function public_home_search_enabled(): bool
 
 /**
  * Persist the global public home search setting.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_public_home_search_enabled(bool $enabled): void
 {
@@ -57,6 +61,9 @@ function set_public_home_search_enabled(bool $enabled): void
 
 /**
  * Normalize a browser-supplied public search query.
+ *
+ * @param string $query Query value.
+ * @return string Text result for the caller.
  */
 function public_search_normalize_query(string $query): string
 {
@@ -69,6 +76,11 @@ function public_search_normalize_query(string $query): string
 
 /**
  * Return compact public search results for galleries and photos.
+ *
+ * @param string $query Query value.
+ * @param int $limit Maximum number of items.
+ * @param ?array $contextGallery Context gallery value.
+ * @return array Structured result data for the caller.
  */
 function public_search_results(string $query, int $limit = 12, ?array $contextGallery = null): array
 {
@@ -107,6 +119,9 @@ function public_search_results(string $query, int $limit = 12, ?array $contextGa
 
 /**
  * Return the user-visible query length in characters.
+ *
+ * @param string $query Query value.
+ * @return int Integer result for the caller.
  */
 function public_search_query_length(string $query): int
 {
@@ -119,6 +134,10 @@ function public_search_query_length(string $query): int
 
 /**
  * Return the public gallery listing condition, optionally restricted to one gallery branch.
+ *
+ * @param string $alias Alias value.
+ * @param ?array $contextGallery Context gallery value.
+ * @return string Text result for the caller.
  */
 function public_search_context_listing_condition(string $alias, ?array $contextGallery): string
 {
@@ -132,6 +151,9 @@ function public_search_context_listing_condition(string $alias, ?array $contextG
 
 /**
  * Return bound SQL values for a gallery branch search context.
+ *
+ * @param ?array $contextGallery Context gallery value.
+ * @return array Structured result data for the caller.
  */
 function public_search_context_params(?array $contextGallery): array
 {
@@ -149,6 +171,9 @@ function public_search_context_params(?array $contextGallery): array
 
 /**
  * Return a wildcard LIKE pattern for one normalized query.
+ *
+ * @param string $query Query value.
+ * @return string Text result for the caller.
  */
 function public_search_like_pattern(string $query): string
 {
@@ -157,6 +182,11 @@ function public_search_like_pattern(string $query): string
 
 /**
  * Return gallery matches for the public search endpoint.
+ *
+ * @param string $query Query value.
+ * @param int $limit Maximum number of items.
+ * @param ?array $contextGallery Context gallery value.
+ * @return array Structured result data for the caller.
  */
 function public_search_gallery_results(string $query, int $limit, ?array $contextGallery = null): array
 {
@@ -236,6 +266,11 @@ function public_search_gallery_results(string $query, int $limit, ?array $contex
 
 /**
  * Return image matches for the public search endpoint.
+ *
+ * @param string $query Query value.
+ * @param int $limit Maximum number of items.
+ * @param ?array $contextGallery Context gallery value.
+ * @return array Structured result data for the caller.
  */
 function public_search_image_results(string $query, int $limit, ?array $contextGallery = null): array
 {
@@ -328,6 +363,9 @@ function public_search_image_results(string $query, int $limit, ?array $contextG
 
 /**
  * Build a gallery-shaped array from a joined image search row.
+ *
+ * @param array $row Row data.
+ * @return array Structured result data for the caller.
  */
 function public_search_gallery_from_image_row(array $row): array
 {
@@ -347,6 +385,10 @@ function public_search_gallery_from_image_row(array $row): array
 
 /**
  * Collapse rich text into a short one-line search result detail.
+ *
+ * @param string $text Text value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
  */
 function public_search_compact_text(string $text, int $limit): string
 {

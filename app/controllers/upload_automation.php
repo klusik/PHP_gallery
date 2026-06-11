@@ -44,6 +44,9 @@ declare(strict_types=1);
 
 /**
  * Send a JSON response for the upload automation endpoint.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function upload_automation_json(array $payload, int $status = 200): void
 {
@@ -155,6 +158,7 @@ function upload_automation_handle_ai_action(string $action, int $galleryId, arra
 /**
  * Claim and return one AI image-analysis job for a worker.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -198,6 +202,7 @@ function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, a
 /**
  * Extend one active AI job lease for a worker.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -225,6 +230,7 @@ function upload_automation_handle_ai_heartbeat(int $galleryId, array $tokenRow, 
 /**
  * Complete or fail one active AI image-analysis job.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -283,6 +289,8 @@ function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, a
 
 /**
  * Stream the image asset for one active claimed AI job.
+ *
+ * @param int $galleryId Gallery identifier.
  */
 function upload_automation_stream_ai_asset(int $galleryId): void
 {
@@ -658,7 +666,6 @@ function upload_automation_token_csrf_valid(): bool
  *
  * @param array<string,mixed> $payload JSON-safe response payload.
  * @param int $status HTTP status code to send with the response.
- * @return void
  */
 function upload_automation_token_json_response(array $payload, int $status = 200): void
 {
@@ -739,6 +746,9 @@ function upload_automation_return_url_allowed(string $url, int $galleryId): bool
 
 /**
  * Render gallery-scoped upload automation controls inside the image editor tab.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $returnTab Return tab value.
  */
 function render_admin_gallery_upload_automation_panel(array $gallery, string $returnTab = 'admin-edit-api'): void
 {

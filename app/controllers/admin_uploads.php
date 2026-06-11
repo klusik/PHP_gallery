@@ -47,6 +47,9 @@ declare(strict_types=1);
  * The value is used only as a refresh source after JSON uploads. Keeping this
  * validation server-side prevents a submitted form from turning the refresh
  * URL into an arbitrary external target.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function admin_upload_safe_refresh_url(mixed $value): string
 {
@@ -80,7 +83,8 @@ function admin_upload_safe_refresh_url(mixed $value): string
 /**
  * Emit a JSON upload response and stop this request path cleanly.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function admin_upload_experimental_json_response(array $payload, int $statusCode = 200): void
 {
@@ -102,6 +106,8 @@ function admin_upload_experimental_verify_csrf(): void
 
 /**
  * Reject requests that PHP has already discarded because the multipart body exceeded limits.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_upload_experimental_reject_discarded_body(): bool
 {
@@ -126,6 +132,9 @@ function admin_upload_experimental_reject_discarded_body(): bool
 
 /**
  * Normalize the dedicated upload settings tab used by the Admin settings page.
+ *
+ * @param string $tab Tab value.
+ * @return string Text result for the caller.
  */
 function admin_upload_settings_normalize_tab(string $tab): string
 {
@@ -135,7 +144,9 @@ function admin_upload_settings_normalize_tab(string $tab): string
 /**
  * Build the upload settings page model from current application settings.
  *
- * @return array<string, mixed>
+ * @param string $activeTab Active tab value.
+ * @param string $notice Notice value.
+ * @return array<string mixed>.
  */
 function admin_upload_settings_view_model(string $activeTab, string $notice = ''): array
 {
@@ -160,7 +171,7 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
 /**
  * Return upload support capabilities for reusable Admin upload views.
  *
- * @return array<string, bool>
+ * @return array<string bool>.
  */
 function admin_upload_support_model(): array
 {
@@ -172,6 +183,8 @@ function admin_upload_support_model(): array
 
 /**
  * Persist general upload preferences from the dedicated Admin settings page.
+ *
+ * @param array $input Input value.
  */
 function admin_upload_save_general_settings(array $input): void
 {
@@ -269,6 +282,11 @@ function cms_admin_upload_experimental_batch(): void
     }
 }
 
+/**
+ * Handle cms admin upload.
+ *
+ * Used by HTTP controller routing for this workflow.
+ */
 function cms_admin_upload(): void
 {
     // $isAjaxUpload stores an intermediate value used by the surrounding gallery workflow.
@@ -476,6 +494,13 @@ function cms_admin_upload(): void
 
 /**
  * Render the focused upload workflow inside the reusable admin side panel.
+ *
+ * @param int $prefillGalleryId Prefill gallery id identifier.
+ * @param ?array $prefillGallery Prefill gallery value.
+ * @param string $error Error value.
+ * @param string $requestedUploadMode Requested upload mode value.
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param ?array $prefillParentGallery Prefill parent gallery value.
  */
 function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error, string $requestedUploadMode = 'existing', int $prefillParentId = 0, ?array $prefillParentGallery = null): void
 {
@@ -508,6 +533,8 @@ function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGa
 
 /**
  * Return the upload accept attribute shared by upload page and side-panel forms.
+ *
+ * @return string Text result for the caller.
  */
 function admin_upload_accept_value(): string
 {
@@ -526,6 +553,8 @@ function render_admin_upload_support_panel(): void
 
 /**
  * Render the opt-in experimental client-side upload checkbox.
+ *
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_experimental_checkbox(bool $panelMode = false): void
 {
@@ -541,6 +570,9 @@ function render_admin_upload_experimental_checkbox(bool $panelMode = false): voi
 
 /**
  * Render the existing-gallery upload form without changing the upload endpoint.
+ *
+ * @param int $prefillGalleryId Prefill gallery id identifier.
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
 {
@@ -573,6 +605,8 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
 
 /**
  * Render the new-gallery upload form used by the direct admin upload page.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
  */
 function render_admin_upload_new_gallery_form(int $prefillParentId): void
 {
@@ -581,6 +615,8 @@ function render_admin_upload_new_gallery_form(int $prefillParentId): void
 
 /**
  * Render the new-gallery upload form used inside the public-page side panel.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
  */
 function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 {
@@ -589,6 +625,9 @@ function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 
 /**
  * Render the shared create-and-upload form while preserving the existing upload route.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $panelMode): void
 {
@@ -628,6 +667,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
 
 /**
  * Handles admin wants json logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function admin_wants_json(): bool

@@ -41,6 +41,9 @@
 
 /**
  * Return a privacy-safe SQL operation bucket.
+ *
+ * @param string $sql Sql value.
+ * @return string Text result for the caller.
  */
 function telemetry_sql_operation(string $sql): string
 {
@@ -60,6 +63,9 @@ function telemetry_sql_operation(string $sql): string
 
 /**
  * Return a best-effort primary table name without storing the full SQL string.
+ *
+ * @param string $sql Sql value.
+ * @return string Text result for the caller.
  */
 function telemetry_sql_table_name(string $sql): string
 {
@@ -75,6 +81,9 @@ function telemetry_sql_table_name(string $sql): string
 
 /**
  * Return a short hash of a normalized SQL shape.
+ *
+ * @param string $sql Sql value.
+ * @return string Text result for the caller.
  */
 function telemetry_sql_fingerprint(string $sql): string
 {
@@ -86,6 +95,12 @@ function telemetry_sql_fingerprint(string $sql): string
 
 /**
  * Record an aggregated database query metric.
+ *
+ * @param string $sql Sql value.
+ * @param float $latencyMs Latency ms value.
+ * @param int $rowsReturned Rows returned value.
+ * @param int $rowsAffected Rows affected value.
+ * @param bool $failed Failed value.
  */
 function telemetry_record_db_query(string $sql, float $latencyMs, int $rowsReturned = 0, int $rowsAffected = 0, bool $failed = false): void
 {

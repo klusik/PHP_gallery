@@ -33,6 +33,11 @@
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 // Function `setupGalleryRefreshProgress` executes this focused behavior.
+/**
+ * Handle setup gallery refresh progress.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupGalleryRefreshProgress() {
     document.querySelectorAll('[data-refresh-galleries-form]').forEach((form) => {
         if (!(form instanceof HTMLFormElement)) {
@@ -65,6 +70,14 @@ export function setupGalleryRefreshProgress() {
 }
 
 // Function `ensureGalleryRefreshProgress` executes this focused behavior.
+/**
+ * Ensure gallery refresh progress.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLFormElement} form Form value.
+ * @return {*} Result value for the caller.
+ */
 function ensureGalleryRefreshProgress(form) {
     // progress stores state or configuration for the gallery front-end flow.
     let progress = document.querySelector('[data-gallery-refresh-progress]');

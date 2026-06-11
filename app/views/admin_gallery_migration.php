@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Render the gallery migration controls for the API tab.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function view_render_admin_gallery_migration_panel(array $gallery): void
 {

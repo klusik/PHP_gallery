@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 /**
  * Return authentication configuration merged with safe defaults.
+ *
+ * @return array Structured result data for the caller.
  */
 function auth_persistence_config(): array
 {
@@ -54,6 +56,8 @@ function auth_persistence_config(): array
 
 /**
  * Return the long-lived PHP session lifetime in seconds.
+ *
+ * @return int Integer result for the caller.
  */
 function auth_admin_session_lifetime_seconds(): int
 {
@@ -64,6 +68,8 @@ function auth_admin_session_lifetime_seconds(): int
 
 /**
  * Return the persistent login cookie lifetime in seconds.
+ *
+ * @return int Integer result for the caller.
  */
 function auth_remember_lifetime_seconds(): int
 {
@@ -74,6 +80,8 @@ function auth_remember_lifetime_seconds(): int
 
 /**
  * Return true when DB-backed persistent login is enabled and migrated.
+ *
+ * @return bool True when the condition matches.
  */
 function auth_persistent_login_ready(): bool
 {
@@ -86,6 +94,8 @@ function auth_persistent_login_ready(): bool
 
 /**
  * Return the persistent login cookie name for this installation.
+ *
+ * @return string Text result for the caller.
  */
 function auth_remember_cookie_name(): string
 {
@@ -96,6 +106,9 @@ function auth_remember_cookie_name(): string
 
 /**
  * Send or clear the persistent login cookie using admin-safe attributes.
+ *
+ * @param string $value Value to process.
+ * @param int $expiresAt Expires at value.
  */
 function auth_set_remember_cookie(string $value, int $expiresAt): void
 {
@@ -120,6 +133,8 @@ function auth_set_remember_cookie(string $value, int $expiresAt): void
 
 /**
  * Remove expired and revoked persistent login tokens.
+ *
+ * @param ?int $userId User id identifier.
  */
 function auth_prune_persistent_tokens(?int $userId = null): void
 {
@@ -139,6 +154,8 @@ function auth_prune_persistent_tokens(?int $userId = null): void
 
 /**
  * Issue a new persistent login token and store only its hash in the database.
+ *
+ * @param int $userId User id identifier.
  */
 function auth_issue_persistent_login(int $userId): void
 {
@@ -181,6 +198,8 @@ function auth_issue_persistent_login(int $userId): void
 
 /**
  * Parse the browser persistent login cookie into selector and validator parts.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function auth_parse_remember_cookie(): ?array
 {
@@ -200,6 +219,8 @@ function auth_parse_remember_cookie(): ?array
 
 /**
  * Restore an admin session from a valid persistent login cookie.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function auth_restore_persistent_login(): ?array
 {
@@ -274,6 +295,8 @@ function auth_revoke_current_persistent_login(): void
 
 /**
  * Revoke every persistent login token for one user.
+ *
+ * @param int $userId User id identifier.
  */
 function auth_revoke_user_persistent_logins(int $userId): void
 {

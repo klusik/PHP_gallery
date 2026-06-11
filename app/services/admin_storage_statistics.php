@@ -46,7 +46,8 @@ const ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE = 80;
  * display-master sizes come from bounded filesystem checks against expected
  * derivative paths only, so random cache files are not counted as photos.
  *
- * @return array<string, mixed>
+ * @param bool $forceRefresh Force refresh value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics(bool $forceRefresh = false): array
 {
@@ -69,7 +70,8 @@ function admin_storage_statistics(bool $forceRefresh = false): array
 /**
  * Return the most recent cached storage statistics without rebuilding them.
  *
- * @return array<string, mixed>|null
+ * @param bool $allowStale Allow stale flag.
+ * @return array<string mixed>|null.
  */
 function admin_storage_statistics_cached_snapshot(bool $allowStale = true): ?array
 {
@@ -106,7 +108,7 @@ function admin_storage_statistics_cached_snapshot(bool $allowStale = true): ?arr
  * checks for generated images are then processed in small Ajax batches so the
  * admin page can display progress and shared hosting requests stay short.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_start_job(): array
 {
@@ -138,7 +140,8 @@ function admin_storage_statistics_start_job(): array
 /**
  * Process one manual storage statistics job batch.
  *
- * @return array<string, mixed>
+ * @param int $batchSize Batch size value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_process_job(int $batchSize = ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE): array
 {
@@ -185,6 +188,8 @@ function admin_storage_statistics_process_job(int $batchSize = ADMIN_STORAGE_STA
 
 /**
  * Build a stable database fingerprint used to invalidate cached statistics.
+ *
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_fingerprint(): string
 {
@@ -208,7 +213,8 @@ function admin_storage_statistics_fingerprint(): string
 /**
  * Read cached storage statistics when they match the current fingerprint.
  *
- * @return array<string, mixed>|null
+ * @param string $fingerprint Fingerprint value.
+ * @return array<string mixed>|null.
  */
 function admin_storage_statistics_cache_read(string $fingerprint): ?array
 {
@@ -237,7 +243,7 @@ function admin_storage_statistics_cache_read(string $fingerprint): ?array
 /**
  * Store cached statistics and ignore cache-write failures.
  *
- * @param array<string, mixed> $statistics
+ * @param array $statistics Statistics value.
  */
 function admin_storage_statistics_cache_write(array $statistics): void
 {
@@ -272,7 +278,8 @@ function admin_storage_statistics_cache_clear(): void
 /**
  * Build uncached statistics from database rows and expected generated media paths.
  *
- * @return array<string, mixed>
+ * @param string $fingerprint Fingerprint value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_build(string $fingerprint): array
 {
@@ -286,7 +293,7 @@ function admin_storage_statistics_build(string $fingerprint): array
 /**
  * Return image rows required by source and generated-media statistics.
  *
- * @return array<int, array<string, mixed>>
+ * @return array<int array<string, mixed>>.
  */
 function admin_storage_statistics_image_rows(): array
 {
@@ -300,7 +307,9 @@ function admin_storage_statistics_image_rows(): array
 /**
  * Return a generated-media statistics batch after one image id.
  *
- * @return array<int, array<string, mixed>>
+ * @param int $lastImageId Last image id identifier.
+ * @param int $limit Maximum number of items.
+ * @return array<int array<string, mixed>>.
  */
 function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $limit): array
 {
@@ -318,8 +327,8 @@ function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $lim
 /**
  * Aggregate source-photo statistics from image rows.
  *
- * @param array<int, array<string, mixed>> $rows
- * @return array<string, mixed>
+ * @param array $rows Rows to process.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_source_summary(array $rows): array
 {
@@ -347,8 +356,8 @@ function admin_storage_statistics_source_summary(array $rows): array
 /**
  * Add one image row to the source-photo statistics accumulator.
  *
- * @param array<string, mixed> $summary
- * @param array<string, mixed> $row
+ * @param array $summary Summary value.
+ * @param array $row Row data.
  */
 function admin_storage_statistics_accumulate_source_row(array &$summary, array $row): void
 {
@@ -397,8 +406,8 @@ function admin_storage_statistics_accumulate_source_row(array &$summary, array $
 /**
  * Return compact source statistics suitable for a cache record or job state.
  *
- * @param array<string, mixed> $source
- * @return array<string, mixed>
+ * @param array $source Source value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_compact_source_summary(array $source): array
 {
@@ -419,8 +428,8 @@ function admin_storage_statistics_compact_source_summary(array $source): array
 /**
  * Aggregate generated thumbnail and display-master statistics from expected paths.
  *
- * @param array<int, array<string, mixed>> $rows
- * @return array<string, mixed>
+ * @param array $rows Rows to process.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_generated_media_summary(array $rows): array
 {
@@ -434,7 +443,7 @@ function admin_storage_statistics_generated_media_summary(array $rows): array
 /**
  * Return an empty generated-media statistics accumulator.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_empty_generated_summary(): array
 {
@@ -452,8 +461,8 @@ function admin_storage_statistics_empty_generated_summary(): array
 /**
  * Normalize a generated-media statistics accumulator read from JSON.
  *
- * @param array<string, mixed> $summary
- * @return array<string, mixed>
+ * @param array $summary Summary value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_normalize_generated_summary(array $summary): array
 {
@@ -471,8 +480,8 @@ function admin_storage_statistics_normalize_generated_summary(array $summary): a
 /**
  * Add one image row to the generated-media statistics accumulator.
  *
- * @param array<string, mixed> $summary
- * @param array<string, mixed> $row
+ * @param array $summary Summary value.
+ * @param array $row Row data.
  */
 function admin_storage_statistics_accumulate_generated_media_row(array &$summary, array $row): void
 {
@@ -544,9 +553,10 @@ function admin_storage_statistics_accumulate_generated_media_row(array &$summary
 /**
  * Build the final statistics snapshot from compact source and generated summaries.
  *
- * @param array<string, mixed> $source
- * @param array<string, mixed> $generated
- * @return array<string, mixed>
+ * @param string $fingerprint Fingerprint value.
+ * @param array $source Source value.
+ * @param array $generated Generated value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_snapshot_from_summaries(string $fingerprint, array $source, array $generated): array
 {
@@ -583,8 +593,8 @@ function admin_storage_statistics_snapshot_from_summaries(string $fingerprint, a
 /**
  * Finish a manual job and store its statistics snapshot.
  *
- * @param array<string, mixed> $job
- * @return array<string, mixed>
+ * @param array $job Job value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_finish_job(array $job): array
 {
@@ -601,9 +611,10 @@ function admin_storage_statistics_finish_job(array $job): array
 /**
  * Return a compact public state for a manual storage statistics job.
  *
- * @param array<string, mixed> $job
- * @param array<string, mixed>|null $snapshot
- * @return array<string, mixed>
+ * @param array $job Job value.
+ * @param ?array $snapshot Snapshot value.
+ * @param string $message Message value.
+ * @return array<string mixed>.
  */
 function admin_storage_statistics_job_public_state(array $job, ?array $snapshot = null, string $message = ''): array
 {
@@ -625,7 +636,7 @@ function admin_storage_statistics_job_public_state(array $job, ?array $snapshot 
 /**
  * Read a manual storage statistics job state from application settings.
  *
- * @return array<string, mixed>|null
+ * @return array<string mixed>|null.
  */
 function admin_storage_statistics_job_read(): ?array
 {
@@ -643,7 +654,7 @@ function admin_storage_statistics_job_read(): ?array
 /**
  * Store a manual storage statistics job state.
  *
- * @param array<string, mixed> $job
+ * @param array $job Job value.
  */
 function admin_storage_statistics_job_write(array $job): void
 {
@@ -659,6 +670,8 @@ function admin_storage_statistics_job_write(array $job): void
 
 /**
  * Build a short opaque job id for manual storage statistics runs.
+ *
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_job_id(): string
 {
@@ -671,6 +684,9 @@ function admin_storage_statistics_job_id(): string
 
 /**
  * Return a safe size for an existing file or zero for missing/unreadable paths.
+ *
+ * @param string $path Filesystem path.
+ * @return int Integer result for the caller.
  */
 function admin_storage_statistics_existing_file_size(string $path): int
 {
@@ -684,6 +700,9 @@ function admin_storage_statistics_existing_file_size(string $path): int
 
 /**
  * Normalize one file extension for grouping.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_normalize_file_extension(string $path): string
 {
@@ -703,7 +722,7 @@ function admin_storage_statistics_normalize_file_extension(string $path): string
 /**
  * Return preseeded source-size bucket groups in dashboard order.
  *
- * @return array<string, array<string, mixed>>
+ * @return array<string array<string, mixed>>.
  */
 function admin_storage_statistics_empty_size_bucket_groups(): array
 {
@@ -724,7 +743,7 @@ function admin_storage_statistics_empty_size_bucket_groups(): array
 /**
  * Return source-size bucket keys in display order.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function admin_storage_statistics_size_bucket_order(): array
 {
@@ -733,6 +752,9 @@ function admin_storage_statistics_size_bucket_order(): array
 
 /**
  * Return the source-size bucket key for one byte count.
+ *
+ * @param int $bytes Bytes value.
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_size_bucket_key(int $bytes): string
 {
@@ -759,6 +781,9 @@ function admin_storage_statistics_size_bucket_key(int $bytes): string
 
 /**
  * Return a translation key for one source-size bucket.
+ *
+ * @param string $bucketKey Bucket key value.
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_size_bucket_translation_key(string $bucketKey): string
 {
@@ -767,6 +792,9 @@ function admin_storage_statistics_size_bucket_translation_key(string $bucketKey)
 
 /**
  * Return an English fallback label for one source-size bucket.
+ *
+ * @param string $bucketKey Bucket key value.
+ * @return string Text result for the caller.
  */
 function admin_storage_statistics_size_bucket_fallback(string $bucketKey): string
 {
@@ -784,8 +812,12 @@ function admin_storage_statistics_size_bucket_fallback(string $bucketKey): strin
 /**
  * Add count and byte values to a grouped statistics row.
  *
- * @param array<string, array<string, mixed>> $groups
- * @param array<string, mixed> $metadata
+ * @param array $groups Groups value.
+ * @param string $key Lookup key.
+ * @param string $label Label value.
+ * @param int $count Count value.
+ * @param int $bytes Bytes value.
+ * @param array $metadata Metadata value.
  */
 function admin_storage_statistics_add_group_value(array &$groups, string $key, string $label, int $count, int $bytes, array $metadata = []): void
 {
@@ -805,8 +837,10 @@ function admin_storage_statistics_add_group_value(array &$groups, string $key, s
 /**
  * Sort grouped rows and add percentage values for chart rendering.
  *
- * @param array<string, array<string, mixed>> $groups
- * @return array<int, array<string, mixed>>
+ * @param array $groups Groups value.
+ * @param string $valueKey Value key value.
+ * @param int $limit Maximum number of items.
+ * @return array<int array<string, mixed>>.
  */
 function admin_storage_statistics_finalize_group_rows(array $groups, string $valueKey, int $limit = 8): array
 {
