@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-06-13
  */
 
 declare(strict_types=1);
@@ -40,8 +40,9 @@ declare(strict_types=1);
  * @param ?array $statistics Statistics value.
  * @param ?array $databaseUsage Database usage value.
  * @param string $activeTab Active tab value.
+ * @param string $notice Notice value.
  */
-function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files'): void
+function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files', string $notice = ''): void
 {
     $activeTab = view_admin_storage_statistics_normalize_tab($activeTab);
     render_header(t('admin.storage.page_title', 'Storage statistics'));
@@ -50,6 +51,7 @@ function view_render_admin_storage_statistics_page(?array $statistics, ?array $d
     echo '<div class="admin-hero-actions"><a class="button secondary" href="' . e(url_for('admin')) . '">' . e(t('admin.storage.back_to_dashboard', 'Back to dashboard')) . '</a></div></section>';
 
     view_render_admin_storage_statistics_tabs($activeTab);
+    view_render_admin_storage_statistics_notice($notice);
 
     if ($activeTab === 'database') {
         if (function_exists('view_render_admin_database_usage_panel')) {
@@ -118,6 +120,20 @@ function view_render_admin_storage_statistics_tabs(string $activeTab): void
 function view_admin_storage_statistics_normalize_tab(string $activeTab): string
 {
     return in_array($activeTab, ['files', 'database'], true) ? $activeTab : 'files';
+}
+
+/**
+ * Render a storage-page notice when a controller action sets one.
+ *
+ * @param string $notice Notice text.
+ */
+function view_render_admin_storage_statistics_notice(string $notice): void
+{
+    $notice = trim($notice);
+    if ($notice === '') {
+        return;
+    }
+    echo '<div class="notice admin-storage-notice">' . e($notice) . '</div>';
 }
 
 /**

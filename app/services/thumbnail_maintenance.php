@@ -77,6 +77,10 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
     $required = 0;
     // $missing stores the number of expected variant files missing or stale.
     $missing = 0;
+    // $metadataRowsWritten counts durable thumbnail rows refreshed by this scan.
+    $metadataRowsWritten = 0;
+    // $metadataSourceSyncs counts master image source metadata refreshes.
+    $metadataSourceSyncs = 0;
 
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
@@ -110,7 +114,13 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
                 }
             }
             if ($mutate && function_exists('thumbnail_metadata_record_file')) {
-                thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+                $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
+                if (!empty($metadataResult['metadata_written'])) {
+                    $metadataRowsWritten++;
+                }
+                if (!empty($metadataResult['source_synced'])) {
+                    $metadataSourceSyncs++;
+                }
             }
         }
     }
@@ -124,6 +134,8 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
         'invalid_geometry_deleted' => $invalidGeometryDeleted,
         'invalid_geometry_detected' => $invalidGeometryDetected,
         'invalid_geometry_files' => $invalidGeometryFiles,
+        'metadata_rows_written' => $metadataRowsWritten,
+        'metadata_source_syncs' => $metadataSourceSyncs,
     ];
 }
 

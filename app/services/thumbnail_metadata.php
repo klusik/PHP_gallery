@@ -12,8 +12,8 @@
  *   probing the thumbnail filesystem during normal public gallery rendering.
  *
  * Responsibilities:
- *   - Store one database row for every known thumbnail variant
- *   - Keep source dimensions, source file identity, EXIF summary, derivative dimensions, and validation status together
+ *   - Store one compact database row for every known thumbnail variant
+ *   - Keep source image facts on the master image row, not duplicated across derivatives
  *   - Let public renderers select only aspect-ratio-correct thumbnails from database state
  *   - Let generation, warmup, and admin maintenance refresh physical derivative state deliberately
  *
@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-06-13
  */
 
 declare(strict_types=1);
@@ -53,6 +53,62 @@ function thumbnail_metadata_schema_ready(): bool
     }
 
     return $ready = db_table_exists('image_thumbnail_variants');
+}
+
+/**
+ * Return cached column names for one thumbnail-related table.
+ *
+ * @param string $table Table name.
+ * @param bool $refresh Refresh cached schema metadata.
+ * @return array<string,bool> Known columns keyed by column name.
+ */
+function thumbnail_metadata_table_columns(string $table, bool $refresh = false): array
+{
+    static $cache = [];
+    $safeTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table) ?? '';
+    if ($safeTable === '') {
+        return [];
+    }
+    if ($refresh) {
+        unset($cache[$safeTable]);
+    }
+    if (array_key_exists($safeTable, $cache)) {
+        return $cache[$safeTable];
+    }
+
+    $columns = [];
+    try {
+        $stmt = db()->query('SHOW COLUMNS FROM `' . $safeTable . '`');
+        foreach ($stmt->fetchAll() as $column) {
+            $columns[(string) ($column['Field'] ?? '')] = true;
+        }
+    } catch (Throwable) {
+        $columns = [];
+    }
+
+    return $cache[$safeTable] = $columns;
+}
+
+/**
+ * Return true when a thumbnail metadata table column exists.
+ *
+ * @param string $column Column name.
+ * @return bool True when the column exists.
+ */
+function thumbnail_metadata_variant_column_exists(string $column): bool
+{
+    return isset(thumbnail_metadata_table_columns('image_thumbnail_variants')[$column]);
+}
+
+/**
+ * Return true when a master image metadata column exists.
+ *
+ * @param string $column Column name.
+ * @return bool True when the column exists.
+ */
+function thumbnail_metadata_image_column_exists(string $column): bool
+{
+    return isset(thumbnail_metadata_table_columns('images')[$column]);
 }
 
 /**
@@ -78,7 +134,11 @@ function thumbnail_metadata_image_modified_at(array $image): string
 }
 
 /**
- * Return the relative thumbnail path stored for metadata diagnostics.
+ * Return the relative thumbnail path for backward-compatible legacy schemas.
+ *
+ * New compact metadata schemas do not persist this value. The helper remains so
+ * interrupted deployments can still write old NOT NULL columns before the
+ * compaction migration has run.
  *
  * @param array $image Image row or image data.
  * @param int $size Size value.
@@ -167,12 +227,16 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
         'modified_at' => $sourceModifiedAt !== '' ? $sourceModifiedAt : null,
         'checksum_sha256' => trim((string) ($image['checksum_sha256'] ?? '')) !== '' ? trim((string) $image['checksum_sha256']) : null,
         'exif_orientation' => $orientation >= 1 && $orientation <= 8 ? $orientation : 1,
-        'exif_json' => thumbnail_metadata_source_exif_json($image),
     ];
 }
 
 /**
- * Return true when a stored metadata row still describes the current image row.
+ * Return true when a stored metadata row still belongs to the current derivative generation.
+ *
+ * Compact thumbnail rows no longer duplicate source checksums, source mtimes,
+ * or EXIF summaries. The master image row owns those facts. The tiny
+ * derivative_version value is the only per-variant staleness marker needed by
+ * public rendering.
  *
  * @param array $row Row data.
  * @param array $image Image row or image data.
@@ -180,37 +244,50 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
  */
 function thumbnail_metadata_row_matches_image_source(array $row, array $image): bool
 {
-    $imageChecksum = trim((string) ($image['checksum_sha256'] ?? ''));
-    $rowChecksum = trim((string) ($row['source_checksum_sha256'] ?? ''));
-    if ($imageChecksum !== '' && $rowChecksum !== '') {
-        return hash_equals($imageChecksum, $rowChecksum);
-    }
-
-    $imageFileSize = (int) ($image['file_size'] ?? 0);
-    $rowFileSize = (int) ($row['source_file_size'] ?? 0);
-    if ($imageFileSize > 0 && $rowFileSize > 0 && $imageFileSize !== $rowFileSize) {
-        return false;
-    }
-
-    $imageModifiedAt = thumbnail_metadata_image_modified_at($image);
-    $rowModifiedAt = trim((string) ($row['source_modified_at'] ?? ''));
-    if ($imageModifiedAt !== '' && $rowModifiedAt !== '' && $imageModifiedAt !== $rowModifiedAt) {
-        return false;
+    $imageVersion = (int) ($image['thumbnail_derivative_version'] ?? 0);
+    $rowVersion = (int) ($row['derivative_version'] ?? 0);
+    if ($imageVersion > 0 && $rowVersion > 0) {
+        return $imageVersion === $rowVersion;
     }
 
     return true;
 }
 
 /**
- * Return true when a stored thumbnail row preserves the stored source aspect ratio.
+ * Return orientation-aware display dimensions stored on the master image row.
+ *
+ * @param array $image Image row or image data.
+ * @return array{width:int,height:int}|null Structured result data for the caller.
+ */
+function thumbnail_metadata_image_display_dimensions(array $image): ?array
+{
+    $displayWidth = (int) ($image['display_width'] ?? 0);
+    $displayHeight = (int) ($image['display_height'] ?? 0);
+    if ($displayWidth > 0 && $displayHeight > 0) {
+        return ['width' => $displayWidth, 'height' => $displayHeight];
+    }
+
+    $width = (int) ($image['width'] ?? 0);
+    $height = (int) ($image['height'] ?? 0);
+    if ($width > 0 && $height > 0) {
+        return ['width' => $width, 'height' => $height];
+    }
+
+    return null;
+}
+
+/**
+ * Return true when a stored thumbnail row preserves the master image aspect ratio.
  *
  * @param array $row Row data.
+ * @param array $image Image row or image data.
  * @return bool True when the condition matches.
  */
-function thumbnail_metadata_row_has_valid_geometry(array $row): bool
+function thumbnail_metadata_row_has_valid_geometry(array $row, array $image): bool
 {
-    $sourceWidth = (int) ($row['source_width'] ?? 0);
-    $sourceHeight = (int) ($row['source_height'] ?? 0);
+    $sourceGeometry = thumbnail_metadata_image_display_dimensions($image);
+    $sourceWidth = is_array($sourceGeometry) ? (int) $sourceGeometry['width'] : 0;
+    $sourceHeight = is_array($sourceGeometry) ? (int) $sourceGeometry['height'] : 0;
     $actualWidth = (int) ($row['width'] ?? 0);
     $actualHeight = (int) ($row['height'] ?? 0);
     $size = (int) ($row['size_px'] ?? 0);
@@ -245,7 +322,7 @@ function thumbnail_metadata_row_is_renderable(array $row, array $image): bool
     if (!thumbnail_metadata_row_matches_image_source($row, $image)) {
         return false;
     }
-    return thumbnail_metadata_row_has_valid_geometry($row);
+    return thumbnail_metadata_row_has_valid_geometry($row, $image);
 }
 
 /**
@@ -370,6 +447,80 @@ function thumbnail_metadata_has_renderable_variant(array $image, int $size, stri
 }
 
 /**
+ * Persist orientation-aware source facts on the master image row.
+ *
+ * Thumbnail rows should not duplicate source EXIF, source paths, checksums,
+ * or mtimes. This helper keeps the master image row authoritative and updates
+ * it only when the compact source payload has changed.
+ *
+ * @param array $image Image row or image data.
+ * @param array $source Source payload from thumbnail_metadata_source_payload().
+ * @return bool True when the master row was updated.
+ */
+function thumbnail_metadata_sync_image_source_payload(array $image, array $source): bool
+{
+    static $synced = [];
+    $imageId = (int) ($image['id'] ?? 0);
+    if ($imageId <= 0) {
+        return false;
+    }
+
+    $wanted = [
+        'display_width' => (int) ($source['width'] ?? 0) > 0 ? (int) $source['width'] : null,
+        'display_height' => (int) ($source['height'] ?? 0) > 0 ? (int) $source['height'] : null,
+        'exif_orientation' => (int) ($source['exif_orientation'] ?? 1),
+        'thumbnail_metadata_refreshed_at' => now_sql(),
+    ];
+
+    $available = [];
+    foreach ($wanted as $column => $value) {
+        if (thumbnail_metadata_image_column_exists($column)) {
+            $available[$column] = $value;
+        }
+    }
+    if (!$available) {
+        return false;
+    }
+
+    $stableAvailable = $available;
+    unset($stableAvailable['thumbnail_metadata_refreshed_at']);
+    $signature = hash('sha256', json_encode($stableAvailable, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '');
+    if (($synced[$imageId] ?? '') === $signature) {
+        return false;
+    }
+
+    $needsUpdate = false;
+    foreach ($available as $column => $value) {
+        if ($column === 'thumbnail_metadata_refreshed_at') {
+            continue;
+        }
+        $current = $image[$column] ?? null;
+        if ((string) $current !== (string) $value) {
+            $needsUpdate = true;
+            break;
+        }
+    }
+
+    if (!$needsUpdate && !empty($image['thumbnail_metadata_refreshed_at'])) {
+        $synced[$imageId] = $signature;
+        return false;
+    }
+
+    $assignments = [];
+    $params = [];
+    foreach ($available as $column => $value) {
+        $assignments[] = '`' . $column . '` = ?';
+        $params[] = $value;
+    }
+    $params[] = $imageId;
+
+    $stmt = db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?');
+    $stmt->execute($params);
+    $synced[$imageId] = $signature;
+    return true;
+}
+
+/**
  * Store metadata for one existing generated thumbnail file.
  *
  * @param array $image Image row or image data.
@@ -384,21 +535,22 @@ function thumbnail_metadata_has_renderable_variant(array $image, int $size, stri
 function thumbnail_metadata_record_file(array $image, array $gallery, int $size, string $format, string $thumbnailPath, ?string $sourcePath = null, bool $deleteInvalid = false): array
 {
     if (!thumbnail_metadata_schema_ready()) {
-        return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false];
+        return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
     if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
-        return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false];
+        return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
 
     if (!is_file($thumbnailPath)) {
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'missing', 'valid' => false, 'deleted' => false];
+        return ['status' => 'missing', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
     }
 
     $actualInfo = @getimagesize($thumbnailPath);
     $actualWidth = is_array($actualInfo) ? (int) ($actualInfo[0] ?? 0) : 0;
     $actualHeight = is_array($actualInfo) ? (int) ($actualInfo[1] ?? 0) : 0;
     $source = thumbnail_metadata_source_payload($image, $gallery, $sourcePath);
+    $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
 
     if ((int) $source['width'] > 0 && (int) $source['height'] > 0 && function_exists('thumbnail_file_geometry_status')) {
         $geometryStatus = thumbnail_file_geometry_status($thumbnailPath, (int) $source['width'], (int) $source['height'], $size);
@@ -420,80 +572,58 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
             @unlink($thumbnailPath);
         }
         thumbnail_metadata_delete_variant($image, $size, $format);
-        return ['status' => 'invalid', 'valid' => false, 'deleted' => true, 'reason' => $reason];
+        return ['status' => 'invalid', 'valid' => false, 'deleted' => true, 'reason' => $reason, 'metadata_written' => false, 'source_synced' => $sourceSynced];
     }
 
     $now = now_sql();
-    $stmt = db()->prepare("INSERT INTO image_thumbnail_variants (
-        image_id,
-        gallery_id,
-        size_px,
-        format,
-        thumbnail_rel_path,
-        width,
-        height,
-        file_size,
-        modified_at,
-        source_width,
-        source_height,
-        source_mime_type,
-        source_file_size,
-        source_modified_at,
-        source_checksum_sha256,
-        source_exif_orientation,
-        source_exif_json,
-        status,
-        status_reason,
-        checked_at,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        gallery_id = VALUES(gallery_id),
-        thumbnail_rel_path = VALUES(thumbnail_rel_path),
-        width = VALUES(width),
-        height = VALUES(height),
-        file_size = VALUES(file_size),
-        modified_at = VALUES(modified_at),
-        source_width = VALUES(source_width),
-        source_height = VALUES(source_height),
-        source_mime_type = VALUES(source_mime_type),
-        source_file_size = VALUES(source_file_size),
-        source_modified_at = VALUES(source_modified_at),
-        source_checksum_sha256 = VALUES(source_checksum_sha256),
-        source_exif_orientation = VALUES(source_exif_orientation),
-        source_exif_json = VALUES(source_exif_json),
-        status = VALUES(status),
-        status_reason = VALUES(status_reason),
-        checked_at = VALUES(checked_at),
-        updated_at = VALUES(updated_at)");
+    $variantColumns = [
+        'image_id' => (int) ($image['id'] ?? 0),
+        'size_px' => $size,
+        'format' => $format,
+        'width' => $actualWidth > 0 ? $actualWidth : null,
+        'height' => $actualHeight > 0 ? $actualHeight : null,
+        'file_size' => (int) (filesize($thumbnailPath) ?: 0),
+        'modified_at' => thumbnail_metadata_datetime_from_timestamp((int) (filemtime($thumbnailPath) ?: time())),
+        'status' => $status,
+        'status_reason' => $reason,
+        'checked_at' => $now,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
 
-    $stmt->execute([
-        (int) ($image['id'] ?? 0),
-        (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0)),
-        $size,
-        $format,
-        thumbnail_metadata_relative_path($image, $size, $format),
-        $actualWidth > 0 ? $actualWidth : null,
-        $actualHeight > 0 ? $actualHeight : null,
-        (int) (filesize($thumbnailPath) ?: 0),
-        thumbnail_metadata_datetime_from_timestamp((int) (filemtime($thumbnailPath) ?: time())),
-        (int) $source['width'] > 0 ? (int) $source['width'] : null,
-        (int) $source['height'] > 0 ? (int) $source['height'] : null,
-        $source['mime_type'],
-        (int) $source['file_size'] > 0 ? (int) $source['file_size'] : null,
-        $source['modified_at'],
-        $source['checksum_sha256'],
-        (int) $source['exif_orientation'],
-        $source['exif_json'],
-        $status,
-        $reason,
-        $now,
-        $now,
-        $now,
-    ]);
+    if (thumbnail_metadata_variant_column_exists('derivative_version')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 3, true),
+            ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
+            array_slice($variantColumns, 3, null, true)
+        );
+    }
 
-    return ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason];
+    if (thumbnail_metadata_variant_column_exists('gallery_id')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 1, true),
+            ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
+            array_slice($variantColumns, 1, null, true)
+        );
+    }
+    if (thumbnail_metadata_variant_column_exists('thumbnail_rel_path')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 5, true),
+            ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],
+            array_slice($variantColumns, 5, null, true)
+        );
+    }
+
+    $columnNames = array_keys($variantColumns);
+    $insertColumns = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columnNames));
+    $placeholders = implode(', ', array_fill(0, count($columnNames), '?'));
+    $updateColumns = array_values(array_filter($columnNames, static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)));
+    $updates = implode(', ', array_map(static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)', $updateColumns));
+
+    $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
+    $stmt->execute(array_values($variantColumns));
+
+    return ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => $sourceSynced];
 }
 
 /**
@@ -516,6 +646,8 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
     $missing = 0;
     $invalidDeleted = 0;
     $invalidFiles = [];
+    $metadataRowsWritten = 0;
+    $metadataSourceSyncs = 0;
 
     try {
         $sourcePath = image_abs_path($image, $gallery);
@@ -542,6 +674,12 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
             }
 
             $result = thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $thumbnailPath, $sourcePath, $deleteInvalid);
+            if (!empty($result['metadata_written'])) {
+                $metadataRowsWritten++;
+            }
+            if (!empty($result['source_synced'])) {
+                $metadataSourceSyncs++;
+            }
             if (!empty($result['valid'])) {
                 $valid++;
                 continue;
@@ -559,6 +697,8 @@ function thumbnail_metadata_refresh_image(array $image, array $gallery, ?array $
         'missing' => $missing,
         'invalid_deleted' => $invalidDeleted,
         'invalid_files' => $invalidFiles,
+        'metadata_rows_written' => $metadataRowsWritten,
+        'metadata_source_syncs' => $metadataSourceSyncs,
     ];
 }
 
@@ -598,4 +738,71 @@ function thumbnail_metadata_bundle_data(array $image, array $gallery, array $siz
         'warmup_sizes' => $warmupSizes,
         'known_from_db' => thumbnail_metadata_image_has_rows($image),
     ];
+}
+
+/**
+ * Return a compact diagnostic snapshot of thumbnail metadata storage.
+ *
+ * The snapshot is intentionally suitable for Admin logs. It avoids source paths
+ * and EXIF payloads while exposing the information needed to compare the old
+ * duplicated schema with the compact derivative-only schema.
+ *
+ * @return array<string mixed> Structured diagnostic data.
+ */
+function thumbnail_metadata_storage_snapshot(): array
+{
+    if (!thumbnail_metadata_schema_ready()) {
+        return ['available' => false, 'reason' => 'image_thumbnail_variants_missing'];
+    }
+
+    $columns = thumbnail_metadata_table_columns('image_thumbnail_variants', true);
+    $legacyColumns = array_values(array_filter([
+        'gallery_id',
+        'thumbnail_rel_path',
+        'source_width',
+        'source_height',
+        'source_mime_type',
+        'source_file_size',
+        'source_modified_at',
+        'source_checksum_sha256',
+        'source_exif_orientation',
+        'source_exif_json',
+    ], static fn (string $column): bool => isset($columns[$column])));
+
+    $snapshot = [
+        'available' => true,
+        'compact_schema' => $legacyColumns === [] && isset($columns['derivative_version']),
+        'legacy_columns_present' => $legacyColumns,
+        'variant_columns' => array_keys($columns),
+        'row_count' => null,
+        'status_counts' => [],
+        'data_bytes' => null,
+        'index_bytes' => null,
+        'total_bytes' => null,
+    ];
+
+    try {
+        $snapshot['row_count'] = (int) db()->query('SELECT COUNT(*) FROM image_thumbnail_variants')->fetchColumn();
+        $stmt = db()->query('SELECT status, COUNT(*) AS count_rows FROM image_thumbnail_variants GROUP BY status ORDER BY status');
+        foreach ($stmt->fetchAll() as $row) {
+            $snapshot['status_counts'][(string) ($row['status'] ?? '')] = (int) ($row['count_rows'] ?? 0);
+        }
+    } catch (Throwable $exception) {
+        $snapshot['row_count_error'] = $exception->getMessage();
+    }
+
+    try {
+        $stmt = db()->prepare('SELECT data_length, index_length FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1');
+        $stmt->execute(['image_thumbnail_variants']);
+        $table = $stmt->fetch() ?: [];
+        $dataBytes = (int) ($table['data_length'] ?? 0);
+        $indexBytes = (int) ($table['index_length'] ?? 0);
+        $snapshot['data_bytes'] = $dataBytes;
+        $snapshot['index_bytes'] = $indexBytes;
+        $snapshot['total_bytes'] = $dataBytes + $indexBytes;
+    } catch (Throwable $exception) {
+        $snapshot['size_error'] = $exception->getMessage();
+    }
+
+    return $snapshot;
 }

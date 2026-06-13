@@ -14,6 +14,7 @@
  *   - Read database-size metadata from information_schema.TABLES
  *   - Separate gallery/content tables from operational tables
  *   - Return compact usage rows suitable for Admin dashboard rendering
+ *   - Recompute database engine statistics on explicit admin request
  *   - Fail safely when table-size metadata is unavailable on shared hosting
  *
  * Author:
@@ -30,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-06-13
  */
 
 declare(strict_types=1);
@@ -90,6 +91,152 @@ function admin_database_usage_summary(): array
     } catch (Throwable $exception) {
         return admin_database_usage_unavailable($exception->getMessage());
     }
+}
+
+/**
+ * Recompute database table statistics through ANALYZE TABLE.
+ *
+ * The storage page normally reads information_schema directly, but some MySQL
+ * and MariaDB installations keep row and page estimates stale after DDL. This
+ * method deliberately asks the engine to refresh table statistics, then reads
+ * the same information_schema summary again for comparison. It does not rebuild
+ * tables, optimize storage files, or change gallery data.
+ *
+ * @return array<string mixed> Structured recompute report.
+ */
+function admin_database_usage_recompute_statistics(): array
+{
+    $startedAt = microtime(true);
+    $databaseName = admin_database_usage_current_database_name();
+    if ($databaseName === '') {
+        return [
+            'ok' => false,
+            'database_name' => '',
+            'table_count' => 0,
+            'table_reports' => [],
+            'duration_seconds' => 0.0,
+            'before_summary' => admin_database_usage_unavailable('Current database name could not be detected.'),
+            'after_summary' => admin_database_usage_unavailable('Current database name could not be detected.'),
+            'error' => 'Current database name could not be detected.',
+        ];
+    }
+
+    $beforeRows = admin_database_usage_table_rows($databaseName);
+    $beforeSummary = admin_database_usage_build_summary_from_rows(
+        $databaseName,
+        $beforeRows,
+        admin_database_usage_gallery_table_names()
+    );
+    $tableNames = admin_database_usage_recomputable_table_names($beforeRows);
+    $tableReports = [];
+    $failedTables = 0;
+
+    foreach ($tableNames as $tableName) {
+        $tableStartedAt = microtime(true);
+        try {
+            $stmt = db()->query('ANALYZE TABLE ' . admin_database_usage_quote_identifier($tableName));
+            $messages = $stmt ? $stmt->fetchAll() : [];
+            $tableReports[] = [
+                'table_name' => $tableName,
+                'status' => 'ok',
+                'duration_seconds' => round(microtime(true) - $tableStartedAt, 4),
+                'messages' => admin_database_usage_normalize_analyze_messages($messages),
+            ];
+        } catch (Throwable $exception) {
+            $failedTables++;
+            $tableReports[] = [
+                'table_name' => $tableName,
+                'status' => 'failed',
+                'duration_seconds' => round(microtime(true) - $tableStartedAt, 4),
+                'messages' => [],
+                'error' => $exception->getMessage(),
+            ];
+        }
+    }
+
+    $afterRows = admin_database_usage_table_rows($databaseName);
+    $afterSummary = admin_database_usage_build_summary_from_rows(
+        $databaseName,
+        $afterRows,
+        admin_database_usage_gallery_table_names()
+    );
+
+    $report = [
+        'ok' => $failedTables === 0,
+        'database_name' => $databaseName,
+        'table_count' => count($tableNames),
+        'failed_table_count' => $failedTables,
+        'table_reports' => $tableReports,
+        'duration_seconds' => round(microtime(true) - $startedAt, 4),
+        'started_at_utc' => gmdate('c', (int) $startedAt),
+        'finished_at_utc' => gmdate('c'),
+        'php_max_execution_time' => ini_get('max_execution_time'),
+        'php_memory_limit' => ini_get('memory_limit'),
+        'before_summary' => $beforeSummary,
+        'after_summary' => $afterSummary,
+        'total_bytes_delta' => (int) ($afterSummary['total_bytes'] ?? 0) - (int) ($beforeSummary['total_bytes'] ?? 0),
+        'gallery_bytes_delta' => (int) ($afterSummary['gallery_bytes'] ?? 0) - (int) ($beforeSummary['gallery_bytes'] ?? 0),
+        'row_estimate_delta' => (int) ($afterSummary['table_rows_estimate'] ?? 0) - (int) ($beforeSummary['table_rows_estimate'] ?? 0),
+        'gallery_row_estimate_delta' => (int) ($afterSummary['gallery_rows_estimate'] ?? 0) - (int) ($beforeSummary['gallery_rows_estimate'] ?? 0),
+        'error' => '',
+    ];
+
+    if (function_exists('admin_log_event')) {
+        admin_log_event('info', 'database_usage.recomputed', 'Admin recomputed database table statistics.', $report, ['category' => 'database', 'severity' => $failedTables === 0 ? 'notice' : 'warning']);
+    }
+
+    return $report;
+}
+
+/**
+ * Return table names that can be safely passed to ANALYZE TABLE.
+ *
+ * @param array $rows Table metadata rows.
+ * @return array<int, string> Table names.
+ */
+function admin_database_usage_recomputable_table_names(array $rows): array
+{
+    $tableNames = [];
+    foreach ($rows as $row) {
+        $tableName = trim((string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''));
+        $engine = trim((string) ($row['engine'] ?? $row['ENGINE'] ?? ''));
+        if ($tableName === '' || $engine === '') {
+            continue;
+        }
+        $tableNames[] = $tableName;
+    }
+    return array_values(array_unique($tableNames));
+}
+
+/**
+ * Quote a database identifier for a controlled maintenance statement.
+ *
+ * @param string $identifier Identifier value.
+ * @return string Quoted identifier.
+ */
+function admin_database_usage_quote_identifier(string $identifier): string
+{
+    return '`' . str_replace('`', '``', $identifier) . '`';
+}
+
+/**
+ * Normalize ANALYZE TABLE rows for admin logs.
+ *
+ * @param array $messages Raw rows.
+ * @return array<int, array<string, string>> Normalized rows.
+ */
+function admin_database_usage_normalize_analyze_messages(array $messages): array
+{
+    $normalized = [];
+    foreach ($messages as $message) {
+        $normalized[] = [
+            'table' => (string) ($message['Table'] ?? $message['table'] ?? ''),
+            'operation' => (string) ($message['Op'] ?? $message['op'] ?? ''),
+            'message_type' => (string) ($message['Msg_type'] ?? $message['msg_type'] ?? ''),
+            'message_text' => (string) ($message['Msg_text'] ?? $message['msg_text'] ?? ''),
+        ];
+    }
+    return $normalized;
 }
 
 /**

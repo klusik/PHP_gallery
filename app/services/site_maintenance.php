@@ -493,6 +493,7 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
         'last_step_summary' => [],
         'totals' => site_maintenance_empty_totals(),
         'cleanup' => [],
+        'thumbnail_metadata_start_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
     ];
 }
 
@@ -515,6 +516,8 @@ function site_maintenance_empty_totals(): array
         'webp_skipped' => 0,
         'failed' => 0,
         'invalid_geometry_deleted' => 0,
+        'metadata_rows_refreshed' => 0,
+        'metadata_source_syncs' => 0,
         'errors' => [],
     ];
 }
@@ -925,6 +928,8 @@ function site_maintenance_run(array $options = []): array
                 'time_budget_seconds' => $timeBudgetSeconds,
                 'window_minutes' => site_maintenance_window_minutes(),
                 'window_ends_at_utc' => $schedule['window_ends_at'],
+                'php_max_execution_time' => site_maintenance_php_max_execution_seconds(),
+                'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
             ]);
         }
 
@@ -1017,9 +1022,14 @@ function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds,
         }
         set_app_setting(SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING, now_sql());
         thumbnail_maintenance_summary_cache_clear();
+        $state['thumbnail_metadata_end_snapshot'] = function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
+        site_maintenance_save_state($state);
         site_maintenance_log_event('info', 'site_maintenance.completed', 'Site maintenance cycle completed.', [
             'cycle_date' => $cycleDate,
             'state' => site_maintenance_public_state($state),
+            'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
+            'thumbnail_metadata_end_snapshot' => is_array($state['thumbnail_metadata_end_snapshot'] ?? null) ? $state['thumbnail_metadata_end_snapshot'] : [],
+            'duration_from_state_seconds' => site_maintenance_state_duration_seconds($state),
         ]);
     }
 
@@ -1076,6 +1086,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         site_maintenance_log_event('info', 'site_maintenance.thumbnails_checked', 'Site maintenance thumbnail scan finished.', [
             'cycle_date' => (string) ($state['cycle_date'] ?? ''),
             'totals' => is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals(),
+            'thumbnail_metadata_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
         ]);
         return ['worked' => true, 'phase' => 'thumbnails', 'processed_images' => 0, 'seen_images' => 0, 'next_phase' => 'cleanups'];
     }
@@ -1083,6 +1094,8 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
     $totals = is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals();
     $galleryCache = [];
     $step = site_maintenance_empty_totals();
+    $stepStartedAt = microtime(true);
+    $stepImageIds = [];
 
     foreach ($images as $image) {
         if (!site_maintenance_has_runtime($deadline)) {
@@ -1093,6 +1106,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         if ($imageId <= 0) {
             continue;
         }
+        $stepImageIds[] = $imageId;
 
         // These snapshots let runtime pauses retry the same image in the next slice.
         $previousCursorImageId = (int) ($state['cursor_image_id'] ?? 0);
@@ -1127,10 +1141,16 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         $validVariants = max(0, $required - $missing);
         $invalidDeleted = max(0, (int) ($status['invalid_geometry_deleted'] ?? 0));
 
+        $metadataRowsWritten = (int) ($status['metadata_rows_written'] ?? 0);
+        $metadataSourceSyncs = (int) ($status['metadata_source_syncs'] ?? 0);
         $totals['webp_skipped'] = (int) ($totals['webp_skipped'] ?? 0) + (int) ($status['webp_skipped'] ?? 0);
         $totals['invalid_geometry_deleted'] = (int) ($totals['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
+        $totals['metadata_rows_refreshed'] = (int) ($totals['metadata_rows_refreshed'] ?? 0) + $metadataRowsWritten;
+        $totals['metadata_source_syncs'] = (int) ($totals['metadata_source_syncs'] ?? 0) + $metadataSourceSyncs;
         $step['webp_skipped'] = (int) ($step['webp_skipped'] ?? 0) + (int) ($status['webp_skipped'] ?? 0);
         $step['invalid_geometry_deleted'] = (int) ($step['invalid_geometry_deleted'] ?? 0) + $invalidDeleted;
+        $step['metadata_rows_refreshed'] = (int) ($step['metadata_rows_refreshed'] ?? 0) + $metadataRowsWritten;
+        $step['metadata_source_syncs'] = (int) ($step['metadata_source_syncs'] ?? 0) + $metadataSourceSyncs;
 
         if ($missing <= 0) {
             $totals['thumbs_skipped'] = (int) ($totals['thumbs_skipped'] ?? 0) + $validVariants;
@@ -1149,6 +1169,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
             if ((string) ($repairDecision['reason'] ?? '') === 'not_enough_runtime_left') {
                 $totals = $totalsBeforeImage;
                 $step = $stepBeforeImage;
+                array_pop($stepImageIds);
                 $state['cursor_image_id'] = $previousCursorImageId;
                 $state['current_image_id'] = 0;
                 $state['current_image_started_at'] = null;
@@ -1193,6 +1214,8 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         site_maintenance_finish_current_image($state, $totals);
     }
 
+    $step['duration_seconds'] = round(microtime(true) - $stepStartedAt, 4);
+    $step['image_ids'] = $stepImageIds;
     $state['totals'] = $totals;
     $state['last_step_at'] = now_sql();
     $state['last_step_summary'] = site_maintenance_step_summary($step, (int) ($state['cursor_image_id'] ?? 0));
@@ -1204,6 +1227,9 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
             'phase' => 'thumbnails',
             'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
             'step' => site_maintenance_step_summary($step, (int) ($state['cursor_image_id'] ?? 0)),
+            'image_ids' => $stepImageIds,
+            'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
+            'thumbnail_metadata_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
         ]);
     }
 
@@ -1219,6 +1245,9 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         'failed' => (int) ($step['failed'] ?? 0),
         'deferred' => (int) ($step['images_deferred'] ?? 0),
         'interrupted' => (int) ($step['images_interrupted'] ?? 0),
+        'metadata_rows_refreshed' => (int) ($step['metadata_rows_refreshed'] ?? 0),
+        'metadata_source_syncs' => (int) ($step['metadata_source_syncs'] ?? 0),
+        'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
         'cursor_image_id' => (int) ($state['cursor_image_id'] ?? 0),
     ];
 }
@@ -1254,8 +1283,12 @@ function site_maintenance_step_summary(array $step, int $cursorImageId): array
         'thumbnails_created' => (int) ($step['thumbs_created'] ?? 0),
         'valid_thumbnails_reused' => (int) ($step['thumbs_skipped'] ?? 0),
         'invalid_thumbnails_removed' => (int) ($step['invalid_geometry_deleted'] ?? 0),
+        'metadata_rows_refreshed' => (int) ($step['metadata_rows_refreshed'] ?? 0),
+        'metadata_source_syncs' => (int) ($step['metadata_source_syncs'] ?? 0),
         'deferred_images' => (int) ($step['images_deferred'] ?? 0),
         'failed_images' => (int) ($step['failed'] ?? 0),
+        'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
+        'image_id_range' => !empty($step['image_ids']) ? [min($step['image_ids']), max($step['image_ids'])] : [],
         'cursor_image_id' => $cursorImageId,
     ];
 }
@@ -1422,6 +1455,10 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
         return $deleted;
     }
 
+    if (!function_exists('db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
+        return $deleted;
+    }
+
     try {
         $stmt = db()->prepare('DELETE v FROM image_thumbnail_variants v LEFT JOIN galleries g ON g.id = v.gallery_id WHERE g.id IS NULL');
         $stmt->execute();
@@ -1431,6 +1468,23 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
     }
 
     return $deleted;
+}
+
+/**
+ * Return a best-effort duration for a persisted maintenance state.
+ *
+ * @param array $state State value.
+ * @return int Integer result for the caller.
+ */
+function site_maintenance_state_duration_seconds(array $state): int
+{
+    $startedAt = strtotime((string) ($state['started_at'] ?? ''));
+    $finishedAt = strtotime((string) ($state['finished_at'] ?? ''));
+    if (!$startedAt || !$finishedAt || $finishedAt < $startedAt) {
+        return 0;
+    }
+
+    return max(0, $finishedAt - $startedAt);
 }
 
 /**
@@ -1457,6 +1511,8 @@ function site_maintenance_public_state(array $state): array
         'last_step_summary' => is_array($state['last_step_summary'] ?? null) ? $state['last_step_summary'] : [],
         'totals' => is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals(),
         'cleanup' => is_array($state['cleanup'] ?? null) ? $state['cleanup'] : [],
+        'thumbnail_metadata_start_snapshot' => is_array($state['thumbnail_metadata_start_snapshot'] ?? null) ? $state['thumbnail_metadata_start_snapshot'] : [],
+        'thumbnail_metadata_end_snapshot' => is_array($state['thumbnail_metadata_end_snapshot'] ?? null) ? $state['thumbnail_metadata_end_snapshot'] : [],
     ];
 }
 

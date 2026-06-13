@@ -15,6 +15,7 @@
  *   - Display total database storage and gallery-content table storage
  *   - Render table-size charts using the shared Admin storage visual language
  *   - Handle unavailable information_schema metadata without breaking the page
+ *   - Render explicit database-statistics recompute controls
  *
  * Author:
  *   Rudolf Klusal
@@ -30,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-06-13
  */
 
 declare(strict_types=1);
@@ -48,6 +49,7 @@ function view_render_admin_database_usage_panel(?array $usage): void
 
     echo '<section class="admin-storage-panel admin-database-usage-panel panel" aria-label="' . e(t('admin.database_usage.panel_aria', 'Database usage')) . '">';
     echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.database_usage.kicker', 'Database')) . '</p><h2>' . e(t('admin.database_usage.title', 'Database usage')) . '</h2></div><p class="muted">' . e(t('admin.database_usage.description', 'Database table sizes are measured from MySQL/MariaDB table metadata and shown separately from picture files stored on disk.')) . '</p></div>';
+    view_render_admin_database_usage_recompute_form();
 
     if (empty($usage['available'])) {
         view_render_admin_database_usage_unavailable($usage);
@@ -92,6 +94,20 @@ function view_render_admin_database_usage_panel(?array $usage): void
     view_render_admin_database_usage_table_chart(t('admin.database_usage.gallery_tables_title', 'Gallery DB tables'), t('admin.database_usage.gallery_tables_hint', 'Only tables classified as gallery content or gallery-derived metadata.'), view_admin_database_usage_array($usage, 'gallery_table_rows'), t('admin.database_usage.empty_gallery_tables', 'No gallery database tables were reported.'));
     echo '</div>';
     echo '</section>';
+}
+
+/**
+ * Render the explicit database usage recompute form.
+ */
+function view_render_admin_database_usage_recompute_form(): void
+{
+    echo '<div class="admin-storage-update-shell admin-database-usage-recompute-shell">';
+    echo '<div><strong>' . e(t('admin.database_usage.recompute_title', 'Refresh database metadata')) . '</strong><p class="muted">' . e(t('admin.database_usage.recompute_hint', 'Runs ANALYZE TABLE for current database tables, then reloads MySQL/MariaDB size and row estimates. This does not rebuild tables or modify gallery data.')) . '</p></div>';
+    echo '<form method="post" action="' . e(url_for('admin_database_usage_recompute')) . '" class="inline-action-form">';
+    echo csrf_field();
+    echo '<button type="submit" class="button">' . e(t('admin.database_usage.recompute_button', 'Recompute DB metadata')) . '</button>';
+    echo '</form>';
+    echo '</div>';
 }
 
 /**

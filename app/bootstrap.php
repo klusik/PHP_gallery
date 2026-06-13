@@ -211,6 +211,7 @@ function cms_run(): void
         'admin_url_rewrite' => 'cms_admin_url_rewrite',
         'admin_storage_statistics' => 'cms_admin_storage_statistics',
         'admin_storage_statistics_update' => 'cms_admin_storage_statistics_update',
+        'admin_database_usage_recompute' => 'cms_admin_database_usage_recompute',
         'admin_public_search_settings' => 'cms_admin_public_search_settings',
         'admin_exif_gps_settings' => 'cms_admin_exif_gps_settings',
         'admin_seo_guard_settings' => 'cms_admin_seo_guard_settings',

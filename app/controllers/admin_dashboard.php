@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-24
+ *   2026-06-13
  */
 
 declare(strict_types=1);
@@ -59,7 +59,8 @@ function cms_admin_storage_statistics(): void
     }
     $statistics = $activeTab === 'files' && function_exists('admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
     $databaseUsage = $activeTab === 'database' && function_exists('admin_database_usage_summary') ? admin_database_usage_summary() : null;
-    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab);
+    $notice = (string) flash_message('admin_notice');
+    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab, $notice);
 }
 
 /**
@@ -100,6 +101,38 @@ function cms_admin_storage_statistics_update(): void
             'error' => $exception->getMessage(),
         ]);
     }
+}
+
+/**
+ * Process an explicit database table statistics recompute request.
+ */
+function cms_admin_database_usage_recompute(): void
+{
+    require_admin();
+    if (request_method() !== 'POST') {
+        cms_not_found();
+        return;
+    }
+
+    verify_csrf();
+    try {
+        $report = function_exists('admin_database_usage_recompute_statistics') ? admin_database_usage_recompute_statistics() : ['ok' => false, 'error' => 'Database usage service is not available.'];
+        if (!empty($report['ok'])) {
+            flash_message('admin_notice', t('admin.database_usage.recompute_done', 'Database statistics recomputed. Analyzed {tables} table(s) in {seconds} second(s).', [
+                'tables' => (string) (int) ($report['table_count'] ?? 0),
+                'seconds' => number_format((float) ($report['duration_seconds'] ?? 0.0), 3),
+            ]));
+        } else {
+            flash_message('admin_notice', t('admin.database_usage.recompute_partial', 'Database statistics recompute finished with {failed} failed table(s). Check Admin logs for details.', [
+                'failed' => (string) (int) ($report['failed_table_count'] ?? 0),
+            ]));
+        }
+    } catch (Throwable $exception) {
+        admin_log_event('error', 'database_usage.recompute_failed', 'Admin database statistics recompute failed.', ['exception' => $exception->getMessage()], ['category' => 'database', 'severity' => 'error']);
+        flash_message('admin_notice', t('admin.database_usage.recompute_failed', 'Database statistics recompute failed: {error}', ['error' => $exception->getMessage()]));
+    }
+
+    redirect_to(url_for('admin_storage_statistics', ['tab' => 'database']));
 }
 
 /**
