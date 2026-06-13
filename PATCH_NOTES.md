@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 0.79.2
+
+Version 0.79.2 synchronizes the release metadata after the 0.79.1 admin editor and version-display fixes, so the public footer, Admin update menu, patch notes, and core integrity manifest all report the same patch-level release.
+
+  ### Highlights
+
+  #### Fixed release version metadata
+
+  - Updated the runtime CMS version marker to `0.79.2`.
+  - Added a `0.79.2` patch-note entry above the older release history.
+  - Regenerated the core manifest with the `0.79.2` release version and current file hashes.
+
+  #### Preserved A.B.C version handling
+
+  - Kept the installed-version display aligned with full semantic-style patch versions such as `0.79.2`.
+  - Kept footer and Admin update menu consumers reading the same runtime version marker.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Updated `app/bootstrap.php` so `CMS_VERSION` reports `0.79.2`.
+  - Regenerated `app/core-manifest.json` from the current working tree after the version and patch-note changes.
+
+  #### Database
+
+  - No database migrations were required.
+
+  #### Frontend
+
+  - No frontend asset changes were required.
+
+  #### Tests
+
+  - Verified `app/bootstrap.php` with PHP syntax checks.
+  - Verified `app/core-manifest.json` with the manifest check command.
+
+  ### User Impact
+
+  #### For visitors
+
+  - The public footer now displays version `0.79.2`.
+
+  #### For administrators
+
+  - The Admin update menu now displays installed version `0.79.2`.
+  - The core integrity manifest now matches the updated patch notes and runtime version marker.
+
 ## Version 0.79.1
 
 Version 0.79.1 tightens the admin gallery editor and public media routing so the gallery edit workflow can render the media row list correctly while public media links keep using the canonical public base URL.
