@@ -40,6 +40,7 @@ use finfo;
 use InvalidArgumentException;
 use function Gallery\Core\current_user;
 use function Gallery\Core\output_sitemap_xml;
+use function Gallery\Core\public_base_url;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;

@@ -1,5 +1,39 @@
 # Patch notes
 
+## Version 0.79.1
+
+Version 0.79.1 tightens the admin gallery editor and public media routing so the gallery edit workflow can render the media row list correctly while public media links keep using the canonical public base URL.
+
+  ### Highlights
+
+  #### Improved admin gallery editing
+
+  - Added the missing admin gallery editor dependencies for gallery file-name display and thumbnail URL rendering.
+  - Restored the gallery editor footer rendering path needed by the updated edit view.
+  - Kept the gallery edit workflow aligned with the current tabbed admin panel structure.
+
+  #### Refined public media routing
+
+  - Added `public_base_url()` to the public media controller so public media responses can build canonical links consistently.
+  - Kept public media handling aligned with the site’s public URL configuration.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Updated `app/controllers/admin_galleries_edit.php` to import `render_footer`, `gallery_shows_filenames`, and `thumbnail_url`.
+  - Updated `app/controllers/public_media.php` to import `public_base_url`.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public media links remain consistent with the configured public base URL.
+
+  #### For administrators
+
+  - The gallery editor now has the dependencies it needs to render file-name and thumbnail-related UI correctly.
+
 ## Version 0.79
 
 Version 0.79 is a broad reliability, performance, and maintainability release focused on public gallery rendering,
