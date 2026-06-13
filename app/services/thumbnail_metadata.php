@@ -55,11 +55,35 @@ function thumbnail_metadata_schema_ready(): bool
         return $ready;
     }
 
-    if (!function_exists('Gallery\\Services\\db_table_exists')) {
+    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
         return $ready = false;
     }
 
-    return $ready = db_table_exists('image_thumbnail_variants');
+    // $requiredColumns stores the durable variant columns common to the legacy
+    // and compact schemas. Treat partially edited tables as unavailable so
+    // optional thumbnail metadata cannot break uploads or thumbnail generation.
+    $requiredColumns = [
+        'image_id',
+        'size_px',
+        'format',
+        'width',
+        'height',
+        'file_size',
+        'modified_at',
+        'status',
+        'status_reason',
+        'checked_at',
+        'created_at',
+        'updated_at',
+    ];
+    $columns = thumbnail_metadata_table_columns('image_thumbnail_variants', true);
+    foreach ($requiredColumns as $column) {
+        if (!isset($columns[$column])) {
+            return $ready = false;
+        }
+    }
+
+    return $ready = true;
 }
 
 
@@ -167,11 +191,16 @@ function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes)
     $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
     // $params stores bound image ids and sizes.
     $params = array_merge($missingImageIds, $sizes);
-    // $stmt stores the batched thumbnail metadata query.
-    $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) ORDER BY image_id, size_px, format");
-    $stmt->execute($params);
+    try {
+        // $stmt stores the batched thumbnail metadata query.
+        $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) ORDER BY image_id, size_px, format");
+        $stmt->execute($params);
+        $metadataRows = $stmt->fetchAll();
+    } catch (Throwable) {
+        return;
+    }
 
-    foreach ($stmt->fetchAll() as $row) {
+    foreach ($metadataRows as $row) {
         // $imageId stores the owner image id for this thumbnail metadata row.
         $imageId = (int) ($row['image_id'] ?? 0);
         if (!isset($imageById[$imageId])) {
@@ -532,9 +561,13 @@ function thumbnail_metadata_image_has_rows(array $image): bool
         return $cache[$imageId];
     }
 
-    $stmt = db()->prepare('SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1');
-    $stmt->execute([$imageId]);
-    return $cache[$imageId] = (bool) $stmt->fetchColumn();
+    try {
+        $stmt = db()->prepare('SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1');
+        $stmt->execute([$imageId]);
+        return $cache[$imageId] = (bool) $stmt->fetchColumn();
+    } catch (Throwable) {
+        return $cache[$imageId] = false;
+    }
 }
 
 /**
@@ -558,8 +591,11 @@ function thumbnail_metadata_delete_variant(array|int $image, int $size, string $
         return;
     }
 
-    $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ? AND size_px = ? AND format = ?');
-    $stmt->execute([$imageId, $size, $format]);
+    try {
+        $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ? AND size_px = ? AND format = ?');
+        $stmt->execute([$imageId, $size, $format]);
+    } catch (Throwable) {
+    }
 }
 
 /**
@@ -578,8 +614,11 @@ function thumbnail_metadata_delete_image_variants(array|int $image): void
         return;
     }
 
-    $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?');
-    $stmt->execute([$imageId]);
+    try {
+        $stmt = db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?');
+        $stmt->execute([$imageId]);
+    } catch (Throwable) {
+    }
 }
 
 /**
@@ -704,7 +743,14 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $actualWidth = is_array($actualInfo) ? (int) ($actualInfo[0] ?? 0) : 0;
     $actualHeight = is_array($actualInfo) ? (int) ($actualInfo[1] ?? 0) : 0;
     $source = thumbnail_metadata_source_payload($image, $gallery, $sourcePath);
-    $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
+    $sourceSynced = false;
+    $metadataError = null;
+    try {
+        $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
+    } catch (Throwable $exception) {
+        // $metadataError stores an optional SQL diagnostic without failing the source upload.
+        $metadataError = $exception->getMessage();
+    }
 
     if ((int) $source['width'] > 0 && (int) $source['height'] > 0 && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
         $geometryStatus = thumbnail_file_geometry_status($thumbnailPath, (int) $source['width'], (int) $source['height'], $size);
@@ -774,10 +820,26 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $updateColumns = array_values(array_filter($columnNames, static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)));
     $updates = implode(', ', array_map(static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)', $updateColumns));
 
-    $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
-    $stmt->execute(array_values($variantColumns));
+    try {
+        $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
+        $stmt->execute(array_values($variantColumns));
+    } catch (Throwable $exception) {
+        return [
+            'status' => $status,
+            'valid' => $valid,
+            'deleted' => false,
+            'reason' => $reason,
+            'metadata_written' => false,
+            'source_synced' => $sourceSynced,
+            'metadata_error' => $metadataError ?? $exception->getMessage(),
+        ];
+    }
 
-    return ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => $sourceSynced];
+    $result = ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => $sourceSynced];
+    if ($metadataError !== null) {
+        $result['metadata_error'] = $metadataError;
+    }
+    return $result;
 }
 
 /**

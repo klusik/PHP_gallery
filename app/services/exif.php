@@ -63,15 +63,33 @@ use function Gallery\Core\url_for;
 function exif_gps_schema_ready(): bool
 {
     try {
-        // Variable $galleryColumn stores this steps working value.
-        $galleryColumn = db()->query("SHOW COLUMNS FROM galleries LIKE 'gps_map_enabled'");
-        if (!$galleryColumn || !$galleryColumn->fetch()) {
+        if (!function_exists('Gallery\Services\db_column_exists') || !db_column_exists('galleries', 'gps_map_enabled')) {
             return false;
         }
-        // Variable $imageColumn stores this steps working value.
-        $imageColumn = db()->query("SHOW COLUMNS FROM images LIKE 'gps_lat'");
-        return $imageColumn && (bool) $imageColumn->fetch();
-    } catch (PDOException) {
+
+        // $requiredImageColumns stores every EXIF/GPS column used by scanner inserts and updates.
+        $requiredImageColumns = [
+            'exif_taken_at',
+            'exif_camera_make',
+            'exif_camera_model',
+            'exif_lens_model',
+            'exif_focal_length',
+            'exif_aperture',
+            'exif_exposure_time',
+            'exif_iso',
+            'gps_lat',
+            'gps_lng',
+            'gps_altitude',
+            'gps_extracted_at',
+        ];
+        foreach ($requiredImageColumns as $column) {
+            if (!db_column_exists('images', $column)) {
+                return false;
+            }
+        }
+
+        return true;
+    } catch (Throwable) {
         return false;
     }
 }
@@ -92,7 +110,7 @@ function exif_gps_override_schema_ready(): bool
         $galleryColumn = db()->query("SHOW COLUMNS FROM galleries LIKE 'gps_map_enabled'");
         $row = $galleryColumn ? $galleryColumn->fetch() : null;
         return is_array($row) && strtoupper((string) ($row['Null'] ?? '')) === 'YES';
-    } catch (PDOException) {
+    } catch (Throwable) {
         return false;
     }
 }

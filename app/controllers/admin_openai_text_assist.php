@@ -60,6 +60,7 @@ use function Gallery\Services\openai_text_assist_text_limit;
 use function Gallery\Services\openai_text_assist_thumbnail_reference_for_image;
 use function Gallery\Services\openai_text_assist_thumbnail_reference_for_image_id;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Send an OpenAI text-assistance JSON response and stop the request.
@@ -136,7 +137,7 @@ function admin_openai_text_assist_bulk_generate_one_response(int $userId, int $g
     $result = openai_text_assist_generate($userId, 'image_visual_description', $context, (string) ($image['description'] ?? ''), $language);
     $updated = openai_text_assist_save_image_description($imageId, (string) ($result['text'] ?? ''));
 
-    if (function_exists('admin_log_event')) {
+    if (function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event('info', 'openai_text_assist.bulk_image_generated', t('admin.openai.log_bulk_image_generated', 'Admin generated and saved one OpenAI photo description in a bulk run.'), [
             'user_id' => $userId,
             'gallery_id' => $galleryId,
@@ -283,7 +284,7 @@ function cms_admin_openai_text_assist(): void
         }
 
         $result = openai_text_assist_generate($userId, $task, $context, $existingText, $language);
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('info', 'openai_text_assist.generated', t('admin.openai.log_generated', 'Admin generated an OpenAI text-assistance suggestion.'), [
                 'user_id' => $userId,
                 'gallery_id' => $galleryId,
@@ -313,7 +314,7 @@ function cms_admin_openai_text_assist(): void
                         : t('admin.openai.generated', 'OpenAI suggestion inserted into the editor. Save the gallery to keep it.'))),
         ]);
     } catch (Throwable $exception) {
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('warning', 'openai_text_assist.failed', t('admin.openai.log_failed', 'OpenAI text-assistance generation failed.'), [
                 'user_id' => $userId,
                 'gallery_id' => $galleryId,

@@ -288,7 +288,7 @@ function thumbnail_warmup_log_request_context(): array
  */
 function thumbnail_warmup_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
-    if (!function_exists('admin_log_event')) {
+    if (!function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
 

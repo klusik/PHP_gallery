@@ -32,6 +32,12 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Controllers;
+
+use Throwable;
+use RuntimeException;
 use function Gallery\Controllers\cms_not_found;
 use function Gallery\Core\base_url;
 use function Gallery\Core\csrf_field;
@@ -48,6 +54,7 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Views\view_render_admin_feature_flag;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Administrative log controller model.

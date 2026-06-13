@@ -52,6 +52,7 @@ use function Gallery\Services\regenerate_public_paths;
 use function Gallery\Services\sync_gallery_parent_ids;
 use function Gallery\Services\t;
 use function Gallery\Services\write_gallery_sidecar;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handles cms admin gallery reorder logic for the gallery application.

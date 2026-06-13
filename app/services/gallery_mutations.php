@@ -1097,7 +1097,9 @@ function import_galleries_without_thumbnails(array $folderPaths): array
 function sync_gallery_parent_ids(): void
 {
     // Variable $galleries stores this steps working value.
-    $galleries = db()->query('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path')->fetchAll();
+    $stmt = db()->prepare('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    $galleries = $stmt->fetchAll();
     foreach ($galleries as $gallery) {
         // Missing intermediate gallery rows are repaired before parent lookup.
         // This fixes older imports where a deep folder was imported without its
@@ -1106,7 +1108,9 @@ function sync_gallery_parent_ids(): void
     }
 
     // New ancestor rows may have been inserted above, so read the final hierarchy once.
-    $galleries = db()->query('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path')->fetchAll();
+    $stmt = db()->prepare('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    $galleries = $stmt->fetchAll();
     // $galleryIdsByPath stores gallery ids by normalized folder path for O(1) parent lookup.
     $galleryIdsByPath = [];
     foreach ($galleries as $gallery) {

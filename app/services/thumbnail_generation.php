@@ -304,7 +304,9 @@ function create_all_thumbnails(): int
 {
     // Variable $count stores this steps working value.
     $count = 0;
-    foreach (db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $galleryId) {
+    $stmt = db()->prepare('SELECT id FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $galleryId) {
         $count += create_gallery_thumbnails((int) $galleryId);
     }
     return $count;

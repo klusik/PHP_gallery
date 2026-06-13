@@ -32,6 +32,10 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Controllers;
+
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
 use function Gallery\Core\e;
@@ -43,6 +47,7 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_active_language;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin telemetry controller.

@@ -55,6 +55,7 @@ use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_srcset;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Public picture-game controller layer.

@@ -187,7 +187,9 @@ function navigation_data_status(): array
 
     if ($status['local_db_ready']) {
         try {
-            $status['local_db_count'] = (int) db()->query('SELECT COUNT(*) FROM flight_map_nav_points')->fetchColumn();
+            $stmt = db()->prepare('SELECT COUNT(*) FROM flight_map_nav_points');
+            $stmt->execute();
+            $status['local_db_count'] = (int) $stmt->fetchColumn();
         } catch (PDOException) {
             $status['local_db_ready'] = false;
         }

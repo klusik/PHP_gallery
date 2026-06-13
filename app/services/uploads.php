@@ -892,7 +892,7 @@ function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): 
     try {
         return media_renamer_execute_gallery_image_batch($galleryId, $ids, media_renamer_default_pattern());
     } catch (Throwable $exception) {
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('warning', 'gallery.upload_auto_rename_failed', 'Upload-time media renaming failed after images were stored.', [
                 'gallery_id' => $galleryId,
                 'image_ids' => $ids,

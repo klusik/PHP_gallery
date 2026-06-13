@@ -45,6 +45,7 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handles cms admin image reorder logic for the gallery application.

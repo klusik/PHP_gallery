@@ -199,8 +199,12 @@ function admin_storage_statistics_process_job(int $batchSize = ADMIN_STORAGE_STA
 function admin_storage_statistics_fingerprint(): string
 {
     try {
-        $row = db()->query("SELECT COUNT(*) AS image_count, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS original_bytes, COALESCE(MAX(id), 0) AS newest_image_id, COALESCE(MAX(updated_at), '') AS newest_image_update FROM images")->fetch() ?: [];
-        $galleryRow = db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(updated_at), '') AS newest_gallery_update FROM galleries")->fetch() ?: [];
+        $stmt = db()->prepare("SELECT COUNT(*) AS image_count, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS original_bytes, COALESCE(MAX(id), 0) AS newest_image_id, COALESCE(MAX(updated_at), '') AS newest_image_update FROM images");
+        $stmt->execute();
+        $row = $stmt->fetch() ?: [];
+        $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(updated_at), '') AS newest_gallery_update FROM galleries");
+        $stmt->execute();
+        $galleryRow = $stmt->fetch() ?: [];
     } catch (Throwable) {
         return '';
     }
@@ -303,7 +307,9 @@ function admin_storage_statistics_build(string $fingerprint): array
 function admin_storage_statistics_image_rows(): array
 {
     try {
-        return db()->query("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path")->fetchAll();
+        $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id ORDER BY g.folder_path, i.relative_path");
+        $stmt->execute();
+        return $stmt->fetchAll();
     } catch (Throwable) {
         return [];
     }
@@ -322,8 +328,9 @@ function admin_storage_statistics_image_rows_after_id(int $lastImageId, int $lim
     $limit = max(1, min(ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE, $limit));
 
     try {
-        $stmt = db()->query("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > " . $lastImageId . " ORDER BY i.id LIMIT " . $limit);
-        return $stmt ? $stmt->fetchAll() : [];
+        $stmt = db()->prepare("SELECT i.id AS image_id, i.gallery_id AS image_gallery_id, i.relative_path, i.filename, i.mime_type, COALESCE(i.file_size, 0) AS file_size, i.width, i.height, g.id AS gallery_id, g.title AS gallery_title, g.folder_path AS gallery_folder_path FROM images i INNER JOIN galleries g ON g.id = i.gallery_id WHERE i.id > ? ORDER BY i.id LIMIT ?");
+        $stmt->execute([$lastImageId, $limit]);
+        return $stmt->fetchAll();
     } catch (Throwable) {
         return [];
     }

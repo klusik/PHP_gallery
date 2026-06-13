@@ -32,6 +32,12 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Services;
+
+use Throwable;
+use RuntimeException;
 use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
 

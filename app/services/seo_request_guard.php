@@ -268,7 +268,7 @@ function seo_request_guard_reject(string $page, array $unexpected): void
  */
 function seo_request_guard_log_rejection(string $page, array $unexpected): void
 {
-    if (!seo_request_guard_logging_enabled() || !function_exists('admin_log_event')) {
+    if (!seo_request_guard_logging_enabled() || !function_exists('Gallery\\Services\\admin_log_event')) {
         return;
     }
 

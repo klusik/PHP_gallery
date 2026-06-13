@@ -85,6 +85,7 @@ use function Gallery\Services\thumbnail_maintenance_store_last_check;
 use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
 use function Gallery\Services\thumbnail_metadata_refresh_image;
 use function Gallery\Views\view_render_admin_thumbnail_maintenance_notice;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin thumbnail controller model.

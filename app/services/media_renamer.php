@@ -71,10 +71,12 @@ function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 {
     if (!$hideEmptyGalleries) {
-        return array_map('intval', db()->query('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll(PDO::FETCH_COLUMN));
+        $stmt = db()->prepare('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+        $stmt->execute();
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     }
 
-    $stmt = db()->query("SELECT g.id
+    $stmt = db()->prepare("SELECT g.id
         FROM galleries g
         INNER JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
         GROUP BY g.id

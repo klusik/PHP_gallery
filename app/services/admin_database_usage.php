@@ -187,7 +187,7 @@ function admin_database_usage_recompute_statistics(): array
         'error' => '',
     ];
 
-    if (function_exists('admin_log_event')) {
+    if (function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event('info', 'database_usage.recomputed', 'Admin recomputed database table statistics.', $report, ['category' => 'database', 'severity' => $failedTables === 0 ? 'notice' : 'warning']);
     }
 

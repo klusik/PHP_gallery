@@ -93,6 +93,7 @@ use function Gallery\Services\restore_application_stable_release;
 use function Gallery\Services\set_app_setting;
 use function Gallery\Services\site_name;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin authentication controller model.
@@ -1124,7 +1125,7 @@ function cms_admin_account(): void
                 // $result stores the validated and saved OpenAI profile settings.
                 $result = openai_text_assist_save_user_settings((int) $user['id'], $_POST);
                 if (!empty($result['ok'])) {
-                    if (function_exists('admin_log_event')) {
+                    if (function_exists('Gallery\\Services\\admin_log_event')) {
                         admin_log_event('info', 'openai_text_assist.settings_updated', t('admin.openai.log_settings_updated', 'Admin updated OpenAI text-assistance profile settings.'), [
                             'user_id' => (int) $user['id'],
                             'enabled' => (bool) ($result['enabled'] ?? false),

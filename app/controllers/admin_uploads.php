@@ -73,6 +73,7 @@ use function Gallery\Services\store_uploaded_gallery_images;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_upload_settings_page;
 use function Gallery\Views\view_render_admin_upload_support_panel;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin upload controller model.

@@ -57,6 +57,7 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\t;
 use function Gallery\Services\tag_description_schema_ready;
 use function Gallery\Services\update_tag_metadata;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Render and process the admin tag editor.

@@ -65,6 +65,7 @@ use function Gallery\Services\media_renamer_pattern_help_text;
 use function Gallery\Services\media_renamer_plan_for_gallery;
 use function Gallery\Services\media_renamer_plans_for_galleries;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handle the site-wide media renamer admin page.
@@ -885,7 +886,7 @@ function admin_media_renamer_log_exception(string $eventKey, string $message, Th
 function admin_media_renamer_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
     $written = admin_media_renamer_write_admin_log_direct($level, $eventKey, $message, $context, $options);
-    if (!$written && function_exists('admin_log_event')) {
+    if (!$written && function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event($level, $eventKey, $message, $context, $options);
     }
     $encodedContext = $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '';

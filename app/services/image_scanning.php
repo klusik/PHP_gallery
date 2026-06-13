@@ -174,7 +174,7 @@ function scan_image_file_metadata(string $path, string $filename): ?array
         // Some hosting ImageMagick builds report DNG support but cannot reliably
         // ping every camera model. Keep the original import visible in admin and
         // let thumbnail generation report the concrete conversion failure.
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('warning', 'image_scan.dng_metadata_unreadable', 'A DNG file was imported with fallback metadata because the server could not read its dimensions.', [
                 'filename' => $filename,
                 'path' => $path,
@@ -420,7 +420,9 @@ function scan_all_imported_gallery_images(): array
     // $changed stores an intermediate value used by the surrounding gallery workflow.
     $changed = 0;
     // $galleryIds stores an intermediate value used by the surrounding gallery workflow.
-    $galleryIds = db()->query('SELECT id FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN);
+    $stmt = db()->prepare('SELECT id FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    $galleryIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
     foreach ($galleryIds as $galleryId) {
         // $current stores an intermediate value used by the surrounding gallery workflow.
         $current = scan_gallery_images((int) $galleryId);

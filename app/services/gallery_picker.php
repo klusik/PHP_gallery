@@ -55,7 +55,9 @@ function gallery_search_picker_rows(int $selectedGalleryId = 0, int $excludedGal
     // $rows stores normalized gallery choices for text-search widgets.
     $rows = [];
     // $galleries stores the canonical gallery list ordered by hierarchy path.
-    $galleries = db()->query('SELECT id, title, folder_path FROM galleries ORDER BY folder_path')->fetchAll();
+    $stmt = db()->prepare('SELECT id, title, folder_path FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    $galleries = $stmt->fetchAll();
     foreach ($galleries as $gallery) {
         // $galleryId stores the numeric destination ID used by backend forms.
         $galleryId = (int) ($gallery['id'] ?? 0);

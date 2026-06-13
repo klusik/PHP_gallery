@@ -64,9 +64,13 @@ function db_column_exists(string $table, string $column): bool
         return false;
     }
 
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
-    $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
-    return (bool) $stmt->fetch();
+    try {
+        // $stmt stores an intermediate value used by the surrounding gallery workflow.
+        $stmt = db()->query("SHOW COLUMNS FROM `{$safeTable}` LIKE '{$safeColumn}'");
+        return $stmt && (bool) $stmt->fetch();
+    } catch (Throwable) {
+        return false;
+    }
 }
 
 /**

@@ -32,6 +32,11 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Controllers;
+
+use Throwable;
 use function Gallery\Controllers\cms_not_found;
 use function Gallery\Controllers\picture_manager_image_ids_from_post;
 use function Gallery\Controllers\picture_manager_require_logged_in_user;
@@ -42,6 +47,7 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\t;
 use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Public download controller model.

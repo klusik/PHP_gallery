@@ -50,6 +50,7 @@ use function Gallery\Services\simbrief_description_save_ofp_for_gallery;
 use function Gallery\Services\simbrief_description_save_route_map_from_ofp;
 use function Gallery\Services\t;
 use function Gallery\Views\view_simbrief_description_markdown;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Send a SimBrief JSON response and stop the request.
@@ -107,7 +108,7 @@ function cms_admin_simbrief_description(): void
             ? simbrief_description_save_ofp_for_gallery($gallery, $payload, $identifier, $details, $routeResult)
             : ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'OFP storage helper is unavailable.'];
 
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('info', 'simbrief.description_generated', 'Admin generated a gallery description draft from SimBrief and stored OFP route data.', [
                 'gallery_id' => $galleryId,
                 'identifier_type' => (string) ($identifier['label'] ?? ''),
@@ -144,7 +145,7 @@ function cms_admin_simbrief_description(): void
             'route' => $routeResult,
         ]);
     } catch (Throwable $exception) {
-        if (function_exists('admin_log_event')) {
+        if (function_exists('Gallery\\Services\\admin_log_event')) {
             admin_log_event('warning', 'simbrief.description_failed', 'Admin SimBrief description generation failed.', [
                 'gallery_id' => $galleryId,
                 'error' => $exception->getMessage(),

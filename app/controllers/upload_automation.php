@@ -90,6 +90,7 @@ use function Gallery\Services\upload_automation_sim_camera_metadata;
 use function Gallery\Services\upload_automation_tokens_for_manager;
 use function Gallery\Services\upload_automation_uploaded_files;
 use function Gallery\Services\upload_automation_with_gallery_lock;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Upload automation controller model.
@@ -472,18 +473,46 @@ function cms_upload_automation_upload(): void
         $simCameraMetadata = upload_automation_sim_camera_metadata();
         // $entries stores validated upload entries returned by the existing upload validator.
         $entries = gallery_upload_entries($files);
+        // $postUploadErrors stores optional post-store failures that must not poison the original upload response.
+        $postUploadErrors = [];
         // $uploadResult stores the gallery mutation result produced under a
         // short gallery-scoped advisory lock. Manual bulk upload can run several
         // HTTP requests in parallel, but the existing scanner reconciles the
         // whole target folder. The lock prevents two PHP workers from inserting
         // the same discovered image row concurrently.
-        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use ($galleryId, $gallery, $entries, $clientThumbnailEntries, $imageClientIds, $simCameraMetadata): array {
+        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use ($galleryId, $gallery, $entries, $clientThumbnailEntries, $imageClientIds, $simCameraMetadata, &$postUploadErrors): array {
             // $stored stores the existing upload pipeline result after filesystem storage and image scan.
             $stored = store_uploaded_gallery_images($galleryId, $entries);
             // $simCameraResult stores the optional GPS metadata update for accepted screenshot uploads.
-            $simCameraResult = upload_automation_apply_sim_camera_metadata($galleryId, $stored, $simCameraMetadata);
+            $simCameraResult = ['attached' => 0, 'skipped' => 0, 'error' => ''];
+            try {
+                $simCameraResult = upload_automation_apply_sim_camera_metadata($galleryId, $stored, $simCameraMetadata);
+                if ((string) ($simCameraResult['error'] ?? '') !== '') {
+                    $postUploadErrors[] = 'Flight Simulator camera metadata was skipped: ' . (string) $simCameraResult['error'];
+                }
+            } catch (Throwable $exception) {
+                $simCameraResult = [
+                    'attached' => 0,
+                    'skipped' => count((array) ($stored['image_ids'] ?? [])),
+                    'error' => $exception->getMessage(),
+                ];
+                $postUploadErrors[] = 'Flight Simulator camera metadata failed: ' . $exception->getMessage();
+            }
+
             // $clientThumbnailResult stores the thumbnails installed from the client request.
-            $clientThumbnailResult = upload_automation_install_client_thumbnails($galleryId, $gallery, $clientThumbnailEntries, $imageClientIds, $stored);
+            $clientThumbnailResult = ['installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => []];
+            try {
+                $clientThumbnailResult = upload_automation_install_client_thumbnails($galleryId, $gallery, $clientThumbnailEntries, $imageClientIds, $stored);
+            } catch (Throwable $exception) {
+                $clientThumbnailResult = [
+                    'installed' => 0,
+                    'skipped' => 0,
+                    'failed' => count($clientThumbnailEntries),
+                    'errors' => [$exception->getMessage()],
+                ];
+                $postUploadErrors[] = 'Client thumbnail installation failed: ' . $exception->getMessage();
+            }
+
             return [$stored, $clientThumbnailResult, $simCameraResult];
         });
         // $stored stores the existing upload pipeline result after filesystem storage and image scan.
@@ -503,22 +532,33 @@ function cms_upload_automation_upload(): void
 
         if ($createThumbnails) {
             foreach ((array) ($stored['image_ids'] ?? []) as $imageId) {
-                // $image stores the image row created or updated by the scan.
-                $image = find_image((int) $imageId);
-                if (!$image) {
-                    continue;
-                }
-                // $thumbnailResult stores per-image derivative generation counts.
-                $thumbnailResult = create_image_thumbnails_result($image, $gallery);
-                $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
-                $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
-                foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
-                    $thumbnailErrors[] = (string) $thumbnailError;
+                try {
+                    // $image stores the image row created or updated by the scan.
+                    $image = find_image((int) $imageId);
+                    if (!$image) {
+                        continue;
+                    }
+                    // $thumbnailResult stores per-image derivative generation counts.
+                    $thumbnailResult = create_image_thumbnails_result($image, $gallery);
+                    $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
+                    $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
+                    foreach ((array) ($thumbnailResult['errors'] ?? []) as $thumbnailError) {
+                        $thumbnailErrors[] = (string) $thumbnailError;
+                    }
+                } catch (Throwable $exception) {
+                    $thumbnailFailed++;
+                    $thumbnailErrors[] = $exception->getMessage();
+                    $postUploadErrors[] = 'Thumbnail generation failed: ' . $exception->getMessage();
                 }
             }
         }
 
-        mark_upload_automation_token_used((int) $tokenRow['id']);
+        try {
+            mark_upload_automation_token_used((int) $tokenRow['id']);
+        } catch (Throwable $exception) {
+            $postUploadErrors[] = 'API-key last-used timestamp failed: ' . $exception->getMessage();
+        }
+
         admin_log_event('info', 'upload_automation.images_uploaded', 'Upload automation stored images through the existing gallery upload pipeline.', [
             'token_id' => (int) $tokenRow['id'],
             'gallery_id' => $galleryId,
@@ -532,6 +572,7 @@ function cms_upload_automation_upload(): void
             'client_thumbnails_failed' => (int) ($clientThumbnailResult['failed'] ?? 0),
             'sim_camera_metadata_attached' => (int) ($simCameraResult['attached'] ?? 0),
             'sim_camera_metadata_skipped' => (int) ($simCameraResult['skipped'] ?? 0),
+            'post_upload_errors' => array_values(array_unique(array_filter($postUploadErrors))),
             'filenames' => array_values((array) ($stored['filenames'] ?? [])),
             'renamed' => (int) ($stored['renamed'] ?? 0),
             'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
@@ -553,6 +594,7 @@ function cms_upload_automation_upload(): void
             'thumbnails' => $thumbnails,
             'thumbnail_failed' => $thumbnailFailed,
             'thumbnail_errors' => array_values(array_unique(array_filter($thumbnailErrors))),
+            'post_upload_errors' => array_values(array_unique(array_filter($postUploadErrors))),
             'sim_camera_metadata' => [
                 'attached' => (int) ($simCameraResult['attached'] ?? 0),
                 'skipped' => (int) ($simCameraResult['skipped'] ?? 0),

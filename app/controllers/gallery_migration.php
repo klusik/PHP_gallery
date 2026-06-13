@@ -66,6 +66,7 @@ use function Gallery\Services\t;
 use function Gallery\Services\upload_automation_request_token;
 use function Gallery\Services\upload_automation_schema_ready;
 use function Gallery\Views\view_render_admin_gallery_migration_panel;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Emit one JSON response for migration routes.

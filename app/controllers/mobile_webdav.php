@@ -58,6 +58,7 @@ use function Gallery\Services\mobile_webdav_ready;
 use function Gallery\Services\mobile_webdav_store_put;
 use function Gallery\Services\mobile_webdav_tokens;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Render and manage mobile WebDAV upload connections.

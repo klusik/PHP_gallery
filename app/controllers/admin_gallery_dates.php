@@ -56,6 +56,7 @@ use function Gallery\Services\gallery_date_range_storage_label;
 use function Gallery\Services\gallery_date_save_range;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_gallery_date_exif_suggestion;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Send a JSON response for the reusable gallery EXIF date suggestion workflow.
