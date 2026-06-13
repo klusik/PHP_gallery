@@ -34,6 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\visitor_hash;
+
 /**
  * Tag and voting service functions.
  *

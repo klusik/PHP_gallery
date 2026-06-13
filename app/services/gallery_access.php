@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Gallery access model.
  * 

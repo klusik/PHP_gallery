@@ -35,6 +35,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+
 /**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
  *
@@ -616,7 +626,7 @@ function media_renamer_target_derivative_conflicts(array $sourceImage, array $ta
         }
     }
 
-    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($sourceImage)) {
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($sourceImage)) {
         $targetPath = dng_display_master_abs_path($targetImage, $gallery, false);
         $targetKey = media_renamer_path_key($targetPath);
         if (file_exists($targetPath) && !isset($currentFileKeys[$targetKey])) {
@@ -645,7 +655,7 @@ function media_renamer_current_file_keys(array $images, array $gallery): array
                     $keys[media_renamer_path_key(thumbnail_abs_path($image, $gallery, (int) $size, $format))] = true;
                 }
             }
-            if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+            if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
                 $keys[media_renamer_path_key(dng_display_master_abs_path($image, $gallery, false))] = true;
             }
         } catch (Throwable) {
@@ -662,7 +672,7 @@ function media_renamer_current_file_keys(array $images, array $gallery): array
  */
 function media_renamer_path_key(string $path): string
 {
-    $normalized = function_exists('gallery_normalize_filesystem_path') ? gallery_normalize_filesystem_path($path) : str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+    $normalized = function_exists('Gallery\\Services\\gallery_normalize_filesystem_path') ? gallery_normalize_filesystem_path($path) : str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
     return DIRECTORY_SEPARATOR === '\\' ? strtolower($normalized) : $normalized;
 }
 
@@ -1108,14 +1118,14 @@ function media_renamer_execute_plan(array $plan): array
     }
     $result['zip_archives_deleted'] = media_renamer_clear_download_archives([$galleryId]);
 
-    if (function_exists('thumbnail_maintenance_summary_cache_clear')) {
+    if (function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
-    if (function_exists('regenerate_public_paths') && public_path_schema_ready()) {
+    if (function_exists('Gallery\\Services\\regenerate_public_paths') && public_path_schema_ready()) {
         regenerate_public_paths();
     }
     $updatedGallery = find_gallery($galleryId, true);
-    if ($updatedGallery && function_exists('write_gallery_sidecar')) {
+    if ($updatedGallery && function_exists('Gallery\\Services\\write_gallery_sidecar')) {
         write_gallery_sidecar($updatedGallery);
     }
 
@@ -1267,7 +1277,7 @@ function media_renamer_generated_derivative_paths(array $image, array $gallery):
         }
     }
 
-    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
         $paths[] = dng_display_master_abs_path($image, $gallery, false);
     }
 

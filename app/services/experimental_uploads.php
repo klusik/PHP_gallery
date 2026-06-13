@@ -37,6 +37,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\url_for;
+
 const EXPERIMENTAL_UPLOAD_DEFAULT_WORKER_COUNT = 8;
 const EXPERIMENTAL_UPLOAD_MIN_WORKER_COUNT = 1;
 const EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP = 32;
@@ -67,7 +79,7 @@ function experimental_upload_default_settings(): array
         'zip_size_threshold_ratio' => EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO,
         'max_items_per_batch' => EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
         'max_zip_batch_bytes' => EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES,
-        'thumbnail_rebuild_source_chunk_bytes' => defined('EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024,
+        'thumbnail_rebuild_source_chunk_bytes' => defined('Gallery\\Services\\EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024,
     ];
 }
 
@@ -189,7 +201,7 @@ function experimental_upload_normalize_settings(array $raw): array
             EXPERIMENTAL_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES,
             EXPERIMENTAL_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES
         ),
-        'thumbnail_rebuild_source_chunk_bytes' => function_exists('experimental_thumbnail_rebuild_clamped_source_chunk_bytes')
+        'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_clamped_source_chunk_bytes')
             ? experimental_thumbnail_rebuild_clamped_source_chunk_bytes($raw['thumbnail_rebuild_source_chunk_bytes'] ?? $defaults['thumbnail_rebuild_source_chunk_bytes'])
             : (int) ($raw['thumbnail_rebuild_source_chunk_bytes'] ?? $defaults['thumbnail_rebuild_source_chunk_bytes']),
     ];
@@ -211,7 +223,7 @@ function experimental_upload_settings(): array
         'zip_size_threshold_ratio' => app_setting('experimental_upload_zip_size_threshold_ratio', (string) EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO),
         'max_items_per_batch' => app_setting('experimental_upload_max_items_per_batch', (string) EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
         'max_zip_batch_bytes' => app_setting('experimental_upload_max_zip_batch_bytes', (string) EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
-        'thumbnail_rebuild_source_chunk_bytes' => app_setting('experimental_thumbnail_rebuild_source_chunk_bytes', (string) (defined('EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024)),
+        'thumbnail_rebuild_source_chunk_bytes' => app_setting('experimental_thumbnail_rebuild_source_chunk_bytes', (string) (defined('Gallery\\Services\\EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024)),
     ]);
 }
 
@@ -232,7 +244,7 @@ function set_experimental_upload_settings(array $input): array
         'zip_size_threshold_ratio' => $input['experimental_upload_zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO,
         'max_items_per_batch' => $input['experimental_upload_max_items_per_batch'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
         'max_zip_batch_bytes' => experimental_upload_megabytes_to_bytes($input['experimental_upload_max_zip_batch_megabytes'] ?? null, EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
-        'thumbnail_rebuild_source_chunk_bytes' => function_exists('experimental_thumbnail_rebuild_megabytes_to_bytes')
+        'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_megabytes_to_bytes')
             ? experimental_thumbnail_rebuild_megabytes_to_bytes($input['experimental_thumbnail_rebuild_source_chunk_megabytes'] ?? null)
             : (512 * 1024 * 1024),
     ]);
@@ -337,7 +349,7 @@ function experimental_upload_browser_config(): array
 {
     $settings = experimental_upload_settings();
     $uploadLimit = experimental_upload_server_upload_limit_bytes();
-    $formats = function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
     $formats = array_values(array_filter(array_map('strval', $formats), static fn (string $format): bool => in_array($format, ['jpg', 'webp'], true)));
     if (!$formats) {
         $formats = ['jpg'];
@@ -355,10 +367,10 @@ function experimental_upload_browser_config(): array
         'batch_target_bytes' => experimental_upload_effective_batch_target_bytes($uploadLimit, (float) $settings['zip_size_threshold_ratio'], (int) $settings['max_zip_batch_bytes']),
         'max_items_per_batch' => (int) $settings['max_items_per_batch'],
         'max_zip_batch_bytes' => (int) $settings['max_zip_batch_bytes'],
-        'thumbnail_sizes' => function_exists('thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
+        'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
         'thumbnail_formats' => $formats,
-        'jpeg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpeg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
         'supported_mime_types' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ];
 }
@@ -750,10 +762,10 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
                     throw new RuntimeException(t('experimental_upload.error_thumbnail_store_failed', 'Could not store a prepared thumbnail.'));
                 }
                 $sourcePath = image_abs_path($image, $gallery);
-                if (function_exists('thumbnail_touch_generated_file_for_source')) {
+                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
                     thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
                 }
-                if (function_exists('thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
                     $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
                     if (empty($metadata['valid'])) {
                         $thumbnailFailed++;

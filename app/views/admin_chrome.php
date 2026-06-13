@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Controllers\thumbnail_maintenance_notice_is_dismissed;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\application_update_nav_label;
+use function Gallery\Services\application_update_pending;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\t;
+
 /**
  * Handle view admin menu structure.
  *
@@ -43,8 +54,8 @@ declare(strict_types=1);
  */
 function view_admin_menu_structure(): array
 {
-    $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
-    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
+    $updatePending = function_exists('Gallery\\Services\\application_update_pending') ? application_update_pending() : false;
+    $updateLabel = function_exists('Gallery\\Services\\application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
     return [
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
@@ -326,7 +337,7 @@ function view_render_admin_sidebar(string $currentPage): void
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
             $featureKey = (string) ($item['feature'] ?? '');
-            if ($featureKey !== '' && function_exists('feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+            if ($featureKey !== '' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
                 continue;
             }
             $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';

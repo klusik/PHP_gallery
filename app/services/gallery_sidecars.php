@@ -34,6 +34,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use FilesystemIterator;
+use PDO;
+use RecursiveCallbackFilterIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use SplFileInfo;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\unique_slug;
+
 /**
 Gallery discovery and sidecar metadata helpers.
  *
@@ -165,7 +182,7 @@ function discover_gallery_candidates(): array
  */
 function normalize_gallery_sidecar_tags_recursive(): void
 {
-    if (!function_exists('galleries_root') || !function_exists('normalize_tag_name')) {
+    if (!function_exists('Gallery\\Services\\galleries_root') || !function_exists('normalize_tag_name')) {
         return;
     }
     // Variable $root stores this steps working value.
@@ -373,7 +390,7 @@ function write_gallery_sidecar(array $gallery): void
     if (!empty($gallery['cover_image_path'])) {
         $data['cover_image_path'] = (string) $gallery['cover_image_path'];
     }
-    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
@@ -548,7 +565,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $values[] = $accessMode;
         $values[] = $accessMode === 'password' ? $accessListing : 'listed';
     }
-    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];

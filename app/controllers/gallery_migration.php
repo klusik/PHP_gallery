@@ -35,6 +35,38 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\GALLERY_MIGRATION_PROTOCOL_VERSION;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_upload_automation_token;
+use function Gallery\Services\gallery_migration_asset_ref_from_input;
+use function Gallery\Services\gallery_migration_build_manifest;
+use function Gallery\Services\gallery_migration_complete_job;
+use function Gallery\Services\gallery_migration_current_version;
+use function Gallery\Services\gallery_migration_endpoint_url;
+use function Gallery\Services\gallery_migration_http_get_json;
+use function Gallery\Services\gallery_migration_http_get_to_file;
+use function Gallery\Services\gallery_migration_http_post_file_json;
+use function Gallery\Services\gallery_migration_http_post_form_json;
+use function Gallery\Services\gallery_migration_install_asset_file;
+use function Gallery\Services\gallery_migration_job_status_response;
+use function Gallery\Services\gallery_migration_manifest_asset_refs;
+use function Gallery\Services\gallery_migration_manifest_asset_refs_with_keys;
+use function Gallery\Services\gallery_migration_prepare_target_job;
+use function Gallery\Services\gallery_migration_request_timeout_seconds;
+use function Gallery\Services\gallery_migration_source_asset_descriptor;
+use function Gallery\Services\gallery_migration_t;
+use function Gallery\Services\mark_upload_automation_token_used;
+use function Gallery\Services\t;
+use function Gallery\Services\upload_automation_request_token;
+use function Gallery\Services\upload_automation_schema_ready;
+use function Gallery\Views\view_render_admin_gallery_migration_panel;
+
 /**
  * Emit one JSON response for migration routes.
  *
@@ -468,7 +500,7 @@ function gallery_migration_admin_push_complete(): array
  */
 function render_admin_gallery_migration_panel(array $gallery): void
 {
-    if (function_exists('view_render_admin_gallery_migration_panel')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_gallery_migration_panel')) {
         view_render_admin_gallery_migration_panel($gallery);
     }
 }

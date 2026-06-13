@@ -34,6 +34,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Core\verify_vote_rate_limit;
+use function Gallery\Core\visitor_hash;
+use function Gallery\Services\current_vote_for_image;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\vote_score;
+
 /**
  * Build the public vote controls and current vote state.
  *

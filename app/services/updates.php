@@ -34,6 +34,21 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DateTimeImmutable;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use Throwable;
+use ZipArchive;
+use const Gallery\Core\CMS_GITHUB_REPOSITORY;
+use const Gallery\Core\CMS_UPDATE_BRANCHES;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\e;
+use function Gallery\Core\run_migrations;
+
 /**
  * Application update service model.
  *

@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use GdImage;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\url_for;
+
 /**
  * Gallery and theme background service helpers.
  *

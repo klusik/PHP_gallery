@@ -34,6 +34,58 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\THUMBNAIL_COMPATIBILITY_MODERN;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\all_image_ids;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\create_all_thumbnails;
+use function Gallery\Services\create_gallery_thumbnails;
+use function Gallery\Services\create_image_thumbnails;
+use function Gallery\Services\create_image_thumbnails_result;
+use function Gallery\Services\delete_all_thumbnail_files;
+use function Gallery\Services\delete_app_settings;
+use function Gallery\Services\delete_legacy_jpg_thumbnails_for_image_ids;
+use function Gallery\Services\experimental_thumbnail_rebuild_source_chunk_plan;
+use function Gallery\Services\experimental_thumbnail_rebuild_store_prepared_zip_batch;
+use function Gallery\Services\experimental_thumbnail_rebuild_stream_source_zip;
+use function Gallery\Services\experimental_upload_settings;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\image_ids_for_galleries;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\set_thumbnail_compatibility_mode;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_compatibility_format_bytes;
+use function Gallery\Services\thumbnail_compatibility_mode_label;
+use function Gallery\Services\thumbnail_compatibility_mode_normalize;
+use function Gallery\Services\thumbnail_inventory_fingerprint;
+use function Gallery\Services\thumbnail_maintenance_check_batch;
+use function Gallery\Services\thumbnail_maintenance_check_report;
+use function Gallery\Services\thumbnail_maintenance_check_report_for_image_ids;
+use function Gallery\Services\thumbnail_maintenance_debug_image_statuses;
+use function Gallery\Services\thumbnail_maintenance_empty_check_report;
+use function Gallery\Services\thumbnail_maintenance_finalize_check_report;
+use function Gallery\Services\thumbnail_maintenance_image_ids;
+use function Gallery\Services\thumbnail_maintenance_last_check;
+use function Gallery\Services\thumbnail_maintenance_last_check_image_ids;
+use function Gallery\Services\thumbnail_maintenance_merge_check_reports;
+use function Gallery\Services\thumbnail_maintenance_store_last_check;
+use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
+use function Gallery\Services\thumbnail_metadata_refresh_image;
+use function Gallery\Views\view_render_admin_thumbnail_maintenance_notice;
+
 /**
  * Admin thumbnail controller model.
  *
@@ -43,7 +95,7 @@ declare(strict_types=1);
  */
 function render_admin_thumbnail_maintenance_notice(array $summary): void
 {
-    if (function_exists('view_render_admin_thumbnail_maintenance_notice')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_thumbnail_maintenance_notice')) {
         view_render_admin_thumbnail_maintenance_notice($summary);
         return;
     }
@@ -541,7 +593,7 @@ function cms_admin_create_thumbnails_batch(): void
         // $maintenanceBefore stores the saved dry check report without rescanning the library.
         $maintenanceBefore = null;
         if ($scope === 'missing' && $offset === 0) {
-            $maintenanceBefore = function_exists('thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : null;
+            $maintenanceBefore = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : null;
             admin_log_event('info', 'thumbnail.missing_repair_started', 'Targeted server-side thumbnail repair started.', [
                 'scope' => $scope,
                 'selected_image_count' => $total,
@@ -651,7 +703,7 @@ function cms_admin_create_thumbnails_batch(): void
             ]);
         }
         if ($scope === 'missing' && $done) {
-            $maintenanceAfter = function_exists('thumbnail_maintenance_check_report_for_image_ids')
+            $maintenanceAfter = function_exists('Gallery\\Services\\thumbnail_maintenance_check_report_for_image_ids')
                 ? thumbnail_maintenance_check_report_for_image_ids($imageIds)
                 : null;
             $remainingImageIds = is_array($maintenanceAfter)
@@ -740,7 +792,7 @@ function cms_admin_create_thumbnails_batch(): void
  */
 function cms_admin_thumbnail_experimental_json_response(array $payload, int $statusCode = 200): void
 {
-    if (function_exists('admin_upload_experimental_json_response')) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_json_response')) {
         admin_upload_experimental_json_response($payload, $statusCode);
         return;
     }
@@ -754,7 +806,7 @@ function cms_admin_thumbnail_experimental_json_response(array $payload, int $sta
  */
 function cms_admin_thumbnail_experimental_verify_csrf(): void
 {
-    if (function_exists('admin_upload_experimental_verify_csrf')) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_verify_csrf')) {
         admin_upload_experimental_verify_csrf();
         return;
     }
@@ -777,11 +829,11 @@ function cms_admin_thumbnail_experimental_source_chunk(): void
 
     try {
         cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('experimental_thumbnail_rebuild_stream_source_zip')) {
+        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_stream_source_zip')) {
             throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
         }
 
@@ -814,17 +866,17 @@ function cms_admin_thumbnail_experimental_upload_batch(): void
         cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
         return;
     }
-    if (function_exists('admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
         return;
     }
 
     try {
         cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
+        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
             throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
         }
         $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['upload_session_id'] ?? '')) ?: bin2hex(random_bytes(8));
@@ -933,7 +985,7 @@ function thumbnail_maintenance_request_image_ids(array $post): array
     }
 
     // $lastCheckImageIds stores the exact dry-check findings when the saved report is still current.
-    $lastCheckImageIds = function_exists('thumbnail_maintenance_last_check_image_ids') ? thumbnail_maintenance_last_check_image_ids($galleryIds) : [];
+    $lastCheckImageIds = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check_image_ids') ? thumbnail_maintenance_last_check_image_ids($galleryIds) : [];
     if ($lastCheckImageIds !== []) {
         return $lastCheckImageIds;
     }

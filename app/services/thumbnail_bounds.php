@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * Return true when thumbnail-bound columns are available for galleries and images.
  *
@@ -140,7 +147,7 @@ function save_gallery_thumbnail_bounds(array $gallery, ?int $minSize, ?int $maxS
     $stmt = db()->prepare('UPDATE galleries SET thumbnail_min_size = ?, thumbnail_max_size = ?, updated_at = ? WHERE id IN (' . $placeholders . ')');
     $stmt->execute(array_merge([$minSize, $maxSize, now_sql()], $galleryIds));
     $changedRows = $stmt->rowCount();
-    if (function_exists('write_gallery_sidecar')) {
+    if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
         foreach ($galleryIds as $galleryId) {
             $updatedGallery = find_gallery((int) $galleryId, true);
             if ($updatedGallery) {

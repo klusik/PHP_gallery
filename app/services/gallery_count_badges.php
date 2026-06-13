@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 /**
  * Return true when per-gallery count badge overrides can be stored.
  *

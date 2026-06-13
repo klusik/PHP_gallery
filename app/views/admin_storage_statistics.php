@@ -34,6 +34,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Services\t;
+
 /**
  * Render the dedicated Admin storage statistics page.
  *
@@ -54,7 +64,7 @@ function view_render_admin_storage_statistics_page(?array $statistics, ?array $d
     view_render_admin_storage_statistics_notice($notice);
 
     if ($activeTab === 'database') {
-        if (function_exists('view_render_admin_database_usage_panel')) {
+        if (function_exists('Gallery\\Views\\view_render_admin_database_usage_panel')) {
             view_render_admin_database_usage_panel($databaseUsage);
         }
         render_footer();

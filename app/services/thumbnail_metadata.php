@@ -36,6 +36,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Return true when durable thumbnail metadata storage is available.
  *
@@ -48,11 +55,148 @@ function thumbnail_metadata_schema_ready(): bool
         return $ready;
     }
 
-    if (!function_exists('db_table_exists')) {
+    if (!function_exists('Gallery\\Services\\db_table_exists')) {
         return $ready = false;
     }
 
     return $ready = db_table_exists('image_thumbnail_variants');
+}
+
+
+/**
+ * Return the request-local cache used by renderable thumbnail metadata lookups.
+ *
+ * @return array<string,array<string,array<int,array<string,mixed>>>> Cached rows keyed by image id and size set.
+ */
+function &thumbnail_metadata_renderable_rows_request_cache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Return the request-local cache used by thumbnail metadata row-existence checks.
+ *
+ * @return array<int,bool> Cached existence flags keyed by image id.
+ */
+function &thumbnail_metadata_image_has_rows_request_cache(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Return the cache key for a thumbnail metadata size set.
+ *
+ * @param array $sizes Sizes value.
+ * @return string Text result for the caller.
+ */
+function thumbnail_metadata_size_cache_key(array $sizes): string
+{
+    // $sizes stores normalized thumbnail sizes represented by this cache key.
+    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    sort($sizes);
+    return implode(',', $sizes);
+}
+
+/**
+ * Warm renderable thumbnail metadata rows for many images in one database query.
+ *
+ * Public gallery cards frequently render several collage images at once. This
+ * helper keeps the existing per-image bundle API while avoiding one metadata
+ * query for every individual image during the same request.
+ *
+ * @param array $images Image rows keyed by id or sequential index.
+ * @param array $sizes Sizes value.
+ */
+function thumbnail_metadata_preload_renderable_rows(array $images, array $sizes): void
+{
+    if (!thumbnail_metadata_schema_ready()) {
+        return;
+    }
+
+    // $sizes stores normalized thumbnail sizes represented by this preload.
+    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    sort($sizes);
+    if (!$sizes) {
+        return;
+    }
+
+    // $sizeKey stores the cache key shared by this preload batch.
+    $sizeKey = thumbnail_metadata_size_cache_key($sizes);
+    // $rowsCache stores renderable rows already discovered during this request.
+    $rowsCache = &thumbnail_metadata_renderable_rows_request_cache();
+    // $hasRowsCache stores metadata existence flags already discovered during this request.
+    $hasRowsCache = &thumbnail_metadata_image_has_rows_request_cache();
+    // $canCacheExistence stores whether the preload covers every configured thumbnail size.
+    $canCacheExistence = $sizeKey === thumbnail_metadata_size_cache_key(thumbnail_sizes());
+    // $imageById stores source image rows keyed by image id.
+    $imageById = [];
+    foreach ($images as $image) {
+        // $imageId stores the image identifier used by thumbnail metadata rows.
+        $imageId = (int) ($image['id'] ?? 0);
+        if ($imageId <= 0 || array_key_exists($imageId, $imageById)) {
+            continue;
+        }
+        $imageById[$imageId] = $image;
+    }
+    if (!$imageById) {
+        return;
+    }
+
+    // $missingImageIds stores image ids not yet available in the request-local cache.
+    $missingImageIds = [];
+    foreach (array_keys($imageById) as $imageId) {
+        // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
+        $cacheKey = $imageId . ':' . $sizeKey;
+        if (!array_key_exists($cacheKey, $rowsCache)) {
+            $rowsCache[$cacheKey] = ['jpg' => [], 'webp' => []];
+            if ($canCacheExistence) {
+                $hasRowsCache[$imageId] = false;
+            }
+            $missingImageIds[] = $imageId;
+        }
+    }
+    if (!$missingImageIds) {
+        return;
+    }
+
+    // $imagePlaceholders stores placeholders for image ids.
+    $imagePlaceholders = implode(',', array_fill(0, count($missingImageIds), '?'));
+    // $sizePlaceholders stores placeholders for thumbnail sizes.
+    $sizePlaceholders = implode(',', array_fill(0, count($sizes), '?'));
+    // $params stores bound image ids and sizes.
+    $params = array_merge($missingImageIds, $sizes);
+    // $stmt stores the batched thumbnail metadata query.
+    $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id IN ($imagePlaceholders) AND size_px IN ($sizePlaceholders) ORDER BY image_id, size_px, format");
+    $stmt->execute($params);
+
+    foreach ($stmt->fetchAll() as $row) {
+        // $imageId stores the owner image id for this thumbnail metadata row.
+        $imageId = (int) ($row['image_id'] ?? 0);
+        if (!isset($imageById[$imageId])) {
+            continue;
+        }
+        if ($canCacheExistence) {
+            $hasRowsCache[$imageId] = true;
+        }
+        // $format stores the thumbnail format for this metadata row.
+        $format = (string) ($row['format'] ?? '');
+        // $size stores the thumbnail size for this metadata row.
+        $size = (int) ($row['size_px'] ?? 0);
+        if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, $sizes, true)) {
+            continue;
+        }
+        if (!thumbnail_metadata_row_is_renderable($row, $imageById[$imageId])) {
+            continue;
+        }
+        $rowsCache[$imageId . ':' . $sizeKey][$format][$size] = $row;
+    }
+
+    foreach ($missingImageIds as $imageId) {
+        ksort($rowsCache[$imageId . ':' . $sizeKey]['jpg']);
+        ksort($rowsCache[$imageId . ':' . $sizeKey]['webp']);
+    }
 }
 
 /**
@@ -202,7 +346,7 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
     $sourceExists = is_file($sourcePath);
     $sourceInfo = $sourceExists ? @getimagesize($sourcePath) : false;
     $mime = is_array($sourceInfo) ? (string) ($sourceInfo['mime'] ?? ($image['mime_type'] ?? '')) : (string) ($image['mime_type'] ?? '');
-    $sourceGeometry = $sourceExists && function_exists('thumbnail_source_geometry_dimensions')
+    $sourceGeometry = $sourceExists && function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')
         ? thumbnail_source_geometry_dimensions($sourcePath, $image)
         : null;
 
@@ -215,7 +359,7 @@ function thumbnail_metadata_source_payload(array $image, array $gallery, ?string
     $sourceMtime = $sourceExists ? (int) (filemtime($sourcePath) ?: 0) : 0;
     $sourceModifiedAt = $sourceMtime > 0 ? thumbnail_metadata_datetime_from_timestamp($sourceMtime) : thumbnail_metadata_image_modified_at($image);
     $orientation = 1;
-    if ($sourceExists && function_exists('thumbnail_jpeg_exif_orientation')) {
+    if ($sourceExists && function_exists('Gallery\\Services\\thumbnail_jpeg_exif_orientation')) {
         $orientation = thumbnail_jpeg_exif_orientation($sourcePath, $mime);
     }
 
@@ -339,31 +483,29 @@ function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
     }
 
     $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    sort($sizes);
     if (!$sizes) {
         return ['jpg' => [], 'webp' => []];
     }
 
-    $placeholders = implode(',', array_fill(0, count($sizes), '?'));
-    $params = array_merge([(int) ($image['id'] ?? 0)], $sizes);
-    $stmt = db()->prepare("SELECT * FROM image_thumbnail_variants WHERE image_id = ? AND size_px IN ($placeholders) ORDER BY size_px, format");
-    $stmt->execute($params);
-
-    $rows = ['jpg' => [], 'webp' => []];
-    foreach ($stmt->fetchAll() as $row) {
-        $format = (string) ($row['format'] ?? '');
-        $size = (int) ($row['size_px'] ?? 0);
-        if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, $sizes, true)) {
-            continue;
-        }
-        if (!thumbnail_metadata_row_is_renderable($row, $image)) {
-            continue;
-        }
-        $rows[$format][$size] = $row;
+    // $imageId stores the image identifier used by thumbnail metadata rows.
+    $imageId = (int) ($image['id'] ?? 0);
+    if ($imageId <= 0) {
+        return ['jpg' => [], 'webp' => []];
     }
 
-    ksort($rows['jpg']);
-    ksort($rows['webp']);
-    return $rows;
+    // $sizeKey stores the cache key for this exact requested size set.
+    $sizeKey = thumbnail_metadata_size_cache_key($sizes);
+    // $rowsCache stores renderable rows already discovered during this request.
+    $rowsCache = &thumbnail_metadata_renderable_rows_request_cache();
+    // $cacheKey stores an intermediate value used by the surrounding gallery workflow.
+    $cacheKey = $imageId . ':' . $sizeKey;
+    if (array_key_exists($cacheKey, $rowsCache)) {
+        return $rowsCache[$cacheKey];
+    }
+
+    thumbnail_metadata_preload_renderable_rows([$image], $sizes);
+    return $rowsCache[$cacheKey] ?? ['jpg' => [], 'webp' => []];
 }
 
 /**
@@ -378,9 +520,21 @@ function thumbnail_metadata_image_has_rows(array $image): bool
         return false;
     }
 
+    // $imageId stores the image identifier used by thumbnail metadata rows.
+    $imageId = (int) ($image['id'] ?? 0);
+    if ($imageId <= 0) {
+        return false;
+    }
+
+    // $cache stores row-existence checks already discovered during this request.
+    $cache = &thumbnail_metadata_image_has_rows_request_cache();
+    if (array_key_exists($imageId, $cache)) {
+        return $cache[$imageId];
+    }
+
     $stmt = db()->prepare('SELECT 1 FROM image_thumbnail_variants WHERE image_id = ? LIMIT 1');
-    $stmt->execute([(int) ($image['id'] ?? 0)]);
-    return (bool) $stmt->fetchColumn();
+    $stmt->execute([$imageId]);
+    return $cache[$imageId] = (bool) $stmt->fetchColumn();
 }
 
 /**
@@ -552,7 +706,7 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $source = thumbnail_metadata_source_payload($image, $gallery, $sourcePath);
     $sourceSynced = thumbnail_metadata_sync_image_source_payload($image, $source);
 
-    if ((int) $source['width'] > 0 && (int) $source['height'] > 0 && function_exists('thumbnail_file_geometry_status')) {
+    if ((int) $source['width'] > 0 && (int) $source['height'] > 0 && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
         $geometryStatus = thumbnail_file_geometry_status($thumbnailPath, (int) $source['width'], (int) $source['height'], $size);
     } else {
         $geometryStatus = [
@@ -566,7 +720,7 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
     $reason = substr((string) ($geometryStatus['reason'] ?? ($valid ? 'ok' : 'invalid_geometry')), 0, 100);
 
     if (!$valid && $deleteInvalid) {
-        if (function_exists('thumbnail_delete_invalid_geometry_file')) {
+        if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
             thumbnail_delete_invalid_geometry_file($thumbnailPath);
         } elseif (is_file($thumbnailPath)) {
             @unlink($thumbnailPath);

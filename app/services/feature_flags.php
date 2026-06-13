@@ -35,6 +35,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+
 const FEATURE_FLAG_SETTING_PREFIX = 'feature_flag.';
 const FEATURE_FLAG_SETTING_SUFFIX = '.enabled';
 

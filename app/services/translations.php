@@ -35,6 +35,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\request_is_https;
+
 const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
 const CMS_PUBLIC_LANGUAGE_COOKIE = 'cms_public_language';
@@ -240,7 +246,7 @@ function translation_route_is_admin(string $route): bool
 function translation_public_language(): string
 {
     $candidate = '';
-    if (function_exists('app_setting')) {
+    if (function_exists('Gallery\\Services\\app_setting')) {
         $candidate = translation_normalize_language_code((string) app_setting('public_language', ''));
     }
     if ($candidate !== '' && translation_language_allowed($candidate)) {
@@ -632,7 +638,7 @@ function translation_set_public_language(string $language): bool
         return false;
     }
 
-    if (function_exists('set_app_setting')) {
+    if (function_exists('Gallery\\Services\\set_app_setting')) {
         set_app_setting('public_language', $language);
     }
     return true;
@@ -648,7 +654,7 @@ function translation_diagnostics_enabled(): bool
     if (PHP_SAPI === 'cli') {
         return false;
     }
-    if (!function_exists('current_user')) {
+    if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
     // $user stores the authenticated account when one exists.

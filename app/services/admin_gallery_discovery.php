@@ -35,6 +35,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use FilesystemIterator;
+use PDO;
+use RecursiveCallbackFilterIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+
 const ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE = 80;
 const ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE = 300;
 const ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS = 7200;

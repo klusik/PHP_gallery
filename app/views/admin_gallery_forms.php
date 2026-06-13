@@ -34,6 +34,30 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Controllers\gallery_parent_options_for_new;
+use function Gallery\Controllers\visibility_options;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\gallery_count_badge_override_label;
+use function Gallery\Services\gallery_count_badge_override_values;
+use function Gallery\Services\gallery_count_badge_schema_ready;
+use function Gallery\Services\gallery_date_exif_suggestion_for_gallery;
+use function Gallery\Services\gallery_date_exif_suggestions_schema_ready;
+use function Gallery\Services\gallery_date_input_value;
+use function Gallery\Services\gallery_date_range_schema_ready;
+use function Gallery\Services\gallery_date_range_storage_label;
+use function Gallery\Services\gallery_date_schema_ready;
+use function Gallery\Services\openai_text_assist_available;
+use function Gallery\Services\openai_text_assist_default_language;
+use function Gallery\Services\openai_text_assist_image_input_allowed;
+use function Gallery\Services\openai_text_assist_language_catalog;
+use function Gallery\Services\t;
+
 /**
  * Handle view render gallery description formatting hint.
  *
@@ -251,9 +275,9 @@ function view_render_admin_simbrief_description_tool(int $galleryId): void
  */
 function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery'): void
 {
-    $user = function_exists('current_user') ? current_user() : null;
+    $user = function_exists('Gallery\\Core\\current_user') ? current_user() : null;
     $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
-    if ($userId <= 0 || !function_exists('openai_text_assist_available') || !openai_text_assist_available($userId)) {
+    if ($userId <= 0 || !function_exists('Gallery\\Services\\openai_text_assist_available') || !openai_text_assist_available($userId)) {
         return;
     }
 
@@ -268,9 +292,9 @@ function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId 
     $button = $mode === 'image'
         ? t('admin.openai.generate_image_button', 'Generate photo description')
         : t('admin.openai.generate_gallery_button', 'Generate gallery description');
-    $allowImageInput = function_exists('openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
-    $languageCatalog = function_exists('openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
-    $defaultLanguage = function_exists('openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
+    $allowImageInput = function_exists('Gallery\\Services\\openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
+    $languageCatalog = function_exists('Gallery\\Services\\openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
+    $defaultLanguage = function_exists('Gallery\\Services\\openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
 
     echo '<div class="admin-openai-text-assist" data-openai-text-assist data-openai-endpoint="' . e(url_for('admin_openai_text_assist')) . '" data-gallery-id="' . (int) $galleryId . '" data-image-id="' . (int) $imageId . '" data-openai-target-selector="[data-openai-description-textarea]">';
     echo '<div class="admin-openai-text-assist-heading"><div><h3>' . e($title) . '</h3><p class="muted">' . e($help) . '</p></div></div>';

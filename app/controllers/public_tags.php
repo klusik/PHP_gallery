@@ -34,6 +34,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\find_tag_by_slug;
+use function Gallery\Services\public_galleries_for_tag;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_description_schema_ready;
+
 /**
  * Tag and voting controllers.
  *

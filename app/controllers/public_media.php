@@ -34,6 +34,35 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use finfo;
+use InvalidArgumentException;
+use function Gallery\Core\current_user;
+use function Gallery\Core\output_sitemap_xml;
+use function Gallery\Services\current_user_is_known_under_18;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_abs_path;
+use function Gallery\Services\gallery_access_requirement;
+use function Gallery\Services\gallery_branding_asset_abs_path;
+use function Gallery\Services\gallery_branding_asset_kind;
+use function Gallery\Services\gallery_branding_mime_extension;
+use function Gallery\Services\gallery_branding_schema_ready;
+use function Gallery\Services\gallery_cover_path;
+use function Gallery\Services\gallery_nsfw_requirement;
+use function Gallery\Services\image_create_from_path;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\image_public_display_file;
+use function Gallery\Services\public_image_visible_to_current_visitor;
+use function Gallery\Services\public_media_needs_private_cache;
+use function Gallery\Services\resolve_public_gallery_path;
+use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
+use function Gallery\Services\thumbnail_response_file_geometry_status;
+use function Gallery\Services\thumbnail_sizes;
+use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\visitor_can_access_nsfw_content;
+
 /**
  * Public media controller model.
  * 
@@ -53,7 +82,7 @@ declare(strict_types=1);
  */
 function cms_thumbnail_file_geometry_status_for_response(array $image, array $gallery, int $size, string $path): array
 {
-    if (function_exists('thumbnail_response_file_geometry_status')) {
+    if (function_exists('Gallery\\Services\\thumbnail_response_file_geometry_status')) {
         return thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
     }
 
@@ -92,7 +121,7 @@ function cms_thumbnail_file_has_valid_geometry(array $image, array $gallery, int
  */
 function cms_resolve_thumbnail_response_file(array $image, array $gallery, int $size, string $format): ?array
 {
-    if (function_exists('thumbnail_ensure_image_thumbnail_variant_file')) {
+    if (function_exists('Gallery\\Services\\thumbnail_ensure_image_thumbnail_variant_file')) {
         return thumbnail_ensure_image_thumbnail_variant_file($image, $gallery, $size, $format);
     }
 
@@ -141,9 +170,8 @@ function cms_thumb(): void
         ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
-    // $bytes stores the response body size counted for anonymous media telemetry.
+    // $bytes stores the response body size sent to the browser.
     $bytes = (int) filesize($path);
-    telemetry_record_media_served_event($image, $gallery, 'media.thumbnail.served', $bytes, 'thumb_' . $size, 'miss');
     header('Content-Length: ' . $bytes);
     readfile($path);
 }
@@ -193,9 +221,8 @@ function cms_public_thumb(): void
         ? (public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable')
         : 'private, no-cache, max-age=0, must-revalidate';
     send_conditional_file_headers($path, $cacheControl);
-    // $bytes stores the response body size counted for anonymous media telemetry.
+    // $bytes stores the response body size sent to the browser.
     $bytes = (int) filesize($path);
-    telemetry_record_media_served_event($image, $gallery, 'media.thumbnail.served', $bytes, 'thumb_' . $size, 'miss');
     header('Content-Length: ' . $bytes);
     readfile($path);
 }
@@ -240,7 +267,9 @@ function cms_public_media(): void
     send_conditional_file_headers($path, $cacheControl);
     // $bytes stores the response body size counted for anonymous media telemetry.
     $bytes = (int) filesize($path);
-    telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
+    if (function_exists('telemetry_record_media_served_event')) {
+        \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
+    }
     header('Content-Length: ' . $bytes);
     readfile($path);
 }
@@ -305,7 +334,7 @@ function cms_gallery_cover_asset(): void
             imageinterlace($target, true);
             header('Content-Type: image/jpeg');
             header('X-Content-Type-Options: nosniff');
-            header('Cache-Control: ' . (public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400'));
+            send_asset_cache_control(public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400');
             imagejpeg($target, null, 82);
             imagedestroy($target);
             imagedestroy($source);
@@ -317,7 +346,7 @@ function cms_gallery_cover_asset(): void
     }
     header('Content-Type: ' . $mime);
     header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: ' . (public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400'));
+    send_asset_cache_control(public_media_needs_private_cache($gallery) ? 'private, max-age=300' : 'public, max-age=86400');
     readfile($path);
 }
 
@@ -406,7 +435,12 @@ function cms_media(): void
     // $cacheControl stores an intermediate value used by the surrounding gallery workflow.
     $cacheControl = public_media_needs_private_cache($gallery, $image) ? 'private, max-age=300' : 'public, max-age=31536000, immutable';
     send_conditional_file_headers($path, $cacheControl);
-    header('Content-Length: ' . filesize($path));
+    // $bytes stores the response body size counted for anonymous media telemetry.
+    $bytes = (int) filesize($path);
+    if (function_exists('telemetry_record_media_served_event')) {
+        \telemetry_record_media_served_event($image, $gallery, 'media.image.served', $bytes, (string) $displayFile['variant'], 'miss');
+    }
+    header('Content-Length: ' . $bytes);
     readfile($path);
 }
 
@@ -435,4 +469,3 @@ function cms_sitemap_xml(): void
 {
     output_sitemap_xml();
 }
-

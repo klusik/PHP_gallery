@@ -35,6 +35,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use finfo;
+use JsonException;
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * AI image-analysis queue service model.
  *
@@ -59,7 +70,7 @@ const AI_IMAGE_ANALYSIS_ERROR_LIMIT = 2000;
  */
 function ai_image_analysis_schema_ready(): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
         return false;
     }
     if (!db_table_exists('image_ai_analysis_jobs') || !db_table_exists('image_ai_metadata')) {
@@ -744,7 +755,7 @@ function ai_image_analysis_claimed_asset(int $galleryId, int $jobId, string $cla
     // Prefer an already-generated display master for DNG files, but do not
     // create derivatives here. The shared host must not do expensive analysis or
     // conversion work just because a worker asks for an asset.
-    $displayFile = function_exists('image_public_display_file') ? image_public_display_file($image, $gallery, false) : null;
+    $displayFile = function_exists('Gallery\\Services\\image_public_display_file') ? image_public_display_file($image, $gallery, false) : null;
     if (is_array($displayFile) && is_file((string) ($displayFile['path'] ?? ''))) {
         return $displayFile;
     }

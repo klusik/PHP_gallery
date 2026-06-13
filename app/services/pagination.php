@@ -34,6 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\url_for;
+
 /**
  * Unified public-list pagination helpers.
  *

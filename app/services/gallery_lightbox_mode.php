@@ -36,6 +36,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 /**
  * Return true when per-gallery lightbox browsing-mode overrides can be stored.
  *
@@ -60,7 +62,7 @@ function gallery_lightbox_browsing_mode_schema_ready(): bool
  */
 function gallery_lightbox_browsing_mode_options(): array
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
         return ['single'];
     }
     return ['single', 'picture_strip', '3d_carousel'];
@@ -99,7 +101,7 @@ function gallery_lightbox_browsing_mode_normalize(mixed $value, string $fallback
  */
 function theme_lightbox_browsing_mode(): string
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
         return 'single';
     }
     return gallery_lightbox_browsing_mode_normalize(app_setting('theme_lightbox_browsing_mode', 'single'), 'single');
@@ -142,7 +144,7 @@ function gallery_lightbox_browsing_mode_storage_value(mixed $value): ?string
  */
 function gallery_effective_lightbox_browsing_mode(array $gallery): string
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('lightbox_modes')) {
         return 'single';
     }
     if (gallery_lightbox_browsing_mode_schema_ready()) {

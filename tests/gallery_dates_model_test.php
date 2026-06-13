@@ -36,6 +36,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\gallery_date_gallery_is_in_branch;
+use function Gallery\Services\gallery_date_range_display_value;
+use function Gallery\Services\gallery_date_range_storage_label;
+use function Gallery\Services\gallery_date_range_storage_values;
+use function Gallery\Services\render_gallery_date;
+
 if (!function_exists('db_column_exists')) {
         /**
      * Schema shim for gallery date service tests.
@@ -82,6 +88,7 @@ if (!function_exists('t')) {
     }
 }
 
+require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/gallery_dates.php';
 
 /**

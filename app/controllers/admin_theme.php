@@ -34,6 +34,95 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
+use const Gallery\Services\CMS_PAGINATION_DEFAULT_ROWS;
+use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
+use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
+use const Gallery\Services\THEME_FAVORITE_GALLERIES_HOME_TOKEN;
+use const Gallery\Services\THEME_FAVORITE_GALLERIES_MAX;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_admin_subtab_panel;
+use function Gallery\Core\render_admin_subtabs;
+use function Gallery\Core\render_admin_tab_panel;
+use function Gallery\Core\render_admin_tabs;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\clear_theme_overrides;
+use function Gallery\Services\custom_css_path;
+use function Gallery\Services\custom_css_preset_path;
+use function Gallery\Services\custom_css_presets;
+use function Gallery\Services\delete_theme_branding_asset;
+use function Gallery\Services\favicon_asset_url;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\gallery_background_source_schema_ready;
+use function Gallery\Services\gallery_description_layout_label;
+use function Gallery\Services\gallery_description_layout_normalize;
+use function Gallery\Services\gallery_description_layout_options;
+use function Gallery\Services\gallery_lightbox_browsing_mode_label;
+use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
+use function Gallery\Services\gallery_lightbox_browsing_mode_options;
+use function Gallery\Services\main_page_gallery_grid_settings;
+use function Gallery\Services\pagination_dimension_value;
+use function Gallery\Services\pagination_global_settings;
+use function Gallery\Services\remove_stored_favicon;
+use function Gallery\Services\reset_all_gallery_grid_overrides;
+use function Gallery\Services\sanitize_hex_color;
+use function Gallery\Services\save_theme_favorite_gallery_ids;
+use function Gallery\Services\save_theme_favorite_gallery_slots;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\site_name;
+use function Gallery\Services\store_uploaded_favicon;
+use function Gallery\Services\store_uploaded_theme_background;
+use function Gallery\Services\store_uploaded_theme_branding_asset;
+use function Gallery\Services\t;
+use function Gallery\Services\theme_background_asset_url;
+use function Gallery\Services\theme_background_clear_stored_files;
+use function Gallery\Services\theme_background_optimized_max_side_value;
+use function Gallery\Services\theme_background_optimized_path;
+use function Gallery\Services\theme_background_original_path;
+use function Gallery\Services\theme_background_regenerate_optimized;
+use function Gallery\Services\theme_background_source;
+use function Gallery\Services\theme_branding_asset_types;
+use function Gallery\Services\theme_branding_asset_url;
+use function Gallery\Services\theme_branding_separator_height_value;
+use function Gallery\Services\theme_branding_separator_stretch_enabled;
+use function Gallery\Services\theme_branding_separator_width_value;
+use function Gallery\Services\theme_favorite_gallery_ids;
+use function Gallery\Services\theme_gallery_description_layout;
+use function Gallery\Services\theme_gps_pin_background_size_value;
+use function Gallery\Services\theme_gps_pin_size_value;
+use function Gallery\Services\theme_lightbox_browsing_mode;
+use function Gallery\Services\theme_page_width_custom_value;
+use function Gallery\Services\theme_page_width_mode;
+use function Gallery\Services\theme_settings;
+use function Gallery\Services\translation_admin_language;
+use function Gallery\Services\translation_clear_missing_diagnostics;
+use function Gallery\Services\translation_default_language;
+use function Gallery\Services\translation_detected_language_packs;
+use function Gallery\Services\translation_language_allowed;
+use function Gallery\Services\translation_language_coverage;
+use function Gallery\Services\translation_language_pack_json_text;
+use function Gallery\Services\translation_missing_diagnostics;
+use function Gallery\Services\translation_normalize_language_code;
+use function Gallery\Services\translation_public_language;
+use function Gallery\Services\translation_save_language_json;
+use function Gallery\Services\translation_set_active_language;
+use function Gallery\Services\translation_set_public_language;
+use function Gallery\Views\view_render_admin_hero;
+use function Gallery\Views\view_render_admin_tab_intro;
+
 /**
  * Admin theme controller.
  *
@@ -161,9 +250,9 @@ function cms_admin_theme(): void
 {
     require_admin();
     // $gpsMapsFeatureEnabled stores whether GPS-related theme controls should be visible and saved.
-    $gpsMapsFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps');
+    $gpsMapsFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps');
     // $lightboxModesFeatureEnabled stores whether lightbox browsing-mode theme controls should be visible and saved.
-    $lightboxModesFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    $lightboxModesFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
 
     if (isset($_GET['download_language_pack'])) {
         // $downloadLanguage stores the normalized language code requested for export.
@@ -361,9 +450,9 @@ function cms_admin_theme(): void
             }
             set_app_setting('theme_page_width', theme_page_width_mode((string) ($_POST['theme_page_width'] ?? 'default')));
             set_app_setting('theme_page_width_custom', (string) theme_page_width_custom_value($_POST['theme_page_width_custom'] ?? null));
-            if (function_exists('save_theme_favorite_gallery_slots')) {
+            if (function_exists('Gallery\\Services\\save_theme_favorite_gallery_slots')) {
                 save_theme_favorite_gallery_slots($_POST['theme_favorite_gallery_types'] ?? [], $_POST['theme_favorite_gallery_ids'] ?? []);
-            } elseif (function_exists('save_theme_favorite_gallery_ids')) {
+            } elseif (function_exists('Gallery\\Services\\save_theme_favorite_gallery_ids')) {
                 save_theme_favorite_gallery_ids($_POST['theme_favorite_gallery_ids'] ?? []);
             }
             set_app_setting('theme_branding_separator_width', (string) theme_branding_separator_width_value($_POST['theme_branding_separator_width'] ?? null));
@@ -666,7 +755,7 @@ function cms_admin_theme(): void
     ], 'admin-theme-layout-subtab-shortcuts', t('admin.theme.layout.subtabs_label', 'Layout subsections'));
     ob_start();
     echo '<div class="theme-tab-card-grid">';
-    $favoriteGalleryIds = function_exists('theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
+    $favoriteGalleryIds = function_exists('Gallery\\Services\\theme_favorite_gallery_ids') ? theme_favorite_gallery_ids() : [];
     echo '<fieldset class="form-grid admin-theme-favorite-galleries" id="admin-theme-favorite-galleries"><legend>' . e(t('admin.theme.layout.favorite_galleries_legend', 'Favorite gallery shortcuts')) . '</legend>';
     echo '<p class="muted">' . e(t('admin.theme.layout.favorite_galleries_hint', 'Choose up to three shortcuts to show as direct buttons in the top header navigation. Each slot can point to the main page or to one gallery. Leave all three empty to hide the old Galleries button completely.')) . '</p>';
     echo '<div class="admin-theme-favorite-gallery-list">';
@@ -683,7 +772,7 @@ function cms_admin_theme(): void
         echo '<option value="' . e(THEME_FAVORITE_GALLERIES_HOME_TOKEN) . '"' . ($selectedFavoriteType === THEME_FAVORITE_GALLERIES_HOME_TOKEN ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_home', 'Main page')) . '</option>';
         echo '<option value="gallery"' . ($selectedFavoriteType === 'gallery' ? ' selected' : '') . '>' . e(t('admin.theme.layout.favorite_gallery_gallery', 'Gallery')) . '</option>';
         echo '</select></label>';
-        if (function_exists('render_gallery_search_picker')) {
+        if (function_exists('Gallery\\Controllers\\render_gallery_search_picker')) {
             echo render_gallery_search_picker('theme_favorite_gallery_ids[]', $selectedFavoriteGalleryId, 0, [
                 'id' => 'theme-favorite-gallery-' . ($favoriteIndex + 1),
                 'placeholder' => t('admin.theme.layout.favorite_gallery_placeholder', 'Search gallery by name or path'),

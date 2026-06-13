@@ -35,6 +35,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * Upload automation service model.
  *
@@ -972,7 +982,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
                 throw new RuntimeException(t('upload_automation.error.thumbnail_store_failed', 'Could not store a client-generated thumbnail.'));
             }
             @touch($targetPath, time());
-            if (function_exists('thumbnail_metadata_record_file')) {
+            if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                 // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
                 $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], (string) $entry['format'], $targetPath, image_abs_path($image, $gallery), true);
                 if (empty($metadataResult['valid'])) {
@@ -989,7 +999,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
     }
 
     $result['errors'] = array_values(array_unique(array_filter(array_map('strval', $result['errors']))));
-    if ($result['installed'] > 0 && function_exists('thumbnail_maintenance_summary_cache_clear')) {
+    if ($result['installed'] > 0 && function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
 

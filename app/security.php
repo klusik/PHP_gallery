@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDOException;
+use Throwable;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\auth_restore_persistent_login;
+use function Gallery\Services\t;
+
 /**
  * Get or create the per-session CSRF token used by admin POST forms.
  *
@@ -84,7 +92,7 @@ function current_user(): ?array
     }
     if (empty($_SESSION['user_id'])) {
         // $restoredUser stores a durable login restored from a hashed database token when PHP session storage expired.
-        $restoredUser = function_exists('auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
+        $restoredUser = function_exists('Gallery\\Services\\auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
         if (!$restoredUser) {
             // $cache stores an intermediate value used by the surrounding gallery workflow.
             $cache = true;
@@ -202,7 +210,7 @@ function verify_vote_rate_limit(int $imageId): void
     if ($lastVote > 0 && ($now - $lastVote) < 2) {
         http_response_code(429);
         header('Content-Type: application/json');
-        exit(json_encode(['error' => function_exists('t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
+        exit(json_encode(['error' => function_exists('Gallery\\Services\\t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
     }
     $_SESSION[$key] = $now;
 }

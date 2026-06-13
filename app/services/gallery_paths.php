@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\slugify;
+
 /**
 Gallery path service helpers.
  *

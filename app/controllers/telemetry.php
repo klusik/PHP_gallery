@@ -32,6 +32,9 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\request_method;
+use function Gallery\Services\t;
+
 /**
  * Public anonymous telemetry ingestion controller.
  *

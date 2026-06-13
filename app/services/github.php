@@ -36,6 +36,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_current_version;
+
 /**
  * Return the root directory used for file-backed GitHub API cache metadata.
  *
@@ -337,7 +343,7 @@ function cms_github_api_raw_get(string $url, int $timeoutSeconds, array $headers
     ];
 
     // $config stores optional private server-side settings such as a GitHub token.
-    $config = function_exists('cms_config') ? cms_config() : [];
+    $config = function_exists('Gallery\\Core\\cms_config') ? cms_config() : [];
     // $token stores an optional Personal Access Token or GitHub App token configured server-side only.
     $token = '';
     if (is_array($config)) {

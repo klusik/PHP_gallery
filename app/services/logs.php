@@ -32,6 +32,12 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Services\translation_interpolate;
+use function Gallery\Services\translation_load_language;
+
 /**
  * Administrative log service model.
  *
@@ -68,7 +74,7 @@ if (!function_exists('admin_log_english_t')) {
         }
 
         $text = null;
-        if (function_exists('translation_load_language')) {
+        if (function_exists('Gallery\\Services\\translation_load_language')) {
             $englishStrings = translation_load_language('en');
             if (array_key_exists($key, $englishStrings) && is_string($englishStrings[$key])) {
                 $text = $englishStrings[$key];
@@ -79,7 +85,7 @@ if (!function_exists('admin_log_english_t')) {
             $text = $fallback ?? $key;
         }
 
-        if (function_exists('translation_interpolate')) {
+        if (function_exists('Gallery\\Services\\translation_interpolate')) {
             return translation_interpolate($text, $parameters);
         }
 

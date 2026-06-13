@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use GdImage;
+use Imagick;
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+
 /**
  * Return the JPEG quality used by generated thumbnail files.
  *
@@ -327,7 +336,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     // Variable $sourcePath stores this steps working value.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        if (function_exists('thumbnail_metadata_delete_image_variants')) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
             thumbnail_metadata_delete_image_variants($image);
         }
         return ['created' => 0, 'skipped' => 0, 'webp_skipped' => 0, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => [], 'thumbnail_policy' => null];
@@ -368,7 +377,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
     // $sizes stores the generated thumbnail sizes requested by this operation. Null means the full standard set.
     $sizes = $requestedSizes === null ? thumbnail_sizes() : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
     // $thumbnailPolicy stores the exact generation policy for diagnostics and warmup logs.
-    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
+    $thumbnailPolicy = function_exists('Gallery\\Services\\thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
     if (!$sizes) {
         return ['created' => 0, 'skipped' => $skipped, 'webp_skipped' => $webpSkipped, 'failed' => 0, 'errors' => [], 'created_files' => [], 'target_formats' => $formats, 'thumbnail_policy' => $thumbnailPolicy, 'invalid_geometry_deleted' => $invalidGeometryDeleted, 'invalid_geometry_files' => $invalidGeometryFiles];
     }
@@ -385,7 +394,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
                 // $geometryStatus stores whether a fresh cache file has the right aspect ratio.
                 $geometryStatus = thumbnail_file_geometry_status($targetPath, $sourceWidth, $sourceHeight, $size);
                 if (!empty($geometryStatus['valid'])) {
-                    if (function_exists('thumbnail_metadata_record_file')) {
+                    if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                         thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
                     }
                     $skipped++;
@@ -394,7 +403,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
                 $invalidGeometryDeleted++;
                 $invalidGeometryFiles[] = basename($targetPath);
                 thumbnail_delete_invalid_geometry_file($targetPath);
-                if (function_exists('thumbnail_metadata_delete_variant')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, $format);
                 }
             }
@@ -433,14 +442,14 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             $temporaryPath = thumbnail_temporary_target_path($formatTargets['jpg'], 'jpg');
             if (write_resized_jpeg($source, $workingWidth, $workingHeight, (int) $size, $temporaryPath) && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['jpg'])) {
                 thumbnail_touch_generated_file_for_source($formatTargets['jpg'], $sourcePath);
-                if (function_exists('thumbnail_metadata_record_file')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, 'jpg', $formatTargets['jpg'], $sourcePath, true);
                 }
                 $created++;
                 $createdFiles[] = basename($formatTargets['jpg']);
             } else {
                 thumbnail_remove_partial_file($temporaryPath);
-                if (function_exists('thumbnail_metadata_delete_variant')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
                 }
                 $failed++;
@@ -454,14 +463,14 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
             $webpWritten = write_resized_webp_preserving_exif_when_needed($sourcePath, $source, $workingWidth, $workingHeight, (int) $size, $temporaryPath, $mime, $preferImagickWebpExif);
             if ($webpWritten && thumbnail_publish_temporary_target($temporaryPath, $formatTargets['webp'])) {
                 thumbnail_touch_generated_file_for_source($formatTargets['webp'], $sourcePath);
-                if (function_exists('thumbnail_metadata_record_file')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, 'webp', $formatTargets['webp'], $sourcePath, true);
                 }
                 $created++;
                 $createdFiles[] = basename($formatTargets['webp']);
             } else {
                 thumbnail_remove_partial_file($temporaryPath);
-                if (function_exists('thumbnail_metadata_delete_variant')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, 'webp');
                 }
                 $webpSkipped++;
@@ -487,7 +496,7 @@ function create_image_thumbnails_result(array $image, array $gallery, ?array $re
  */
 function thumbnail_response_file_geometry_status(array $image, array $gallery, int $size, string $path): array
 {
-    if (!function_exists('thumbnail_source_geometry_dimensions') || !function_exists('thumbnail_file_geometry_status')) {
+    if (!function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions') || !function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
         return ['valid' => true, 'reason' => 'geometry_validation_unavailable'];
     }
 
@@ -553,7 +562,7 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
         return null;
     }
 
-    if (!is_file($path) && function_exists('thumbnail_metadata_delete_variant')) {
+    if (!is_file($path) && function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
         thumbnail_metadata_delete_variant($image, $size, $format);
     }
 
@@ -562,7 +571,7 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
     }
 
     if (!is_file($path)) {
-        if (function_exists('thumbnail_metadata_delete_variant')) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
             thumbnail_metadata_delete_variant($image, $size, $format);
         }
         return null;
@@ -571,12 +580,12 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
     // $geometryStatus stores whether the physical file matches the original image ratio.
     $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
     if (empty($geometryStatus['valid'])) {
-        if (function_exists('thumbnail_delete_invalid_geometry_file')) {
+        if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
             thumbnail_delete_invalid_geometry_file($path);
         } elseif (is_file($path)) {
             @unlink($path);
         }
-        if (function_exists('thumbnail_metadata_delete_variant')) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
             thumbnail_metadata_delete_variant($image, $size, $format);
         }
 
@@ -588,19 +597,19 @@ function thumbnail_ensure_image_thumbnail_variant_file(array $image, array $gall
 
         $geometryStatus = thumbnail_response_file_geometry_status($image, $gallery, $size, $path);
         if (empty($geometryStatus['valid'])) {
-            if (function_exists('thumbnail_delete_invalid_geometry_file')) {
+            if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
                 thumbnail_delete_invalid_geometry_file($path);
             } elseif (is_file($path)) {
                 @unlink($path);
             }
-            if (function_exists('thumbnail_metadata_delete_variant')) {
+            if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                 thumbnail_metadata_delete_variant($image, $size, $format);
             }
             return null;
         }
     }
 
-    if (function_exists('thumbnail_metadata_record_file')) {
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
         try {
             thumbnail_metadata_record_file($image, $gallery, $size, $format, $path, image_abs_path($image, $gallery), false);
         } catch (Throwable) {

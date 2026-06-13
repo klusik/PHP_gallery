@@ -2508,7 +2508,7 @@
   "lightbox.fullscreen": "celá obrazovka",
   "lightbox.gallery_map": "Mapa galerie",
   "lightbox.image_load_failed": "Načtení obrázku v lightboxu selhalo.",
-  "lightbox.initial_loader": "Připravuji prohlížeč",
+  "lightbox.initial_loader": "Připravuji galerii...",
   "lightbox.initial_loader_count": "Připravuji fotografii {current} z {total}",
   "lightbox.keep_current_centered": "Držet aktuální bod uprostřed",
   "lightbox.leaflet_failed": "Leaflet se nepodařilo načíst.",

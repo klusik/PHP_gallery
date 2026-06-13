@@ -35,6 +35,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\e;
+use function Gallery\Services\t;
+
 /**
  * Return the Admin interface design tokens used by CSS and by the visible spec card.
  *

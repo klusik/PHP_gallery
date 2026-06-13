@@ -36,6 +36,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use Throwable;
+use function Gallery\Controllers\cms_cleanup_password_reset_tokens;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\pending_migrations_exist;
+use function Gallery\Core\url_for;
+
 const SITE_MAINTENANCE_STATE_SETTING = 'site_maintenance_run_state';
 const SITE_MAINTENANCE_LAST_RESULT_SETTING = 'site_maintenance_last_result';
 const SITE_MAINTENANCE_LAST_COMPLETED_DATE_SETTING = 'site_maintenance_last_completed_date';
@@ -493,7 +504,7 @@ function site_maintenance_new_state(string $cycleDate, string $source): array
         'last_step_summary' => [],
         'totals' => site_maintenance_empty_totals(),
         'cleanup' => [],
-        'thumbnail_metadata_start_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+        'thumbnail_metadata_start_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
     ];
 }
 
@@ -1022,7 +1033,7 @@ function site_maintenance_run_active_state(array $state, int $timeBudgetSeconds,
         }
         set_app_setting(SITE_MAINTENANCE_LAST_COMPLETED_AT_SETTING, now_sql());
         thumbnail_maintenance_summary_cache_clear();
-        $state['thumbnail_metadata_end_snapshot'] = function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
+        $state['thumbnail_metadata_end_snapshot'] = function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
         site_maintenance_save_state($state);
         site_maintenance_log_event('info', 'site_maintenance.completed', 'Site maintenance cycle completed.', [
             'cycle_date' => $cycleDate,
@@ -1086,7 +1097,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
         site_maintenance_log_event('info', 'site_maintenance.thumbnails_checked', 'Site maintenance thumbnail scan finished.', [
             'cycle_date' => (string) ($state['cycle_date'] ?? ''),
             'totals' => is_array($state['totals'] ?? null) ? $state['totals'] : site_maintenance_empty_totals(),
-            'thumbnail_metadata_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+            'thumbnail_metadata_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
         ]);
         return ['worked' => true, 'phase' => 'thumbnails', 'processed_images' => 0, 'seen_images' => 0, 'next_phase' => 'cleanups'];
     }
@@ -1229,7 +1240,7 @@ function site_maintenance_process_thumbnail_step(array &$state, float $deadline)
             'step' => site_maintenance_step_summary($step, (int) ($state['cursor_image_id'] ?? 0)),
             'image_ids' => $stepImageIds,
             'duration_seconds' => (float) ($step['duration_seconds'] ?? 0.0),
-            'thumbnail_metadata_snapshot' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+            'thumbnail_metadata_snapshot' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
         ]);
     }
 
@@ -1407,25 +1418,25 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
         $cleanup['zip_cache'] = cleanup_expired_zip_cache();
     }
 
-    if (function_exists('auth_throttle_cleanup')) {
+    if (function_exists('Gallery\\Services\\auth_throttle_cleanup')) {
         auth_throttle_cleanup();
         $cleanup['auth_rate_limits'] = 'cleaned';
     }
 
-    if (function_exists('cms_cleanup_password_reset_tokens')) {
+    if (function_exists('Gallery\\Controllers\\cms_cleanup_password_reset_tokens')) {
         cms_cleanup_password_reset_tokens();
         $cleanup['password_reset_tokens'] = 'cleaned';
     }
 
-    if (function_exists('telemetry_run_maintenance') && (!function_exists('feature_flag_enabled') || feature_flag_enabled('telemetry'))) {
+    if (function_exists('telemetry_run_maintenance') && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('telemetry'))) {
         $cleanup['telemetry'] = telemetry_run_maintenance();
     }
 
-    if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
         $cleanup['thumbnail_metadata_orphans_deleted'] = site_maintenance_delete_orphan_thumbnail_metadata();
     }
 
-    $cleanup['pending_migrations'] = function_exists('pending_migrations_exist') ? pending_migrations_exist() : false;
+    $cleanup['pending_migrations'] = function_exists('Gallery\\Core\\pending_migrations_exist') ? pending_migrations_exist() : false;
 
     $state['cleanup'] = $cleanup;
     $state['phase'] = 'complete';
@@ -1442,7 +1453,7 @@ function site_maintenance_process_cleanup_step(array &$state, float $deadline): 
  */
 function site_maintenance_delete_orphan_thumbnail_metadata(): int
 {
-    if (!function_exists('db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
+    if (!function_exists('Gallery\\Services\\db_table_exists') || !db_table_exists('image_thumbnail_variants')) {
         return 0;
     }
 
@@ -1455,7 +1466,7 @@ function site_maintenance_delete_orphan_thumbnail_metadata(): int
         return $deleted;
     }
 
-    if (!function_exists('db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
+    if (!function_exists('Gallery\\Services\\db_column_exists') || !db_column_exists('image_thumbnail_variants', 'gallery_id')) {
         return $deleted;
     }
 

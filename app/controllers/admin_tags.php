@@ -34,6 +34,30 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_tag_rows;
+use function Gallery\Services\admin_tag_usage_rows;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\delete_tag_by_id;
+use function Gallery\Services\find_tag_by_id;
+use function Gallery\Services\normalize_existing_tags;
+use function Gallery\Services\normalize_gallery_sidecar_tags_recursively;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_description_schema_ready;
+use function Gallery\Services\update_tag_metadata;
+
 /**
  * Render and process the admin tag editor.
  */

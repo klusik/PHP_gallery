@@ -34,6 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Services\t;
+
 /**
  * HTTP controller helper model.
  *
@@ -44,6 +51,7 @@ declare(strict_types=1);
  */
 function send_conditional_file_headers(string $path, string $cacheControl): void
 {
+    clear_response_cache_headers();
     // $mtime stores an intermediate value used by the surrounding gallery workflow.
     $mtime = (int) filemtime($path);
     // $size stores an intermediate value used by the surrounding gallery workflow.
@@ -62,6 +70,28 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
         http_response_code(304);
         exit;
     }
+}
+
+
+/**
+ * Remove inherited PHP/session cache headers before an asset route sets its own policy.
+ */
+function clear_response_cache_headers(): void
+{
+    header_remove('Cache-Control');
+    header_remove('Pragma');
+    header_remove('Expires');
+}
+
+/**
+ * Send a cache policy after removing inherited PHP/session cache headers.
+ *
+ * @param string $cacheControl Cache control value.
+ */
+function send_asset_cache_control(string $cacheControl): void
+{
+    clear_response_cache_headers();
+    header('Cache-Control: ' . $cacheControl);
 }
 
 /**

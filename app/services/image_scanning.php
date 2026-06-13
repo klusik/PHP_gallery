@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use PDO;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * Image scanning model.
  * 
@@ -87,7 +98,7 @@ function scan_image_orientation_swaps_axes(int $orientation): bool
  */
 function scan_image_sync_master_display_metadata(int $imageId, array $metadata): void
 {
-    if ($imageId <= 0 || !function_exists('db_column_exists') || !db_column_exists('images', 'display_width')) {
+    if ($imageId <= 0 || !function_exists('Gallery\\Services\\db_column_exists') || !db_column_exists('images', 'display_width')) {
         return;
     }
 
@@ -126,12 +137,12 @@ function scan_image_invalidate_thumbnail_derivatives(int $imageId): void
         return;
     }
 
-    if (function_exists('db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
+    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
         db()->prepare('UPDATE images SET thumbnail_derivative_version = thumbnail_derivative_version + 1 WHERE id = ?')->execute([$imageId]);
     }
-    if (function_exists('thumbnail_metadata_delete_image_variants')) {
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
         thumbnail_metadata_delete_image_variants($imageId);
-    } elseif (function_exists('db_table_exists') && db_table_exists('image_thumbnail_variants')) {
+    } elseif (function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('image_thumbnail_variants')) {
         db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?')->execute([$imageId]);
     }
 }
@@ -152,7 +163,7 @@ function scan_image_file_metadata(string $path, string $filename): ?array
 {
     if (is_dng_image_path($filename)) {
         // $metadata stores dimensions reported by the configured RAW decoder when available.
-        $metadata = function_exists('dng_image_metadata') ? dng_image_metadata($path) : null;
+        $metadata = function_exists('Gallery\\Services\\dng_image_metadata') ? dng_image_metadata($path) : null;
         if (is_array($metadata)) {
             $metadata['display_width'] = (int) ($metadata['display_width'] ?? $metadata['width'] ?? 0);
             $metadata['display_height'] = (int) ($metadata['display_height'] ?? $metadata['height'] ?? 0);

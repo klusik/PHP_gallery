@@ -36,6 +36,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Services\t;
+
 /**
  * Render database usage statistics for the Admin storage page.
  *

@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use function Gallery\Core\db;
+
 /**
  * Gallery display-preference service layer.
  *

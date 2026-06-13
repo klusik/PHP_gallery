@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDO;
+use PDOException;
+use Throwable;
+use function Gallery\Services\admin_log_event;
+use function Gallery\Services\thumbnail_metadata_storage_snapshot;
+
 /**
  * Apply all pending database migrations in filename order.
  *
@@ -66,7 +74,7 @@ function run_migrations(): array
     // $migrationStartedAt stores the full migration batch start timestamp.
     $migrationStartedAt = microtime(true);
     // $thumbnailMetadataSnapshotBefore stores a pre-migration storage snapshot when thumbnail metadata helpers are loaded.
-    $thumbnailMetadataSnapshotBefore = function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
+    $thumbnailMetadataSnapshotBefore = function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
 
     foreach ($files as $file) {
         // Variable $version stores this steps working value.
@@ -104,7 +112,7 @@ function run_migrations(): array
         }
     }
 
-    if ($ran && function_exists('admin_log_event')) {
+    if ($ran && function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event('info', 'migrations.ran_detailed', 'Database migrations completed with timing diagnostics.', [
             'versions' => $ran,
             'migration_count' => count($ran),
@@ -115,7 +123,7 @@ function run_migrations(): array
             'total_duration_seconds' => round(microtime(true) - $migrationStartedAt, 4),
             'migrations' => $migrationDiagnostics,
             'thumbnail_metadata_snapshot_before' => $thumbnailMetadataSnapshotBefore,
-            'thumbnail_metadata_snapshot_after' => function_exists('thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+            'thumbnail_metadata_snapshot_after' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
         ], ['category' => 'database', 'severity' => 'notice']);
     }
 

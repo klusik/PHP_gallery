@@ -35,6 +35,37 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\media_renamer_all_gallery_ids;
+use function Gallery\Services\media_renamer_availability_for_gallery_ids;
+use function Gallery\Services\media_renamer_default_pattern;
+use function Gallery\Services\media_renamer_empty_execution_result;
+use function Gallery\Services\media_renamer_execute_galleries;
+use function Gallery\Services\media_renamer_execute_image_batch;
+use function Gallery\Services\media_renamer_existing_gallery_ids;
+use function Gallery\Services\media_renamer_gallery_ids_with_pending_renames;
+use function Gallery\Services\media_renamer_gallery_rows;
+use function Gallery\Services\media_renamer_gallery_rows_with_rename_availability;
+use function Gallery\Services\media_renamer_gallery_rows_with_submitted_availability;
+use function Gallery\Services\media_renamer_normalize_pattern;
+use function Gallery\Services\media_renamer_pattern_help_text;
+use function Gallery\Services\media_renamer_plan_for_gallery;
+use function Gallery\Services\media_renamer_plans_for_galleries;
+use function Gallery\Services\t;
+
 /**
  * Handle the site-wide media renamer admin page.
  */
@@ -904,7 +935,7 @@ function admin_media_renamer_write_admin_log_direct(string $level, string $event
             $category = 'media';
         }
 
-        $user = function_exists('current_user') ? current_user() : null;
+        $user = function_exists('Gallery\\Core\\current_user') ? current_user() : null;
         $insertColumns = [];
         $placeholders = [];
         $params = [];
@@ -933,7 +964,7 @@ function admin_media_renamer_write_admin_log_direct(string $level, string $event
         $add('http_method', substr((string) ($_SERVER['REQUEST_METHOD'] ?? ''), 0, 12));
         $add('is_ajax', admin_wants_json() ? 1 : 0);
         $add('context_json', $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null);
-        $add('created_at', function_exists('now_sql') ? now_sql() : date('Y-m-d H:i:s'));
+        $add('created_at', function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s'));
 
         if (!$insertColumns) {
             return false;

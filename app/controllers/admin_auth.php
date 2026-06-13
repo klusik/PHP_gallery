@@ -34,6 +34,66 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use const Gallery\Services\OPENAI_TEXT_ASSIST_DEFAULT_MODEL;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_login_return_target;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\sanitize_login_return_target;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Core\visitor_hash;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\auth_issue_persistent_login;
+use function Gallery\Services\auth_persistence_config;
+use function Gallery\Services\auth_persistent_login_ready;
+use function Gallery\Services\auth_revoke_current_persistent_login;
+use function Gallery\Services\auth_revoke_user_persistent_logins;
+use function Gallery\Services\auth_throttle_check;
+use function Gallery\Services\auth_throttle_clear;
+use function Gallery\Services\auth_throttle_log;
+use function Gallery\Services\auth_throttle_normalize_identifier;
+use function Gallery\Services\auth_throttle_record_attempt;
+use function Gallery\Services\auth_throttle_visitor_subject;
+use function Gallery\Services\db_column_exists;
+use function Gallery\Services\db_table_exists;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\google_auth_authorization_url;
+use function Gallery\Services\google_auth_claims_from_code;
+use function Gallery\Services\google_auth_config;
+use function Gallery\Services\google_auth_consume_state;
+use function Gallery\Services\google_auth_disconnect_account;
+use function Gallery\Services\google_auth_link_account;
+use function Gallery\Services\google_auth_linked_account;
+use function Gallery\Services\google_auth_ready;
+use function Gallery\Services\google_auth_schema_ready;
+use function Gallery\Services\google_auth_touch_login;
+use function Gallery\Services\google_auth_user_by_subject;
+use function Gallery\Services\openai_text_assist_available;
+use function Gallery\Services\openai_text_assist_image_input_column_ready;
+use function Gallery\Services\openai_text_assist_model_catalog;
+use function Gallery\Services\openai_text_assist_normalize_model;
+use function Gallery\Services\openai_text_assist_save_user_settings;
+use function Gallery\Services\openai_text_assist_schema_ready;
+use function Gallery\Services\openai_text_assist_user_settings;
+use function Gallery\Services\restore_application_stable_release;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\site_name;
+use function Gallery\Services\t;
+
 /**
  * Admin authentication controller model.
  * 
@@ -68,7 +128,7 @@ function cms_find_admin_user_by_identifier(string $identifier): ?array
         return null;
     }
 
-    if (function_exists('db_column_exists') && db_column_exists('users', 'email')) {
+    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('users', 'email')) {
         // Variable $stmt stores this steps working value.
         $stmt = db()->prepare('SELECT * FROM users WHERE email IS NOT NULL AND LOWER(email) = LOWER(?) LIMIT 1');
         $stmt->execute([$normalizedIdentifier]);
@@ -221,7 +281,7 @@ function cms_save_password_reset_settings(array $input): array
  */
 function cms_password_reset_schema_ready(): bool
 {
-    return function_exists('db_table_exists') && db_table_exists('password_reset_tokens');
+    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('password_reset_tokens');
 }
 
 /**
@@ -638,7 +698,7 @@ function cms_admin_google_start(): void
     // $returnTarget stores the local page that should reopen after successful authentication.
     $returnTarget = sanitize_login_return_target((string) ($_GET['return'] ?? ''), url_for('admin'));
 
-    if (!function_exists('google_auth_ready') || !google_auth_ready()) {
+    if (!function_exists('Gallery\\Services\\google_auth_ready') || !google_auth_ready()) {
         flash_message('admin_notice', t('admin.google.not_configured', 'Google login is not configured yet. Add the OAuth client ID and secret to config.php, then run the database migrations.'));
         redirect_to($mode === 'link' ? url_for('admin_account') : url_for('admin_login', ['return' => $returnTarget]));
     }
@@ -658,7 +718,7 @@ function cms_admin_google_callback(): void
     // $state stores the returned OAuth state used to prevent request forgery.
     $state = (string) ($_GET['state'] ?? '');
     // $stateEntry stores the local state metadata saved before redirecting to Google.
-    $stateEntry = function_exists('google_auth_consume_state') ? google_auth_consume_state($state) : null;
+    $stateEntry = function_exists('Gallery\\Services\\google_auth_consume_state') ? google_auth_consume_state($state) : null;
     if (!$stateEntry) {
         flash_message('admin_notice', t('admin.google.state_invalid', 'Google login expired or returned an invalid state. Try again.'));
         redirect_to(url_for('admin_login'));
@@ -712,10 +772,10 @@ function cms_admin_google_callback(): void
 
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $linkedUser['id'];
-        if (function_exists('auth_issue_persistent_login')) {
+        if (function_exists('Gallery\\Services\\auth_issue_persistent_login')) {
             auth_issue_persistent_login((int) $linkedUser['id']);
         }
-        if (function_exists('google_auth_touch_login')) {
+        if (function_exists('Gallery\\Services\\google_auth_touch_login')) {
             google_auth_touch_login((int) $linkedUser['google_account_id']);
         }
         admin_log_event('info', 'auth.google_login', t('admin.google.log_login', 'Admin logged in with Google.'), [
@@ -777,7 +837,7 @@ function cms_admin_login(): void
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if (!empty($_POST['remember_login']) && function_exists('auth_issue_persistent_login')) {
+                if (!empty($_POST['remember_login']) && function_exists('Gallery\\Services\\auth_issue_persistent_login')) {
                     auth_issue_persistent_login((int) $user['id']);
                 }
                 // Redirect to the page where the visitor clicked the login link, not always to the admin dashboard.
@@ -805,11 +865,11 @@ function cms_admin_login(): void
         echo '<div class="notice">' . e($error) . '</div>';
     }
     // $rememberConfig stores persistent login defaults for the checkbox below.
-    $rememberConfig = function_exists('auth_persistence_config') ? auth_persistence_config() : ['persistent_login_default_checked' => true];
+    $rememberConfig = function_exists('Gallery\\Services\\auth_persistence_config') ? auth_persistence_config() : ['persistent_login_default_checked' => true];
     // $rememberReady stores whether DB-backed persistent login can be issued on this installation.
-    $rememberReady = function_exists('auth_persistent_login_ready') && auth_persistent_login_ready();
+    $rememberReady = function_exists('Gallery\\Services\\auth_persistent_login_ready') && auth_persistent_login_ready();
     // $googleReady stores whether Google sign-in can be used on this installation.
-    $googleReady = function_exists('google_auth_ready') && google_auth_ready();
+    $googleReady = function_exists('Gallery\\Services\\google_auth_ready') && google_auth_ready();
     echo '<section class="panel"><h1>' . e(t('admin.auth.login_title')) . '</h1><form method="post" class="form-grid">';
     echo csrf_field();
     // Keep the sanitized return target through failed login attempts without exposing unsafe redirect data.
@@ -973,7 +1033,7 @@ function cms_admin_reset_password(): void
  */
 function cms_admin_logout(): void
 {
-    if (function_exists('auth_revoke_current_persistent_login')) {
+    if (function_exists('Gallery\\Services\\auth_revoke_current_persistent_login')) {
         auth_revoke_current_persistent_login();
     }
     unset($_SESSION['user_id']);
@@ -1038,7 +1098,7 @@ function cms_admin_account(): void
             if (!$account || !password_verify($currentPassword, (string) $account['password_hash'])) {
                 $error = t('admin.account.error_current_password_required');
             } else {
-                if (function_exists('google_auth_disconnect_account')) {
+                if (function_exists('Gallery\\Services\\google_auth_disconnect_account')) {
                     google_auth_disconnect_account((int) $user['id']);
                 }
                 admin_log_event('info', 'auth.google_disconnected', t('admin.google.log_disconnected', 'Admin disconnected a Google account.'), [
@@ -1048,7 +1108,7 @@ function cms_admin_account(): void
                 redirect_to(url_for('admin_account', ['google' => 'disconnected']));
             }
         } elseif ($accountAction === 'openai_text_settings') {
-            if (function_exists('feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+            if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
                 $error = t('admin.openai.feature_disabled', 'OpenAI text assistance is disabled in Admin > Features.');
             } else {
             // $currentPassword stores the profile password used to authorize credential changes.
@@ -1141,12 +1201,12 @@ function cms_admin_account(): void
                 // Variable $stmt stores this steps working value.
                 $stmt = db()->prepare($sql);
                 $stmt->execute($params);
-                if ($newPassword !== '' && function_exists('auth_revoke_user_persistent_logins')) {
+                if ($newPassword !== '' && function_exists('Gallery\\Services\\auth_revoke_user_persistent_logins')) {
                     auth_revoke_user_persistent_logins((int) $user['id']);
                 }
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = (int) $user['id'];
-                if ($newPassword !== '' && function_exists('auth_issue_persistent_login')) {
+                if ($newPassword !== '' && function_exists('Gallery\\Services\\auth_issue_persistent_login')) {
                     auth_issue_persistent_login((int) $user['id']);
                 }
                 redirect_to(url_for('admin_account', ['saved' => 1]));
@@ -1165,23 +1225,23 @@ function cms_admin_account(): void
     // $resetReady stores an intermediate value used by the surrounding gallery workflow.
     $resetReady = cms_password_reset_schema_ready() && $resetSettings['enabled'] && $accountEmail !== '' && $resetSettings['from_email'] !== '';
     // $openaiFeatureEnabled stores whether OpenAI profile controls should be visible.
-    $openaiFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('openai_text_assist');
+    $openaiFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('openai_text_assist');
     // $openaiSettings stores the current user's optional OpenAI profile integration settings.
-    $openaiSettings = $openaiFeatureEnabled && function_exists('openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
+    $openaiSettings = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_user_settings') ? openai_text_assist_user_settings((int) $user['id']) : [];
     // $openaiSchemaReady stores whether the required optional OpenAI settings table exists.
-    $openaiSchemaReady = $openaiFeatureEnabled && function_exists('openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
+    $openaiSchemaReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_schema_ready') && openai_text_assist_schema_ready();
     // $openaiReady stores whether the current account can use OpenAI text assistance right now.
-    $openaiReady = $openaiFeatureEnabled && function_exists('openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
+    $openaiReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_available') && openai_text_assist_available((int) $user['id']);
     // $openaiImageInputColumnReady stores whether the optional thumbnail-consent setting can be saved yet.
-    $openaiImageInputColumnReady = $openaiFeatureEnabled && function_exists('openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
+    $openaiImageInputColumnReady = $openaiFeatureEnabled && function_exists('Gallery\\Services\\openai_text_assist_image_input_column_ready') && openai_text_assist_image_input_column_ready();
     // $googleSchemaReady stores whether the linked Google account table exists.
-    $googleSchemaReady = function_exists('google_auth_schema_ready') && google_auth_schema_ready();
+    $googleSchemaReady = function_exists('Gallery\\Services\\google_auth_schema_ready') && google_auth_schema_ready();
     // $googleReady stores whether Google login has complete config and database support.
-    $googleReady = function_exists('google_auth_ready') && google_auth_ready();
+    $googleReady = function_exists('Gallery\\Services\\google_auth_ready') && google_auth_ready();
     // $googleConfig stores the OAuth client readiness state and callback URL.
-    $googleConfig = function_exists('google_auth_config') ? google_auth_config() : ['redirect_uri' => ''];
+    $googleConfig = function_exists('Gallery\\Services\\google_auth_config') ? google_auth_config() : ['redirect_uri' => ''];
     // $googleLinkedAccount stores the Google identity linked to the current admin profile.
-    $googleLinkedAccount = function_exists('google_auth_linked_account') ? google_auth_linked_account((int) $user['id']) : null;
+    $googleLinkedAccount = function_exists('Gallery\\Services\\google_auth_linked_account') ? google_auth_linked_account((int) $user['id']) : null;
 
     render_header(t('admin.account.title'));
     if (isset($_GET['saved'])) {
@@ -1319,7 +1379,7 @@ function cms_admin_account(): void
         $openaiAllowImageInput = (int) ($openaiSettings['allow_image_input'] ?? 0) === 1;
         $openaiKeyHint = (string) ($openaiSettings['api_key_hint'] ?? '');
         $openaiModel = openai_text_assist_normalize_model((string) ($openaiSettings['model'] ?? OPENAI_TEXT_ASSIST_DEFAULT_MODEL));
-        $openaiModels = function_exists('openai_text_assist_model_catalog') ? openai_text_assist_model_catalog() : [];
+        $openaiModels = function_exists('Gallery\\Services\\openai_text_assist_model_catalog') ? openai_text_assist_model_catalog() : [];
         echo '<form method="post" class="form-grid account-settings-form account-settings-openai-form">' . csrf_field();
         echo '<input type="hidden" name="account_action" value="openai_text_settings">';
         echo '<label class="account-settings-toggle"><input type="checkbox" name="openai_text_enabled" value="1"' . ($openaiEnabled ? ' checked' : '') . '> <span><strong>' . e(t('admin.openai.enable', 'Enable OpenAI text assistance')) . '</strong><small>' . e(t('admin.openai.enable_help', 'When enabled and a key is saved, selected editors can request reviewable AI text suggestions.')) . '</small></span></label>';

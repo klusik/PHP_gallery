@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\e;
+
 /**
  * Handle view gallery description utf8 excerpt.
  *

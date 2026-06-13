@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\asset_url;
+
 /**
  * Resolve the active custom CSS file path.
  *

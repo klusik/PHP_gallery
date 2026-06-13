@@ -32,6 +32,10 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\cms_config;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\request_host_name;
+
 /**
  * Privacy normalization helpers for anonymous telemetry.
  *

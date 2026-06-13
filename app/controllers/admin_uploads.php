@@ -34,6 +34,46 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_login_return_target;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_upload_accept_value_for_mode;
+use function Gallery\Services\admin_upload_auto_rename_enabled;
+use function Gallery\Services\admin_upload_client_format_mode;
+use function Gallery\Services\admin_upload_client_format_mode_normalize;
+use function Gallery\Services\create_image_thumbnails_result;
+use function Gallery\Services\experimental_upload_browser_config;
+use function Gallery\Services\experimental_upload_server_upload_limit_bytes;
+use function Gallery\Services\experimental_upload_settings;
+use function Gallery\Services\experimental_upload_store_prepared_zip_batch;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_upload_entries;
+use function Gallery\Services\gallery_upload_entries_or_empty;
+use function Gallery\Services\heic_conversion_supported;
+use function Gallery\Services\raw_conversion_supported;
+use function Gallery\Services\set_admin_upload_auto_rename_enabled;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\set_experimental_upload_settings;
+use function Gallery\Services\store_uploaded_gallery_images;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_upload_settings_page;
+use function Gallery\Views\view_render_admin_upload_support_panel;
+
 /**
  * Admin upload controller model.
  * 
@@ -115,7 +155,7 @@ function admin_upload_experimental_reject_discarded_body(): bool
     if ($contentLength <= 0 || $_POST !== [] || $_FILES !== []) {
         return false;
     }
-    $uploadLimit = function_exists('experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 0;
+    $uploadLimit = function_exists('Gallery\\Services\\experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 0;
     admin_log_event('warning', 'gallery.experimental_upload_rejected', 'Experimental upload request body was discarded before PHP could read files.', [
         'content_length' => $contentLength,
         'upload_limit_bytes' => $uploadLimit,
@@ -164,7 +204,7 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'support' => admin_upload_support_model(),
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
-        'experimental_settings' => function_exists('experimental_upload_settings') ? experimental_upload_settings() : [],
+        'experimental_settings' => function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : [],
     ];
 }
 
@@ -213,7 +253,7 @@ function cms_admin_upload_settings(): void
             redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
         }
         if (!empty($_POST['update_experimental_upload_settings'])) {
-            if (function_exists('set_experimental_upload_settings')) {
+            if (function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
                 $settings = set_experimental_upload_settings($_POST);
                 admin_log_event('info', 'settings.experimental_upload_updated', 'Admin updated experimental browser upload settings.', [
                     'enabled' => !empty($settings['enabled']),
@@ -256,7 +296,7 @@ function cms_admin_upload_experimental_batch(): void
 
     try {
         admin_upload_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
@@ -313,7 +353,7 @@ function cms_admin_upload(): void
         try {
             if (!empty($_POST['update_upload_preferences'])) {
                 admin_upload_save_general_settings($_POST);
-                if (!empty($_POST['update_experimental_upload_settings']) && function_exists('set_experimental_upload_settings')) {
+                if (!empty($_POST['update_experimental_upload_settings']) && function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
                     set_experimental_upload_settings($_POST);
                 }
                 flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
@@ -558,7 +598,7 @@ function render_admin_upload_support_panel(): void
  */
 function render_admin_upload_experimental_checkbox(bool $panelMode = false): void
 {
-    $config = function_exists('experimental_upload_browser_config') ? experimental_upload_browser_config() : ['enabled' => false];
+    $config = function_exists('Gallery\\Services\\experimental_upload_browser_config') ? experimental_upload_browser_config() : ['enabled' => false];
     $encodedConfig = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encodedConfig)) {
         $encodedConfig = '{}';

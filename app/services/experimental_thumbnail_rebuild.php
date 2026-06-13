@@ -36,6 +36,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\url_for;
+
 const EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES = 512 * 1024 * 1024;
 const EXPERIMENTAL_THUMBNAIL_SOURCE_MIN_CHUNK_BYTES = 16 * 1024 * 1024;
 const EXPERIMENTAL_THUMBNAIL_SOURCE_HARD_CHUNK_BYTES = 3 * 1024 * 1024 * 1024;
@@ -174,12 +182,12 @@ function experimental_thumbnail_rebuild_normalized_formats(array $formats, bool 
  */
 function experimental_thumbnail_rebuild_target_formats_for_image(string $sourcePath, array $image): array
 {
-    $mime = function_exists('image_source_mime_for_derivatives') ? image_source_mime_for_derivatives($sourcePath, $image) : '';
-    if ($mime !== '' && function_exists('thumbnail_target_formats_for_source')) {
+    $mime = function_exists('Gallery\\Services\\image_source_mime_for_derivatives') ? image_source_mime_for_derivatives($sourcePath, $image) : '';
+    if ($mime !== '' && function_exists('Gallery\\Services\\thumbnail_target_formats_for_source')) {
         return experimental_thumbnail_rebuild_normalized_formats(thumbnail_target_formats_for_source($sourcePath, $mime), false);
     }
 
-    return experimental_thumbnail_rebuild_normalized_formats(function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    return experimental_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
 }
 
 /**
@@ -190,7 +198,7 @@ function experimental_thumbnail_rebuild_target_formats_for_image(string $sourceP
  */
 function experimental_thumbnail_rebuild_expected_variant_count(array $formats): int
 {
-    $sizes = function_exists('thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
     return count($sizes) * count(experimental_thumbnail_rebuild_normalized_formats($formats, false));
 }
 
@@ -201,9 +209,9 @@ function experimental_thumbnail_rebuild_expected_variant_count(array $formats): 
  */
 function experimental_thumbnail_rebuild_browser_config(): array
 {
-    $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
-    $uploadLimit = function_exists('experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
-    $formats = experimental_thumbnail_rebuild_normalized_formats(function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+    $uploadLimit = function_exists('Gallery\\Services\\experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
+    $formats = experimental_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
 
     return [
         'enabled' => (bool) ($settings['enabled'] ?? false),
@@ -213,14 +221,14 @@ function experimental_thumbnail_rebuild_browser_config(): array
         'max_worker_count' => (int) ($settings['max_worker_count'] ?? EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP),
         'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP),
         'upload_limit_bytes' => $uploadLimit,
-        'batch_target_bytes' => function_exists('experimental_upload_effective_batch_target_bytes') ? experimental_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO), (int) ($settings['max_zip_batch_bytes'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES)) : (int) floor($uploadLimit * 0.8),
+        'batch_target_bytes' => function_exists('Gallery\\Services\\experimental_upload_effective_batch_target_bytes') ? experimental_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO), (int) ($settings['max_zip_batch_bytes'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES)) : (int) floor($uploadLimit * 0.8),
         'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
         'source_chunk_bytes' => experimental_thumbnail_rebuild_source_chunk_bytes(),
         'source_chunk_item_cap' => experimental_thumbnail_rebuild_source_chunk_item_cap(),
-        'thumbnail_sizes' => function_exists('thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
+        'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
         'thumbnail_formats' => $formats,
-        'jpeg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpeg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
         'supported_mime_types' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ];
 }
@@ -248,15 +256,15 @@ function experimental_thumbnail_rebuild_request_image_ids(array $input): array
 {
     $scope = trim((string) ($input['scope'] ?? 'all'));
     if ($scope === 'missing') {
-        return function_exists('thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
+        return function_exists('Gallery\\Services\\thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
     }
     if (!empty($input['image_ids']) && is_array($input['image_ids'])) {
         return array_values(array_unique(array_filter(array_map('intval', $input['image_ids']), static fn (int $id): bool => $id > 0)));
     }
-    if (!empty($input['gallery_ids']) && is_array($input['gallery_ids']) && function_exists('image_ids_for_galleries')) {
+    if (!empty($input['gallery_ids']) && is_array($input['gallery_ids']) && function_exists('Gallery\\Services\\image_ids_for_galleries')) {
         return image_ids_for_galleries($input['gallery_ids']);
     }
-    return function_exists('all_image_ids') ? all_image_ids() : [];
+    return function_exists('Gallery\\Services\\all_image_ids') ? all_image_ids() : [];
 }
 
 /**
@@ -720,10 +728,10 @@ function experimental_thumbnail_rebuild_store_prepared_zip_batch(array $uploaded
                 if (@file_put_contents($targetPath, $entries[$zipPath], LOCK_EX) === false) {
                     throw new RuntimeException(t('experimental_thumbnail_rebuild.error_thumbnail_store_failed', 'Could not store a browser-prepared thumbnail.'));
                 }
-                if (function_exists('thumbnail_touch_generated_file_for_source')) {
+                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
                     thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
                 }
-                if (function_exists('thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
                     $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
                     if (empty($metadata['valid'])) {
                         $failed++;

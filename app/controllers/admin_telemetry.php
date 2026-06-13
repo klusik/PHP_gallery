@@ -32,6 +32,18 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\t;
+use function Gallery\Services\translation_active_language;
+
 /**
  * Admin telemetry controller.
  *

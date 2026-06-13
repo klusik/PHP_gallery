@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\db;
+
 const ADMIN_STORAGE_STATISTICS_CACHE_KEY = 'admin_storage_statistics_cache_v2';
 const ADMIN_STORAGE_STATISTICS_JOB_KEY = 'admin_storage_statistics_job_v1';
 const ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE = 20;
@@ -75,7 +80,7 @@ function admin_storage_statistics(bool $forceRefresh = false): array
  */
 function admin_storage_statistics_cached_snapshot(bool $allowStale = true): ?array
 {
-    if (!function_exists('app_setting')) {
+    if (!function_exists('Gallery\\Services\\app_setting')) {
         return null;
     }
 
@@ -218,7 +223,7 @@ function admin_storage_statistics_fingerprint(): string
  */
 function admin_storage_statistics_cache_read(string $fingerprint): ?array
 {
-    if ($fingerprint === '' || !function_exists('app_setting')) {
+    if ($fingerprint === '' || !function_exists('Gallery\\Services\\app_setting')) {
         return null;
     }
 
@@ -247,7 +252,7 @@ function admin_storage_statistics_cache_read(string $fingerprint): ?array
  */
 function admin_storage_statistics_cache_write(array $statistics): void
 {
-    if (!function_exists('set_app_setting')) {
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
         return;
     }
 
@@ -269,7 +274,7 @@ function admin_storage_statistics_cache_write(array $statistics): void
  */
 function admin_storage_statistics_cache_clear(): void
 {
-    if (!function_exists('delete_app_settings')) {
+    if (!function_exists('Gallery\\Services\\delete_app_settings')) {
         return;
     }
     delete_app_settings([ADMIN_STORAGE_STATISTICS_CACHE_KEY, ADMIN_STORAGE_STATISTICS_JOB_KEY]);
@@ -486,7 +491,7 @@ function admin_storage_statistics_normalize_generated_summary(array $summary): a
 function admin_storage_statistics_accumulate_generated_media_row(array &$summary, array $row): void
 {
     $summary = admin_storage_statistics_normalize_generated_summary($summary);
-    $sizes = function_exists('thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
     $formats = ['jpg', 'webp'];
     $gallery = [
         'id' => (int) ($row['gallery_id'] ?? $row['image_gallery_id'] ?? 0),
@@ -504,7 +509,7 @@ function admin_storage_statistics_accumulate_generated_media_row(array &$summary
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
             try {
-                $path = function_exists('thumbnail_abs_path') ? thumbnail_abs_path($image, $gallery, (int) $size, $format) : '';
+                $path = function_exists('Gallery\\Services\\thumbnail_abs_path') ? thumbnail_abs_path($image, $gallery, (int) $size, $format) : '';
             } catch (Throwable) {
                 $summary['scan_errors'] = (int) $summary['scan_errors'] + 1;
                 continue;
@@ -525,7 +530,7 @@ function admin_storage_statistics_accumulate_generated_media_row(array &$summary
         }
     }
 
-    if (function_exists('image_uses_dng_display_derivatives') && function_exists('dng_display_master_abs_path') && image_uses_dng_display_derivatives($image)) {
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && function_exists('Gallery\\Services\\dng_display_master_abs_path') && image_uses_dng_display_derivatives($image)) {
         try {
             $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
         } catch (Throwable) {
@@ -640,7 +645,7 @@ function admin_storage_statistics_job_public_state(array $job, ?array $snapshot 
  */
 function admin_storage_statistics_job_read(): ?array
 {
-    if (!function_exists('app_setting')) {
+    if (!function_exists('Gallery\\Services\\app_setting')) {
         return null;
     }
     $raw = app_setting(ADMIN_STORAGE_STATISTICS_JOB_KEY, '');
@@ -658,7 +663,7 @@ function admin_storage_statistics_job_read(): ?array
  */
 function admin_storage_statistics_job_write(array $job): void
 {
-    if (!function_exists('set_app_setting')) {
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
         return;
     }
     $encoded = json_encode($job, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

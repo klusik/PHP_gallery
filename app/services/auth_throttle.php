@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\visitor_hash;
+
 /**
  * Return true when the optional auth throttling table exists.
  *
@@ -42,7 +49,7 @@ declare(strict_types=1);
  */
 function auth_throttle_schema_ready(): bool
 {
-    return function_exists('db_table_exists') && db_table_exists('auth_rate_limits');
+    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('auth_rate_limits');
 }
 
 /**
@@ -85,7 +92,7 @@ function auth_throttle_subject_hash(string $subject): string
  */
 function auth_throttle_visitor_subject(): string
 {
-    return function_exists('visitor_hash') ? visitor_hash() : auth_throttle_subject_hash((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : auth_throttle_subject_hash((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
 }
 
 /**
@@ -242,7 +249,7 @@ function auth_throttle_log(string $eventKey, string $message, string $bucket, st
         'subject_sha256' => auth_throttle_subject_hash($subject),
         'attempts' => (int) ($check['attempts'] ?? 0),
         'retry_after_seconds' => (int) ($check['retry_after_seconds'] ?? 0),
-        'visitor_hash' => function_exists('visitor_hash') ? visitor_hash() : '',
+        'visitor_hash' => function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : '',
         'request_id' => function_exists('telemetry_request_id') ? telemetry_request_id() : '',
     ], ['category' => 'security', 'severity' => 'warning']);
 }

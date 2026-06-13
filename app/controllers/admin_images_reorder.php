@@ -34,6 +34,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_images;
+
 /**
  * Handles cms admin image reorder logic for the gallery application.
  *

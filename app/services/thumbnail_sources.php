@@ -34,6 +34,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\base_url;
+use function Gallery\Core\image_public_media_url;
+use function Gallery\Core\image_public_thumbnail_url;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\url_for;
+
 /**
  * Thumbnail generation model.
  *
@@ -57,7 +67,7 @@ function thumbnail_sizes(): array
  */
 function thumbnail_srcset(array $image, array $sizes = [300, 600, 800]): string
 {
-    $format = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    $format = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
     return thumbnail_srcset_for_format($image, $sizes, $format);
 }
 
@@ -92,10 +102,10 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
     if (!$gallery || !in_array($format, ['jpg', 'webp'], true)) {
         return '';
     }
-    if (function_exists('thumbnail_bound_filter_sizes')) {
+    if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
         $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
     }
-    if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
         // $metadataRows stores renderable variants known from DB without touching thumbnail files.
         $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
         foreach ($sizes as $size) {
@@ -109,7 +119,7 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
 
     // $sourceGeometry stores source dimensions used to reject wrong-ratio legacy candidates.
     $sourceGeometry = null;
-    if (function_exists('thumbnail_source_geometry_dimensions')) {
+    if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
         try {
             // $sourcePath stores the original file path used only for geometry validation.
             $sourcePath = image_abs_path($image, $gallery);
@@ -133,7 +143,7 @@ function thumbnail_srcset_for_format(array $image, array $sizes, string $format)
             if (!is_file($targetPath)) {
                 continue;
             }
-            if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+            if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
                 // $geometryStatus stores whether this candidate preserves the source aspect ratio.
                 $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
                 if (empty($geometryStatus['valid'])) {
@@ -334,9 +344,9 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
 {
     static $cache = [];
     // $cacheKey stores repeated thumbnail URL lookups inside one request.
-    $format = $format !== '' ? $format : (function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
+    $format = $format !== '' ? $format : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
-    $purpose = function_exists('public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
+    $purpose = function_exists('Gallery\\Services\\public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
     $cacheKey = (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
     if (array_key_exists($cacheKey, $cache)) {
         public_render_profile_count('thumbnail_lookup_cache_hits');
@@ -350,10 +360,10 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
     // Variable $gallery stores this steps working value.
     $gallery = find_gallery((int) $image['gallery_id']);
     if ($gallery) {
-        if (function_exists('thumbnail_bound_fallback_size')) {
+        if (function_exists('Gallery\\Services\\thumbnail_bound_fallback_size')) {
             $size = thumbnail_bound_fallback_size($image, $size, $gallery);
         }
-        if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
             // $metadataRows stores renderable variants known from DB without checking thumbnail files.
             $metadataRows = thumbnail_metadata_renderable_rows($image, thumbnail_sizes());
             if (isset($metadataRows[$format][$size])) {
@@ -370,7 +380,7 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
         }
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;
-        if (function_exists('thumbnail_source_geometry_dimensions')) {
+        if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
             try {
                 // $sourcePath stores the original file path used only for geometry validation.
                 $sourcePath = image_abs_path($image, $gallery);
@@ -385,7 +395,7 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
             // $path stores an intermediate value used by the surrounding gallery workflow.
             $path = thumbnail_abs_path($image, $gallery, $size, $format);
             if (public_render_profile_is_file($path)) {
-                if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
                     // $geometryStatus stores whether this cache file still matches the source aspect ratio.
                     $geometryStatus = thumbnail_file_geometry_status($path, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], $size);
                     if (empty($geometryStatus['valid'])) {
@@ -453,7 +463,7 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
     return public_render_profile_span('thumbnail_fallback_search', static function () use ($image, $gallery, $preferredSize, $preferredFormat): ?array {
         // Variable $sizes stores this steps working value.
         $sizes = thumbnail_sizes();
-        if (function_exists('thumbnail_bound_filter_sizes')) {
+        if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
             $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
         }
         usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
@@ -462,7 +472,7 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
         // Variable $formats stores this steps working value.
         $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
 
-        if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
             // $metadataRows stores renderable fallback candidates known from DB.
             $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
             foreach ($sizes as $size) {
@@ -482,7 +492,7 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
 
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;
-        if (function_exists('thumbnail_source_geometry_dimensions')) {
+        if (function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions')) {
             try {
                 // $sourcePath stores the original file path used only for geometry validation.
                 $sourcePath = image_abs_path($image, $gallery);
@@ -507,7 +517,7 @@ function thumbnail_existing_fallback(array $image, array $gallery, int $preferre
                     continue;
                 }
                 if (public_render_profile_is_file($targetPath)) {
-                    if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                    if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
                         // $geometryStatus stores whether this fallback candidate keeps the source aspect ratio.
                         $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
                         if (empty($geometryStatus['valid'])) {

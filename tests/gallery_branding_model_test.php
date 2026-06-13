@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\gallery_branding_asset_column;
+use function Gallery\Services\gallery_branding_mime_extension;
+use function Gallery\Services\gallery_branding_upload_extension_allowed;
+use function Gallery\Services\theme_branding_asset_filename_stem;
+use function Gallery\Services\theme_branding_asset_setting;
+
+require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/gallery_branding.php';
 
 if (!function_exists('t')) {

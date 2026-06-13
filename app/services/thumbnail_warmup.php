@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+
 /**
  * Return true when public media fallbacks may request background thumbnail repair.
  *
@@ -335,13 +342,13 @@ function thumbnail_warmup_request_policy_summary(array $items): array
     $requestedSizes = thumbnail_warmup_normalize_sizes(array_values($requestedSizes));
 
     return [
-        'mode' => function_exists('thumbnail_compatibility_mode_log_value') ? thumbnail_compatibility_mode_log_value() : 'jpg_plus_webp',
-        'compatibility_mode' => function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'legacy',
-        'formats_requested' => function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'],
+        'mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode_log_value') ? thumbnail_compatibility_mode_log_value() : 'jpg_plus_webp',
+        'compatibility_mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'legacy',
+        'formats_requested' => function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'],
         'enabled_sizes' => array_values(array_map('intval', thumbnail_sizes())),
         'requested_sizes' => $requestedSizes,
-        'jpg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
     ];
 }
 
@@ -538,7 +545,7 @@ function thumbnail_warmup_process_items(array $items): array
                 $sizes = [300];
             }
 
-            if (function_exists('thumbnail_metadata_bundle_data') && thumbnail_metadata_schema_ready()) {
+            if (function_exists('Gallery\\Services\\thumbnail_metadata_bundle_data') && thumbnail_metadata_schema_ready()) {
                 // $metadata stores the DB-only renderability state so repeated warmup calls do not touch files.
                 $metadata = thumbnail_metadata_bundle_data($image, $gallery, $sizes);
                 $metadataWarmupSizes = array_values(array_map('intval', (array) ($metadata['warmup_sizes'] ?? [])));

@@ -2544,7 +2544,7 @@
   "lightbox.fullscreen": "fullscreen",
   "lightbox.gallery_map": "Gallery map",
   "lightbox.image_load_failed": "Lightbox image load failed.",
-  "lightbox.initial_loader": "Preparing lightbox",
+  "lightbox.initial_loader": "Preparing gallery...",
   "lightbox.initial_loader_count": "Preparing photo {current} of {total}",
   "lightbox.keep_current_centered": "Keep current centered",
   "lightbox.leaflet_failed": "Leaflet failed to load.",

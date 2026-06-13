@@ -36,6 +36,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 const OPENAI_TEXT_ASSIST_ENDPOINT = 'https://api.openai.com/v1/responses';
 const OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS = 35;
 const OPENAI_TEXT_ASSIST_DEFAULT_MODEL = 'gpt-5.4-mini';
@@ -52,7 +61,7 @@ const OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT = 3;
  */
 function openai_text_assist_t(string $key, string $fallback, array $parameters = []): string
 {
-    if (function_exists('t')) {
+    if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
 
@@ -69,7 +78,7 @@ function openai_text_assist_t(string $key, string $fallback, array $parameters =
  */
 function openai_text_assist_schema_ready(): bool
 {
-    if (!function_exists('db_table_exists') || !function_exists('db_column_exists')) {
+    if (!function_exists('Gallery\\Services\\db_table_exists') || !function_exists('Gallery\\Services\\db_column_exists')) {
         return false;
     }
     if (!db_table_exists('user_openai_text_settings')) {
@@ -143,7 +152,7 @@ function openai_text_assist_user_settings(int $userId): array
  */
 function openai_text_assist_image_input_column_ready(): bool
 {
-    return function_exists('db_column_exists') && db_column_exists('user_openai_text_settings', 'allow_image_input');
+    return function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('user_openai_text_settings', 'allow_image_input');
 }
 
 /**
@@ -310,7 +319,7 @@ function openai_text_assist_decrypt_secret(string $encoded): string
  */
 function openai_text_assist_secret_key(): string
 {
-    $config = function_exists('cms_config') ? cms_config() : [];
+    $config = function_exists('Gallery\\Core\\cms_config') ? cms_config() : [];
     $keyMaterial = implode('|', [
         (string) ($config['visitor_vote_secret'] ?? ''),
         (string) ($config['setup_key'] ?? ''),
@@ -380,7 +389,7 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
         ];
     }
 
-    $now = function_exists('now_sql') ? now_sql() : date('Y-m-d H:i:s');
+    $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s');
     if (openai_text_assist_image_input_column_ready()) {
         $stmt = db()->prepare('INSERT INTO user_openai_text_settings (user_id, enabled, api_key_cipher, api_key_hint, model, allow_image_input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), api_key_cipher = VALUES(api_key_cipher), api_key_hint = VALUES(api_key_hint), model = VALUES(model), allow_image_input = VALUES(allow_image_input), updated_at = VALUES(updated_at)');
         $stmt->execute([
@@ -424,7 +433,7 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
  */
 function openai_text_assist_available(int $userId): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
         return false;
     }
     if ($userId <= 0 || !openai_text_assist_schema_ready()) {
@@ -445,15 +454,15 @@ function openai_text_assist_available(int $userId): bool
  */
 function openai_text_assist_gallery_context(int $galleryId): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
 
-    $children = function_exists('child_galleries') ? child_galleries($galleryId, false) : [];
-    $images = function_exists('gallery_images') ? gallery_images($galleryId, false) : [];
-    $tags = function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('gallery', $galleryId) : '';
-    $branchCount = function_exists('gallery_branch_image_count') ? gallery_branch_image_count($galleryId, false) : count($images);
+    $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($galleryId, false) : [];
+    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
+    $tags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', $galleryId) : '';
+    $branchCount = function_exists('Gallery\\Services\\gallery_branch_image_count') ? gallery_branch_image_count($galleryId, false) : count($images);
 
     $childSummaries = [];
     foreach (array_slice($children, 0, 12) as $child) {
@@ -497,17 +506,17 @@ function openai_text_assist_gallery_context(int $galleryId): array
  */
 function openai_text_assist_image_context(int $imageId): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
 
-    $gallery = function_exists('find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
-    $imageTags = function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('image', $imageId) : '';
-    $galleryTags = $gallery && function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
+    $imageTags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('image', $imageId) : '';
+    $galleryTags = $gallery && function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
 
     $metadataSummary = [];
-    if (function_exists('ai_image_analysis_latest_metadata_for_image')) {
+    if (function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
         $metadata = ai_image_analysis_latest_metadata_for_image($imageId);
         if (is_array($metadata)) {
             $metadataSummary = [
@@ -637,7 +646,7 @@ function openai_text_assist_normalize_language(string $language): string
  */
 function openai_text_assist_default_language(): string
 {
-    $active = function_exists('translation_active_language') ? translation_active_language() : '';
+    $active = function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : '';
     $normalized = openai_text_assist_normalize_language($active);
     return $normalized === 'auto' ? 'en' : $normalized;
 }
@@ -722,7 +731,7 @@ function openai_text_assist_prompt(string $task, array $context, string $existin
  */
 function openai_text_assist_thumbnail_reference_for_image(array $image): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
@@ -772,7 +781,7 @@ function openai_text_assist_thumbnail_reference_for_image(array $image): array
  */
 function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
@@ -788,12 +797,12 @@ function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): arra
  */
 function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
 
-    $images = function_exists('gallery_images') ? gallery_images($galleryId, false) : [];
+    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
     $candidates = [];
     foreach ($images as $image) {
         $imageId = (int) ($image['id'] ?? 0);
@@ -820,14 +829,14 @@ function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
  */
 function openai_text_assist_save_image_description(int $imageId, string $description): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
 
     $description = openai_text_assist_text_limit($description, 8000);
     $stmt = db()->prepare('UPDATE images SET description = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$description, function_exists('now_sql') ? now_sql() : date('Y-m-d H:i:s'), $imageId]);
+    $stmt->execute([$description, function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s'), $imageId]);
 
     $stmt = db()->prepare('SELECT * FROM images WHERE id = ? LIMIT 1');
     $stmt->execute([$imageId]);
@@ -856,7 +865,7 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
         }
         $visited[$currentGalleryId] = true;
 
-        $images = function_exists('gallery_images') ? gallery_images($currentGalleryId, false) : [];
+        $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($currentGalleryId, false) : [];
         foreach ($images as $image) {
             try {
                 $references[] = openai_text_assist_thumbnail_reference_for_image($image);
@@ -872,7 +881,7 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
             break;
         }
 
-        $children = function_exists('child_galleries') ? child_galleries($currentGalleryId, false) : [];
+        $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($currentGalleryId, false) : [];
         foreach ($children as $child) {
             $childId = (int) ($child['id'] ?? 0);
             if ($childId > 0 && !isset($visited[$childId])) {
@@ -1019,7 +1028,7 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'unknown'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'unknown'),
         ]);
         $responseBody = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);

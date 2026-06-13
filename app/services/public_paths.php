@@ -34,6 +34,21 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\gallery_seo_title;
+use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\slugify;
+
 /**
 Public URL path and slug helpers.
  *
@@ -150,7 +165,7 @@ function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
     $stmt->execute([(int) $gallery['id'], 'public']);
     $images = [];
     foreach ($stmt->fetchAll() as $image) {
-        if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+        if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
             continue;
         }
         $images[] = $image;
@@ -245,7 +260,7 @@ function public_sitemap_gallery_freshness_images(array $gallery, array $seedImag
         $stmt->execute([(int) $gallery['id'], 'public']);
         $images = [];
         foreach ($stmt->fetchAll() as $image) {
-            if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+            if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
                 continue;
             }
             $images[] = $image;
@@ -575,9 +590,10 @@ function find_image_by_public_slug(int $galleryId, string $slug): ?array
  * SQL condition used by public gallery listing queries.
  *
  * @param string $alias Alias value.
- * @return string Text result for the caller.
+ * @return string A hardcoded SQL fragment safe for interpolation — MUST NOT contain any user-derived values.
+ * @internal
  */
-function public_gallery_listing_condition(string $alias = 'g'): string
+function public_gallery_listing_sql_fragment(string $alias = 'g'): string
 {
     // $prefix stores an intermediate value used by the surrounding gallery workflow.
     $prefix = $alias . '.';
@@ -586,6 +602,7 @@ function public_gallery_listing_condition(string $alias = 'g'): string
     if (gallery_access_schema_ready()) {
         $sql .= ' AND ' . $prefix . "access_listing = 'listed'";
     }
+    // Contract: MUST only return hardcoded SQL with no user-derived values because this fragment is interpolated into prepared statement strings.
     return $sql;
 }
 

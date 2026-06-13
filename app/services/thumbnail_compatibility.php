@@ -36,6 +36,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\path_inside;
+
 const THUMBNAIL_COMPATIBILITY_SETTING = 'thumbnail_compatibility_mode';
 const THUMBNAIL_COMPATIBILITY_MODERN = 'modern';
 const THUMBNAIL_COMPATIBILITY_LEGACY = 'legacy';
@@ -69,7 +76,7 @@ function thumbnail_compatibility_mode_normalize(?string $mode): string
  */
 function thumbnail_compatibility_mode(): string
 {
-    $stored = function_exists('app_setting') ? app_setting(THUMBNAIL_COMPATIBILITY_SETTING, THUMBNAIL_COMPATIBILITY_MODERN) : THUMBNAIL_COMPATIBILITY_MODERN;
+    $stored = function_exists('Gallery\\Services\\app_setting') ? app_setting(THUMBNAIL_COMPATIBILITY_SETTING, THUMBNAIL_COMPATIBILITY_MODERN) : THUMBNAIL_COMPATIBILITY_MODERN;
     return thumbnail_compatibility_mode_normalize(is_string($stored) ? $stored : THUMBNAIL_COMPATIBILITY_MODERN);
 }
 
@@ -80,7 +87,7 @@ function thumbnail_compatibility_mode(): string
  */
 function set_thumbnail_compatibility_mode(string $mode): void
 {
-    if (!function_exists('set_app_setting')) {
+    if (!function_exists('Gallery\\Services\\set_app_setting')) {
         return;
     }
     set_app_setting(THUMBNAIL_COMPATIBILITY_SETTING, thumbnail_compatibility_mode_normalize($mode));
@@ -158,7 +165,7 @@ function thumbnail_compatibility_mode_label(string $mode): string
  */
 function thumbnail_source_webp_available_for_policy(string $sourcePath, string $mime): bool
 {
-    return function_exists('thumbnail_webp_required_for_source') && thumbnail_webp_required_for_source($sourcePath, $mime);
+    return function_exists('Gallery\\Services\\thumbnail_webp_required_for_source') && thumbnail_webp_required_for_source($sourcePath, $mime);
 }
 
 /**
@@ -175,8 +182,8 @@ function thumbnail_source_webp_available_for_policy(string $sourcePath, string $
  */
 function thumbnail_formats_for_compatibility_policy(string $sourcePath, string $mime, bool $webpAvailable): array
 {
-    if ($mime === 'image/x-adobe-dng' || (function_exists('is_dng_image_path') && is_dng_image_path($sourcePath))) {
-        if (!function_exists('dng_derivative_generation_supported') || !dng_derivative_generation_supported()) {
+    if ($mime === 'image/x-adobe-dng' || (function_exists('Gallery\\Core\\is_dng_image_path') && is_dng_image_path($sourcePath))) {
+        if (!function_exists('Gallery\\Services\\dng_derivative_generation_supported') || !dng_derivative_generation_supported()) {
             return [];
         }
         return thumbnail_compatibility_modern_enabled() ? ['webp'] : ['jpg', 'webp'];
@@ -200,7 +207,7 @@ function thumbnail_formats_for_compatibility_policy(string $sourcePath, string $
  */
 function thumbnail_legacy_jpg_variant_count(): int
 {
-    return function_exists('thumbnail_sizes') ? count(thumbnail_sizes()) : 0;
+    return function_exists('Gallery\\Services\\thumbnail_sizes') ? count(thumbnail_sizes()) : 0;
 }
 
 /**
@@ -211,7 +218,7 @@ function thumbnail_legacy_jpg_variant_count(): int
  */
 function thumbnail_compatibility_format_bytes(int $bytes): string
 {
-    if (function_exists('admin_dashboard_format_bytes')) {
+    if (function_exists('Gallery\\Services\\admin_dashboard_format_bytes')) {
         return admin_dashboard_format_bytes($bytes);
     }
     if (function_exists('telemetry_format_bytes')) {
@@ -263,7 +270,7 @@ function delete_legacy_jpg_thumbnails_for_image(array $image, array $gallery): a
         if (!@unlink($path)) {
             throw new RuntimeException('Could not delete legacy JPEG thumbnail: ' . $path);
         }
-        if (function_exists('thumbnail_metadata_delete_variant')) {
+        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
             thumbnail_metadata_delete_variant($image, (int) $size, 'jpg');
         }
         $filesDeleted++;

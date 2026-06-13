@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use RuntimeException;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\visitor_hash;
+
 /**
  * Picture game and gallery-voting service layer.
  *
@@ -88,7 +99,7 @@ function gallery_voting_schema_ready(): bool
  */
 function gallery_voting_allowed(array $gallery): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
         return false;
     }
     return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
@@ -125,7 +136,7 @@ function picture_game_gallery_ids(array $gallery): array
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     try {
         // Variable $stmt stores this steps working value.
-        $listingCondition = public_gallery_listing_condition('g');
+        $listingCondition = public_gallery_listing_sql_fragment('g');
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
         $stmt->execute([$folderPath, $folderPath . '/%']);
@@ -197,6 +208,65 @@ function picture_game_images(array $gallery): array
 }
 
 /**
+ * Count visible public images until the picture game availability threshold is known.
+ *
+ * Public gallery pages only need to know whether the game button should be
+ * visible. Loading every eligible image from a large gallery branch is reserved
+ * for the game route itself, where the full candidate set is actually needed.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $minimum Minimum number of visible images required.
+ * @return int Integer result for the caller.
+ */
+function picture_game_available_image_count(array $gallery, int $minimum = 2): int
+{
+    // $minimum stores the smallest useful threshold for this availability check.
+    $minimum = max(1, $minimum);
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = picture_game_gallery_ids($gallery);
+    if (!$galleryIds) {
+        return 0;
+    }
+
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $filenameSelect stores this steps working value.
+    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
+    // Variable $sql stores this steps working value.
+    $sql = "SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'";
+    // Variable $params stores this steps working value.
+    $params = $galleryIds;
+    if (nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content()) {
+        $sql .= ' AND COALESCE(i.nsfw_enabled, 0) = 0';
+    }
+    $sql .= ' ORDER BY g.folder_path, i.sort_order, i.filename LIMIT ' . $minimum;
+
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    // $galleryCache stores gallery rows reused for final visitor-specific checks.
+    $galleryCache = [(int) $gallery['id'] => $gallery];
+    // $visibleCount stores how many visible candidates have been found.
+    $visibleCount = 0;
+    foreach ($stmt->fetchAll() as $image) {
+        // $imageGalleryId stores the owning gallery id for this candidate image.
+        $imageGalleryId = (int) $image['gallery_id'];
+        if (!array_key_exists($imageGalleryId, $galleryCache)) {
+            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+        }
+        if (public_image_visible_to_current_visitor($image, $galleryCache[$imageGalleryId])) {
+            $visibleCount++;
+        }
+        if ($visibleCount >= $minimum) {
+            break;
+        }
+    }
+
+    return $visibleCount;
+}
+
+/**
  * Return whether one gallery has enough opted-in public images for a game.
  *
  * @param array $gallery Gallery row or gallery data.
@@ -205,8 +275,10 @@ function picture_game_images(array $gallery): array
  */
 function picture_game_available(array $gallery, ?array $images = null): bool
 {
-    $images ??= picture_game_images($gallery);
-    return count($images) >= 2;
+    if ($images !== null) {
+        return count($images) >= 2;
+    }
+    return picture_game_available_image_count($gallery, 2) >= 2;
 }
 
 /**

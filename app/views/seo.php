@@ -34,6 +34,25 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\canonical_url_for_gallery;
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_seo_description;
+use function Gallery\Core\gallery_seo_title;
+use function Gallery\Core\gallery_social_preview_image;
+use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_url;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\public_gallery_metadata;
+use function Gallery\Services\public_render_profile_count;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\public_sitemap_image_last_modified;
+use function Gallery\Services\public_sitemap_lastmod;
+use function Gallery\Services\site_name;
+use function Gallery\Services\thumbnail_url;
+
 /**
  * Handle view render meta tag.
  *
@@ -144,7 +163,7 @@ function view_render_gallery_json_ld(array $gallery, array $images = []): void
         if (!empty($image['height'])) {
             $item['height'] = (int) $image['height'];
         }
-        if (function_exists('public_sitemap_lastmod')) {
+        if (function_exists('Gallery\\Services\\public_sitemap_lastmod')) {
             $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
             if ($dateModified !== null) {
                 $item['dateModified'] = $dateModified;

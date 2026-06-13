@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
 require_once __DIR__ . '/admin_gallery_renderers.php';
 require_once __DIR__ . '/admin_galleries_discovery.php';
 require_once __DIR__ . '/admin_galleries_bulk.php';

@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Services\simbrief_description_plain_text;
+
 /**
  * Handle view simbrief description markdown.
  *

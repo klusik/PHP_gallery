@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\url_for;
+
 const THEME_FAVORITE_GALLERIES_SETTING = 'theme_favorite_gallery_ids';
 const THEME_FAVORITE_GALLERIES_MAX = 3;
 const THEME_FAVORITE_GALLERIES_HOME_TOKEN = 'home';
@@ -329,7 +336,7 @@ function theme_favorite_gallery_navigation_items_from_rows(array $ids, array $ro
         }
         // $gallery stores the resolved gallery row for one favorite button.
         $gallery = $rowMap[(int) $galleryId];
-        if ($publicOnly && function_exists('gallery_is_public_listed') && !gallery_is_public_listed($gallery)) {
+        if ($publicOnly && function_exists('Gallery\\Services\\gallery_is_public_listed') && !gallery_is_public_listed($gallery)) {
             continue;
         }
         // $title stores a stable label even if an old row has an empty title.

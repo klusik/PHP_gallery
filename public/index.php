@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+use function Gallery\Core\cms_run;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 cms_run();

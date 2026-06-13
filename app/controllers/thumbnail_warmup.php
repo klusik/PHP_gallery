@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\request_method;
+use function Gallery\Services\thumbnail_warmup_enabled;
+use function Gallery\Services\thumbnail_warmup_log_candidate_summary;
+use function Gallery\Services\thumbnail_warmup_log_event;
+use function Gallery\Services\thumbnail_warmup_log_request_context;
+use function Gallery\Services\thumbnail_warmup_normalize_items;
+use function Gallery\Services\thumbnail_warmup_process_items;
+
 /**
  * Process a guarded thumbnail warmup request.
  */

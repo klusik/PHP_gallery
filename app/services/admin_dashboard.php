@@ -34,6 +34,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\pending_migrations_exist;
+
 /**
  * Return the total byte size of imported original gallery files.
  *
@@ -142,13 +148,13 @@ function admin_dashboard_parent_sync_fingerprint(): string
 function admin_dashboard_view_model(): array
 {
     // Variable $pictureGameReady stores this steps working value.
-    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
+    $pictureGameReady = admin_render_profile_schema('schema_picture_game', static fn (): bool => picture_game_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    $gpsMapReady = admin_render_profile_schema('schema_exif_gps', static fn (): bool => exif_gps_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // $gpsMapOverrideReady stores whether EXIF/GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $gpsMapReady && admin_render_profile_schema('schema_exif_gps_overrides', static fn (): bool => exif_gps_override_schema_ready());
     // Variable $votingReady stores this steps working value.
-    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $votingReady = admin_render_profile_schema('schema_gallery_voting', static fn (): bool => gallery_voting_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // Variable $filenameDisplayReady stores this steps working value.
     $filenameDisplayReady = admin_render_profile_schema('schema_filename_display', static fn (): bool => gallery_filename_display_schema_ready());
     // $galleryDateRangeReady stores whether gallery rows can store range end dates.
@@ -164,7 +170,7 @@ function admin_dashboard_view_model(): array
     // $coverAssetReady stores whether uploaded gallery cover assets can be shown in the admin gallery list.
     $coverAssetReady = admin_render_profile_schema('schema_cover_asset', static fn (): bool => gallery_cover_asset_schema_ready());
     // $flightNavdataReady stores whether route lookup data can be imported and read from the DB.
-    $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready()) && (!function_exists('feature_flag_enabled') || feature_flag_enabled('navigation_data'));
+    $flightNavdataReady = admin_render_profile_schema('schema_flight_navdata', static fn (): bool => flight_map_navdata_schema_ready()) && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('navigation_data'));
     // $flightNavdataStatus stores maintenance information for the admin navdata card.
     $flightNavdataStatus = $flightNavdataReady ? admin_render_profile_db('flight_navdata_status', static fn (): array => flight_map_navdata_status()) : [];
     // $exifGpsDefaultEnabled stores the global display default for galleries without explicit overrides.
@@ -213,12 +219,12 @@ function admin_dashboard_view_model(): array
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
     $updateLabel = application_update_nav_label($updatePending);
     // $siteMaintenanceStatus stores the persisted cron-safe maintenance state for the media maintenance card.
-    $siteMaintenanceStatus = admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('site_maintenance_status') ? site_maintenance_status() : []);
+    $siteMaintenanceStatus = admin_render_profile_setting_read('site_maintenance_status', static fn (): array => function_exists('Gallery\\Services\\site_maintenance_status') ? site_maintenance_status() : []);
     // $thumbnailSummary stores an intermediate value used by the surrounding gallery workflow.
     admin_render_profile_set_counter('thumbnail_maintenance_sample_limit', 1000);
     $thumbnailSummary = admin_render_profile_span('thumbnail_maintenance_summary_cached_read', static fn (): array => cached_thumbnail_maintenance_summary_if_available(null, 1000));
     // $lastThumbnailCheck stores an explicit full dry-run result when an admin requested one.
-    $lastThumbnailCheck = function_exists('thumbnail_maintenance_last_check') ? admin_render_profile_setting_read('thumbnail_maintenance_last_check', static fn (): array => thumbnail_maintenance_last_check()) : [];
+    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? admin_render_profile_setting_read('thumbnail_maintenance_last_check', static fn (): array => thumbnail_maintenance_last_check()) : [];
     if ($lastThumbnailCheck) {
         $thumbnailSummary = [
             'images_scanned' => (int) ($lastThumbnailCheck['images_scanned'] ?? 0),
@@ -236,7 +242,7 @@ function admin_dashboard_view_model(): array
     // $originalStorageLabel stores a human-readable storage amount for the dashboard summary card.
     $originalStorageLabel = admin_dashboard_format_bytes($originalStorageBytes);
     // $databaseUsage stores a cheap information_schema estimate for DB capacity display.
-    $databaseUsage = function_exists('admin_database_usage_summary') ? admin_render_profile_db('dashboard_database_usage', static fn (): array => admin_database_usage_summary()) : [];
+    $databaseUsage = function_exists('Gallery\\Services\\admin_database_usage_summary') ? admin_render_profile_db('dashboard_database_usage', static fn (): array => admin_database_usage_summary()) : [];
     // $galleryDatabaseUsageBytes stores table-level DB storage for gallery/content metadata.
     $galleryDatabaseUsageBytes = !empty($databaseUsage['available']) ? max(0, (int) ($databaseUsage['gallery_bytes'] ?? 0)) : 0;
     // $databaseUsageBytes stores table-level DB storage for the whole app database.

@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\t;
+
 /**
  * Render the dedicated admin navigation-data page.
  *

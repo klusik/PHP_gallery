@@ -34,6 +34,120 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\CMS_PAGINATION_DEFAULT_COLUMNS;
+use const Gallery\Services\CMS_PAGINATION_DEFAULT_ROWS;
+use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
+use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_admin_tab_panel;
+use function Gallery\Core\render_admin_tabs;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\slugify;
+use function Gallery\Core\unique_slug;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\ai_image_analysis_force_gallery_reprocess;
+use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\delete_gallery_branding_asset;
+use function Gallery\Services\exif_gps_override_schema_ready;
+use function Gallery\Services\exif_gps_schema_ready;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\flight_map_schema_ready;
+use function Gallery\Services\gallery_access_schema_ready;
+use function Gallery\Services\gallery_access_share_token_schema_ready;
+use function Gallery\Services\gallery_background_source;
+use function Gallery\Services\gallery_background_source_schema_ready;
+use function Gallery\Services\gallery_branding_asset_paths;
+use function Gallery\Services\gallery_branding_asset_types;
+use function Gallery\Services\gallery_branding_asset_url;
+use function Gallery\Services\gallery_branding_schema_ready;
+use function Gallery\Services\gallery_count_badge_override_label;
+use function Gallery\Services\gallery_count_badge_override_values;
+use function Gallery\Services\gallery_count_badge_schema_ready;
+use function Gallery\Services\gallery_count_badge_source_label;
+use function Gallery\Services\gallery_count_badge_state_label;
+use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_cover_asset_schema_ready;
+use function Gallery\Services\gallery_cover_path;
+use function Gallery\Services\gallery_date_input_value;
+use function Gallery\Services\gallery_date_range_schema_ready;
+use function Gallery\Services\gallery_date_range_storage_values;
+use function Gallery\Services\gallery_date_schema_ready;
+use function Gallery\Services\gallery_description_layout_label;
+use function Gallery\Services\gallery_description_layout_options;
+use function Gallery\Services\gallery_description_layout_schema_ready;
+use function Gallery\Services\gallery_description_layout_source_label;
+use function Gallery\Services\gallery_description_layout_storage_value;
+use function Gallery\Services\gallery_effective_count_badge_enabled;
+use function Gallery\Services\gallery_effective_description_layout;
+use function Gallery\Services\gallery_effective_gps_map_enabled;
+use function Gallery\Services\gallery_effective_grid_settings;
+use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
+use function Gallery\Services\gallery_filename_display_schema_ready;
+use function Gallery\Services\gallery_flight_map_row;
+use function Gallery\Services\gallery_flight_map_unresolved_from_row;
+use function Gallery\Services\gallery_folder_name_from_path;
+use function Gallery\Services\gallery_gps_map_storage_value;
+use function Gallery\Services\gallery_grid_form_columns;
+use function Gallery\Services\gallery_grid_form_rows;
+use function Gallery\Services\gallery_grid_has_explicit_override;
+use function Gallery\Services\gallery_grid_schema_ready;
+use function Gallery\Services\gallery_images;
+use function Gallery\Services\gallery_lightbox_browsing_mode_label;
+use function Gallery\Services\gallery_lightbox_browsing_mode_options;
+use function Gallery\Services\gallery_lightbox_browsing_mode_override_label;
+use function Gallery\Services\gallery_lightbox_browsing_mode_schema_ready;
+use function Gallery\Services\gallery_lightbox_browsing_mode_source_label;
+use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\gallery_share_token_for_admin;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\gallery_voting_schema_ready;
+use function Gallery\Services\likely_gallery_destination_id;
+use function Gallery\Services\media_renamer_default_pattern;
+use function Gallery\Services\media_renamer_execute_gallery;
+use function Gallery\Services\media_renamer_normalize_pattern;
+use function Gallery\Services\move_gallery_folder_to_parent;
+use function Gallery\Services\normalize_gallery_visibility;
+use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\pagination_dimension_value;
+use function Gallery\Services\picture_game_schema_ready;
+use function Gallery\Services\regenerate_gallery_share_token;
+use function Gallery\Services\render_admin_thumbnail_bound_slider;
+use function Gallery\Services\revoke_gallery_share_token;
+use function Gallery\Services\save_gallery_flight_path_route;
+use function Gallery\Services\save_gallery_thumbnail_bounds;
+use function Gallery\Services\scan_gallery_images;
+use function Gallery\Services\store_uploaded_gallery_branding_asset;
+use function Gallery\Services\store_uploaded_gallery_cover;
+use function Gallery\Services\sync_entity_tags;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_names_for_entity;
+use function Gallery\Services\thumbnail_bound_pair_from_post;
+use function Gallery\Services\thumbnail_bounds_schema_ready;
+use function Gallery\Services\upload_error_message;
+use function Gallery\Services\write_gallery_sidecar;
+use function Gallery\Views\view_render_admin_gallery_date_range_fields;
+use function Gallery\Views\view_render_admin_hero;
+use function Gallery\Views\view_render_admin_metric_grid;
+use function Gallery\Views\view_render_admin_openai_text_assist_tool;
+use function Gallery\Views\view_render_admin_simbrief_description_tool;
+use function Gallery\Views\view_render_admin_tab_intro;
+
 /**
  * Handles cms admin scan images logic for the gallery application.
  */
@@ -256,10 +370,10 @@ function admin_panel_error_response(string $message, int $statusCode = 422): voi
  */
 function render_admin_simbrief_description_tool(int $galleryId): void
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('simbrief')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('simbrief')) {
         return;
     }
-    if (function_exists('view_render_admin_simbrief_description_tool')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_simbrief_description_tool')) {
         view_render_admin_simbrief_description_tool($galleryId);
         return;
     }
@@ -320,17 +434,17 @@ function admin_gallery_checkbox_input(array $input, string $key, bool $defaultWh
 function admin_save_gallery_from_input(array $gallery, array $input, array $files, string $returnTab, bool $completeForm = true): array
 {
     // $pictureGameReady stores this steps working value.
-    $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
+    $pictureGameReady = picture_game_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // $flightMapReady stores this steps working value.
-    $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
+    $flightMapReady = flight_map_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // $votingReady stores this steps working value.
-    $votingReady = gallery_voting_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $votingReady = gallery_voting_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // $lightboxModeReady stores this steps working value.
-    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
     // $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     // $galleryId stores the gallery being edited.
@@ -727,7 +841,7 @@ function cms_admin_edit_gallery(): void
         cms_not_found();
         return;
     }
-    if (request_method() === 'GET' && admin_wants_json() && (string) ($_GET['tab'] ?? '') === 'admin-edit-renamer' && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+    if (request_method() === 'GET' && admin_wants_json() && (string) ($_GET['tab'] ?? '') === 'admin-edit-renamer' && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
         $pattern = media_renamer_normalize_pattern((string) ($_GET['renamer_pattern'] ?? ''));
         header('Content-Type: application/json');
         echo json_encode([
@@ -740,29 +854,29 @@ function cms_admin_edit_gallery(): void
 
     // Variable $pictureGameReady stores this steps working value.
 
-    $pictureGameReady = picture_game_schema_ready() && (!function_exists('feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
+    $pictureGameReady = picture_game_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || (feature_flag_enabled('picture_game') && feature_flag_enabled('image_voting')));
     // Variable $gpsMapReady stores this steps working value.
-    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
+    $gpsMapReady = exif_gps_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_maps'));
     // $gpsMapOverrideReady stores whether GPS display supports inherited per-gallery overrides.
     $gpsMapOverrideReady = $gpsMapReady && exif_gps_override_schema_ready();
     // Variable $flightMapReady stores this steps working value.
-    $flightMapReady = flight_map_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps'));
+    $flightMapReady = flight_map_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('flight_maps'));
     // Variable $votingReady stores this steps working value.
-    $votingReady = gallery_voting_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'));
+    $votingReady = gallery_voting_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'));
     // Variable $lightboxModeReady stores this steps working value.
-    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
+    $lightboxModeReady = gallery_lightbox_browsing_mode_schema_ready() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes'));
     // $pictureGameFeatureEnabled stores whether picture-game controls should be surfaced at all.
-    $pictureGameFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('picture_game');
+    $pictureGameFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('picture_game');
     // $flightMapFeatureEnabled stores whether flight-route map controls should be surfaced at all.
-    $flightMapFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('flight_maps');
+    $flightMapFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('flight_maps');
     // $lightboxModeFeatureEnabled stores whether lightbox browsing controls should be surfaced at all.
-    $lightboxModeFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    $lightboxModeFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
     // $mediaRenamerFeatureEnabled stores whether the file-renamer tab should be visible.
-    $mediaRenamerFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('media_renamer');
+    $mediaRenamerFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('media_renamer');
     // $uploadApiFeatureEnabled stores whether upload-token tools should be visible.
-    $uploadApiFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('upload_api');
+    $uploadApiFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('upload_api');
     // $galleryMigrationFeatureEnabled stores whether gallery transfer controls should be visible.
-    $galleryMigrationFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('gallery_migration');
+    $galleryMigrationFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('gallery_migration');
     // Variable $accessReady stores this steps working value.
     $accessReady = gallery_access_schema_ready();
     if (request_method() === 'POST') {
@@ -770,7 +884,7 @@ function cms_admin_edit_gallery(): void
         // The normal verifier exits with plain text, which makes fetch() report
         // a confusing non-JSON response and leaves the admin without a log row.
         $isMediaRenamerPost = (string) ($_POST['action'] ?? '') === 'rename_files';
-        if ($isMediaRenamerPost && function_exists('admin_media_renamer_verify_csrf_for_ajax')) {
+        if ($isMediaRenamerPost && function_exists('Gallery\\Controllers\\admin_media_renamer_verify_csrf_for_ajax')) {
             if (!admin_media_renamer_verify_csrf_for_ajax()) {
                 return;
             }
@@ -788,11 +902,11 @@ function cms_admin_edit_gallery(): void
             return;
         }
         if ((string) ($_POST['action'] ?? '') === 'force_ai_reprocess') {
-            if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+            if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
                 flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_disabled', 'AI metadata is disabled in Admin > Features.'));
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
             }
-            if (!function_exists('ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
+            if (!function_exists('Gallery\\Services\\ai_image_analysis_force_gallery_reprocess') || !ai_image_analysis_schema_ready()) {
                 flash_message('admin_notice', t('admin.gallery_editor.ai_reprocess_unavailable', 'AI metadata reset will be available after the AI image-analysis migration is applied.'));
                 redirect_to(admin_edit_gallery_tab_url((int) $gallery['id'], 'admin-edit-api'));
             }
@@ -816,7 +930,7 @@ function cms_admin_edit_gallery(): void
             $renameResult = null;
             if (empty($_POST['confirm_media_rename'])) {
                 $notice = t('admin.media_renamer.confirm_required', 'Confirm that you reviewed the preview before applying physical renames.');
-                if (admin_wants_json() && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+                if (admin_wants_json() && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
                     header('Content-Type: application/json');
                     echo json_encode([
                         'ok' => false,
@@ -830,13 +944,13 @@ function cms_admin_edit_gallery(): void
             }
             try {
                 $renameResult = media_renamer_execute_gallery((int) $gallery['id'], $renamerPattern);
-                if (function_exists('admin_media_renamer_log_event')) {
-                    $completionSeverity = function_exists('admin_media_renamer_result_log_severity') ? admin_media_renamer_result_log_severity($renameResult) : 'info';
+                if (function_exists('Gallery\\Controllers\\admin_media_renamer_log_event')) {
+                    $completionSeverity = function_exists('Gallery\\Controllers\\admin_media_renamer_result_log_severity') ? admin_media_renamer_result_log_severity($renameResult) : 'info';
                     admin_media_renamer_log_event($completionSeverity === 'warning' ? 'warning' : 'info', 'media_renamer.gallery_completed', 'Gallery media rename completed.', [
                         'gallery_id' => (int) $gallery['id'],
                         'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
                         'pattern' => $renamerPattern,
-                        'result' => function_exists('admin_media_renamer_loggable_result') ? admin_media_renamer_loggable_result($renameResult) : $renameResult,
+                        'result' => function_exists('Gallery\\Controllers\\admin_media_renamer_loggable_result') ? admin_media_renamer_loggable_result($renameResult) : $renameResult,
                     ], ['category' => 'media', 'severity' => $completionSeverity]);
                 }
                 $notice = t('admin.media_renamer.gallery_result_notice', 'Renamed {renamed} file(s), invalidated {derivatives} generated derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).', [
@@ -860,7 +974,7 @@ function cms_admin_edit_gallery(): void
                 }
             } catch (Throwable $exception) {
                 $notice = $exception->getMessage();
-                if (function_exists('admin_media_renamer_log_exception')) {
+                if (function_exists('Gallery\\Controllers\\admin_media_renamer_log_exception')) {
                     admin_media_renamer_log_exception('media_renamer.gallery_failed', 'Gallery media rename failed.', $exception, [
                         'gallery_id' => (int) $gallery['id'],
                         'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
@@ -874,7 +988,7 @@ function cms_admin_edit_gallery(): void
                 }
             }
             $updatedGallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
-            if (admin_wants_json() && function_exists('admin_media_renamer_render_gallery_panel_html')) {
+            if (admin_wants_json() && function_exists('Gallery\\Controllers\\admin_media_renamer_render_gallery_panel_html')) {
                 header('Content-Type: application/json');
                 echo json_encode([
                     'ok' => $renameResult !== null,
@@ -945,7 +1059,7 @@ function cms_admin_edit_gallery(): void
     } elseif (isset($_GET['saved'])) {
         echo '<div class="notice">' . e(t('admin.gallery_editor.gallery_saved')) . '</div>';
     }
-    if (!$pictureGameReady && $pictureGameFeatureEnabled && (!function_exists('feature_flag_enabled') || feature_flag_enabled('image_voting'))) {
+    if (!$pictureGameReady && $pictureGameFeatureEnabled && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('image_voting'))) {
         render_admin_migration_notice(t('admin.gallery_editor.picture_game_migration_hidden'));
     }
     // $imageCount stores the number of images currently attached to this gallery.
@@ -1048,7 +1162,7 @@ function cms_admin_edit_gallery(): void
     ]);
     echo '<div class="admin-edit-card-grid">';
     echo '<div class="admin-edit-card is-wide"><label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($gallery['title']) . '" autocomplete="off" required></label>';
-    if (function_exists('view_render_admin_gallery_date_range_fields')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_gallery_date_range_fields')) {
         view_render_admin_gallery_date_range_fields($gallery, false);
     } elseif (gallery_date_schema_ready()) {
         echo '<label class="admin-date-picker-field">' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date" value="' . e(gallery_date_input_value($gallery['gallery_date'] ?? null)) . '"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
@@ -1058,7 +1172,7 @@ function cms_admin_edit_gallery(): void
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-gallery-description-textarea data-openai-description-textarea>' . e($gallery['description']) . '</textarea></label>';
     render_gallery_description_formatting_hint();
     render_admin_simbrief_description_tool((int) $gallery['id']);
-    if ((!function_exists('feature_flag_enabled') || feature_flag_enabled('openai_text_assist')) && function_exists('view_render_admin_openai_text_assist_tool')) {
+    if ((!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('openai_text_assist')) && function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) $gallery['id'], 0, 'gallery');
     }
     echo '</div>';
@@ -1300,7 +1414,7 @@ function cms_admin_edit_gallery(): void
 
     if ($mediaRenamerFeatureEnabled) {
         ob_start();
-        if (function_exists('render_admin_media_renamer_gallery_panel')) {
+        if (function_exists('Gallery\\Controllers\\render_admin_media_renamer_gallery_panel')) {
             render_admin_media_renamer_gallery_panel($gallery);
         }
         render_admin_tab_panel('admin-edit-renamer', (string) ob_get_clean(), $activeEditTab === 'admin-edit-renamer');
@@ -1341,7 +1455,7 @@ function cms_admin_edit_gallery(): void
  */
 function render_admin_gallery_ai_reprocess_panel(array $gallery): void
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
         return;
     }
     $galleryId = (int) ($gallery['id'] ?? 0);
@@ -1349,7 +1463,7 @@ function render_admin_gallery_ai_reprocess_panel(array $gallery): void
     echo '<h3>' . e(t('admin.gallery_editor.ai_reprocess_title', 'AI metadata regeneration')) . '</h3>';
     echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_help', 'Use this when photos were already processed with an older local analyzer and you want the Windows worker to generate fresh internal search metadata for this gallery. This resets queue/result rows on the server and immediately creates fresh queue jobs for the same model generation where possible. The heavy analysis still runs on the Windows app.')) . '</p>';
 
-    if (!function_exists('ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
+    if (!function_exists('Gallery\\Services\\ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
         echo '<p class="muted">' . e(t('admin.gallery_editor.ai_reprocess_migration_hidden', 'AI metadata regeneration will be available after the AI image-analysis migration is applied.')) . '</p>';
         echo '</div>';
         return;
@@ -1378,7 +1492,7 @@ function render_admin_image_bulk_toolbar(array $gallery): void
     // $galleryId stores the gallery currently being edited.
     $galleryId = (int) $gallery['id'];
     // $suggestedDestinationId stores a likely child gallery destination for the shared searchable picker.
-    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    $suggestedDestinationId = function_exists('Gallery\\Services\\likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
     // $newGalleryParentOptions stores the selectable parent hierarchy for move-to-new-gallery actions.
     $newGalleryParentOptions = gallery_options_for_select($galleryId);
 

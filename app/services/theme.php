@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 /**
  * Theme setting service helpers.
  *
@@ -77,9 +79,9 @@ function theme_settings(): array
         'branding_separator_width' => theme_branding_separator_width_value(app_setting('theme_branding_separator_width')),
         'branding_separator_height' => theme_branding_separator_height_value(app_setting('theme_branding_separator_height')),
         'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
-        'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
-        'gallery_count_badge_enabled' => !function_exists('theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
-        'lightbox_browsing_mode' => function_exists('theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
+        'gallery_description_layout' => function_exists('Gallery\\Services\\theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
+        'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
+        'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
     ];
 }
 

@@ -34,6 +34,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\experimental_thumbnail_rebuild_browser_config;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\public_home_search_enabled;
+use function Gallery\Services\seo_request_guard_status;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_compatibility_mode;
+use function Gallery\Services\thumbnail_maintenance_last_check;
+
 /**
  * Return true when an optional dashboard feature should be rendered.
  *
@@ -42,7 +56,7 @@ declare(strict_types=1);
  */
 function view_admin_dashboard_feature_enabled(string $featureKey): bool
 {
-    return !function_exists('feature_flag_enabled') || feature_flag_enabled($featureKey);
+    return !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey);
 }
 
 /**
@@ -406,7 +420,7 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
  */
 function view_render_admin_dashboard_seo_guard_card(string $className): void
 {
-    $status = function_exists('seo_request_guard_status') ? seo_request_guard_status() : [
+    $status = function_exists('Gallery\\Services\\seo_request_guard_status') ? seo_request_guard_status() : [
         'enabled' => true,
         'logging_enabled' => true,
         'log_day' => '',
@@ -439,8 +453,8 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 {
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
-    $compatibilityMode = function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
-    $lastThumbnailCheck = function_exists('thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
+    $compatibilityMode = function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
+    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
 
     echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -518,7 +532,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
     echo '</form>';
 
-    $experimentalRebuildConfig = function_exists('experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $experimentalRebuildConfig = function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
     $experimentalRebuildJson = json_encode($experimentalRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($experimentalRebuildJson)) {
         $experimentalRebuildJson = '{}';

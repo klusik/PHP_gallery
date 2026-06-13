@@ -35,6 +35,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\db;
+
 /**
  * Return gallery rows formatted for the shared searchable gallery picker.
  *

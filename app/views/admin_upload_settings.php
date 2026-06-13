@@ -35,6 +35,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\media_renamer_default_pattern;
+use function Gallery\Services\t;
+
 /**
  * Render the reusable upload format support matrix.
  *

@@ -30,7 +30,7 @@
  *   2026-06-09
  */
 
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260608-lightbox-letterbox-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260613-lightbox-preview-then-media-v4';
 
 const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',

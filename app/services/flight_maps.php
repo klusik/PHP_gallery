@@ -34,6 +34,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use PDOStatement;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 const GALLERY_MAP_SOURCE_EXIF_POINT = 'exif_point';
 const GALLERY_MAP_SOURCE_FLIGHT_PATH = 'flight_path';
 const FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS = 'ourairports';
@@ -370,7 +380,7 @@ function save_gallery_flight_path_resolved_points(int $galleryId, string $routeT
  */
 function flight_map_clear_runtime_cache(): void
 {
-    if (function_exists('gallery_map_cache_clear_all')) {
+    if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
         gallery_map_cache_clear_all();
     }
 }
@@ -605,7 +615,7 @@ function flight_route_lookup_nav_point(string $token): ?array
         return null;
     }
 
-    if (function_exists('navigation_data_resolve_ident')) {
+    if (function_exists('Gallery\\Services\\navigation_data_resolve_ident')) {
         $point = navigation_data_resolve_ident($ident, [
             'allow_remote' => false,
         ]);
@@ -717,7 +727,7 @@ function flight_map_navdata_status(): array
         'last_navaids' => (int) app_setting('flight_map_navdata_last_navaids', '0'),
         'last_skipped' => (int) app_setting('flight_map_navdata_last_skipped', '0'),
         'last_deleted' => (int) app_setting('flight_map_navdata_last_deleted', '0'),
-        'hybrid' => function_exists('navigation_data_status') ? navigation_data_status() : [],
+        'hybrid' => function_exists('Gallery\\Services\\navigation_data_status') ? navigation_data_status() : [],
     ];
 
     if (!$status['ready']) {
@@ -841,7 +851,7 @@ function flight_map_fetch_navdata_csv(string $url): string
         throw new RuntimeException('Unsupported navdata source URL.');
     }
 
-    $body = function_exists('http_fetch') ? http_fetch($url, 60) : flight_map_basic_https_fetch($url, 60);
+    $body = function_exists('Gallery\\Services\\http_fetch') ? http_fetch($url, 60) : flight_map_basic_https_fetch($url, 60);
     if (trim($body) === '' || !str_contains($body, ',')) {
         throw new RuntimeException('Downloaded navdata CSV is empty or invalid.');
     }
@@ -869,7 +879,7 @@ function flight_map_basic_https_fetch(string $url, int $timeoutSeconds): string
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);

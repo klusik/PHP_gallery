@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\request_is_https;
+
 /**
  * Return authentication configuration merged with safe defaults.
  *
@@ -88,7 +96,7 @@ function auth_persistent_login_ready(): bool
     // $settings stores normalized authentication settings.
     $settings = auth_persistence_config();
     return (bool) $settings['persistent_login_enabled']
-        && function_exists('db_table_exists')
+        && function_exists('Gallery\\Services\\db_table_exists')
         && db_table_exists('admin_remember_tokens');
 }
 

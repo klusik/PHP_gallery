@@ -1435,7 +1435,16 @@ export function setupGalleryLightbox() {
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
             applyLightboxImageSource(src, altText);
-            return Promise.resolve(true);
+            if (!initialLightboxLoadActive) {
+                return Promise.resolve(true);
+            }
+            return loadDecodedLightboxImage(src).then((loadedImage) => {
+                if (currentIndex !== index || activeLightboxImageToken !== token || image.getAttribute('src') !== src) {
+                    return false;
+                }
+                updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
+                return true;
+            }).catch(() => currentIndex === index && activeLightboxImageToken === token && image.getAttribute('src') === src);
         }
         return loadDecodedLightboxImage(src).then((loadedImage) => new Promise((resolve) => {
             if (currentIndex !== index || activeLightboxImageToken !== token) {
@@ -2001,10 +2010,12 @@ export function setupGalleryLightbox() {
         if (pageUrl && window.history && window.history.replaceState) {
             window.history.replaceState({lightbox: true}, '', pageUrl);
         }
-        // previewSrc stores state or configuration for the gallery front-end flow.
-        const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
-        // fullSrc stores state or configuration for the gallery front-end flow.
+        // previewSrc stores the lightweight thumbnail source used for nearby previews and fallback loading.
+        const previewSrc = card.dataset.previewSrc || '';
+        // fullSrc stores the browser-displayable media source that must drive the main lightbox stage.
         const fullSrc = card.dataset.fullSrc || previewSrc;
+        // mainSrc stores the source used for normal and fullscreen picture viewing.
+        const mainSrc = fullSrc || previewSrc;
         // altText stores state or configuration for the gallery front-end flow.
         const altText = card.dataset.title || '';
         const titleText = (card.dataset.title || '').trim();
@@ -2024,23 +2035,53 @@ export function setupGalleryLightbox() {
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
         /**
-         * Handle show initial preview.
+         * Handle show lightweight preview image before the full media source.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @return {*} Result value for the caller.
+         */
+        const showPreviewFirst = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        /**
+         * Handle show main media image when no separate preview is available.
          *
          * Used by browser-side gallery behavior.
          *
          * @param {*} loadedImage Loaded image value.
          * @return {*} Result value for the caller.
          */
-        const showInitialPreview = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately, loadedImage);
-        const initialPreviewPromise = isInitialPhotoOpen && previewSrc
-            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(() => showInitialPreview(null))
-            : showInitialPreview(null);
-        initialPreviewPromise.then((wasDisplayed) => {
+        const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldShowImmediately, loadedImage);
+        /**
+         * Handle full media swap after the preview is already visible.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @return {*} Result value for the caller.
+         */
+        const scheduleFullMediaSwap = () => {
+            if (!previewSrc || !mainSrc || previewSrc === mainSrc) {
+                return Promise.resolve(false);
+            }
+            return swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, mainSrc, altText);
+        };
+        const initialMainPromise = previewSrc && mainSrc && previewSrc !== mainSrc
+            ? showPreviewFirst().then((wasDisplayed) => {
+                if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
+                    return false;
+                }
+                scheduleFullMediaSwap();
+                return true;
+            })
+            : (mainSrc
+                ? (shouldShowImmediately
+                    ? showMainImage(null)
+                    : loadDecodedLightboxImage(mainSrc).then(showMainImage))
+                : Promise.resolve(false));
+        Promise.resolve(initialMainPromise).then((wasDisplayed) => {
             if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;
             }
             hideInitialLightboxLoader();
-            swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
             scheduleLightboxSlideshowNext();
         });
         syncPictureStrip(normalizedIndex);

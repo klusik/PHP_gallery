@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDO;
+
 /**
  * Return the shared PDO connection for the current request.
  *

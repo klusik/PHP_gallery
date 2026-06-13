@@ -37,6 +37,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use CURLFile;
+use RuntimeException;
+use Throwable;
+use const Gallery\Core\CMS_VERSION;
+use function Gallery\Controllers\admin_edit_gallery_tab_url;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\unique_slug;
+
 const GALLERY_MIGRATION_PROTOCOL_VERSION = 1;
 const GALLERY_MIGRATION_TIMEOUT_SECONDS = 45;
 const GALLERY_MIGRATION_RECONNECT_SECONDS = 30;
@@ -51,7 +68,7 @@ const GALLERY_MIGRATION_RECONNECT_SECONDS = 30;
  */
 function gallery_migration_t(string $key, string $fallback, array $parameters = []): string
 {
-    if (function_exists('t')) {
+    if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
 
@@ -108,7 +125,7 @@ function gallery_migration_versions_compatible(string $sourceVersion, string $ta
  */
 function gallery_migration_current_version(): string
 {
-    return function_exists('cms_current_version') ? cms_current_version() : (defined('CMS_VERSION') ? CMS_VERSION : '');
+    return function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : (defined('Gallery\\Core\\CMS_VERSION') ? CMS_VERSION : '');
 }
 
 
@@ -306,7 +323,7 @@ function gallery_migration_gallery_metadata(array $gallery): array
         }
     }
 
-    $metadata['tags'] = function_exists('tag_names_for_entity') ? tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
+    $metadata['tags'] = function_exists('Gallery\\Services\\tag_names_for_entity') ? tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
     $metadata['cover_source_id'] = (int) ($gallery['cover_image_id'] ?? 0);
     return $metadata;
 }
@@ -351,7 +368,7 @@ function gallery_migration_image_metadata(array $image): array
 
     $metadata = [
         'source_id' => (int) ($image['id'] ?? 0),
-        'tags' => function_exists('tag_names_for_entity') ? tag_names_for_entity('image', (int) ($image['id'] ?? 0)) : '',
+        'tags' => function_exists('Gallery\\Services\\tag_names_for_entity') ? tag_names_for_entity('image', (int) ($image['id'] ?? 0)) : '',
     ];
     foreach ($fields as $field) {
         if (array_key_exists($field, $image)) {
@@ -513,7 +530,7 @@ function gallery_migration_image_assets(array $image, array $gallery): array
  */
 function gallery_migration_flight_map_manifest(int $galleryId): ?array
 {
-    if (!function_exists('gallery_flight_map_row')) {
+    if (!function_exists('Gallery\\Services\\gallery_flight_map_row')) {
         return null;
     }
 
@@ -951,7 +968,7 @@ function gallery_migration_apply_gallery_metadata(int $targetGalleryId, array $m
     $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', $fields) . ' WHERE id = ?');
     $stmt->execute($values);
 
-    if (function_exists('sync_entity_tags')) {
+    if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('gallery', $targetGalleryId, (string) ($metadata['tags'] ?? ''));
     }
 }
@@ -989,7 +1006,7 @@ function gallery_migration_gallery_column_value(string $column, mixed $value): m
  */
 function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifest): void
 {
-    if (!function_exists('flight_map_schema_ready') || !flight_map_schema_ready()) {
+    if (!function_exists('Gallery\\Services\\flight_map_schema_ready') || !flight_map_schema_ready()) {
         return;
     }
     $flightMap = $manifest['flight_map'] ?? null;
@@ -1037,7 +1054,7 @@ function gallery_migration_apply_flight_map(int $targetGalleryId, array $manifes
         $now,
         $now,
     ]);
-    if (function_exists('flight_map_clear_runtime_cache')) {
+    if (function_exists('Gallery\\Services\\flight_map_clear_runtime_cache')) {
         flight_map_clear_runtime_cache();
     }
 }
@@ -1632,7 +1649,7 @@ function gallery_migration_upsert_image_metadata(int $targetGalleryId, array $im
         $imageId = (int) db()->lastInsertId();
     }
 
-    if (function_exists('sync_entity_tags')) {
+    if (function_exists('Gallery\\Services\\sync_entity_tags')) {
         sync_entity_tags('image', $imageId, (string) ($imageManifest['tags'] ?? ''));
     }
 
@@ -1691,7 +1708,7 @@ function gallery_migration_install_thumbnail(int $targetGalleryId, int $imageId,
         throw new RuntimeException(gallery_migration_t('gallery_migration.error.thumbnail_dir_failed', 'Could not create the target thumbnail folder.'));
     }
     gallery_migration_copy_if_same_or_missing($sourcePath, $targetPath, (string) ($asset['checksum_sha256'] ?? ''));
-    if (function_exists('thumbnail_maintenance_summary_cache_clear')) {
+    if (function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
 }
@@ -1723,10 +1740,10 @@ function gallery_migration_complete_job(string $jobId, int $targetGalleryId): ar
     if ($gallery) {
         write_gallery_sidecar($gallery);
     }
-    if (function_exists('regenerate_public_paths') && public_path_schema_ready()) {
+    if (function_exists('Gallery\\Services\\regenerate_public_paths') && public_path_schema_ready()) {
         regenerate_public_paths();
     }
-    if (function_exists('gallery_map_cache_clear_all')) {
+    if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
         gallery_map_cache_clear_all();
     }
 

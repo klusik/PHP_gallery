@@ -34,6 +34,43 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_DEFAULT_BATCH_SIZE;
+use const Gallery\Services\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_gallery_discovery_delete_requested_paths;
+use function Gallery\Services\admin_gallery_discovery_job_status;
+use function Gallery\Services\admin_gallery_discovery_move_requested_photos;
+use function Gallery\Services\admin_gallery_discovery_process_job;
+use function Gallery\Services\admin_gallery_discovery_start_job;
+use function Gallery\Services\create_empty_gallery;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_count_badge_override_label;
+use function Gallery\Services\gallery_count_badge_override_values;
+use function Gallery\Services\gallery_count_badge_schema_ready;
+use function Gallery\Services\gallery_date_schema_ready;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\import_galleries;
+use function Gallery\Services\import_galleries_without_thumbnails;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_gallery_date_range_fields;
+use function Gallery\Views\view_render_admin_new_gallery_fields;
+use function Gallery\Views\view_render_admin_new_gallery_side_panel;
+use function Gallery\Views\view_render_gallery_description_formatting_hint;
+
 /**
  * Render the Admin gallery discovery page or process its Ajax batches.
  *
@@ -468,7 +505,7 @@ function admin_new_gallery_success_response(array $gallery): array
  */
 function render_gallery_description_formatting_hint(): void
 {
-    if (function_exists('view_render_gallery_description_formatting_hint')) {
+    if (function_exists('Gallery\\Views\\view_render_gallery_description_formatting_hint')) {
         view_render_gallery_description_formatting_hint();
         return;
     }
@@ -492,7 +529,7 @@ function render_gallery_description_formatting_hint(): void
  */
 function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
-    if (function_exists('view_render_admin_new_gallery_fields')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_new_gallery_fields')) {
         view_render_admin_new_gallery_fields($prefillParentId, $panelMode, $workflow);
         return;
     }
@@ -508,7 +545,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
         echo '<label class="admin-side-panel-field admin-side-panel-field-wide"><span>' . e(t('admin.gallery_editor.gallery_name', 'Gallery name')) . '</span><input name="title" required></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '</span><input name="folder_name" autocomplete="off"><small>' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</small></label>';
         echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.metric_visibility')) . '</span><select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-        if (function_exists('view_render_admin_gallery_date_range_fields')) {
+        if (function_exists('Gallery\\Views\\view_render_admin_gallery_date_range_fields')) {
             view_render_admin_gallery_date_range_fields([], true);
         } elseif (gallery_date_schema_ready()) {
             echo '<label class="admin-side-panel-field"><span>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '</span><input name="gallery_date" type="date"><small>' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</small></label>';
@@ -535,7 +572,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
     echo '<label>' . e(t('admin.gallery_editor.folder_name', 'Folder name')) . '<input name="folder_name" autocomplete="off"><span class="muted">' . e(t('admin.gallery_editor.derive_from_gallery_name', 'Leave empty to derive it from the gallery name.')) . '</span></label>';
     echo '<label>' . e(t('admin.gallery_editor.parent_gallery', 'Parent gallery')) . '<select name="parent_id"><option value="0"' . ($prefillParentId === 0 ? ' selected' : '') . '>' . e(t('admin.gallery_editor.no_parent', 'No parent')) . '</option>' . gallery_parent_options_for_new($prefillParentId) . '</select></label>';
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . visibility_options('unpublished') . '</select></label>';
-    if (function_exists('view_render_admin_gallery_date_range_fields')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_gallery_date_range_fields')) {
         view_render_admin_gallery_date_range_fields([], false);
     } elseif (gallery_date_schema_ready()) {
         echo '<label>' . e(t('admin.gallery_editor.gallery_date', 'Date')) . '<input name="gallery_date" type="date"><span class="muted">' . e(t('admin.gallery_editor.gallery_date_help', 'Optional manual gallery date, for example an event, trip, or shooting date.')) . '</span></label>';
@@ -564,7 +601,7 @@ function render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, 
  */
 function render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
-    if (function_exists('view_render_admin_new_gallery_side_panel')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_new_gallery_side_panel')) {
         view_render_admin_new_gallery_side_panel($prefillParentId, $prefillParentGallery, $error);
         return;
     }

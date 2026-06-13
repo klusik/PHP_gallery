@@ -32,6 +32,23 @@
  *   2026-05-04
  */
 
+use function Gallery\Controllers\cms_not_found;
+use function Gallery\Core\base_url;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\delete_app_settings;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\translation_interpolate;
+use function Gallery\Services\translation_load_language;
+use function Gallery\Views\view_render_admin_feature_flag;
+
 /**
  * Administrative log controller model.
  *
@@ -68,7 +85,7 @@ if (!function_exists('admin_log_english_t')) {
         }
 
         $text = null;
-        if (function_exists('translation_load_language')) {
+        if (function_exists('Gallery\\Services\\translation_load_language')) {
             $englishStrings = translation_load_language('en');
             if (array_key_exists($key, $englishStrings) && is_string($englishStrings[$key])) {
                 $text = $englishStrings[$key];
@@ -79,7 +96,7 @@ if (!function_exists('admin_log_english_t')) {
             $text = $fallback ?? $key;
         }
 
-        if (function_exists('translation_interpolate')) {
+        if (function_exists('Gallery\\Services\\translation_interpolate')) {
             return translation_interpolate($text, $parameters);
         }
 
@@ -130,7 +147,7 @@ function render_admin_log_row(array $entry, bool $withActions = false): string
  */
 function render_admin_feature_flag(bool $enabled, string $symbol, string $label): string
 {
-    if (function_exists('view_render_admin_feature_flag')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_feature_flag')) {
         return view_render_admin_feature_flag($enabled, e($symbol), $label);
     }
 

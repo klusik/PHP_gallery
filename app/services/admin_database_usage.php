@@ -36,6 +36,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+
 /**
  * Return table names that represent gallery content or gallery-derived metadata.
  *

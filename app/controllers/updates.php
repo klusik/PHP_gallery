@@ -34,6 +34,39 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Core\CMS_GITHUB_REPOSITORY;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_admin_tab_panel;
+use function Gallery\Core\render_admin_tabs;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\application_autoupdate_dry_run;
+use function Gallery\Services\application_autoupdate_status;
+use function Gallery\Services\application_patch_notes_viewer_data;
+use function Gallery\Services\application_update_beta_active;
+use function Gallery\Services\application_update_beta_commit;
+use function Gallery\Services\application_update_github_api_status;
+use function Gallery\Services\application_update_normalize_version;
+use function Gallery\Services\application_update_status_for_admin;
+use function Gallery\Services\clean_reinstall_current_application_version;
+use function Gallery\Services\cms_github_project_url;
+use function Gallery\Services\install_application_beta;
+use function Gallery\Services\install_application_update;
+use function Gallery\Services\restore_application_stable_release;
+use function Gallery\Services\set_application_autoupdate_enabled;
+use function Gallery\Services\t;
+
 /**
  * Admin update controller model.
  *

@@ -35,6 +35,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\canonical_url_for_gallery;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\request_method;
+use function Gallery\Core\url_for;
+
 const CMS_SEO_REQUEST_GUARD_LOG_LIMIT_PER_DAY = 25;
 
 /**

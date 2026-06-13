@@ -32,6 +32,9 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Database telemetry helper functions.
  *

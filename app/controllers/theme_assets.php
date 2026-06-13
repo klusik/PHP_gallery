@@ -34,6 +34,25 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use InvalidArgumentException;
+use function Gallery\Core\css_value;
+use function Gallery\Services\favicon_path;
+use function Gallery\Services\favicon_safe_size;
+use function Gallery\Services\theme_background_asset_url;
+use function Gallery\Services\theme_background_original_path;
+use function Gallery\Services\theme_background_served_path;
+use function Gallery\Services\theme_branding_asset_abs_path;
+use function Gallery\Services\theme_branding_asset_kind;
+use function Gallery\Services\theme_branding_separator_height_value;
+use function Gallery\Services\theme_branding_separator_stretch_enabled;
+use function Gallery\Services\theme_branding_separator_width_value;
+use function Gallery\Services\theme_gps_pin_background_size_value;
+use function Gallery\Services\theme_gps_pin_size_value;
+use function Gallery\Services\theme_page_width_custom_value;
+use function Gallery\Services\theme_settings;
+
 /**
  * Theme asset controllers.
  *
@@ -66,7 +85,9 @@ function cms_theme_background_asset(): void
     $mime = mime_content_type($absolute) ?: 'application/octet-stream';
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($absolute));
-    header('Cache-Control: public, max-age=86400');
+    // $cacheControl stores the public immutable policy for versioned background derivatives and a conservative policy for admin original previews.
+    $cacheControl = $variant === 'original' ? 'private, no-cache, max-age=0, must-revalidate' : 'public, max-age=31536000, immutable';
+    send_asset_cache_control($cacheControl);
     readfile($absolute);
 }
 
@@ -98,7 +119,7 @@ function cms_theme_branding_asset(): void
     }
     header('Content-Type: ' . $mime);
     header('Content-Length: ' . (string) filesize($absolute));
-    header('Cache-Control: public, max-age=86400');
+    send_asset_cache_control('public, max-age=86400');
     readfile($absolute);
 }
 
@@ -123,7 +144,7 @@ function cms_favicon_asset(): void
     }
     header('Content-Type: image/png');
     header('Content-Length: ' . (string) filesize($absolute));
-    header('Cache-Control: public, max-age=604800');
+    send_asset_cache_control('public, max-age=604800');
     readfile($absolute);
 }
 
@@ -137,7 +158,7 @@ function cms_theme_css(): void
     // $themeBackground stores an intermediate value used by the surrounding gallery workflow.
     $themeBackground = theme_background_asset_url();
     header('Content-Type: text/css; charset=utf-8');
-    header('Cache-Control: public, max-age=31536000, immutable');
+    send_asset_cache_control('public, max-age=31536000, immutable');
     // $theme stores an intermediate value used by the surrounding gallery workflow.
     $theme = theme_settings();
     // $fontFamily stores an intermediate value used by the surrounding gallery workflow.

@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use RuntimeException;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\base_url;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Return whether the WebDAV token table is available.
  *
@@ -41,7 +50,7 @@ declare(strict_types=1);
  */
 function mobile_webdav_ready(): bool
 {
-    return function_exists('db_table_exists') && db_table_exists('mobile_webdav_upload_tokens');
+    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('mobile_webdav_upload_tokens');
 }
 
 /**

@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 /**
  * EXIF and GPS metadata service module.
  *
@@ -183,7 +192,7 @@ function gallery_legacy_allows_gps_maps(array $gallery): bool
  */
 function gallery_effective_gps_map_enabled(array $gallery): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('gallery_maps')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('gallery_maps')) {
         return false;
     }
     if (!exif_gps_schema_ready()) {
@@ -264,7 +273,7 @@ function reset_all_gallery_gps_map_overrides(): int
     foreach ($rows as $gallery) {
         $gallery['gps_map_enabled'] = null;
         $gallery['updated_at'] = now_sql();
-        if (function_exists('write_gallery_sidecar')) {
+        if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
             write_gallery_sidecar($gallery);
         }
     }
@@ -673,7 +682,7 @@ function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursi
         $params[] = (int) $gallery['id'];
     }
     if ($publicOnly) {
-        $conditions[] = public_gallery_listing_condition('g');
+        $conditions[] = public_gallery_listing_sql_fragment('g');
         $conditions[] = "i.visibility = 'public'";
     }
     return ['conditions' => $conditions, 'params' => $params];
@@ -804,7 +813,7 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
  */
 function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): bool
 {
-    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
         return true;
     }
 
@@ -825,7 +834,7 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  */
 function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
-    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_flight_map_payload')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_flight_map_payload')) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
             $photoPoints = gallery_map_points($gallery, $publicOnly, $recursive);

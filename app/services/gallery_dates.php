@@ -35,6 +35,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DateTimeImmutable;
+use InvalidArgumentException;
+use RuntimeException;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+
 /**
  * Return true when gallery rows can store the optional manual gallery date.
  *
@@ -306,7 +315,7 @@ function gallery_date_save_range(int $galleryId, mixed $startValue, mixed $endVa
 
     // $updatedGallery stores the post-save row so sidecar metadata mirrors the DB state.
     $updatedGallery = find_gallery($galleryId, true) ?: $gallery;
-    if (function_exists('write_gallery_sidecar')) {
+    if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
         write_gallery_sidecar($updatedGallery);
     }
 

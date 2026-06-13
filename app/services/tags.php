@@ -34,5 +34,7 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 require_once __DIR__ . '/votes.php';
 require_once __DIR__ . '/tag_metadata.php';

@@ -34,6 +34,29 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_date_apply_exif_suggestion_to_gallery;
+use function Gallery\Services\gallery_date_exif_suggestion_rows;
+use function Gallery\Services\gallery_date_exif_suggestions_schema_ready;
+use function Gallery\Services\gallery_date_range_schema_ready;
+use function Gallery\Services\gallery_date_range_storage_label;
+use function Gallery\Services\gallery_date_save_range;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_gallery_date_exif_suggestion;
+
 /**
  * Send a JSON response for the reusable gallery EXIF date suggestion workflow.
  *
@@ -58,7 +81,7 @@ function admin_gallery_date_suggestion_json_response(bool $ok, string $message, 
  */
 function admin_gallery_date_suggestion_panel_html(array $gallery): string
 {
-    if (!function_exists('view_render_admin_gallery_date_exif_suggestion')) {
+    if (!function_exists('Gallery\\Views\\view_render_admin_gallery_date_exif_suggestion')) {
         return '';
     }
 

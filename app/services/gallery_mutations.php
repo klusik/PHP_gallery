@@ -34,6 +34,19 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use FilesystemIterator;
+use PDO;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+
 /**
  * Gallery mutation model.
  *
@@ -269,7 +282,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
             }
         }
 
-        if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
             // $displayMasterPath stores the full-size generated WebP used for public DNG display.
             $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
             if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
@@ -687,7 +700,7 @@ function gallery_image_derivative_move_paths(array $image, array $sourceGallery,
         }
     }
 
-    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
         // $sourceDisplayMaster stores the generated full-size WebP display derivative.
         $sourceDisplayMaster = dng_display_master_abs_path($image, $sourceGallery, false);
         if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourceDisplayMaster) && is_file($sourceDisplayMaster)) {

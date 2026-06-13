@@ -34,6 +34,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use FilesystemIterator;
+use PDO;
+use PDOException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\slugify;
+use function Gallery\Core\url_for;
+
 /**
  * Parse admin-entered comma/semicolon/newline tag text into unique names.
  *
@@ -738,7 +755,7 @@ function find_tag_by_slug(string $slug): ?array
 function public_galleries_for_tag(int $tagId): array
 {
     // Variable $stmt stores this steps working value.
-    $listingCondition = public_gallery_listing_condition('g');
+    $listingCondition = public_gallery_listing_sql_fragment('g');
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
@@ -768,7 +785,7 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         return [];
     }
     // Variable $visibilitySql stores this steps working value.
-    $visibilitySql = $publicOnly ? ' AND ' . public_gallery_listing_condition('g') : '';
+    $visibilitySql = $publicOnly ? ' AND ' . public_gallery_listing_sql_fragment('g') : '';
     // Variable $imageVisibilitySql stores this steps working value.
     $imageVisibilitySql = $publicOnly ? " AND tagged_image.visibility = 'public'" : '';
     // Variable $sql stores this steps working value.

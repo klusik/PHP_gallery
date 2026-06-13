@@ -34,6 +34,25 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\cms_admin_user_exists;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_setup_is_locked;
+use function Gallery\Core\cms_write_setup_lock;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\run_migrations;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\t;
+
 /**
  * Setup controller model.
  *

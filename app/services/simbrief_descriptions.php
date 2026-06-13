@@ -37,6 +37,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+use function Gallery\Views\view_simbrief_description_markdown;
+
 const SIMBRIEF_DESCRIPTION_ENDPOINT = 'https://www.simbrief.com/api/xml.fetcher.php';
 const SIMBRIEF_DESCRIPTION_BASE_URL = 'https://www.simbrief.com';
 const SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS = 18;
@@ -52,7 +62,7 @@ const SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS = 30;
  */
 function simbrief_description_t(string $key, string $fallback, array $parameters = []): string
 {
-    if (function_exists('t')) {
+    if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
 
@@ -142,7 +152,7 @@ function simbrief_description_fetch_latest_ofp(array $identifier): array
     ], '', '&', PHP_QUERY_RFC3986);
 
     try {
-        $body = function_exists('http_fetch_with_headers')
+        $body = function_exists('Gallery\\Services\\http_fetch_with_headers')
             ? http_fetch_with_headers($url, SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS, ['Accept: application/json'])
             : simbrief_description_basic_https_fetch($url, SIMBRIEF_DESCRIPTION_TIMEOUT_SECONDS);
     } catch (Throwable $exception) {
@@ -201,7 +211,7 @@ function simbrief_description_basic_https_fetch(string $url, int $timeoutSeconds
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 10),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Accept: application/json'],
@@ -247,7 +257,7 @@ function simbrief_description_generate_for_identifier(string $pilotId, string $p
     $identifier = simbrief_description_identifier($pilotId, $pilotName);
     $payload = simbrief_description_fetch_latest_ofp($identifier);
     $details = simbrief_description_extract_details($payload);
-    $description = function_exists('view_simbrief_description_markdown')
+    $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
         ? view_simbrief_description_markdown($details)
         : simbrief_description_build_markdown($details);
 
@@ -318,15 +328,15 @@ function simbrief_description_extract_details(array $payload): array
  */
 function simbrief_description_save_ofp_for_gallery(array $gallery, array $payload, array $identifier, array $details, array $routeResult = []): array
 {
-    $folderPath = function_exists('normalize_relative_path')
+    $folderPath = function_exists('Gallery\\Core\\normalize_relative_path')
         ? normalize_relative_path((string) ($gallery['folder_path'] ?? ''))
         : trim(str_replace('\\', '/', (string) ($gallery['folder_path'] ?? '')), '/');
-    if ($folderPath === '' || !function_exists('gallery_abs_path') || !function_exists('path_inside')) {
+    if ($folderPath === '' || !function_exists('Gallery\\Services\\gallery_abs_path') || !function_exists('Gallery\\Core\\path_inside')) {
         return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery path helpers are unavailable.'];
     }
 
     $galleryRoot = gallery_abs_path($folderPath);
-    $galleriesRoot = function_exists('galleries_root') ? galleries_root() : dirname($galleryRoot);
+    $galleriesRoot = function_exists('Gallery\\Services\\galleries_root') ? galleries_root() : dirname($galleryRoot);
     if (!is_dir($galleryRoot) || !path_inside($galleriesRoot, $galleryRoot)) {
         return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'Gallery folder is unavailable.'];
     }
@@ -344,7 +354,7 @@ function simbrief_description_save_ofp_for_gallery(array $gallery, array $payloa
         return ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'SimBrief payload could not be encoded.'];
     }
 
-    $now = function_exists('now_sql') ? now_sql() : gmdate('Y-m-d H:i:s');
+    $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : gmdate('Y-m-d H:i:s');
     $manifest = [
         'format' => 'php_gallery_simbrief_ofp_manifest_v1',
         'saved_at' => $now,
@@ -546,7 +556,7 @@ function simbrief_description_save_pdf_for_gallery(string $pdfUrl, string $targe
     }
 
     try {
-        $body = function_exists('http_fetch_with_headers')
+        $body = function_exists('Gallery\\Services\\http_fetch_with_headers')
             ? http_fetch_with_headers($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS, ['Accept: application/pdf'])
             : simbrief_description_basic_pdf_fetch($safeUrl, SIMBRIEF_DESCRIPTION_PDF_TIMEOUT_SECONDS);
     } catch (Throwable $exception) {
@@ -588,7 +598,7 @@ function simbrief_description_basic_pdf_fetch(string $url, int $timeoutSeconds):
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 10),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => ['Accept: application/pdf'],
@@ -644,7 +654,7 @@ function simbrief_description_save_route_map_from_ofp(int $galleryId, array $pay
     }
 
     $saved = false;
-    if (count($points) >= 2 && function_exists('save_gallery_flight_path_resolved_points')) {
+    if (count($points) >= 2 && function_exists('Gallery\\Services\\save_gallery_flight_path_resolved_points')) {
         save_gallery_flight_path_resolved_points($galleryId, $routeText, $points, $unresolved);
         $saved = true;
     }
@@ -738,7 +748,7 @@ function simbrief_description_airport_route_point(array $payload, string $sectio
     $latitude = simbrief_description_row_coordinate($node, ['lat', 'latitude', 'pos_lat', 'poslat', 'apt_lat', 'airport_lat'], 'lat');
     $longitude = simbrief_description_row_coordinate($node, ['lon', 'lng', 'long', 'longitude', 'pos_long', 'pos_lon', 'poslong', 'apt_lon', 'airport_lon'], 'lon');
 
-    if (($latitude === null || $longitude === null) && function_exists('flight_route_lookup_nav_point') && $name !== '') {
+    if (($latitude === null || $longitude === null) && function_exists('Gallery\\Services\\flight_route_lookup_nav_point') && $name !== '') {
         $fallback = flight_route_lookup_nav_point($name);
         if (is_array($fallback)) {
             $latitude = isset($fallback['latitude']) ? (float) $fallback['latitude'] : $latitude;
@@ -778,7 +788,7 @@ function simbrief_description_navlog_route_point(array $row): ?array
 
     if ($latitude === null || $longitude === null) {
         $combined = simbrief_description_row_first_text($row, ['pos', 'position', 'coord', 'coords', 'coordinates', 'latlon', 'lat_lon']);
-        $combinedPoint = $combined !== '' && function_exists('flight_route_parse_aviation_coordinate')
+        $combinedPoint = $combined !== '' && function_exists('Gallery\\Services\\flight_route_parse_aviation_coordinate')
             ? flight_route_parse_aviation_coordinate($combined)
             : null;
         if (is_array($combinedPoint)) {
@@ -1088,7 +1098,7 @@ function simbrief_description_route_text_from_points(array $points, array $detai
  */
 function simbrief_description_build_markdown(array $details): string
 {
-    if (function_exists('view_simbrief_description_markdown')) {
+    if (function_exists('Gallery\\Views\\view_simbrief_description_markdown')) {
         return view_simbrief_description_markdown($details);
     }
     $originCode = simbrief_description_markdown_code($details['origin_code'] ?? '');

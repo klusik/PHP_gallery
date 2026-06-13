@@ -32,6 +32,15 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\append_cms_footer_html;
+use function Gallery\Core\append_cms_footer_script;
+use function Gallery\Core\asset_url;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 /**
  * Anonymous telemetry service.
  *
@@ -117,7 +126,6 @@ function telemetry_event_name(mixed $eventName): ?string
         'client.performance.image_display',
         'client.error.javascript',
         'media.image.served',
-        'media.thumbnail.served',
         'media.download.served',
         'cache.thumbnail.hit',
         'cache.thumbnail.miss',

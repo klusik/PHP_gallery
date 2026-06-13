@@ -34,6 +34,31 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\base_url;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\mobile_webdav_absolute_url;
+use function Gallery\Services\mobile_webdav_authenticated_token;
+use function Gallery\Services\mobile_webdav_create_token;
+use function Gallery\Services\mobile_webdav_delete_token;
+use function Gallery\Services\mobile_webdav_filename_from_path;
+use function Gallery\Services\mobile_webdav_ready;
+use function Gallery\Services\mobile_webdav_store_put;
+use function Gallery\Services\mobile_webdav_tokens;
+use function Gallery\Services\t;
+
 /**
  * Render and manage mobile WebDAV upload connections.
  */

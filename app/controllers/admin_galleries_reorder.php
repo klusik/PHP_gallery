@@ -34,6 +34,25 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\child_galleries;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_folder_name_from_path;
+use function Gallery\Services\gallery_path_diagnostics;
+use function Gallery\Services\move_gallery_folder_to_parent;
+use function Gallery\Services\public_path_schema_ready;
+use function Gallery\Services\regenerate_public_paths;
+use function Gallery\Services\sync_gallery_parent_ids;
+use function Gallery\Services\t;
+use function Gallery\Services\write_gallery_sidecar;
+
 /**
  * Handles cms admin gallery reorder logic for the gallery application.
  *

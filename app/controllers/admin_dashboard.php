@@ -34,6 +34,52 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use const Gallery\Services\ADMIN_STORAGE_STATISTICS_DEFAULT_BATCH_SIZE;
+use const Gallery\Services\ADMIN_STORAGE_STATISTICS_MAX_BATCH_SIZE;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\run_migrations;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_dashboard_notice_messages;
+use function Gallery\Services\admin_dashboard_view_model;
+use function Gallery\Services\admin_database_usage_recompute_statistics;
+use function Gallery\Services\admin_database_usage_summary;
+use function Gallery\Services\admin_render_profile_start;
+use function Gallery\Services\admin_storage_statistics_cached_snapshot;
+use function Gallery\Services\admin_storage_statistics_process_job;
+use function Gallery\Services\admin_storage_statistics_start_job;
+use function Gallery\Services\exif_gps_default_enabled;
+use function Gallery\Services\exif_gps_override_schema_ready;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\flight_map_update_navdata_from_ourairports;
+use function Gallery\Services\public_home_search_enabled;
+use function Gallery\Services\reset_all_gallery_gps_map_overrides;
+use function Gallery\Services\seo_request_guard_enabled;
+use function Gallery\Services\seo_request_guard_logging_enabled;
+use function Gallery\Services\set_dev_mode_enabled;
+use function Gallery\Services\set_exif_gps_default_enabled;
+use function Gallery\Services\set_public_home_search_enabled;
+use function Gallery\Services\set_seo_request_guard_enabled;
+use function Gallery\Services\set_seo_request_guard_logging_enabled;
+use function Gallery\Services\set_url_rewrite_enabled;
+use function Gallery\Services\t;
+use function Gallery\Views\view_admin_storage_snapshot_status;
+use function Gallery\Views\view_render_admin_dashboard;
+use function Gallery\Views\view_render_admin_devmode_panel;
+use function Gallery\Views\view_render_admin_migration_notice;
+use function Gallery\Views\view_render_admin_navdata_maintenance_card;
+use function Gallery\Views\view_render_admin_storage_statistics_page;
+use function Gallery\Views\view_render_admin_storage_statistics_panel;
+use function Gallery\Views\view_render_admin_url_rewrite_card;
+use function Gallery\Views\view_render_admin_url_rewrite_warning;
+
 /**
  * Render the main Admin dashboard.
  */
@@ -57,8 +103,8 @@ function cms_admin_storage_statistics(): void
     if (!in_array($activeTab, ['files', 'database'], true)) {
         $activeTab = 'files';
     }
-    $statistics = $activeTab === 'files' && function_exists('admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
-    $databaseUsage = $activeTab === 'database' && function_exists('admin_database_usage_summary') ? admin_database_usage_summary() : null;
+    $statistics = $activeTab === 'files' && function_exists('Gallery\\Services\\admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
+    $databaseUsage = $activeTab === 'database' && function_exists('Gallery\\Services\\admin_database_usage_summary') ? admin_database_usage_summary() : null;
     $notice = (string) flash_message('admin_notice');
     view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab, $notice);
 }
@@ -116,7 +162,7 @@ function cms_admin_database_usage_recompute(): void
 
     verify_csrf();
     try {
-        $report = function_exists('admin_database_usage_recompute_statistics') ? admin_database_usage_recompute_statistics() : ['ok' => false, 'error' => 'Database usage service is not available.'];
+        $report = function_exists('Gallery\\Services\\admin_database_usage_recompute_statistics') ? admin_database_usage_recompute_statistics() : ['ok' => false, 'error' => 'Database usage service is not available.'];
         if (!empty($report['ok'])) {
             flash_message('admin_notice', t('admin.database_usage.recompute_done', 'Database statistics recomputed. Analyzed {tables} table(s) in {seconds} second(s).', [
                 'tables' => (string) (int) ($report['table_count'] ?? 0),
@@ -227,7 +273,7 @@ function cms_admin_public_search_settings(): void
         return;
     }
     verify_csrf();
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('public_search')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('public_search')) {
         flash_message('admin_notice', t('admin.dashboard.notice_public_search_disabled', 'Public search is disabled in Admin > Features.'));
         redirect_to(url_for('admin'));
     }

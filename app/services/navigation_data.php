@@ -35,6 +35,19 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 const NAVIGATION_DATA_SOURCE_LOCAL_DB = 'local_db';
 const NAVIGATION_DATA_SOURCE_BUNDLED = 'bundled';
 const NAVIGATION_DATA_SOURCE_REMOTE_CACHE = 'remote_cache';
@@ -52,7 +65,7 @@ const NAVIGATION_DATA_BUNDLED_CYCLE = 'offline';
  */
 function navigation_data_config(): array
 {
-    $config = function_exists('cms_config') ? cms_config() : [];
+    $config = function_exists('Gallery\\Core\\cms_config') ? cms_config() : [];
     $navigation = is_array($config['navigation_data'] ?? null) ? $config['navigation_data'] : [];
     $navigraph = is_array($navigation['navigraph'] ?? null) ? $navigation['navigraph'] : [];
 
@@ -738,7 +751,7 @@ function navigation_data_navigraph_status(): array
  */
 function navigation_data_current_user_id(): int
 {
-    if (!function_exists('current_user')) {
+    if (!function_exists('Gallery\\Core\\current_user')) {
         return 0;
     }
     $user = current_user();
@@ -1364,7 +1377,7 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded', 'Accept: application/json'],
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
@@ -1409,7 +1422,7 @@ function navigation_data_http_post_form(string $url, array $fields, int $timeout
  */
 function navigation_data_http_get_json(string $url, array $headers, int $timeoutSeconds): string
 {
-    if (function_exists('http_fetch_with_headers')) {
+    if (function_exists('Gallery\\Services\\http_fetch_with_headers')) {
         return http_fetch_with_headers($url, $timeoutSeconds, $headers);
     }
 
@@ -1424,7 +1437,7 @@ function navigation_data_http_get_json(string $url, array $headers, int $timeout
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,

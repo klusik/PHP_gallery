@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\run_migrations;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 // Variable $username stores this steps working value.

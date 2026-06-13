@@ -34,7 +34,7 @@
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
-const lightboxModuleUrl = './lightbox.js?v=20260608-lightbox-letterbox-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260613-lightbox-preview-then-media-v5';
 
 const deferredLightboxState = {
     controller: null,

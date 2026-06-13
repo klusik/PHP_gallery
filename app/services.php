@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
 
 // Load DB-backed application settings before any feature module reads app_setting().
 require_once __DIR__ . '/services/app_settings.php';

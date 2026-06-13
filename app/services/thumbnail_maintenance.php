@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use FilesystemIterator;
+use PDO;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+
 const THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING = 'thumbnail_maintenance_last_check_report';
 
 /**
@@ -60,11 +71,11 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
     // $formats stores the formats this installation can keep current for this source file.
     $formats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // $thumbnailPolicy stores the exact source-specific policy for warmup diagnostics.
-    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
+    $thumbnailPolicy = function_exists('Gallery\\Services\\thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, $mime, $sizes) : null;
     // $webpSkipped stores intentionally missing WebP variants when metadata preservation is not available.
     $webpSkipped = thumbnail_intentionally_skipped_webp_count($sourcePath, $mime);
     // $sourceGeometry stores dimensions used to detect stale square-canvas thumbnail artifacts.
-    $sourceGeometry = function_exists('thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
+    $sourceGeometry = function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
     // $invalidGeometryDeleted stores cache files scheduled for replacement because they did not preserve the source ratio.
     $invalidGeometryDeleted = 0;
     // $invalidGeometryDetected stores invalid cache files found even when the caller requested a dry check.
@@ -96,7 +107,7 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
                 $missing++;
                 continue;
             }
-            if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+            if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
                 // $geometryStatus stores whether a fresh thumbnail cache file has valid dimensions.
                 $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
                 if (empty($geometryStatus['valid'])) {
@@ -105,7 +116,7 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
                     if ($mutate) {
                         $invalidGeometryDeleted++;
                         thumbnail_delete_invalid_geometry_file($targetPath);
-                        if (function_exists('thumbnail_metadata_delete_variant')) {
+                        if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                             thumbnail_metadata_delete_variant($image, (int) $size, $format);
                         }
                     }
@@ -113,7 +124,7 @@ function thumbnail_maintenance_status_for_sizes(array $image, array $gallery, ar
                     continue;
                 }
             }
-            if ($mutate && function_exists('thumbnail_metadata_record_file')) {
+            if ($mutate && function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                 $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
                 if (!empty($metadataResult['metadata_written'])) {
                     $metadataRowsWritten++;
@@ -923,10 +934,10 @@ function thumbnail_maintenance_summary_cache_clear(): void
 {
     set_app_setting('thumbnail_maintenance_summary_generation', sprintf('%.6F', microtime(true)));
     delete_app_settings([THUMBNAIL_MAINTENANCE_LAST_CHECK_SETTING]);
-    if (function_exists('admin_storage_statistics_cache_clear')) {
+    if (function_exists('Gallery\\Services\\admin_storage_statistics_cache_clear')) {
         admin_storage_statistics_cache_clear();
     }
-    if (function_exists('gallery_map_cache_clear_all')) {
+    if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
         gallery_map_cache_clear_all();
     }
 }
@@ -994,7 +1005,7 @@ function delete_all_thumbnail_files(): array
     // $galleryRoot stores the configured root boundary for all filesystem checks.
     $galleryRoot = galleries_root();
 
-    if (function_exists('thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
         db()->exec('DELETE FROM image_thumbnail_variants');
     }
 

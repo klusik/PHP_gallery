@@ -35,6 +35,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use function Gallery\Controllers\cms_normalize_account_email;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\sanitize_login_return_target;
+use function Gallery\Core\url_for;
+
 const CMS_GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const CMS_GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const CMS_GOOGLE_JWKS_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/certs';
@@ -77,7 +89,7 @@ function google_auth_ready(): bool
     return (bool) $config['enabled']
         && $config['client_id'] !== ''
         && $config['client_secret'] !== ''
-        && function_exists('db_table_exists')
+        && function_exists('Gallery\\Services\\db_table_exists')
         && db_table_exists('user_google_accounts');
 }
 
@@ -88,7 +100,7 @@ function google_auth_ready(): bool
  */
 function google_auth_schema_ready(): bool
 {
-    return function_exists('db_table_exists') && db_table_exists('user_google_accounts');
+    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('user_google_accounts');
 }
 
 /**

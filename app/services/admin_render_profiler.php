@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+
 /**
  * Return whether the current request should collect admin dashboard profiling data.
  *
@@ -44,7 +49,7 @@ function admin_render_profile_enabled(): bool
     if (PHP_SAPI === 'cli') {
         return false;
     }
-    if (!function_exists('current_user')) {
+    if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
     return current_user() !== null && (string) ($_GET['page'] ?? '') === 'admin';

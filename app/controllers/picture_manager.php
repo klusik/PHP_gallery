@@ -35,6 +35,26 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\copy_gallery_images;
+use function Gallery\Services\create_empty_gallery;
+use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_shows_filenames;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\move_gallery_images;
+use function Gallery\Services\picture_manager_normalize_image_ids;
+use function Gallery\Services\t;
+
 /**
  * Send one JSON response for Picture manager endpoints.
  *

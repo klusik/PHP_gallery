@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+use function Gallery\Core\run_migrations;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 // Variable $ran stores this steps working value.

@@ -34,6 +34,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\render_admin_tab_panel;
+use function Gallery\Core\render_admin_tabs;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\admin_render_profile_span;
+use function Gallery\Services\dev_mode_enabled;
+use function Gallery\Services\gallery_background_source;
+use function Gallery\Services\gallery_effective_gps_map_enabled;
+use function Gallery\Services\gallery_effective_visibility;
+use function Gallery\Services\gallery_visibility_label;
+use function Gallery\Services\render_admin_render_profile_panel;
+use function Gallery\Services\t;
+use function Gallery\Services\url_rewrite_compatibility;
+use function Gallery\Services\url_rewrite_enabled;
+
 /**
  * Render the Admin dashboard page from a controller-provided model.
  *

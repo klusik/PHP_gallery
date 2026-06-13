@@ -32,6 +32,22 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\slugify;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_zip_signature;
+use function Gallery\Services\image_abs_path;
+use function Gallery\Services\image_public_display_file;
+use function Gallery\Services\picture_manager_normalize_image_ids;
+use function Gallery\Services\picture_manager_owned_images_for_selection;
+use function Gallery\Services\public_image_visible_to_current_visitor;
+use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery;
+
 /**
  * Download and ZIP service model.
  *

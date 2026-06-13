@@ -35,6 +35,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\set_site_maintenance_settings;
+use function Gallery\Services\site_maintenance_manual_time_budget_seconds;
+use function Gallery\Services\site_maintenance_reset_state;
+use function Gallery\Services\site_maintenance_rotate_token;
+use function Gallery\Services\site_maintenance_run;
+use function Gallery\Services\site_maintenance_time_budget_seconds;
+use function Gallery\Services\site_maintenance_token_is_valid;
+use function Gallery\Services\site_maintenance_window_hours_to_minutes;
+use function Gallery\Services\t;
+
 /**
  * Process a token-protected site maintenance cron request.
  */

@@ -34,6 +34,19 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Imagick;
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\slugify;
+
 /**
  * Upload service model.
  *
@@ -872,7 +885,7 @@ function uploaded_gallery_image_row_by_path(int $galleryId, string $relativePath
 function gallery_upload_auto_rename_image_ids(int $galleryId, array $imageIds): ?array
 {
     $ids = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
-    if (!$ids || !function_exists('media_renamer_execute_gallery_image_batch')) {
+    if (!$ids || !function_exists('Gallery\\Services\\media_renamer_execute_gallery_image_batch')) {
         return null;
     }
 

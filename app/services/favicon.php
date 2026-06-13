@@ -34,6 +34,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use GdImage;
+use RuntimeException;
+use function Gallery\Core\url_for;
+
 /**
  * Favicon service helpers.
  *

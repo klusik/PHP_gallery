@@ -34,6 +34,116 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\anonymous_preview_url;
+use function Gallery\Core\append_cms_footer_script;
+use function Gallery\Core\append_cms_head_extras;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\css_value;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\slugify;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\child_galleries;
+use function Gallery\Services\child_galleries_tree_preload;
+use function Gallery\Services\contained_tags_for_gallery;
+use function Gallery\Services\current_user_is_known_under_18;
+use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_gallery_by_folder_path;
+use function Gallery\Services\find_gallery_by_slug;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_access_lifetime_seconds;
+use function Gallery\Services\gallery_access_requirement;
+use function Gallery\Services\gallery_access_schema_ready;
+use function Gallery\Services\gallery_allows_direct_public_request;
+use function Gallery\Services\gallery_allows_gps_maps;
+use function Gallery\Services\gallery_background_asset_url;
+use function Gallery\Services\gallery_branch_image_count;
+use function Gallery\Services\gallery_branch_image_counts;
+use function Gallery\Services\gallery_branding_asset_url;
+use function Gallery\Services\gallery_branding_schema_ready;
+use function Gallery\Services\gallery_breadcrumb_ancestors;
+use function Gallery\Services\gallery_cover_asset_url;
+use function Gallery\Services\gallery_cover_collage_images;
+use function Gallery\Services\gallery_cover_image;
+use function Gallery\Services\gallery_date_range_display_value;
+use function Gallery\Services\gallery_effective_count_badge_enabled;
+use function Gallery\Services\gallery_effective_description_layout;
+use function Gallery\Services\gallery_effective_grid_settings;
+use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
+use function Gallery\Services\gallery_effective_visibility;
+use function Gallery\Services\gallery_has_map_payload;
+use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
+use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
+use function Gallery\Services\gallery_lightbox_fetch_images;
+use function Gallery\Services\gallery_lightbox_image_position;
+use function Gallery\Services\gallery_lightbox_total_count;
+use function Gallery\Services\gallery_nsfw_requirement;
+use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\grant_gallery_public_access;
+use function Gallery\Services\grant_nsfw_guard_access;
+use function Gallery\Services\image_has_gps;
+use function Gallery\Services\image_map_point;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\likely_gallery_destination_id;
+use function Gallery\Services\main_page_gallery_grid_settings;
+use function Gallery\Services\pagination_current_page;
+use function Gallery\Services\pagination_gallery_clean_url;
+use function Gallery\Services\pagination_grid_columns_class;
+use function Gallery\Services\pagination_home_gallery_clean_url;
+use function Gallery\Services\pagination_model;
+use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
+use function Gallery\Services\pagination_slice_items;
+use function Gallery\Services\picture_game_available;
+use function Gallery\Services\public_gallery_listing_sql_fragment;
+use function Gallery\Services\public_gallery_metadata;
+use function Gallery\Services\public_home_search_enabled;
+use function Gallery\Services\public_image_display_title;
+use function Gallery\Services\public_path_schema_ready;
+use function Gallery\Services\public_render_profile_count;
+use function Gallery\Services\public_render_profile_db;
+use function Gallery\Services\public_render_profile_set_gallery;
+use function Gallery\Services\public_render_profile_span;
+use function Gallery\Services\public_render_profile_start;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\public_search_normalize_query;
+use function Gallery\Services\public_search_query_length;
+use function Gallery\Services\public_search_results;
+use function Gallery\Services\render_gallery_date;
+use function Gallery\Services\render_pagination_controls;
+use function Gallery\Services\render_public_render_profile_panel;
+use function Gallery\Services\resolve_public_gallery_path;
+use function Gallery\Services\site_name;
+use function Gallery\Services\t;
+use function Gallery\Services\tags_for_entities;
+use function Gallery\Services\tags_for_entity;
+use function Gallery\Services\thumbnail_bundle;
+use function Gallery\Services\thumbnail_bundle_url;
+use function Gallery\Services\thumbnail_bundles_preload;
+use function Gallery\Services\thumbnail_picture_html;
+use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\visitor_can_access_nsfw_content;
+use function Gallery\Views\view_gallery_description_markdown_excerpt;
+use function Gallery\Views\view_gallery_description_markdown_html;
+use function Gallery\Views\view_render_gallery_json_ld;
+use function Gallery\Views\view_render_public_seo_tags;
+
 /**
  * Public gallery controller model.
  *
@@ -43,7 +153,7 @@ function cms_home(): void
 {
     public_render_profile_start('home');
     // $listingCondition stores an intermediate value used by the surrounding gallery workflow.
-    $listingCondition = public_gallery_listing_condition('g');
+    $listingCondition = public_gallery_listing_sql_fragment('g');
     // Variable $stmt stores this steps working value.
     $galleries = public_render_profile_db('home_gallery_query', static function () use ($listingCondition): array {
         // $stmt stores the prepared home gallery query.
@@ -88,9 +198,10 @@ function cms_home(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $galleryPagination : [], t('gallery.pagination.gallery_pages', 'Gallery pages'));
         echo '<section class="grid public-home-gallery-grid' . e(pagination_grid_columns_class($paginationSettings)) . '">';
         public_render_profile_count('rendered_subgalleries', count($galleries));
-        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries): void {
+        $galleryCardContexts = public_render_profile_span('home_gallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($galleries, true, true));
+        public_render_profile_span('render_home_gallery_cards', static function () use ($galleries, $galleryCardContexts): void {
             foreach ($galleries as $index => $gallery) {
-                render_gallery_card($gallery, true, false, true, $index);
+                render_gallery_card($gallery, true, false, true, $index, $galleryCardContexts[(int) $gallery['id']] ?? []);
             }
         });
         echo '</section>';
@@ -282,8 +393,8 @@ function cms_gallery(): void
     $votingAllowed = gallery_voting_allowed($gallery);
     // $lightboxBrowsingMode stores the effective public lightbox mode resolved from Theme plus gallery override.
     $lightboxBrowsingMode = gallery_effective_lightbox_browsing_mode($gallery);
-    // Variable $pictureGameImages stores this steps working value.
-    $pictureGameImages = public_render_profile_span('picture_game_lookup', static fn (): array => picture_game_images($gallery));
+    // Variable $pictureGameAvailable stores this steps working value.
+    $pictureGameAvailable = public_render_profile_span('picture_game_lookup', static fn (): bool => picture_game_available($gallery));
     // Variable $paginationSettings stores this steps working value.
     $paginationSettings = public_render_profile_span('gallery_grid_settings', static fn (): array => gallery_effective_grid_settings($gallery));
     // Variable $galleryPaginationPath stores the gallery-level URL path used for clean pagination links.
@@ -358,7 +469,7 @@ function cms_gallery(): void
     if ($galleryMapAvailable) {
         echo '<button type="button" class="button secondary map-button" data-gallery-map-url="' . e($galleryMapUrl) . '" data-gallery-map-title="' . e((string) $gallery['title']) . '">' . e(t('gallery.show_map', 'Show gallery map')) . '</button>';
     }
-    if (picture_game_available($gallery, $pictureGameImages)) {
+    if ($pictureGameAvailable) {
         echo '<a class="button secondary hero-icon-button hero-picture-game-button" href="' . e(url_for('picture_game', ['id' => $gallery['id']])) . '" aria-label="' . e(t('gallery.play_picture_game', 'Play picture game')) . '" title="' . e(t('gallery.play_picture_game', 'Play picture game')) . '"><span aria-hidden="true">&#127918;</span><span class="visually-hidden">' . e(t('gallery.play_picture_game', 'Play picture game')) . '</span></a>';
     }
     echo '</div>';
@@ -377,7 +488,7 @@ function cms_gallery(): void
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
-    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('feature_flag_enabled') || feature_flag_enabled('picture_manager'));
+    $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('picture_manager'));
     if ($children || $images) {
         echo '<div class="gallery-list-frame" data-back-to-top-scope>';
         echo '<div class="gallery-list-content" data-back-to-top-list>';
@@ -388,9 +499,10 @@ function cms_gallery(): void
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         public_render_profile_count('rendered_subgalleries', count($children));
-        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicPageReorderEnabled): void {
+        $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
+        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicPageReorderEnabled, $subgalleryCardContexts): void {
             foreach ($children as $index => $child) {
-                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true, $index);
+                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
             }
         });
         echo '</div>';
@@ -400,7 +512,7 @@ function cms_gallery(): void
     // Variable $publicPhotoReorderEnabled stores whether visible photo cards should render drag handles.
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     // $lightboxFeatureEnabled stores whether cards should open in the JavaScript lightbox instead of plain image URLs.
-    $lightboxFeatureEnabled = !function_exists('feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
     if ($images) {
         if ($pictureManagerEnabled) {
             render_picture_manager_toolbar($gallery, count($children) > 0);
@@ -427,7 +539,7 @@ function cms_gallery(): void
             continue;
         }
         // Variable $mediaUrl stores this steps working value.
-        $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
         // Variable $thumbnailBundle stores all generated variants for this visible card during this request.
@@ -574,7 +686,7 @@ function render_picture_manager_toolbar(array $gallery, bool $hasVisibleDropTarg
     // $galleryId stores the source gallery ID for all manager actions.
     $galleryId = (int) $gallery['id'];
     // $suggestedDestinationId stores the most likely child gallery destination for typeahead prefill.
-    $suggestedDestinationId = function_exists('likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
+    $suggestedDestinationId = function_exists('Gallery\\Services\\likely_gallery_destination_id') ? likely_gallery_destination_id($galleryId) : 0;
     // $dropHelp stores the drag-and-drop hint appropriate for the current visible page.
     $dropHelp = $hasVisibleDropTargets
         ? t('picture_manager.drop_help_visible', 'Drag selected photos onto a visible subgallery, or use the destination list below.')
@@ -928,6 +1040,75 @@ function public_thumbnail_loading_attributes(int $index): string
 }
 
 /**
+ * Build preloaded rendering context for public gallery cards.
+ *
+ * The card renderer remains responsible for HTML output. This controller helper
+ * only coordinates service-layer lookups so visible cards can share batched
+ * child-gallery, branch-count, cover, collage, and thumbnail-bundle work.
+ *
+ * @param array $galleries Gallery rows to render.
+ * @param bool $publicOnly Public only value.
+ * @param bool $includeCounts Include branch image counts in the context.
+ * @return array<int,array<string,mixed>> Context values keyed by gallery id.
+ */
+function public_gallery_card_rendering_contexts(array $galleries, bool $publicOnly, bool $includeCounts): array
+{
+    // $galleryIds stores visible gallery ids used for batched card context lookups.
+    $galleryIds = array_values(array_unique(array_filter(array_map(static fn (array $gallery): int => (int) ($gallery['id'] ?? 0), $galleries), static fn (int $galleryId): bool => $galleryId > 0)));
+    if (!$galleryIds) {
+        return [];
+    }
+
+    child_galleries_tree_preload($galleryIds, $publicOnly);
+
+    // $branchCounts stores optional contained image counts keyed by gallery id.
+    $branchCounts = $includeCounts ? gallery_branch_image_counts($galleryIds, $publicOnly) : [];
+    // $contexts stores preloaded rendering values keyed by gallery id.
+    $contexts = [];
+    // $thumbnailImages stores all cover and collage images whose thumbnail bundles can be warmed in one pass.
+    $thumbnailImages = [];
+
+    foreach ($galleries as $gallery) {
+        // $galleryId stores the rendered gallery card id.
+        $galleryId = (int) ($gallery['id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+
+        // $isProtectedPublicCard stores whether this public card must avoid exposing cover media.
+        $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
+        // $context stores preloaded values for this card.
+        $context = [
+            'branch_image_count' => (int) ($branchCounts[$galleryId] ?? 0),
+            'cover_asset' => '',
+            'cover' => null,
+            'collage' => [],
+        ];
+
+        if (!$isProtectedPublicCard) {
+            $context['cover_asset'] = gallery_cover_asset_url($gallery, $publicOnly);
+            if ($context['cover_asset'] === '') {
+                $context['cover'] = gallery_cover_image($galleryId, $publicOnly);
+                if (is_array($context['cover'])) {
+                    $thumbnailImages[(int) $context['cover']['id']] = $context['cover'];
+                } else {
+                    $context['collage'] = gallery_cover_collage_images($galleryId, $publicOnly);
+                    foreach ($context['collage'] as $image) {
+                        $thumbnailImages[(int) $image['id']] = $image;
+                    }
+                }
+            }
+        }
+
+        $contexts[$galleryId] = $context;
+    }
+
+    thumbnail_bundles_preload(array_values($thumbnailImages));
+
+    return $contexts;
+}
+
+/**
  * Handles render gallery card logic for the gallery application.
  *
  * @param mixed $gallery Input used by this operation.
@@ -935,21 +1116,22 @@ function public_thumbnail_loading_attributes(int $index): string
  * @param bool $showPublicReorderHandle Show public reorder handle value.
  * @param bool $showSubgalleryBadge Show subgallery badge value.
  * @param mixed $cardIndex Input used by this operation.
+ * @param array $cardContext Preloaded card rendering context.
  */
-function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0): void
+function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicReorderHandle = false, bool $showSubgalleryBadge = false, int $cardIndex = 0, array $cardContext = []): void
 {
     // $isProtectedPublicCard stores an intermediate value used by the surrounding gallery workflow.
     $isProtectedPublicCard = $publicOnly && gallery_access_requirement($gallery) !== null;
     // $descriptionLayout stores the visual layout selected by Theme or the gallery override.
     $descriptionLayout = gallery_effective_description_layout($gallery);
     // Variable $cover stores this steps working value.
-    $coverAsset = $isProtectedPublicCard ? '' : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly));
+    $coverAsset = $isProtectedPublicCard ? '' : (array_key_exists('cover_asset', $cardContext) ? (string) $cardContext['cover_asset'] : public_render_profile_span('gallery_cover_asset_lookup', static fn (): string => gallery_cover_asset_url($gallery, $publicOnly)));
     // $cover stores an intermediate value used by the surrounding gallery workflow.
-    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly));
+    $cover = $isProtectedPublicCard || $coverAsset !== '' ? null : (array_key_exists('cover', $cardContext) ? $cardContext['cover'] : public_render_profile_span('gallery_cover_image_lookup', static fn (): ?array => gallery_cover_image((int) $gallery['id'], $publicOnly)));
     // $showCountBadge stores whether this card should show the contained-picture badge.
     $showCountBadge = !$isProtectedPublicCard && $showSubgalleryBadge && gallery_effective_count_badge_enabled($gallery);
     // Variable $branchImageCount stores this steps working value.
-    $branchImageCount = $showCountBadge ? public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly)) : 0;
+    $branchImageCount = $showCountBadge ? (array_key_exists('branch_image_count', $cardContext) ? (int) $cardContext['branch_image_count'] : public_render_profile_span('gallery_branch_image_count', static fn (): int => gallery_branch_image_count((int) $gallery['id'], $publicOnly))) : 0;
     // $galleryCardTags stores the tags shown in the card body. Own gallery tags win, then contained tags keep the old fallback useful.
     $galleryCardTags = $isProtectedPublicCard ? [] : public_render_profile_span('gallery_card_tag_lookup', static function () use ($gallery, $publicOnly): array {
         // $ownTags stores tags attached directly to the gallery record.
@@ -990,7 +1172,7 @@ function render_gallery_card(array $gallery, bool $publicOnly, bool $showPublicR
         echo public_render_profile_with_thumbnail_purpose('subgallery cover stable picture', static fn (): string => thumbnail_picture_html($cover, 300, [300, 600, 800, 960], '(max-width: 299px) 300px, 800px', '', $coverLoadingAttributes, $coverThumbnailBundle));
     } else {
         // Variable $collage stores this steps working value.
-        $collage = public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
+        $collage = array_key_exists('collage', $cardContext) ? (array) $cardContext['collage'] : public_render_profile_span('gallery_cover_collage_lookup', static fn (): array => gallery_cover_collage_images((int) $gallery['id'], $publicOnly));
         if ($collage) {
             echo '<span class="gallery-collage collage-count-' . count($collage) . '">';
             foreach ($collage as $image) {
@@ -1234,7 +1416,7 @@ function render_lightbox_source_nodes(array $allImages, array $gallery, bool $ma
             continue;
         }
         // Variable $mediaUrl stores this steps working value.
-        $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
         // Variable $previewUrl stores this steps working value.
@@ -1284,7 +1466,7 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, 
     echo '<button class="lightbox-close lightbox-hud" type="button" data-lightbox-action="close">' . e(t('lightbox.close', 'Close')) . '</button>';
     echo '<span class="lightbox-mobile-counter lightbox-hud" data-lightbox-counter aria-hidden="true"></span>';
     echo '<button type="button" class="lightbox-nav lightbox-previous lightbox-hud" data-lightbox-action="previous" aria-label="' . e(t('lightbox.previous_image', 'Previous image')) . '">&lt;</button>';
-    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="' . e(t('lightbox.initial_loader_count', 'Preparing photo {current} of {total}')) . '" hidden><span class="lightbox-initial-loader-label" data-lightbox-initial-loader-label>' . e(t('lightbox.initial_loader', 'Preparing lightbox')) . '</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span class="lightbox-initial-loader-count" data-lightbox-initial-loader-count></span></span><img decoding="async" data-lightbox-img alt=""></button><div class="lightbox-strip" data-lightbox-strip aria-label="' . e(t('lightbox.picture_strip_label', 'Nearby photos')) . '" hidden><div class="lightbox-strip-track" data-lightbox-strip-track></div></div><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-slideshow-link" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S ' . e(t('lightbox.slideshow', 'slideshow')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
+    echo '<figure><button type="button" class="lightbox-stage-link" data-lightbox-stage aria-label="' . e(t('lightbox.toggle_fullscreen_image', 'Toggle fullscreen image')) . '"><span class="lightbox-initial-loader" data-lightbox-initial-loader data-lightbox-loading-count-template="' . e(t('lightbox.initial_loader_count', 'Preparing photo {current} of {total}')) . '" role="status" aria-live="polite" hidden><span class="lightbox-initial-loader-label" data-lightbox-initial-loader-label>' . e(t('lightbox.initial_loader', 'Preparing gallery...')) . '</span><span class="lightbox-initial-loader-track" aria-hidden="true"><span class="lightbox-initial-loader-fill" data-lightbox-initial-loader-fill></span></span><span class="lightbox-initial-loader-count" data-lightbox-initial-loader-count></span></span><img decoding="async" data-lightbox-img alt=""></button><div class="lightbox-strip" data-lightbox-strip aria-label="' . e(t('lightbox.picture_strip_label', 'Nearby photos')) . '" hidden><div class="lightbox-strip-track" data-lightbox-strip-track></div></div><figcaption class="lightbox-meta"><div class="lightbox-toolbar"><span class="lightbox-counter" data-lightbox-counter></span><button type="button" class="lightbox-fullscreen-link" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F ' . e(t('lightbox.fullscreen', 'fullscreen')) . '</button><button type="button" class="lightbox-slideshow-link" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S ' . e(t('lightbox.slideshow', 'slideshow')) . '</button><button type="button" class="lightbox-map-button" data-lightbox-map hidden>&#128205; ' . e(t('lightbox.map', 'Map')) . '</button>' . $votePanelHtml . '</div><h2 data-lightbox-title></h2><p class="lightbox-description" data-lightbox-description></p></figcaption><div class="lightbox-map-split" data-lightbox-map-split hidden><button type="button" class="lightbox-map-split-close" data-lightbox-map-split-close aria-label="' . e(t('lightbox.close_map_split', 'Close map split')) . '">' . e(t('lightbox.close_map', 'Close map')) . '</button><div class="lightbox-map-split-title" data-lightbox-map-split-title></div><div class="lightbox-map-split-canvas" data-lightbox-map-split-canvas></div></div></figure>';
     echo '<button type="button" class="lightbox-nav lightbox-next lightbox-hud" data-lightbox-action="next" aria-label="' . e(t('lightbox.next_image', 'Next image')) . '">&gt;</button>';
     echo '<button type="button" class="lightbox-fullscreen-button lightbox-hud" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">F</button>';
     echo '<button type="button" class="lightbox-slideshow-button lightbox-hud" data-lightbox-action="slideshow" aria-label="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" title="' . e(t('lightbox.toggle_slideshow', 'Toggle slideshow')) . '" aria-pressed="false">S</button>';
@@ -1292,4 +1474,3 @@ function render_lightbox(bool $votingAllowed = true, bool $mapsAllowed = false, 
     echo '<button type="button" class="lightbox-mobile-fullscreen-button" data-lightbox-action="fullscreen" aria-label="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '" title="' . e(t('lightbox.toggle_fullscreen', 'Toggle fullscreen')) . '">&#9974;</button>';
     echo '</div>';
 }
-

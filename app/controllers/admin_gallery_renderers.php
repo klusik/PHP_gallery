@@ -34,6 +34,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\slugify;
+use function Gallery\Services\all_tag_names;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_cover_choices;
+use function Gallery\Services\gallery_images;
+use function Gallery\Services\gallery_search_picker_rows;
+use function Gallery\Services\gallery_visibility_label;
+use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\normalize_gallery_visibility;
+use function Gallery\Services\t;
+use function Gallery\Services\weighted_tag_suggestions_for_gallery;
+
 /**
  * Handles visibility options logic for the gallery application.
  *

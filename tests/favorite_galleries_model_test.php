@@ -35,6 +35,13 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\theme_favorite_gallery_entries_from_form;
+use function Gallery\Services\theme_favorite_gallery_existing_ids_from_rows;
+use function Gallery\Services\theme_favorite_gallery_ids_encode;
+use function Gallery\Services\theme_favorite_gallery_ids_normalize;
+use function Gallery\Services\theme_favorite_gallery_navigation_items_from_rows;
+use function Gallery\Views\view_favorite_gallery_nav_html;
+
 if (!function_exists('e')) {
         /**
      * Minimal HTML escaping shim for view tests.
@@ -108,6 +115,7 @@ if (!function_exists('gallery_is_public_listed')) {
     }
 }
 
+require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/favorite_galleries.php';
 require_once __DIR__ . '/../app/views/layout.php';
 

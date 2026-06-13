@@ -34,6 +34,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+use function Gallery\Services\t;
+
 const CMS_INTEGRITY_CACHE_TTL = 86400;
 
 /**
@@ -171,7 +179,7 @@ function integrity_load_manifest(): array
     if (!is_file($manifestPath)) {
         return [
             'ok' => false,
-            'error' => function_exists('t') ? t('integrity.error.manifest_missing', 'Core manifest is missing.') : 'Core manifest is missing.',
+            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_missing', 'Core manifest is missing.') : 'Core manifest is missing.',
             'manifest' => [],
         ];
     }
@@ -181,7 +189,7 @@ function integrity_load_manifest(): array
     if ($manifestJson === false || trim($manifestJson) === '') {
         return [
             'ok' => false,
-            'error' => function_exists('t') ? t('integrity.error.manifest_empty', 'Core manifest is empty or unreadable.') : 'Core manifest is empty or unreadable.',
+            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_empty', 'Core manifest is empty or unreadable.') : 'Core manifest is empty or unreadable.',
             'manifest' => [],
         ];
     }
@@ -191,7 +199,7 @@ function integrity_load_manifest(): array
     if (!is_array($manifest) || !isset($manifest['files']) || !is_array($manifest['files'])) {
         return [
             'ok' => false,
-            'error' => function_exists('t') ? t('integrity.error.manifest_invalid', 'Core manifest is invalid JSON or does not contain a files object.') : 'Core manifest is invalid JSON or does not contain a files object.',
+            'error' => function_exists('Gallery\\Services\\t') ? t('integrity.error.manifest_invalid', 'Core manifest is invalid JSON or does not contain a files object.') : 'Core manifest is invalid JSON or does not contain a files object.',
             'manifest' => [],
         ];
     }

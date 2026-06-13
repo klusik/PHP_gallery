@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use const Gallery\Services\GALLERY_MIGRATION_RECONNECT_SECONDS;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\gallery_migration_current_version;
+use function Gallery\Services\t;
+
 /**
  * Render the gallery migration controls for the API tab.
  *

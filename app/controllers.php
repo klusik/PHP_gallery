@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
 
 // Load theme admin and theme asset routes after their service dependencies are available.
 require_once __DIR__ . '/controllers/admin_theme.php';
