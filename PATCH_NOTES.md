@@ -1,5 +1,506 @@
 # Patch notes
 
+## Version 0.79
+
+Version 0.79 is a broad reliability, performance, and maintainability release focused on public gallery rendering,
+  thumbnail metadata, media delivery, Admin discovery workflows, Admin log usability, and the internal namespace
+  migration. The release keeps the plain PHP architecture and existing entry points, but moves most application
+  internals into explicit Gallery\Core, Gallery\Services, Gallery\Controllers, and Gallery\Views namespaces. It also
+  improves the public lightbox pipeline so visitors see fast thumbnail previews first, then full media after decode,
+  while administrators get better progress feedback for discovery, thumbnail checks, log filtering, and database
+  metadata refreshes.
+
+  ### Highlights
+
+  #### Added namespaced application internals
+
+  - Added explicit namespaces for the main application layers:
+      - Gallery\Core for bootstrap, routing, database, helpers, migrations, security, integrity, and loader modules.
+      - Gallery\Services for reusable domain logic such as gallery lookup, thumbnail metadata, public search, settings,
+        upload helpers, thumbnail maintenance, and public rendering support.
+
+      - Gallery\Controllers for request handlers such as public gallery pages, media routes, admin dashboard actions,
+        uploads, thumbnail actions, search, votes, and setup.
+
+      - Gallery\Views for shared view helpers and server-rendered UI fragments.
+
+  - Updated app/bootstrap.php so route dispatch points at namespaced controller handlers where applicable, for example
+    \Gallery\Controllers\cms_gallery, \Gallery\Controllers\cms_media, \Gallery\Controllers\cms_admin_thumbnails, and
+    \Gallery\Controllers\cms_public_search.
+
+  - Preserved top-level browser and CLI entry points as global files so existing hosting setups and direct scripts
+    continue to work:
+      - index.php
+      - public/index.php
+      - install.php
+      - setup-gallery.php
+      - scripts/create_admin.php
+      - scripts/migrate.php
+      - scripts/site_maintenance.php
+
+  - Updated scripts and standalone tests to import namespaced functions explicitly instead of relying on old global
+    function names.
+
+  - Added tests/support/namespaced_shims.php so standalone model tests can exercise namespaced services without
+    bootstrapping the full browser application.
+
+  - Example: a direct web request still enters through public/index.php, but the route handler now resolves through the
+    namespaced controller table in app/bootstrap.php.
+
+  #### Improved public gallery performance
+
+  - Improved large parent gallery rendering by batching gallery branch image counts instead of repeatedly querying each
+    child gallery.
+
+  - Added gallery_branch_image_counts() in app/services/gallery_lookup.php so child gallery cards can receive their
+    picture totals from one shared service path.
+
+  - Updated app/controllers/public_gallery.php to preload gallery-card rendering context and branch counts before
+    rendering subgallery cards.
+
+  - Added request-local thumbnail bundle caching in app/services/thumbnail_bundles.php.
+  - Added thumbnail_bundles_preload() so visible gallery images can warm thumbnail metadata and bundle data in a batch
+    before individual cards ask for URLs.
+
+  - Reduced repeated thumbnail filesystem probing by preferring durable database metadata when valid thumbnail rows are
+    available.
+
+  - Improved public render profiler counters for thumbnail bundle requests, cache hits, cache misses, fallback searches,
+    rendered image cards, and rendered subgallery cards.
+
+  - Example: a parent gallery with many child branches can now render child card counts and cover thumbnails through
+    batched lookup helpers rather than performing repeated per-card database and filesystem work.
+
+  #### Improved lightbox preview and full-media pipeline
+
+  - Updated the public gallery image markup so each lightbox source carries two separate media URLs:
+      - data-preview-src points to a generated preview thumbnail, usually a larger thumbnail such as thumb-1600.webp.
+      - data-full-src points to the robust full-media route, for example index.php?page=media&id=236.
+
+  - Updated public/assets/gallery-modules/lightbox.js so opening the viewer shows the preview source first, then loads
+    and decodes the full media source in the background.
+
+  - Preserved the preview image if the full media source fails, so navigation remains usable even when the original or
+    display derivative cannot be loaded.
+
+  - Updated fullscreen behavior so the viewer uses the decoded full media source after the full-media swap succeeds.
+  - Preserved nearby-image preloading so previous/next navigation remains responsive.
+  - Added a visible loading status message for initial lightbox startup:
+      - English: Preparing gallery...
+      - Czech: Připravuji galerii...
+
+  - Added accessible loader semantics with role="status" and aria-live="polite" so assistive technology can announce the
+    loading state.
+
+  - Updated the deferred lightbox loader in public/assets/gallery-modules/lightbox-deferred.js so visitors get immediate
+    feedback while the heavier lightbox module is loading.
+
+  - Example: when a visitor opens a large photo, the black empty frame is replaced by a clear preparation message, then
+    the preview thumbnail appears quickly, and the full image replaces it after the browser finishes decoding.
+
+  #### Improved media and thumbnail route behavior
+
+  - Updated app/controllers/public_media.php so robust media URLs such as index.php?page=media&id=... can serve
+    browser-displayable media reliably.
+
+  - Updated clean public media URLs such as /gallery/.../photo-slug/media to avoid namespace-related telemetry failures
+    after the namespace migration.
+
+  - Preserved generated thumbnail routes such as:
+      - /gallery/.../photo-slug/thumb-600.webp
+      - /gallery/.../photo-slug/thumb-1600.webp
+
+  - Improved media fallback behavior so the main media route can serve the best available browser-displayable derivative
+    when the original source is unavailable but generated derivatives exist.
+
+  - Updated public media and immutable asset responses to use cache headers such as Cache-Control: public, max-
+    age=31536000, immutable where appropriate.
+
+  - Kept private media cases on private cache policies when gallery/image access rules require it.
+  - Removed thumbnail-served telemetry from thumbnail routes so thumbnail requests no longer generate
+    media.thumbnail.served events.
+
+  - Preserved media.image.served telemetry for full media delivery where appropriate.
+  - Example: the lightbox no longer depends on a clean /media URL being perfect; its full source uses the robust
+    index.php?page=media&id=... route while thumbnail grids and previews keep using thumbnail routes.
+
+  #### Added compact thumbnail metadata storage
+
+  - Added migration database/migrations/202606130001_compact_thumbnail_variant_metadata.php.
+  - Added master image metadata columns to images:
+      - display_width
+      - display_height
+      - exif_orientation
+      - thumbnail_derivative_version
+      - thumbnail_metadata_refreshed_at
+
+  - Added derivative_version to image_thumbnail_variants.
+  - Removed duplicated source payload columns from image_thumbnail_variants after moving source-level display metadata
+    to images.
+
+  - Updated app/services/thumbnail_metadata.php so thumbnail variant rows are validated against compact image-level
+    metadata and derivative version markers.
+
+  - Updated app/services/image_scanning.php so scanned images synchronize display dimensions and EXIF orientation to the
+    master images row.
+
+  - Updated thumbnail metadata refresh behavior so stale variants can be invalidated by incrementing
+    images.thumbnail_derivative_version.
+
+  - Added thumbnail_metadata_storage_snapshot() diagnostics so Admin maintenance and database views can report whether
+    the compact schema is active.
+
+  - Example: instead of storing source width, height, MIME type, checksum, EXIF orientation, and EXIF JSON on every
+    thumbnail variant row, the image stores source/display facts once and each derivative row stores only derivative-
+    specific state.
+
+  #### Improved thumbnail maintenance and repair progress
+
+  - Updated app/controllers/admin_thumbnails.php so thumbnail checks can run in browser-driven batches.
+  - Added dry-check progress reporting for missing or stale thumbnails.
+  - Added targeted repair queue behavior so “Create missing thumbnails” can work from the latest successful missing-
+    thumbnail check instead of blindly scanning everything again.
+
+  - Updated public/assets/gallery-modules/admin-thumbnail-progress.js to show:
+      - how many images were checked,
+      - how many images still need thumbnails,
+      - how many thumbnail variants are missing or stale,
+      - when targeted repair is ready,
+      - when targeted repair has nothing left to do.
+
+  - Improved legacy JPG cleanup progress messaging with processed counts, deleted file counts, and freed byte totals.
+  - Updated site maintenance so thumbnail metadata snapshots and thumbnail repair summaries include compact metadata
+    counters such as refreshed metadata rows and source metadata syncs.
+
+  - Example: an administrator can run “Check missing thumbnails”, watch progress update in the browser, and then run a
+    targeted “Create missing thumbnails” pass only for the affected images.
+
+  #### Improved Admin gallery discovery
+
+  - Added app/services/admin_gallery_discovery.php to move filesystem discovery logic out of the controller and into a
+    reusable service.
+
+  - Updated app/controllers/admin_galleries_discovery.php to orchestrate discovery jobs, JSON responses, import actions,
+    move actions, delete actions, and final user feedback.
+
+  - Added browser-driven discovery progress in public/assets/gallery-modules/admin-refresh-progress.js.
+  - Added discovery job state so large gallery trees can be scanned in smaller server batches instead of one long
+    blocking request.
+
+  - Added dynamic discovery results that show candidate folders and the action that will be applied.
+  - Added support for three discovery actions:
+      - Import selected folders in place as new galleries.
+      - Move supported photo files into an existing gallery folder.
+      - Delete selected unmanaged folders from disk.
+
+  - Added destination-gallery selection for move actions.
+  - Added clear explanations for what each action does before the administrator submits it.
+  - Added safeguards so delete actions only target selected unmanaged directories under the gallery root.
+  - Added duplicate and sibling-title detection so likely duplicate gallery folders are highlighted and not silently
+    imported as confusing duplicates.
+
+  - Added metadata-only folder handling so folders with only gallery.json or sidecar metadata but no supported photos
+    are ignored instead of being offered as empty galleries.
+
+  - Added thumbnail follow-up integration so discovery import or move actions can trigger thumbnail creation only when
+    images were actually scanned.
+
+  - Example: if a folder contains photos but is not yet a CMS gallery, Admin discovery can now show the folder, count
+    its photos, warn about duplicate sibling titles, and let the administrator import it, move the photos elsewhere, or
+    delete the unmanaged folder.
+
+  #### Improved Admin logs
+
+  - Updated the Admin logs page with grouped log rows for repeated events.
+  - Added grouped instance counts so repeated log events can appear as one representative row with a visible count.
+  - Added optional ungrouped view so administrators can still inspect individual rows when needed.
+  - Added persistent multi-select severity filtering.
+  - Added page-size choices for log browsing.
+  - Added pagination with preserved filters and sort order.
+  - Added newest-first and oldest-first sorting.
+  - Added live filter updates in public/assets/gallery-modules/admin-logs.js so category, severity, grouping, row count,
+    text search, and page changes can refresh without a full page reload.
+
+  - Added grouped-row bulk status updates so selecting a grouped row can apply the chosen status to every matching
+    instance in that group.
+
+  - Added grouped TXT export support so administrators can export a representative event or an entire grouped set.
+  - Preserved the full ZIP log export action.
+  - Example: instead of scrolling through hundreds of identical thumbnail warmup warnings, an administrator can group
+    similar events, see that one row represents many entries, expand all grouped instances, and mark the group as
+    reviewed.
+
+  #### Improved database usage and storage reporting
+
+  - Updated app/services/admin_database_usage.php and app/views/admin_database_usage.php with safer table metadata
+    handling for MySQL/MariaDB hosting environments.
+
+  - Added admin_database_usage_recompute route support for refreshing database table metadata.
+  - Added a “Recompute DB metadata” workflow that can run ANALYZE TABLE for current database tables, then reload row and
+    size estimates.
+
+  - Improved unavailable-state handling when information_schema.TABLES metadata cannot be read on restricted hosting.
+  - Updated Admin storage statistics views with compact cards and clearer database-vs-file storage separation.
+  - Example: administrators can refresh database size estimates from the dashboard without modifying gallery data or
+    rebuilding tables.
+
+  #### Improved public search and visibility filtering
+
+  - Renamed public listing SQL helper functions to make their interpolation contract explicit:
+      - public_gallery_listing_sql_fragment()
+      - public_search_context_listing_sql_fragment()
+
+  - Added @internal documentation to both helpers.
+  - Documented that these SQL fragments are hardcoded-only and must not contain user-derived values.
+  - Updated call sites in public gallery rendering, gallery lookup, tag metadata, public search, and picture game logic.
+  - Preserved anonymous visibility filtering for public gallery listings and search results.
+  - Improved picture-game availability checks so they use bounded database queries instead of loading all eligible
+    images.
+
+  - Example: public search still filters private and unlisted content, but the shared SQL helper names now make it clear
+    that the returned SQL is a static fragment intended for prepared-query assembly.
+
+  #### Improved public asset and telemetry handling
+
+  - Added public/assets/usage.js.
+  - Added public/assets/telemetry.js.
+  - Updated asset loading in app/views/layout.php, public/assets/gallery.js, and public/assets/public-gallery.js.
+  - Updated public asset loading tests so the public and admin bundles load the correct module sets.
+  - Improved telemetry privacy and rollup service wiring in:
+      - app/services/telemetry.php
+      - app/services/telemetry_privacy.php
+      - app/services/telemetry_rollup.php
+      - app/services/telemetry_settings.php
+
+  - Kept thumbnail route telemetry suppressed while preserving full media telemetry.
+  - Example: public pages can load smaller purpose-specific client modules while telemetry and usage collection remain
+    separated from thumbnail serving.
+
+  #### Improved documentation and code comments
+
+  - Updated ARCHITECTURE.md and CODEMAP.md for discovery, thumbnail, and namespace-related architecture changes.
+  - Added docblock_manifest.txt.
+  - Standardized many PHP and JavaScript docblocks to use consistent descriptions, @param, and @return annotations.
+  - Updated app/core-manifest.json to reflect the changed application files and assets.
+  - Preserved inline comments and avoided changing historical patch notes as part of the release work.
+  - Example: service functions that are shared by controllers and tests now have clearer docblocks, making it easier to
+    audit responsibilities after the namespace migration.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added namespace declarations across core modules, many controllers, services, and views.
+  - Updated app/bootstrap.php route dispatch to use fully qualified namespaced controller handlers.
+  - Updated public/index.php and script entry points to import namespaced core functions.
+  - Added app/services/admin_gallery_discovery.php for batched discovery jobs, candidate generation, unmanaged-folder
+    deletion, move-photo workflows, duplicate detection, metadata-only folder detection, and discovery job persistence.
+
+  - Updated app/controllers/admin_galleries_discovery.php to support discovery actions such as start, status, and step.
+  - Updated app/controllers/admin_galleries_discovery.php to return JSON payloads for browser-driven discovery progress.
+  - Updated app/controllers/admin_galleries_discovery.php to handle discovery import actions including import_in_place,
+    move_photos, and delete_from_disk.
+
+  - Updated app/services/gallery_mutations.php so discovery import workflows can reuse gallery mutation logic instead of
+    duplicating filesystem/database behavior in the controller.
+
+  - Updated app/controllers/admin_thumbnails.php with batched thumbnail check endpoints, repair token handling, targeted
+    missing-thumbnail repair, and safer maintenance status responses.
+
+  - Updated app/services/thumbnail_maintenance.php with report merging, batch checking, last-check storage, targeted
+    image IDs, and compact missing/stale variant summaries.
+
+  - Updated app/services/thumbnail_metadata.php with compact schema support, renderable row preloading, request-local
+    caches, derivative version validation, image source payload syncing, metadata refresh results, and storage
+    snapshots.
+
+  - Updated app/services/thumbnail_bundles.php with request-local bundle resolution, database-backed variant selection,
+    fallback selection, and media fallback URLs.
+
+  - Updated app/services/thumbnail_sources.php with metadata-backed srcset and thumbnail URL resolution.
+  - Updated app/services/image_scanning.php to persist display dimensions, EXIF orientation, and thumbnail metadata
+    refresh timestamps to the master image row.
+
+  - Updated app/services/dng_derivatives.php and related image services so DNG-derived display metadata can participate
+    in the same compact thumbnail metadata workflow.
+
+  - Updated app/controllers/public_media.php with improved full-media and thumbnail cache policies, robust media route
+    behavior, and guarded media telemetry logging.
+
+  - Updated app/controllers/public_gallery.php with batched gallery-card context loading, branch count preloading,
+    lightbox preview/full source attributes, and loader markup.
+
+  - Updated app/services/gallery_lookup.php with gallery_branch_image_counts() and related batched lookup helpers.
+  - Updated app/services/public_paths.php with public_gallery_listing_sql_fragment().
+  - Updated app/services/public_search.php with public_search_context_listing_sql_fragment().
+  - Updated app/services/picture_game.php so availability checks remain fast and bounded.
+  - Updated app/services/tag_metadata.php so tag metadata counts continue to honor public visibility filters after the
+    SQL helper rename.
+
+  - Updated app/controllers/admin_logs.php with grouped log rendering, persistent severity filters, pagination, live
+    filter JSON payloads, grouped bulk updates, grouped exports, and improved fallback translation handling.
+
+  - Updated app/services/logs.php with grouped log count/list helpers, group hashes, grouped status updates, and
+    improved filter support.
+
+  - Updated app/controllers/admin_dashboard.php and app/services/admin_database_usage.php with
+    admin_database_usage_recompute support.
+
+  - Updated app/services/site_maintenance.php with compact thumbnail metadata cleanup, thumbnail metadata snapshots,
+    orphan cleanup, and richer maintenance summaries.
+
+  - Updated app/controllers/upload_automation.php, app/services/upload_automation.php, app/services/uploads.php, and
+    experimental upload/rebuild services to keep upload-derived thumbnails and metadata aligned with the compact
+    metadata model.
+
+  - Updated app/services/updates.php, scripts/generate_manifest.php, and app/core-manifest.json so update/integrity
+    workflows understand the changed file set.
+
+  #### Database
+
+  - Added migration database/migrations/202606130001_compact_thumbnail_variant_metadata.php.
+  - Added images.display_width for browser-display width after EXIF orientation is considered.
+  - Added images.display_height for browser-display height after EXIF orientation is considered.
+  - Added images.exif_orientation to store the source orientation used by thumbnail geometry validation.
+  - Added images.thumbnail_derivative_version to invalidate stale derivative metadata when the source changes.
+  - Added images.thumbnail_metadata_refreshed_at to record when image-level thumbnail metadata was refreshed.
+  - Added image_thumbnail_variants.derivative_version.
+  - Removed duplicated source metadata columns from image_thumbnail_variants, including legacy source dimensions, MIME
+    type, file size, modified time, checksum, EXIF orientation, and EXIF JSON payload fields.
+
+  - Removed the old image_thumbnail_variants.gallery_id dependency from the compact schema.
+  - Migrated existing source dimensions from image_thumbnail_variants into images.display_width, images.display_height,
+    and images.exif_orientation when valid values were available.
+
+  - Updated existing variant rows so their derivative_version matches the corresponding image derivative version.
+  - Updated maintenance cleanup to delete orphan thumbnail metadata rows when matching image or gallery records no
+    longer exist.
+
+  #### Frontend
+
+  - Updated public/assets/gallery-modules/lightbox.js with preview-first loading, full-media decode-and-swap, fullscreen
+    full-media behavior, initial loader persistence, and adjacent preloading preservation.
+
+  - Updated public/assets/gallery-modules/lightbox-deferred.js so deferred lightbox activation shows a small loader
+    immediately and imports the updated full lightbox module.
+
+  - Updated public/assets/gallery-modules/lightbox-votes.js to keep vote controls synchronized with the lightbox after
+    the module split.
+
+  - Updated public/assets/gallery-modules/admin-refresh-progress.js with Ajax discovery progress, dynamic candidate
+    rendering, action-specific controls, move-target handling, delete confirmation, and discovery result messages.
+
+  - Updated public/assets/gallery-modules/admin-thumbnail-progress.js with missing-thumbnail check progress, targeted
+    repair token propagation, repair completion messaging, and legacy JPG cleanup progress.
+
+  - Updated public/assets/gallery-modules/admin-logs.js with live log filters, severity summary updates, page changes,
+    time-sort changes, no-results handling, and progressive status text.
+
+  - Updated public/assets/gallery-modules/admin-gallery-list.js, admin-side-panel.js, admin-media-renamer.js, picture-
+    manager.js, public-home-search.js, responsive-thumbnails.js, and other modules to work with the namespace, asset-
+    loading, and updated admin/public workflows.
+
+  - Added public/assets/usage.js.
+  - Added public/assets/telemetry.js.
+  - Updated app/views/layout.php so public pages load the deferred public lightbox path and admin pages load the fuller
+    admin module set.
+
+  - Updated app/views/admin_dashboard_sections.php with discovery, thumbnail, and database usage controls.
+  - Updated app/views/admin_database_usage.php and app/views/admin_storage_statistics.php for the improved Admin
+    database/storage display.
+
+  - Updated app/views/admin_upload_settings.php, app/views/admin_gallery_migration.php, and related Admin views to match
+    the newer service/controller layout.
+
+  - Updated language files app/lang/en.json and app/lang/cs.json with new labels, progress messages, Admin log strings,
+    discovery messages, thumbnail check messages, and the lightbox loader text.
+
+  #### Tests
+
+  - Updated tests/admin_database_usage_test.php for database usage model changes.
+  - Updated tests/admin_log_severity_filter_test.php for persistent multi-select severity filtering.
+  - Updated tests/admin_storage_statistics_test.php for the refreshed storage/statistics model.
+  - Updated tests/dng_conversion_policy_test.php for DNG metadata and conversion policy changes.
+  - Updated tests/experimental_upload_settings_test.php for upload setting behavior that now participates in the compact
+    metadata release.
+
+  - Updated tests/favorite_galleries_model_test.php, tests/gallery_branding_model_test.php, and tests/
+    gallery_dates_model_test.php to import namespaced service/view functions explicitly.
+
+  - Added tests/support/namespaced_shims.php for deterministic standalone testing of namespaced helpers.
+  - Updated tests/gallery_lightbox_mode_model_test.php for lightbox mode behavior.
+  - Updated tests/gallery_migration_model_test.php for gallery migration behavior after service changes.
+  - Updated tests/gallery_visibility_model_test.php for public visibility filtering and SQL helper behavior.
+  - Updated tests/openai_text_assist_model_test.php for namespaced service compatibility.
+  - Updated tests/public_asset_loading_model_test.php for public/admin asset loading and module inclusion.
+  - Updated tests/thumbnail_compatibility_model_test.php and tests/thumbnail_warmup_model_test.php for thumbnail
+    metadata and warmup behavior.
+
+  - Updated tests/upload_accept_and_dng_gps_test.php and tests/upload_automation_sim_camera_metadata_test.php for upload
+    metadata and DNG/GPS handling.
+
+  - Updated tests/url_rewrite_settings_test.php for namespaced route and URL helper behavior.
+
+  #### Tooling and scripts
+
+  - Updated scripts/create_admin.php for namespaced core/database helpers.
+  - Updated scripts/migrate.php for namespaced migration execution.
+  - Updated scripts/site_maintenance.php for namespaced maintenance service calls.
+  - Updated scripts/generate_manifest.php for the expanded manifest/integrity workflow.
+  - Updated setup-gallery.php and install.php to remain compatible with the new namespaced bootstrap.
+  - Updated winapp/gallery_watch_upload.pyw alongside upload/import workflow changes.
+  - Added docblock_manifest.txt to support the code documentation consistency pass.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public gallery pages should feel faster on large galleries because gallery-card counts, thumbnail bundles, and
+    thumbnail metadata are loaded more efficiently.
+
+  - The lightbox now gives clear visual feedback while preparing the viewer instead of showing only a black frame.
+  - The lightbox shows a preview thumbnail quickly, then upgrades to the full image when the browser has decoded it.
+  - Fullscreen viewing continues to use the full media source after the full image is ready.
+  - Previous/next navigation remains usable even if a full media file fails to load, because the preview remains
+    visible.
+
+  - Public thumbnail and media responses use stronger cache headers where safe, improving repeat visits and browser-
+    cache behavior.
+
+  - Public search and gallery visibility rules continue to hide private or unlisted content from anonymous visitors.
+
+  #### For administrators
+
+  - Admin gallery discovery is more usable for large filesystem trees because it runs through visible progress steps
+    instead of one opaque request.
+
+  - Discovery results explain what will happen before an import, move, or delete action is run.
+  - Move actions can physically move supported photo files into an existing gallery and scan the destination gallery
+    afterward.
+
+  - Delete actions are clearer and safer because they are limited to selected unmanaged folders.
+  - Metadata-only folders are ignored with an explanation instead of becoming confusing empty import candidates.
+  - Thumbnail maintenance is easier to operate because checks show progress and targeted repair becomes available only
+    after a successful check.
+
+  - Admin logs are easier to triage because repeated events can be grouped, filtered by multiple severities, paginated,
+    searched live, exported, and bulk-updated.
+
+  - Database and storage panels provide clearer capacity information and can refresh table metadata without changing
+    gallery content.
+
+  - The namespace migration makes future feature work safer by reducing accidental global-function collisions and making
+    dependencies explicit.
+
+  #### Compatibility notes
+
+  - Existing public URLs, clean gallery URLs, thumbnail URLs, media URLs, setup scripts, migration scripts, and
+    standalone tests remain supported.
+
+  - The application still has no Composer or Node build requirement.
+  - The compact thumbnail metadata migration changes the shape of image_thumbnail_variants; code or manual SQL that
+    depended on the removed duplicated source columns should be updated to read source/display metadata from images.
+
 ## Version 0.78
 
 Version 0.78 adds an experimental browser-side upload and thumbnail rebuild pipeline designed to reduce shared-hosting
