@@ -34,6 +34,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use PDOStatement;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 const GALLERY_MAP_SOURCE_EXIF_POINT = 'exif_point';
 const GALLERY_MAP_SOURCE_FLIGHT_PATH = 'flight_path';
 const FLIGHT_MAP_NAVDATA_SOURCE_OURAIRPORTS = 'ourairports';
@@ -45,6 +55,8 @@ const FLIGHT_MAP_NAVDATA_URL_NAVAIDS = 'https://davidmegginson.github.io/ourairp
  *
  * The public site can run before migrations are applied, so callers use this
  * guard instead of assuming that route-map tables already exist.
+ *
+ * @return bool True when the condition matches.
  */
 function flight_map_schema_ready(): bool
 {
@@ -62,6 +74,8 @@ function flight_map_schema_ready(): bool
 
 /**
  * Return whether optional admin-time nav point lookup storage is available.
+ *
+ * @return bool True when the condition matches.
  */
 function flight_map_navdata_schema_ready(): bool
 {
@@ -79,6 +93,8 @@ function flight_map_navdata_schema_ready(): bool
 
 /**
  * Return the supported map source identifiers.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_map_source_types(): array
 {
@@ -87,6 +103,9 @@ function gallery_map_source_types(): array
 
 /**
  * Fetch the stored route map row for one gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_flight_map_row(int $galleryId): ?array
 {
@@ -101,6 +120,9 @@ function gallery_flight_map_row(int $galleryId): ?array
 
 /**
  * Return true when one gallery has a usable stored flight path.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_has_flight_path_map(array $gallery): bool
 {
@@ -121,6 +143,8 @@ function gallery_has_flight_path_map(array $gallery): bool
 
 /**
  * Delete the route map assigned to one gallery.
+ *
+ * @param int $galleryId Gallery identifier.
  */
 function delete_gallery_flight_path_map(int $galleryId): void
 {
@@ -138,6 +162,10 @@ function delete_gallery_flight_path_map(int $galleryId): void
  * Tokens that cannot be resolved are saved separately for the admin summary,
  * but they are not sent to the public renderer. The displayed route therefore
  * only contains valid coordinates and can be reused without AIRAC lookup.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $routeText Route text value.
+ * @return array Structured result data for the caller.
  */
 function save_gallery_flight_path_route(int $galleryId, string $routeText): array
 {
@@ -209,7 +237,9 @@ function save_gallery_flight_path_route(int $galleryId, string $routeText): arra
  * user can see normal route identifiers. A later gallery save must not resolve
  * that text through the fallback nav database and overwrite OFP coordinates.
  *
- * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}|null
+ * @param int $galleryId Gallery identifier.
+ * @param string $routeText Route text value.
+ * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}|null.
  */
 function flight_map_preserve_existing_ofp_route(int $galleryId, string $routeText): ?array
 {
@@ -240,7 +270,8 @@ function flight_map_preserve_existing_ofp_route(int $galleryId, string $routeTex
 /**
  * Return true when all stored points came from a SimBrief OFP import.
  *
- * @param array<int, array<string, mixed>> $points Stored route points.
+ * @param array $points Points value.
+ * @return bool True when the condition matches.
  */
 function flight_map_points_are_simbrief_ofp(array $points): bool
 {
@@ -266,9 +297,9 @@ function flight_map_points_are_simbrief_ofp(array $points): bool
  *
  * @param int $galleryId Gallery identifier.
  * @param string $routeText Human-readable route point list.
- * @param array<int, array<string, mixed>> $points Already-resolved route points.
- * @param array<int, array<string, mixed>> $unresolved Optional diagnostics.
- * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}
+ * @param array $points Points value.
+ * @param array $unresolved Unresolved value.
+ * @return array{point_count: int, unresolved_count: int, points: array<int, array<string, mixed>>, unresolved: array<int, array<string, mixed>>}.
  */
 function save_gallery_flight_path_resolved_points(int $galleryId, string $routeText, array $points, array $unresolved = []): array
 {
@@ -349,13 +380,16 @@ function save_gallery_flight_path_resolved_points(int $galleryId, string $routeT
  */
 function flight_map_clear_runtime_cache(): void
 {
-    if (function_exists('gallery_map_cache_clear_all')) {
+    if (function_exists('Gallery\\Services\\gallery_map_cache_clear_all')) {
         gallery_map_cache_clear_all();
     }
 }
 
 /**
  * Resolve route text into a stable list of latitude and longitude points.
+ *
+ * @param string $routeText Route text value.
+ * @return array Structured result data for the caller.
  */
 function resolve_flight_route_text(string $routeText): array
 {
@@ -388,6 +422,9 @@ function resolve_flight_route_text(string $routeText): array
 
 /**
  * Split pasted flight plan text into route tokens.
+ *
+ * @param string $routeText Route text value.
+ * @return array Structured result data for the caller.
  */
 function flight_route_tokens(string $routeText): array
 {
@@ -402,6 +439,9 @@ function flight_route_tokens(string $routeText): array
 
 /**
  * Return a sanitized route token suitable for lookup or diagnostics.
+ *
+ * @param string $token Token value.
+ * @return string Text result for the caller.
  */
 function flight_route_clean_token(string $token): string
 {
@@ -414,6 +454,9 @@ function flight_route_clean_token(string $token): string
 
 /**
  * Return true when a route token is syntax, not a point identifier.
+ *
+ * @param string $token Token value.
+ * @return bool True when the condition matches.
  */
 function flight_route_token_is_control_word(string $token): bool
 {
@@ -435,6 +478,9 @@ function flight_route_token_is_control_word(string $token): bool
 
 /**
  * Resolve one token using inline coordinates first, then optional navdata.
+ *
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_route_resolve_token(string $token): ?array
 {
@@ -456,6 +502,9 @@ function flight_route_resolve_token(string $token): ?array
  *
  * Supported forms include NAME@50.0755,14.4378, NAME(50.0755,14.4378),
  * and a bare 50.0755,14.4378 point for quick manual entry.
+ *
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_route_parse_inline_coordinate(string $token): ?array
 {
@@ -478,6 +527,9 @@ function flight_route_parse_inline_coordinate(string $token): ?array
 
 /**
  * Parse compact aviation coordinate tokens commonly seen in flight plans.
+ *
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_route_parse_aviation_coordinate(string $token): ?array
 {
@@ -552,6 +604,9 @@ function flight_route_parse_aviation_coordinate(string $token): ?array
  * Local DB rows and bundled offline data are tried first. A logged-in admin with
  * a linked Navigraph account may receive cached or remote-enhanced data, while
  * public rendering continues to use already persisted coordinates.
+ *
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_route_lookup_nav_point(string $token): ?array
 {
@@ -560,7 +615,7 @@ function flight_route_lookup_nav_point(string $token): ?array
         return null;
     }
 
-    if (function_exists('navigation_data_resolve_ident')) {
+    if (function_exists('Gallery\\Services\\navigation_data_resolve_ident')) {
         $point = navigation_data_resolve_ident($ident, [
             'allow_remote' => false,
         ]);
@@ -579,6 +634,12 @@ function flight_route_lookup_nav_point(string $token): ?array
 
 /**
  * Build a point array when coordinates are valid.
+ *
+ * @param string $name Name value.
+ * @param float $latitude Latitude value.
+ * @param float $longitude Longitude value.
+ * @param string $kind Kind value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_map_point_from_values(string $name, float $latitude, float $longitude, string $kind): ?array
 {
@@ -596,6 +657,9 @@ function flight_map_point_from_values(string $name, float $latitude, float $long
 
 /**
  * Normalize a stored route point to the public display contract.
+ *
+ * @param array $point Point value.
+ * @return ?array Structured result data for the caller.
  */
 function flight_map_normalize_point(array $point): ?array
 {
@@ -627,6 +691,10 @@ function flight_map_normalize_point(array $point): ?array
 
 /**
  * Return true when a new point repeats the previous point exactly enough.
+ *
+ * @param array $points Points value.
+ * @param array $point Point value.
+ * @return bool True when the condition matches.
  */
 function flight_route_is_duplicate_last_point(array $points, array $point): bool
 {
@@ -643,6 +711,8 @@ function flight_route_is_duplicate_last_point(array $points, array $point): bool
 
 /**
  * Return current imported navdata status for admin maintenance UI.
+ *
+ * @return array Structured result data for the caller.
  */
 function flight_map_navdata_status(): array
 {
@@ -657,7 +727,7 @@ function flight_map_navdata_status(): array
         'last_navaids' => (int) app_setting('flight_map_navdata_last_navaids', '0'),
         'last_skipped' => (int) app_setting('flight_map_navdata_last_skipped', '0'),
         'last_deleted' => (int) app_setting('flight_map_navdata_last_deleted', '0'),
-        'hybrid' => function_exists('navigation_data_status') ? navigation_data_status() : [],
+        'hybrid' => function_exists('Gallery\\Services\\navigation_data_status') ? navigation_data_status() : [],
     ];
 
     if (!$status['ready']) {
@@ -690,6 +760,8 @@ function flight_map_navdata_status(): array
  * The importer intentionally stores only final coordinates used by route save.
  * The public gallery viewer never downloads OurAirports data and never performs
  * nav lookup while rendering a map.
+ *
+ * @return array Structured result data for the caller.
  */
 function flight_map_update_navdata_from_ourairports(): array
 {
@@ -769,6 +841,9 @@ function flight_map_update_navdata_from_ourairports(): array
 
 /**
  * Fetch one trusted navdata CSV URL with the existing updater HTTP client.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function flight_map_fetch_navdata_csv(string $url): string
 {
@@ -776,7 +851,7 @@ function flight_map_fetch_navdata_csv(string $url): string
         throw new RuntimeException('Unsupported navdata source URL.');
     }
 
-    $body = function_exists('http_fetch') ? http_fetch($url, 60) : flight_map_basic_https_fetch($url, 60);
+    $body = function_exists('Gallery\\Services\\http_fetch') ? http_fetch($url, 60) : flight_map_basic_https_fetch($url, 60);
     if (trim($body) === '' || !str_contains($body, ',')) {
         throw new RuntimeException('Downloaded navdata CSV is empty or invalid.');
     }
@@ -786,6 +861,10 @@ function flight_map_fetch_navdata_csv(string $url): string
 
 /**
  * Fetch a trusted HTTPS resource when the update service is unavailable.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function flight_map_basic_https_fetch(string $url, int $timeoutSeconds): string
 {
@@ -800,7 +879,7 @@ function flight_map_basic_https_fetch(string $url, int $timeoutSeconds): string
             CURLOPT_MAXREDIRS => 3,
             CURLOPT_CONNECTTIMEOUT => min($timeoutSeconds, 15),
             CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'dev'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'dev'),
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ]);
@@ -835,6 +914,12 @@ function flight_map_basic_https_fetch(string $url, int $timeoutSeconds): string
 
 /**
  * Import airport rows from OurAirports airports.csv.
+ *
+ * @param string $csvBody Csv body value.
+ * @param PDOStatement $stmt Stmt value.
+ * @param string $cycle Cycle value.
+ * @param string $now Now value.
+ * @return array Structured result data for the caller.
  */
 function flight_map_import_ourairports_airports(string $csvBody, PDOStatement $stmt, string $cycle, string $now): array
 {
@@ -872,6 +957,12 @@ function flight_map_import_ourairports_airports(string $csvBody, PDOStatement $s
 
 /**
  * Import navaid rows from OurAirports navaids.csv.
+ *
+ * @param string $csvBody Csv body value.
+ * @param PDOStatement $stmt Stmt value.
+ * @param string $cycle Cycle value.
+ * @param string $now Now value.
+ * @return array Structured result data for the caller.
  */
 function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $stmt, string $cycle, string $now): array
 {
@@ -909,6 +1000,9 @@ function flight_map_import_ourairports_navaids(string $csvBody, PDOStatement $st
 
 /**
  * Return a stable navaid kind from one OurAirports navaids.csv row.
+ *
+ * @param array $row Row data.
+ * @return string Text result for the caller.
  */
 function flight_map_navaid_kind_from_row(array $row): string
 {
@@ -924,6 +1018,9 @@ function flight_map_navaid_kind_from_row(array $row): string
 
 /**
  * Iterate CSV rows with normalized lower-case header names.
+ *
+ * @param string $csvBody Csv body value.
+ * @param callable $callback Callback invoked by this workflow.
  */
 function flight_map_each_csv_row(string $csvBody, callable $callback): void
 {
@@ -960,6 +1057,9 @@ function flight_map_each_csv_row(string $csvBody, callable $callback): void
 
 /**
  * Return candidate airport identifiers from one OurAirports row.
+ *
+ * @param array $row Row data.
+ * @return array Structured result data for the caller.
  */
 function flight_map_airport_ident_candidates(array $row): array
 {
@@ -975,6 +1075,10 @@ function flight_map_airport_ident_candidates(array $row): array
 
 /**
  * Return normalized text from the first present CSV field.
+ *
+ * @param array $row Row data.
+ * @param array $names Names value.
+ * @return string Text result for the caller.
  */
 function flight_map_csv_text(array $row, array $names): string
 {
@@ -989,6 +1093,10 @@ function flight_map_csv_text(array $row, array $names): string
 
 /**
  * Return a valid float from the first present CSV field.
+ *
+ * @param array $row Row data.
+ * @param array $names Names value.
+ * @return ?float Numeric result for the caller.
  */
 function flight_map_csv_float(array $row, array $names): ?float
 {
@@ -1005,6 +1113,9 @@ function flight_map_csv_float(array $row, array $names): ?float
 
 /**
  * Normalize airport and navaid identifiers for lookup.
+ *
+ * @param string $ident Ident value.
+ * @return string Text result for the caller.
  */
 function flight_map_normalize_nav_ident(string $ident): string
 {
@@ -1015,6 +1126,16 @@ function flight_map_normalize_nav_ident(string $ident): string
 
 /**
  * Insert or update one nav point row when coordinates are valid.
+ *
+ * @param PDOStatement $stmt Stmt value.
+ * @param string $ident Ident value.
+ * @param string $kind Kind value.
+ * @param string $region Region value.
+ * @param float $latitude Latitude value.
+ * @param float $longitude Longitude value.
+ * @param string $cycle Cycle value.
+ * @param string $now Now value.
+ * @return bool True when the condition matches.
  */
 function flight_map_insert_nav_point(PDOStatement $stmt, string $ident, string $kind, string $region, float $latitude, float $longitude, string $cycle, string $now): bool
 {
@@ -1040,6 +1161,9 @@ function flight_map_insert_nav_point(PDOStatement $stmt, string $ident, string $
 
 /**
  * Decode stored resolved points for one route map row.
+ *
+ * @param array $row Row data.
+ * @return array Structured result data for the caller.
  */
 function gallery_flight_map_points_from_row(array $row): array
 {
@@ -1064,6 +1188,9 @@ function gallery_flight_map_points_from_row(array $row): array
 
 /**
  * Decode stored unresolved point diagnostics for the admin editor.
+ *
+ * @param array $row Row data.
+ * @return array Structured result data for the caller.
  */
 function gallery_flight_map_unresolved_from_row(array $row): array
 {
@@ -1073,6 +1200,9 @@ function gallery_flight_map_unresolved_from_row(array $row): array
 
 /**
  * Return a JSON-ready flight path payload for the shared map renderer.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_flight_map_payload(array $gallery): ?array
 {

@@ -35,8 +35,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\e;
+use function Gallery\Views\view_gallery_description_markdown_excerpt;
+use function Gallery\Views\view_gallery_description_markdown_html;
+use function Gallery\Views\view_gallery_description_utf8_excerpt;
+
 /**
  * Return the public gallery-card description layouts supported by the renderer.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_description_layout_options(): array
 {
@@ -45,6 +54,10 @@ function gallery_description_layout_options(): array
 
 /**
  * Normalize a submitted or stored description-layout value.
+ *
+ * @param mixed $value Value to process.
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function gallery_description_layout_normalize(mixed $value, string $fallback = 'vertical'): string
 {
@@ -58,6 +71,8 @@ function gallery_description_layout_normalize(mixed $value, string $fallback = '
 
 /**
  * Return true when per-gallery description-layout overrides can be stored.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_description_layout_schema_ready(): bool
 {
@@ -66,6 +81,8 @@ function gallery_description_layout_schema_ready(): bool
 
 /**
  * Return the global Theme fallback used by gallery cards without an override.
+ *
+ * @return string Text result for the caller.
  */
 function theme_gallery_description_layout(): string
 {
@@ -76,6 +93,9 @@ function theme_gallery_description_layout(): string
  * Normalize a per-gallery override for database storage.
  *
  * A null return value means the gallery inherits the global Theme setting.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function gallery_description_layout_storage_value(mixed $value): ?string
 {
@@ -89,6 +109,9 @@ function gallery_description_layout_storage_value(mixed $value): ?string
 
 /**
  * Return the description layout that should be used for one gallery card.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_effective_description_layout(array $gallery): string
 {
@@ -104,6 +127,9 @@ function gallery_effective_description_layout(array $gallery): string
 
 /**
  * Return a translated label for one layout value.
+ *
+ * @param string $layout Layout value.
+ * @return string Text result for the caller.
  */
 function gallery_description_layout_label(string $layout): string
 {
@@ -115,6 +141,9 @@ function gallery_description_layout_label(string $layout): string
 
 /**
  * Return a readable summary of the current source for Admin forms.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_description_layout_source_label(array $gallery): string
 {
@@ -126,10 +155,14 @@ function gallery_description_layout_source_label(array $gallery): string
 
 /**
  * Trim a UTF-8 string without requiring mbstring on shared hosting.
+ *
+ * @param string $text Text value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
  */
 function gallery_description_utf8_excerpt(string $text, int $limit): string
 {
-    if (function_exists('view_gallery_description_utf8_excerpt')) {
+    if (function_exists('Gallery\\Views\\view_gallery_description_utf8_excerpt')) {
         return view_gallery_description_utf8_excerpt($text, $limit);
     }
     if ($limit <= 0) {
@@ -149,10 +182,14 @@ function gallery_description_utf8_excerpt(string $text, int $limit): string
 
 /**
  * Produce the shortened Markdown text used by public gallery cards.
+ *
+ * @param string $markdown Markdown value.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
  */
 function gallery_description_markdown_excerpt(string $markdown, int $limit = 360): string
 {
-    if (function_exists('view_gallery_description_markdown_excerpt')) {
+    if (function_exists('Gallery\\Views\\view_gallery_description_markdown_excerpt')) {
         return view_gallery_description_markdown_excerpt($markdown, $limit);
     }
     // $normalized stores the description with predictable line endings so user-entered newlines survive in cards.
@@ -176,10 +213,13 @@ function gallery_description_markdown_excerpt(string $markdown, int $limit = 360
  * Render a safe public-description subset of Markdown.
  *
  * Supported inline syntax: **bold**, __bold__, *italic*, _italic_, `code`, and http or https links.
+ *
+ * @param string $markdown Markdown value.
+ * @return string Text result for the caller.
  */
 function gallery_description_markdown_html(string $markdown): string
 {
-    if (function_exists('view_gallery_description_markdown_html')) {
+    if (function_exists('Gallery\\Views\\view_gallery_description_markdown_html')) {
         return view_gallery_description_markdown_html($markdown);
     }
     // $normalized stores line endings in one form before paragraph handling.

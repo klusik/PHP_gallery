@@ -32,6 +32,9 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Telemetry rollup and cleanup service.
  *
@@ -42,6 +45,10 @@
 
 /**
  * Roll hourly telemetry metrics into daily metrics for the configured window.
+ *
+ * @param ?string $fromDate From date value.
+ * @param ?string $toDate To date value.
+ * @return int Integer result for the caller.
  */
 function telemetry_rollup_daily(?string $fromDate = null, ?string $toDate = null): int
 {
@@ -79,6 +86,8 @@ function telemetry_rollup_daily(?string $fromDate = null, ?string $toDate = null
 
 /**
  * Purge telemetry rows according to configured retention limits.
+ *
+ * @return array Structured result data for the caller.
  */
 function telemetry_purge_expired(): array
 {
@@ -98,6 +107,11 @@ function telemetry_purge_expired(): array
 
 /**
  * Delete rows from one telemetry table older than the supplied day count.
+ *
+ * @param string $tableName Table name value.
+ * @param string $columnName Column name value.
+ * @param int $days Days value.
+ * @return int Integer result for the caller.
  */
 function telemetry_delete_older_than(string $tableName, string $columnName, int $days): int
 {
@@ -121,6 +135,8 @@ function telemetry_delete_older_than(string $tableName, string $columnName, int 
 
 /**
  * Run daily rollup and retention cleanup, logging only the operational summary.
+ *
+ * @return array Structured result data for the caller.
  */
 function telemetry_run_maintenance(): array
 {

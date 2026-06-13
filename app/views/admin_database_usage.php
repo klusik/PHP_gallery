@@ -15,6 +15,7 @@
  *   - Display total database storage and gallery-content table storage
  *   - Render table-size charts using the shared Admin storage visual language
  *   - Handle unavailable information_schema metadata without breaking the page
+ *   - Render explicit database-statistics recompute controls
  *
  * Author:
  *   Rudolf Klusal
@@ -30,15 +31,23 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-06-08
+ *   2026-06-13
  */
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\admin_dashboard_format_bytes;
+use function Gallery\Services\t;
+
 /**
  * Render database usage statistics for the Admin storage page.
  *
- * @param array<string, mixed>|null $usage
+ * @param ?array $usage Usage value.
  */
 function view_render_admin_database_usage_panel(?array $usage): void
 {
@@ -48,6 +57,7 @@ function view_render_admin_database_usage_panel(?array $usage): void
 
     echo '<section class="admin-storage-panel admin-database-usage-panel panel" aria-label="' . e(t('admin.database_usage.panel_aria', 'Database usage')) . '">';
     echo '<div class="admin-panel-heading admin-storage-heading"><div><p class="admin-kicker">' . e(t('admin.database_usage.kicker', 'Database')) . '</p><h2>' . e(t('admin.database_usage.title', 'Database usage')) . '</h2></div><p class="muted">' . e(t('admin.database_usage.description', 'Database table sizes are measured from MySQL/MariaDB table metadata and shown separately from picture files stored on disk.')) . '</p></div>';
+    view_render_admin_database_usage_recompute_form();
 
     if (empty($usage['available'])) {
         view_render_admin_database_usage_unavailable($usage);
@@ -95,9 +105,23 @@ function view_render_admin_database_usage_panel(?array $usage): void
 }
 
 /**
+ * Render the explicit database usage recompute form.
+ */
+function view_render_admin_database_usage_recompute_form(): void
+{
+    echo '<div class="admin-storage-update-shell admin-database-usage-recompute-shell">';
+    echo '<div><strong>' . e(t('admin.database_usage.recompute_title', 'Refresh database metadata')) . '</strong><p class="muted">' . e(t('admin.database_usage.recompute_hint', 'Runs ANALYZE TABLE for current database tables, then reloads MySQL/MariaDB size and row estimates. This does not rebuild tables or modify gallery data.')) . '</p></div>';
+    echo '<form method="post" action="' . e(url_for('admin_database_usage_recompute')) . '" class="inline-action-form">';
+    echo csrf_field();
+    echo '<button type="submit" class="button">' . e(t('admin.database_usage.recompute_button', 'Recompute DB metadata')) . '</button>';
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
  * Render an unavailable database usage notice.
  *
- * @param array<string, mixed> $usage
+ * @param array $usage Usage value.
  */
 function view_render_admin_database_usage_unavailable(array $usage): void
 {
@@ -113,7 +137,10 @@ function view_render_admin_database_usage_unavailable(array $usage): void
 /**
  * Render one database usage chart.
  *
- * @param array<int, array<string, mixed>> $rows
+ * @param string $title Title value.
+ * @param string $hint Hint value.
+ * @param array $rows Rows to process.
+ * @param string $emptyText Empty text value.
  */
 function view_render_admin_database_usage_table_chart(string $title, string $hint, array $rows, string $emptyText): void
 {
@@ -156,7 +183,10 @@ function view_render_admin_database_usage_table_chart(string $title, string $hin
 /**
  * Return a safe integer from a database usage array.
  *
- * @param array<string, mixed> $usage
+ * @param array $usage Usage value.
+ * @param string $key Lookup key.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function view_admin_database_usage_int(array $usage, string $key, int $fallback = 0): int
 {
@@ -166,8 +196,9 @@ function view_admin_database_usage_int(array $usage, string $key, int $fallback 
 /**
  * Return a safe row array from a database usage array.
  *
- * @param array<string, mixed> $usage
- * @return array<int, array<string, mixed>>
+ * @param array $usage Usage value.
+ * @param string $key Lookup key.
+ * @return array<int array<string, mixed>>.
  */
 function view_admin_database_usage_array(array $usage, string $key): array
 {

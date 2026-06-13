@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 /**
  * Theme setting service helpers.
  *
@@ -46,6 +48,8 @@ declare(strict_types=1);
 /**
  * Theme settings are stored in the DB so the visual preset can be changed
  * without editing PHP or CSS files.
+ *
+ * @return array Structured result data for the caller.
  */
 function theme_settings(): array
 {
@@ -75,14 +79,16 @@ function theme_settings(): array
         'branding_separator_width' => theme_branding_separator_width_value(app_setting('theme_branding_separator_width')),
         'branding_separator_height' => theme_branding_separator_height_value(app_setting('theme_branding_separator_height')),
         'branding_separator_stretch' => theme_branding_separator_stretch_enabled(app_setting('theme_branding_separator_stretch')),
-        'gallery_description_layout' => function_exists('theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
-        'gallery_count_badge_enabled' => !function_exists('theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
-        'lightbox_browsing_mode' => function_exists('theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
+        'gallery_description_layout' => function_exists('Gallery\\Services\\theme_gallery_description_layout') ? theme_gallery_description_layout() : 'vertical',
+        'gallery_count_badge_enabled' => !function_exists('Gallery\\Services\\theme_gallery_count_badge_enabled') || theme_gallery_count_badge_enabled() ? '1' : '0',
+        'lightbox_browsing_mode' => function_exists('Gallery\\Services\\theme_lightbox_browsing_mode') ? theme_lightbox_browsing_mode() : 'single',
     ];
 }
 
 /**
  * Return only DB-backed theme overrides.
+ *
+ * @return array Structured result data for the caller.
  */
 function theme_override_settings(): array
 {
@@ -150,6 +156,9 @@ function clear_theme_overrides(): void
 
 /**
  * Normalize the GPS pin size used in the public image overlay.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_gps_pin_size_value(mixed $value): int
 {
@@ -162,6 +171,9 @@ function theme_gps_pin_size_value(mixed $value): int
 
 /**
  * Normalize the GPS pin background size used in the public image overlay.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_gps_pin_background_size_value(mixed $value): int
 {
@@ -174,6 +186,9 @@ function theme_gps_pin_background_size_value(mixed $value): int
 
 /**
  * Normalize the configured public page-width mode to one of the supported layout presets.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function theme_page_width_mode(string $value): string
 {
@@ -188,6 +203,9 @@ function theme_page_width_mode(string $value): string
  * The Admin form allows direct number input, so the service clamps everything
  * server-side before the value reaches generated CSS. This keeps the final CSS
  * predictable even if a browser bypasses the slider limits.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_page_width_custom_value(mixed $value): int
 {
@@ -205,6 +223,9 @@ function theme_page_width_custom_value(mixed $value): int
  * A value of 0 keeps the current responsive page-width behavior. Positive
  * values constrain the separator container to a fixed pixel width while still
  * allowing it to shrink on narrow screens.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_branding_separator_width_value(mixed $value): int
 {
@@ -218,6 +239,9 @@ function theme_branding_separator_width_value(mixed $value): int
 
 /**
  * Normalize the public header separator image height limit.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function theme_branding_separator_height_value(mixed $value): int
 {
@@ -235,6 +259,9 @@ function theme_branding_separator_height_value(mixed $value): int
  * Disabled keeps the image aspect ratio and treats height as a maximum. Enabled
  * makes the configured width and height an exact render box, allowing intentional
  * horizontal or vertical distortion for decorative separators.
+ *
+ * @param mixed $value Value to process.
+ * @return bool True when the condition matches.
  */
 function theme_branding_separator_stretch_enabled(mixed $value): bool
 {
@@ -243,6 +270,8 @@ function theme_branding_separator_stretch_enabled(mixed $value): bool
 
 /**
  * Read theme defaults from the built-in stylesheet and then from active custom CSS.
+ *
+ * @return array Structured result data for the caller.
  */
 function theme_css_defaults(): array
 {
@@ -276,6 +305,10 @@ function theme_css_defaults(): array
 
 /**
  * Extract selected CSS custom properties from a stylesheet.
+ *
+ * @param string $path Filesystem path.
+ * @param array $names Names value.
+ * @return array Structured result data for the caller.
  */
 function css_custom_properties_from_file(string $path, array $names): array
 {
@@ -303,6 +336,9 @@ function css_custom_properties_from_file(string $path, array $names): array
 
 /**
  * Map a CSS font stack back to the two modes available in the admin form.
+ *
+ * @param string $fontFamily Font family value.
+ * @return string Text result for the caller.
  */
 function theme_font_mode_from_css(string $fontFamily): string
 {
@@ -313,6 +349,10 @@ function theme_font_mode_from_css(string $fontFamily): string
 
 /**
  * Validate a six-digit hex color from theme settings.
+ *
+ * @param string $value Value to process.
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function sanitize_hex_color(string $value, string $fallback): string
 {

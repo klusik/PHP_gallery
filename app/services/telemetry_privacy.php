@@ -32,6 +32,10 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\cms_config;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\request_host_name;
+
 /**
  * Privacy normalization helpers for anonymous telemetry.
  *
@@ -41,6 +45,9 @@
 
 /**
  * Return a short anonymous hash for a browser-generated session id.
+ *
+ * @param ?string $clientSessionId Client session id identifier.
+ * @return ?string Text result for the caller.
  */
 function telemetry_session_hash(?string $clientSessionId): ?string
 {
@@ -59,6 +66,9 @@ function telemetry_session_hash(?string $clientSessionId): ?string
 
 /**
  * Normalize a referrer URL into a privacy-safe category.
+ *
+ * @param ?string $referrer Referrer value.
+ * @return string Text result for the caller.
  */
 function telemetry_referrer_category(?string $referrer): string
 {
@@ -92,6 +102,9 @@ function telemetry_referrer_category(?string $referrer): string
 
 /**
  * Normalize viewport width into a coarse class.
+ *
+ * @param ?int $width Width value.
+ * @return string Text result for the caller.
  */
 function telemetry_viewport_class(?int $width): string
 {
@@ -118,6 +131,9 @@ function telemetry_viewport_class(?int $width): string
 
 /**
  * Normalize locale into a primary language bucket.
+ *
+ * @param ?string $locale Locale value.
+ * @return ?string Text result for the caller.
  */
 function telemetry_locale_bucket(?string $locale): ?string
 {
@@ -134,6 +150,11 @@ function telemetry_locale_bucket(?string $locale): ?string
 
 /**
  * Return a safe enum value from an allowlist.
+ *
+ * @param mixed $value Value to process.
+ * @param array $allowedValues Allowed values value.
+ * @param string $default Default value when no explicit value is available.
+ * @return string Text result for the caller.
  */
 function telemetry_enum(mixed $value, array $allowedValues, string $default): string
 {
@@ -144,6 +165,9 @@ function telemetry_enum(mixed $value, array $allowedValues, string $default): st
 
 /**
  * Return a nullable positive integer for id/count fields.
+ *
+ * @param mixed $value Value to process.
+ * @return ?int Integer result for the caller.
  */
 function telemetry_nullable_positive_int(mixed $value): ?int
 {
@@ -157,6 +181,10 @@ function telemetry_nullable_positive_int(mixed $value): ?int
 
 /**
  * Return a bounded short text identifier.
+ *
+ * @param mixed $value Value to process.
+ * @param int $maxLength Max length value.
+ * @return ?string Text result for the caller.
  */
 function telemetry_short_identifier(mixed $value, int $maxLength = 80): ?string
 {
@@ -174,6 +202,9 @@ function telemetry_short_identifier(mixed $value, int $maxLength = 80): ?string
 
 /**
  * Return a safe metric bucket name.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function telemetry_value_bucket(mixed $value): ?string
 {
@@ -182,6 +213,9 @@ function telemetry_value_bucket(mixed $value): ?string
 
 /**
  * Return a safe error kind.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function telemetry_error_kind(mixed $value): ?string
 {
@@ -190,6 +224,9 @@ function telemetry_error_kind(mixed $value): ?string
 
 /**
  * Return a bounded sampled rate value.
+ *
+ * @param mixed $value Value to process.
+ * @return float Numeric result for the caller.
  */
 function telemetry_sample_rate(mixed $value): float
 {
@@ -203,6 +240,9 @@ function telemetry_sample_rate(mixed $value): float
 
 /**
  * Return a SQL datetime derived from an event timestamp or now if invalid.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function telemetry_datetime_from_event(mixed $value): string
 {
@@ -224,6 +264,10 @@ function telemetry_datetime_from_event(mixed $value): string
 
 /**
  * Return a privacy-safe JSON context for one event name.
+ *
+ * @param string $eventName Event name value.
+ * @param mixed $context Context value.
+ * @return ?string Text result for the caller.
  */
 function telemetry_context_json(string $eventName, mixed $context): ?string
 {

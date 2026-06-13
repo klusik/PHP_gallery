@@ -31,6 +31,11 @@
  */
 
 // Function `setupPictureGame` executes this focused behavior.
+/**
+ * Handle setup picture game.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupPictureGame() {
     // Variable `game` stores this steps working value.
     const game = document.querySelector('[data-picture-game]');

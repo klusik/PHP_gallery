@@ -36,6 +36,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 const OPENAI_TEXT_ASSIST_ENDPOINT = 'https://api.openai.com/v1/responses';
 const OPENAI_TEXT_ASSIST_TIMEOUT_SECONDS = 35;
 const OPENAI_TEXT_ASSIST_DEFAULT_MODEL = 'gpt-5.4-mini';
@@ -44,10 +53,15 @@ const OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT = 3;
 
 /**
  * Translation wrapper for isolated service tests.
+ *
+ * @param string $key Lookup key.
+ * @param string $fallback Fallback value.
+ * @param array $parameters Parameters value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_t(string $key, string $fallback, array $parameters = []): string
 {
-    if (function_exists('t')) {
+    if (function_exists('Gallery\\Services\\t')) {
         return t($key, $fallback, $parameters);
     }
 
@@ -59,10 +73,12 @@ function openai_text_assist_t(string $key, string $fallback, array $parameters =
 
 /**
  * Return whether the user-level OpenAI settings table is ready.
+ *
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_schema_ready(): bool
 {
-    if (!function_exists('db_table_exists') || !function_exists('db_column_exists')) {
+    if (!function_exists('Gallery\\Services\\db_table_exists') || !function_exists('Gallery\\Services\\db_column_exists')) {
         return false;
     }
     if (!db_table_exists('user_openai_text_settings')) {
@@ -89,7 +105,7 @@ function openai_text_assist_schema_ready(): bool
 /**
  * Return the safe default settings row shape.
  *
- * @return array<string,mixed>
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_default_settings(): array
 {
@@ -108,7 +124,8 @@ function openai_text_assist_default_settings(): array
 /**
  * Return one user's OpenAI text-assistance settings.
  *
- * @return array<string,mixed>
+ * @param int $userId User id identifier.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_user_settings(int $userId): array
 {
@@ -130,14 +147,19 @@ function openai_text_assist_user_settings(int $userId): array
 
 /**
  * Return whether the optional image-input preference column exists.
+ *
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_image_input_column_ready(): bool
 {
-    return function_exists('db_column_exists') && db_column_exists('user_openai_text_settings', 'allow_image_input');
+    return function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('user_openai_text_settings', 'allow_image_input');
 }
 
 /**
  * Return whether the user allowed small image thumbnails to be sent to OpenAI.
+ *
+ * @param int $userId User id identifier.
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_image_input_allowed(int $userId): bool
 {
@@ -152,7 +174,7 @@ function openai_text_assist_image_input_allowed(int $userId): bool
 /**
  * Return the curated model choices exposed in the profile UI.
  *
- * @return array<string,array{label:string,description:string,badge:string}>
+ * @return array<string,array{label:string,description:string,badge:string}> Structured result data for the caller.
  */
 function openai_text_assist_model_catalog(): array
 {
@@ -182,6 +204,9 @@ function openai_text_assist_model_catalog(): array
 
 /**
  * Normalize an OpenAI model id saved by the admin.
+ *
+ * @param string $model Model value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_normalize_model(string $model): string
 {
@@ -197,6 +222,9 @@ function openai_text_assist_normalize_model(string $model): string
 
 /**
  * Return true when a raw OpenAI API key looks usable enough to save.
+ *
+ * @param string $apiKey Api key value.
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_api_key_format_valid(string $apiKey): bool
 {
@@ -209,6 +237,9 @@ function openai_text_assist_api_key_format_valid(string $apiKey): bool
 
 /**
  * Return a privacy-safe key hint for profile UI and logs.
+ *
+ * @param string $apiKey Api key value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_key_hint(string $apiKey): string
 {
@@ -222,6 +253,9 @@ function openai_text_assist_key_hint(string $apiKey): string
 
 /**
  * Encrypt one OpenAI API key for database storage.
+ *
+ * @param string $secret Secret value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_encrypt_secret(string $secret): string
 {
@@ -248,6 +282,9 @@ function openai_text_assist_encrypt_secret(string $secret): string
 
 /**
  * Decrypt one OpenAI API key previously saved by openai_text_assist_encrypt_secret().
+ *
+ * @param string $encoded Encoded value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_decrypt_secret(string $encoded): string
 {
@@ -277,10 +314,12 @@ function openai_text_assist_decrypt_secret(string $encoded): string
 
 /**
  * Return the binary encryption key used for user-scoped OpenAI secrets.
+ *
+ * @return string Text result for the caller.
  */
 function openai_text_assist_secret_key(): string
 {
-    $config = function_exists('cms_config') ? cms_config() : [];
+    $config = function_exists('Gallery\\Core\\cms_config') ? cms_config() : [];
     $keyMaterial = implode('|', [
         (string) ($config['visitor_vote_secret'] ?? ''),
         (string) ($config['setup_key'] ?? ''),
@@ -294,8 +333,9 @@ function openai_text_assist_secret_key(): string
 /**
  * Save one user's OpenAI text-assistance settings.
  *
+ * @param int $userId User id identifier.
  * @param array<string,mixed> $input Raw profile form input.
- * @return array{ok:bool,errors:array<int,string>,enabled:bool,api_key_hint:string,model:string}
+ * @return array{ok:bool,errors:array<int,string>,enabled:bool,api_key_hint:string,model:string} Structured result data for the caller.
  */
 function openai_text_assist_save_user_settings(int $userId, array $input): array
 {
@@ -349,7 +389,7 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
         ];
     }
 
-    $now = function_exists('now_sql') ? now_sql() : date('Y-m-d H:i:s');
+    $now = function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s');
     if (openai_text_assist_image_input_column_ready()) {
         $stmt = db()->prepare('INSERT INTO user_openai_text_settings (user_id, enabled, api_key_cipher, api_key_hint, model, allow_image_input, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), api_key_cipher = VALUES(api_key_cipher), api_key_hint = VALUES(api_key_hint), model = VALUES(model), allow_image_input = VALUES(allow_image_input), updated_at = VALUES(updated_at)');
         $stmt->execute([
@@ -387,10 +427,13 @@ function openai_text_assist_save_user_settings(int $userId, array $input): array
 
 /**
  * Return true when a user can call OpenAI text assistance.
+ *
+ * @param int $userId User id identifier.
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_available(int $userId): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('openai_text_assist')) {
         return false;
     }
     if ($userId <= 0 || !openai_text_assist_schema_ready()) {
@@ -406,19 +449,20 @@ function openai_text_assist_available(int $userId): bool
 /**
  * Return a compact gallery context for prompt construction.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_gallery_context(int $galleryId): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
 
-    $children = function_exists('child_galleries') ? child_galleries($galleryId, false) : [];
-    $images = function_exists('gallery_images') ? gallery_images($galleryId, false) : [];
-    $tags = function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('gallery', $galleryId) : '';
-    $branchCount = function_exists('gallery_branch_image_count') ? gallery_branch_image_count($galleryId, false) : count($images);
+    $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($galleryId, false) : [];
+    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
+    $tags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', $galleryId) : '';
+    $branchCount = function_exists('Gallery\\Services\\gallery_branch_image_count') ? gallery_branch_image_count($galleryId, false) : count($images);
 
     $childSummaries = [];
     foreach (array_slice($children, 0, 12) as $child) {
@@ -457,21 +501,22 @@ function openai_text_assist_gallery_context(int $galleryId): array
 /**
  * Return a compact image context for prompt construction.
  *
- * @return array<string,mixed>
+ * @param int $imageId Image identifier.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_image_context(int $imageId): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
 
-    $gallery = function_exists('find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
-    $imageTags = function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('image', $imageId) : '';
-    $galleryTags = $gallery && function_exists('tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
+    $imageTags = function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('image', $imageId) : '';
+    $galleryTags = $gallery && function_exists('Gallery\\Services\\tag_names_for_entity') ? (string) tag_names_for_entity('gallery', (int) ($gallery['id'] ?? 0)) : '';
 
     $metadataSummary = [];
-    if (function_exists('ai_image_analysis_latest_metadata_for_image')) {
+    if (function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
         $metadata = ai_image_analysis_latest_metadata_for_image($imageId);
         if (is_array($metadata)) {
             $metadataSummary = [
@@ -507,6 +552,10 @@ function openai_text_assist_image_context(int $imageId): array
 
 /**
  * Truncate input text to a safe prompt size without breaking multibyte strings when mbstring exists.
+ *
+ * @param string $value Value to process.
+ * @param int $limit Maximum number of items.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_text_limit(string $value, int $limit): string
 {
@@ -523,6 +572,9 @@ function openai_text_assist_text_limit(string $value, int $limit): string
 
 /**
  * Normalize an OpenAI text-assistance task id.
+ *
+ * @param string $task Task value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_normalize_task(string $task): string
 {
@@ -533,6 +585,9 @@ function openai_text_assist_normalize_task(string $task): string
 
 /**
  * Return whether a task needs thumbnail image input in addition to text context.
+ *
+ * @param string $task Task value.
+ * @return bool True when the condition matches.
  */
 function openai_text_assist_task_uses_images(string $task): bool
 {
@@ -543,7 +598,7 @@ function openai_text_assist_task_uses_images(string $task): bool
 /**
  * Return the small language catalog exposed beside OpenAI generation actions.
  *
- * @return array<string,array{label:string,flag:string,instruction:string}>
+ * @return array<string,array{label:string,flag:string,instruction:string}> Structured result data for the caller.
  */
 function openai_text_assist_language_catalog(): array
 {
@@ -568,6 +623,9 @@ function openai_text_assist_language_catalog(): array
 
 /**
  * Normalize a requested OpenAI output language to a supported catalog key.
+ *
+ * @param string $language Language value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_normalize_language(string $language): string
 {
@@ -583,16 +641,21 @@ function openai_text_assist_normalize_language(string $language): string
 
 /**
  * Return the best default OpenAI output language for the current UI.
+ *
+ * @return string Text result for the caller.
  */
 function openai_text_assist_default_language(): string
 {
-    $active = function_exists('translation_active_language') ? translation_active_language() : '';
+    $active = function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : '';
     $normalized = openai_text_assist_normalize_language($active);
     return $normalized === 'auto' ? 'en' : $normalized;
 }
 
 /**
  * Return one instruction line for the requested OpenAI output language.
+ *
+ * @param string $language Language value.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_language_instruction(string $language): string
 {
@@ -604,8 +667,11 @@ function openai_text_assist_language_instruction(string $language): string
 /**
  * Build a concise, task-specific prompt payload.
  *
+ * @param string $task Task value.
  * @param array<string,mixed> $context Gallery and submitted editor context.
- * @return array{instructions:string,input:string,max_output_tokens:int}
+ * @param string $existingText Existing text value.
+ * @param string $language Language value.
+ * @return array{instructions:string,input:string,max_output_tokens:int} Structured result data for the caller.
  */
 function openai_text_assist_prompt(string $task, array $context, string $existingText, string $language = 'auto'): array
 {
@@ -660,11 +726,12 @@ function openai_text_assist_prompt(string $task, array $context, string $existin
 /**
  * Return one compact thumbnail reference for image-input prompts.
  *
- * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string}
+ * @param array $image Image row or image data.
+ * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string} Structured result data for the caller.
  */
 function openai_text_assist_thumbnail_reference_for_image(array $image): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery((int) ($image['gallery_id'] ?? 0)) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
@@ -709,11 +776,12 @@ function openai_text_assist_thumbnail_reference_for_image(array $image): array
 /**
  * Return one thumbnail reference for an existing image id.
  *
- * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string}
+ * @param int $imageId Image identifier.
+ * @return array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string} Structured result data for the caller.
  */
 function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
@@ -724,16 +792,17 @@ function openai_text_assist_thumbnail_reference_for_image_id(int $imageId): arra
 /**
  * Return direct photo candidates for a confirmed gallery bulk-description run.
  *
- * @return array<int,array{id:int,filename:string,title:string,has_description:bool}>
+ * @param int $galleryId Gallery identifier.
+ * @return array<int,array{id:int,filename:string,title:string,has_description:bool}> Structured result data for the caller.
  */
 function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
 {
-    $gallery = function_exists('find_gallery') ? find_gallery($galleryId) : null;
+    $gallery = function_exists('Gallery\\Services\\find_gallery') ? find_gallery($galleryId) : null;
     if (!$gallery) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_gallery_missing', 'The gallery could not be found. Reload the editor and try again.'));
     }
 
-    $images = function_exists('gallery_images') ? gallery_images($galleryId, false) : [];
+    $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($galleryId, false) : [];
     $candidates = [];
     foreach ($images as $image) {
         $imageId = (int) ($image['id'] ?? 0);
@@ -754,18 +823,20 @@ function openai_text_assist_gallery_bulk_image_candidates(int $galleryId): array
 /**
  * Persist one generated image description after a confirmed bulk OpenAI action.
  *
- * @return array<string,mixed>
+ * @param int $imageId Image identifier.
+ * @param string $description Description value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_save_image_description(int $imageId, string $description): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image) {
         throw new RuntimeException(openai_text_assist_t('admin.openai.error_image_missing', 'The photo could not be found. Reload the editor and try again.'));
     }
 
     $description = openai_text_assist_text_limit($description, 8000);
     $stmt = db()->prepare('UPDATE images SET description = ?, updated_at = ? WHERE id = ?');
-    $stmt->execute([$description, function_exists('now_sql') ? now_sql() : date('Y-m-d H:i:s'), $imageId]);
+    $stmt->execute([$description, function_exists('Gallery\\Core\\now_sql') ? now_sql() : date('Y-m-d H:i:s'), $imageId]);
 
     $stmt = db()->prepare('SELECT * FROM images WHERE id = ? LIMIT 1');
     $stmt->execute([$imageId]);
@@ -776,7 +847,9 @@ function openai_text_assist_save_image_description(int $imageId, string $descrip
 /**
  * Return up to a few thumbnail references sampled from a gallery branch.
  *
- * @return array<int,array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string}>
+ * @param int $galleryId Gallery identifier.
+ * @param int $limit Maximum number of items.
+ * @return array<int,array{image_id:int,label:string,detail:string,data_url:string,size:int,format:string,mime_type:string}> Structured result data for the caller.
  */
 function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $limit = OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT): array
 {
@@ -792,7 +865,7 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
         }
         $visited[$currentGalleryId] = true;
 
-        $images = function_exists('gallery_images') ? gallery_images($currentGalleryId, false) : [];
+        $images = function_exists('Gallery\\Services\\gallery_images') ? gallery_images($currentGalleryId, false) : [];
         foreach ($images as $image) {
             try {
                 $references[] = openai_text_assist_thumbnail_reference_for_image($image);
@@ -808,7 +881,7 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
             break;
         }
 
-        $children = function_exists('child_galleries') ? child_galleries($currentGalleryId, false) : [];
+        $children = function_exists('Gallery\\Services\\child_galleries') ? child_galleries($currentGalleryId, false) : [];
         foreach ($children as $child) {
             $childId = (int) ($child['id'] ?? 0);
             if ($childId > 0 && !isset($visited[$childId])) {
@@ -829,7 +902,7 @@ function openai_text_assist_gallery_thumbnail_references(int $galleryId, int $li
  *
  * @param array<string,mixed> $prompt Prompt instructions and text context.
  * @param array<int,array<string,mixed>> $visualReferences Thumbnail references.
- * @return string|array<int,array<string,mixed>>
+ * @return string|array<int,array<string,mixed>> Structured result data for the caller.
  */
 function openai_text_assist_payload_input(array $prompt, array $visualReferences)
 {
@@ -866,8 +939,12 @@ function openai_text_assist_payload_input(array $prompt, array $visualReferences
 /**
  * Generate one OpenAI text suggestion for a user and gallery.
  *
+ * @param int $userId User id identifier.
+ * @param string $task Task value.
  * @param array<string,mixed> $context Prompt context.
- * @return array{text:string,model:string}
+ * @param string $existingText Existing text value.
+ * @param string $language Language value.
+ * @return array{text:string,model:string} Structured result data for the caller.
  */
 function openai_text_assist_generate(int $userId, string $task, array $context, string $existingText, string $language = 'auto'): array
 {
@@ -918,8 +995,11 @@ function openai_text_assist_generate(int $userId, string $task, array $context, 
 /**
  * POST a JSON payload to OpenAI and return the decoded response.
  *
+ * @param string $url URL used by this workflow.
  * @param array<string,mixed> $payload Request body.
- * @return array<string,mixed>
+ * @param string $apiKey Api key value.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_post_json(string $url, array $payload, string $apiKey, int $timeoutSeconds): array
 {
@@ -948,7 +1028,7 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('cms_current_version') ? cms_current_version() : 'unknown'),
+            CURLOPT_USERAGENT => 'PHP-Gallery-CMS/' . (function_exists('Gallery\\Core\\cms_current_version') ? cms_current_version() : 'unknown'),
         ]);
         $responseBody = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
@@ -979,7 +1059,10 @@ function openai_text_assist_post_json(string $url, array $payload, string $apiKe
 /**
  * Decode one HTTP response from OpenAI.
  *
- * @return array<string,mixed>
+ * @param string $responseBody Response body value.
+ * @param int $status Status value.
+ * @param string $transportError Transport error value.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function openai_text_assist_decode_http_response(string $responseBody, int $status, string $transportError): array
 {
@@ -1006,6 +1089,7 @@ function openai_text_assist_decode_http_response(string $responseBody, int $stat
  * Extract plain text from a Responses API payload.
  *
  * @param array<string,mixed> $response Decoded OpenAI response.
+ * @return string Text result for the caller.
  */
 function openai_text_assist_extract_output_text(array $response): string
 {

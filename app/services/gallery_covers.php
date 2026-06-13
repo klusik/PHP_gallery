@@ -34,12 +34,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 /**
  * Gallery cover model.
- * 
+ *
  * This module resolves gallery cover images, cover asset URLs, collage candidates, and sidecar cover choices. It avoids the separate theme background and favicon storage paths.
+ *
+ * @param int $galleryId Gallery identifier.
  */
-
 function ensure_gallery_cover(int $galleryId): void
 {
     // Variable $gallery stores this steps working value.
@@ -62,6 +72,7 @@ function ensure_gallery_cover(int $galleryId): void
 
 /**
  * Handles gallery cover path logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -74,6 +85,7 @@ function gallery_cover_path(array $gallery): ?string
 
 /**
  * Handles gallery cover asset schema ready logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function gallery_cover_asset_schema_ready(): bool
@@ -96,9 +108,9 @@ function gallery_cover_asset_schema_ready(): bool
 
 /**
  * Handles set gallery cover path logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $relativePath Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
 {
@@ -112,6 +124,7 @@ function set_gallery_cover_path(int $galleryId, ?string $relativePath): void
 
 /**
  * Handles gallery cover image logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -123,6 +136,7 @@ function gallery_cover_image(int $galleryId, bool $publicOnly): ?array
 
 /**
  * Handles gallery direct cover image logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -163,6 +177,7 @@ function gallery_direct_cover_image(int $galleryId, bool $publicOnly): ?array
 
 /**
  * Handles gallery cover asset url logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -182,6 +197,7 @@ function gallery_cover_asset_url(array $gallery, bool $publicOnly): string
 
 /**
  * Handles gallery cover collage images logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
  * @param mixed $limit Input used by this operation.
@@ -222,6 +238,7 @@ function gallery_cover_collage_images(int $galleryId, bool $publicOnly, int $lim
 
 /**
  * Handles gallery cover choices logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $publicOnly Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -258,8 +275,8 @@ function gallery_cover_choices(int $galleryId, bool $publicOnly): array
 
 /**
  * Handles apply gallery cover from sidecar logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function apply_gallery_cover_from_sidecar(array $gallery): void
 {

@@ -34,9 +34,36 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_feature_schema_ready;
+use function Gallery\Services\create_gallery_thumbnails;
+use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\exif_gps_override_schema_ready;
+use function Gallery\Services\exif_gps_schema_ready;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_filename_display_schema_ready;
+use function Gallery\Services\gallery_subtree_ids;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\gallery_voting_schema_ready;
+use function Gallery\Services\regenerate_public_paths;
+use function Gallery\Services\scan_gallery_images;
+use function Gallery\Services\set_collapsed_gallery_ids;
+use function Gallery\Services\t;
+use function Gallery\Services\write_gallery_sidecar;
+
 /**
  * Handles cms admin bulk galleries logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_bulk_galleries(): void
 {
@@ -237,7 +264,6 @@ function cms_admin_bulk_galleries(): void
 
 /**
  * Handles cms admin regenerate paths logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_regenerate_paths(): void
 {
@@ -260,7 +286,6 @@ function cms_admin_regenerate_paths(): void
 
 /**
  * Handles cms admin save gallery collapse logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_save_gallery_collapse(): void
 {

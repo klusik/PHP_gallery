@@ -35,9 +35,19 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\theme_favorite_gallery_entries_from_form;
+use function Gallery\Services\theme_favorite_gallery_existing_ids_from_rows;
+use function Gallery\Services\theme_favorite_gallery_ids_encode;
+use function Gallery\Services\theme_favorite_gallery_ids_normalize;
+use function Gallery\Services\theme_favorite_gallery_navigation_items_from_rows;
+use function Gallery\Views\view_favorite_gallery_nav_html;
+
 if (!function_exists('e')) {
-    /**
+        /**
      * Minimal HTML escaping shim for view tests.
+     *
+     * @param ?string $value Value to process.
+     * @return string Text result for the caller.
      */
     function e(?string $value): string
     {
@@ -46,8 +56,13 @@ if (!function_exists('e')) {
 }
 
 if (!function_exists('t')) {
-    /**
+        /**
      * Minimal translation shim for service tests.
+     *
+     * @param string $key Lookup key.
+     * @param string|array|null $fallback Fallback value.
+     * @param array $parameters Parameters value.
+     * @return string Text result for the caller.
      */
     function t(string $key, string|array|null $fallback = null, array $parameters = []): string
     {
@@ -60,8 +75,12 @@ if (!function_exists('t')) {
 }
 
 if (!function_exists('url_for')) {
-    /**
+        /**
      * Deterministic route URL shim for navigation model tests.
+     *
+     * @param string $route Route value.
+     * @param array $params Params value.
+     * @return string Text result for the caller.
      */
     function url_for(string $route, array $params = []): string
     {
@@ -70,8 +89,11 @@ if (!function_exists('url_for')) {
 }
 
 if (!function_exists('gallery_public_url')) {
-    /**
+        /**
      * Deterministic gallery URL shim for navigation model tests.
+     *
+     * @param array $gallery Gallery row or gallery data.
+     * @return string Text result for the caller.
      */
     function gallery_public_url(array $gallery): string
     {
@@ -80,8 +102,11 @@ if (!function_exists('gallery_public_url')) {
 }
 
 if (!function_exists('gallery_is_public_listed')) {
-    /**
+        /**
      * Minimal public listing rule used by anonymous navigation tests.
+     *
+     * @param array $gallery Gallery row or gallery data.
+     * @return bool True when the condition matches.
      */
     function gallery_is_public_listed(array $gallery): bool
     {
@@ -90,11 +115,16 @@ if (!function_exists('gallery_is_public_listed')) {
     }
 }
 
+require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/favorite_galleries.php';
 require_once __DIR__ . '/../app/views/layout.php';
 
 /**
  * Throw when a favorite-gallery expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_favorite_galleries_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -105,6 +135,10 @@ function assert_favorite_galleries_same(mixed $expected, mixed $actual, string $
 
 /**
  * Throw when a rendered string does not contain an expected substring.
+ *
+ * @param string $needle Needle value.
+ * @param string $haystack Haystack value.
+ * @param string $label Label value.
  */
 function assert_favorite_galleries_contains(string $needle, string $haystack, string $label): void
 {
@@ -115,6 +149,10 @@ function assert_favorite_galleries_contains(string $needle, string $haystack, st
 
 /**
  * Throw when a rendered string contains an unexpected substring.
+ *
+ * @param string $needle Needle value.
+ * @param string $haystack Haystack value.
+ * @param string $label Label value.
  */
 function assert_favorite_galleries_not_contains(string $needle, string $haystack, string $label): void
 {

@@ -35,10 +35,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\e;
+use function Gallery\Services\t;
+
 /**
  * Return the Admin interface design tokens used by CSS and by the visible spec card.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function view_admin_ui_design_spec(): array
 {
@@ -67,7 +72,8 @@ function view_admin_ui_design_spec(): array
 /**
  * Convert an attribute map to safe HTML attributes.
  *
- * @param array<string, scalar|null|bool> $attributes Attribute values keyed by name.
+ * @param array $attributes Attributes value.
+ * @return string Text result for the caller.
  */
 function view_admin_ui_attributes(array $attributes): string
 {
@@ -89,7 +95,8 @@ function view_admin_ui_attributes(array $attributes): string
 /**
  * Render one anchor-style Admin action.
  *
- * @param array<string, mixed> $action Action definition.
+ * @param array $action Action value.
+ * @return string Text result for the caller.
  */
 function view_admin_ui_action_link_html(array $action): string
 {
@@ -113,7 +120,7 @@ function view_admin_ui_action_link_html(array $action): string
 /**
  * Render a reusable Admin hero used by dashboard pages and edit side panels.
  *
- * @param array<string, mixed> $model Hero view model.
+ * @param array $model Model value.
  */
 function view_render_admin_hero(array $model): void
 {
@@ -169,7 +176,7 @@ function view_render_admin_hero(array $model): void
 /**
  * Render a reusable Admin section intro.
  *
- * @param array<string, mixed> $model Intro view model.
+ * @param array $model Model value.
  */
 function view_render_admin_tab_intro(array $model): void
 {
@@ -212,7 +219,9 @@ function view_render_admin_tab_intro(array $model): void
 /**
  * Render a reusable summary card grid.
  *
- * @param array<int, array<string, mixed>> $cards Summary cards.
+ * @param array $cards Cards value.
+ * @param string $className Class name value.
+ * @param string $ariaLabel Aria label value.
  */
 function view_render_admin_metric_grid(array $cards, string $className = 'admin-metric-grid', string $ariaLabel = ''): void
 {
@@ -229,7 +238,7 @@ function view_render_admin_metric_grid(array $cards, string $className = 'admin-
 /**
  * Render one reusable summary card.
  *
- * @param array<string, mixed> $card Summary card model.
+ * @param array $card Card value.
  */
 function view_render_admin_metric_card(array $card): void
 {

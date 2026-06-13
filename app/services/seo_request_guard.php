@@ -35,10 +35,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\canonical_url_for_gallery;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\request_method;
+use function Gallery\Core\url_for;
+
 const CMS_SEO_REQUEST_GUARD_LOG_LIMIT_PER_DAY = 25;
 
 /**
  * Return whether public query-string spam protection is active.
+ *
+ * @return bool True when the condition matches.
  */
 function seo_request_guard_enabled(): bool
 {
@@ -47,6 +60,8 @@ function seo_request_guard_enabled(): bool
 
 /**
  * Persist whether public query-string spam protection is active.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_seo_request_guard_enabled(bool $enabled): void
 {
@@ -55,6 +70,8 @@ function set_seo_request_guard_enabled(bool $enabled): void
 
 /**
  * Return whether sampled rejected-query events should be written into Admin logs.
+ *
+ * @return bool True when the condition matches.
  */
 function seo_request_guard_logging_enabled(): bool
 {
@@ -63,6 +80,8 @@ function seo_request_guard_logging_enabled(): bool
 
 /**
  * Persist whether sampled rejected-query events should be written into Admin logs.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_seo_request_guard_logging_enabled(bool $enabled): void
 {
@@ -72,7 +91,7 @@ function set_seo_request_guard_logging_enabled(bool $enabled): void
 /**
  * Return a compact status model for Admin dashboard rendering.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function seo_request_guard_status(): array
 {
@@ -87,6 +106,9 @@ function seo_request_guard_status(): array
 
 /**
  * Return route names where strict public query validation must not run.
+ *
+ * @param string $page Page number or page data.
+ * @return bool True when the condition matches.
  */
 function seo_request_guard_route_is_exempt(string $page): bool
 {
@@ -109,7 +131,7 @@ function seo_request_guard_route_is_exempt(string $page): bool
 /**
  * Return known analytics parameters that do not change rendered content.
  *
- * @return array<string, bool>
+ * @return array<string bool>.
  */
 function seo_request_guard_ignored_tracking_parameters(): array
 {
@@ -130,7 +152,8 @@ function seo_request_guard_ignored_tracking_parameters(): array
 /**
  * Return public query parameters accepted by each route.
  *
- * @return array<int, string>
+ * @param string $page Page number or page data.
+ * @return array<int string>.
  */
 function seo_request_guard_allowed_parameters_for_page(string $page): array
 {
@@ -168,7 +191,8 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
 /**
  * Return unexpected public query keys for the current request.
  *
- * @return array<int, string>
+ * @param string $page Page number or page data.
+ * @return array<int string>.
  */
 function seo_request_guard_unexpected_query_parameters(string $page): array
 {
@@ -191,6 +215,8 @@ function seo_request_guard_unexpected_query_parameters(string $page): array
 
 /**
  * Enforce public GET query-string safety before route handlers render content.
+ *
+ * @param string $page Page number or page data.
  */
 function seo_request_guard_enforce(string $page): void
 {
@@ -215,7 +241,8 @@ function seo_request_guard_enforce(string $page): void
 /**
  * Reject a suspicious public query without invoking the normal public renderer.
  *
- * @param array<int, string> $unexpected Unexpected query parameter names.
+ * @param string $page Page number or page data.
+ * @param array $unexpected Unexpected value.
  */
 function seo_request_guard_reject(string $page, array $unexpected): void
 {
@@ -236,7 +263,8 @@ function seo_request_guard_reject(string $page, array $unexpected): void
 /**
  * Log sampled query rejections without allowing crawler floods to fill the log table.
  *
- * @param array<int, string> $unexpected Unexpected query parameter names.
+ * @param string $page Page number or page data.
+ * @param array $unexpected Unexpected value.
  */
 function seo_request_guard_log_rejection(string $page, array $unexpected): void
 {
@@ -282,6 +310,10 @@ function seo_request_guard_log_rejection(string $page, array $unexpected): void
 
 /**
  * Build a fallback canonical URL for public pages that do not already emit one.
+ *
+ * @param string $page Page number or page data.
+ * @param ?array $currentGallery Current gallery value.
+ * @return string Text result for the caller.
  */
 function seo_request_guard_public_canonical_url(string $page, ?array $currentGallery = null): string
 {
@@ -303,6 +335,11 @@ function seo_request_guard_public_canonical_url(string $page, ?array $currentGal
 
 /**
  * Return canonical head HTML unless the page already supplied a canonical tag.
+ *
+ * @param string $page Page number or page data.
+ * @param ?array $currentGallery Current gallery value.
+ * @param string $existingHeadHtml Existing head html HTML markup.
+ * @return string Text result for the caller.
  */
 function seo_request_guard_canonical_head_html(string $page, ?array $currentGallery, string $existingHeadHtml): string
 {

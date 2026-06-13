@@ -62,6 +62,9 @@ if (is_file($configFile) || is_file($installLockFile)) {
 
 /**
  * Escape one value for safe HTML output.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function installer_e(?string $value): string
 {
@@ -70,6 +73,10 @@ function installer_e(?string $value): string
 
 /**
  * Read one POST value as a trimmed string.
+ *
+ * @param string $name Name value.
+ * @param string $default Default value when no explicit value is available.
+ * @return string Text result for the caller.
  */
 function installer_post(string $name, string $default = ''): string
 {
@@ -78,6 +85,8 @@ function installer_post(string $name, string $default = ''): string
 
 /**
  * Generate a random application secret.
+ *
+ * @return string Text result for the caller.
  */
 function installer_random_secret(): string
 {
@@ -86,6 +95,8 @@ function installer_random_secret(): string
 
 /**
  * Detect the public base URL from the current installer request.
+ *
+ * @return string Text result for the caller.
  */
 function installer_default_base_url(): string
 {
@@ -109,6 +120,11 @@ function installer_default_base_url(): string
 
 /**
  * Build a MySQL PDO DSN from installer fields.
+ *
+ * @param string $host Host value.
+ * @param string $port Port value.
+ * @param ?string $database Database value.
+ * @return string Text result for the caller.
  */
 function installer_mysql_dsn(string $host, string $port = '', ?string $database = null): string
 {
@@ -127,6 +143,9 @@ function installer_mysql_dsn(string $host, string $port = '', ?string $database 
 
 /**
  * Connect to the existing application database.
+ *
+ * @param array $database Database value.
+ * @return PDO Result value for the caller.
  */
 function installer_connect_database(array $database): PDO
 {
@@ -143,6 +162,9 @@ function installer_connect_database(array $database): PDO
 
 /**
  * Validate and normalize the first installer step.
+ *
+ * @param array $defaults Defaults value.
+ * @return array Structured result data for the caller.
  */
 function installer_collect_database_step(array $defaults): array
 {
@@ -193,6 +215,10 @@ function installer_collect_database_step(array $defaults): array
 
 /**
  * Run all pending database migrations.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $migrationPath Migration path filesystem path.
+ * @return array Structured result data for the caller.
  */
 function installer_run_migrations(PDO $pdo, string $migrationPath): array
 {
@@ -233,6 +259,9 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
 
 /**
  * Apply one migration statement and tolerate duplicate schema objects.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $statement Statement value.
  */
 function installer_apply_migration_statement(PDO $pdo, string $statement): void
 {
@@ -247,6 +276,9 @@ function installer_apply_migration_statement(PDO $pdo, string $statement): void
 
 /**
  * Return true when a migration error is safe to ignore during reinstall-like recovery.
+ *
+ * @param PDOException $exception Exception value.
+ * @return bool True when the condition matches.
  */
 function installer_duplicate_ddl_error(PDOException $exception): bool
 {
@@ -267,6 +299,9 @@ function installer_duplicate_ddl_error(PDOException $exception): bool
 
 /**
  * Write the final application config.php file.
+ *
+ * @param string $configFile Config file value.
+ * @param array $config Configuration values.
  */
 function installer_write_config(string $configFile, array $config): void
 {
@@ -279,6 +314,8 @@ function installer_write_config(string $configFile, array $config): void
 
 /**
  * Create the galleries and ZIP cache folders if needed.
+ *
+ * @param array $paths Paths filesystem path.
  */
 function installer_prepare_writable_folders(array $paths): void
 {
@@ -294,6 +331,10 @@ function installer_prepare_writable_folders(array $paths): void
 
 /**
  * Create or replace the first web admin account.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $username Username value.
+ * @param string $password Password value.
  */
 function installer_create_admin_user(PDO $pdo, string $username, string $password): void
 {
@@ -304,6 +345,9 @@ function installer_create_admin_user(PDO $pdo, string $username, string $passwor
 
 /**
  * Store the public site name in application settings.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $siteName Site name value.
  */
 function installer_save_site_name(PDO $pdo, string $siteName): void
 {
@@ -314,6 +358,10 @@ function installer_save_site_name(PDO $pdo, string $siteName): void
 
 /**
  * Build final application config from verified installer data.
+ *
+ * @param array $setup Setup value.
+ * @param string $root Root value.
+ * @return array Structured result data for the caller.
  */
 function installer_build_config(array $setup, string $root): array
 {

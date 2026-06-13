@@ -34,8 +34,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDOException;
+use Throwable;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\auth_restore_persistent_login;
+use function Gallery\Services\t;
+
 /**
  * Get or create the per-session CSRF token used by admin POST forms.
+ *
+ * @return string Text result for the caller.
  */
 function csrf_token(): string
 {
@@ -47,6 +57,8 @@ function csrf_token(): string
 
 /**
  * Render the hidden CSRF field for admin forms.
+ *
+ * @return string Text result for the caller.
  */
 function csrf_field(): string
 {
@@ -68,6 +80,8 @@ function verify_csrf(): void
 
 /**
  * Return the logged-in admin user, or null for anonymous visitors.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function current_user(): ?array
 {
@@ -78,7 +92,7 @@ function current_user(): ?array
     }
     if (empty($_SESSION['user_id'])) {
         // $restoredUser stores a durable login restored from a hashed database token when PHP session storage expired.
-        $restoredUser = function_exists('auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
+        $restoredUser = function_exists('Gallery\\Services\\auth_restore_persistent_login') ? auth_restore_persistent_login() : null;
         if (!$restoredUser) {
             // $cache stores an intermediate value used by the surrounding gallery workflow.
             $cache = true;
@@ -124,6 +138,8 @@ function require_admin(): void
 
 /**
  * Build a stable anonymous identity for voting without storing raw IP addresses.
+ *
+ * @return string Text result for the caller.
  */
 function visitor_hash(): string
 {
@@ -180,6 +196,8 @@ function send_security_headers(): void
 
 /**
  * Reject public POST abuse by limiting fast repeated anonymous votes per image.
+ *
+ * @param int $imageId Image identifier.
  */
 function verify_vote_rate_limit(int $imageId): void
 {
@@ -192,13 +210,15 @@ function verify_vote_rate_limit(int $imageId): void
     if ($lastVote > 0 && ($now - $lastVote) < 2) {
         http_response_code(429);
         header('Content-Type: application/json');
-        exit(json_encode(['error' => function_exists('t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
+        exit(json_encode(['error' => function_exists('Gallery\\Services\\t') ? t('vote.error.too_many_votes', 'Too many votes. Try again in a moment.') : 'Too many votes. Try again in a moment.']));
     }
     $_SESSION[$key] = $now;
 }
 
 /**
  * Return true when installer/setup functionality has been locked after install.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_setup_is_locked(): bool
 {
@@ -207,6 +227,8 @@ function cms_setup_is_locked(): bool
 
 /**
  * Return true when setup has already created at least one administrator.
+ *
+ * @return bool True when the condition matches.
  */
 function cms_admin_user_exists(): bool
 {

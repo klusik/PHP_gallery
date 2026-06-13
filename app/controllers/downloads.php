@@ -32,6 +32,17 @@
  *   2026-05-04
  */
 
+use function Gallery\Controllers\cms_not_found;
+use function Gallery\Controllers\picture_manager_image_ids_from_post;
+use function Gallery\Controllers\picture_manager_require_logged_in_user;
+use function Gallery\Controllers\picture_manager_source_gallery_from_post;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\slugify;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery;
+
 /**
  * Public download controller model.
  *

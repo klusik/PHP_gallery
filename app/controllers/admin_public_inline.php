@@ -34,9 +34,46 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\ai_image_analysis_latest_metadata_for_image;
+use function Gallery\Services\ai_image_analysis_metadata_pretty_json;
+use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\exif_gps_schema_ready;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\gallery_visibility_values;
+use function Gallery\Services\image_has_gps;
+use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\public_path_schema_ready;
+use function Gallery\Services\regenerate_public_paths;
+use function Gallery\Services\render_admin_thumbnail_bound_slider;
+use function Gallery\Services\sync_entity_tags;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_names_for_entity;
+use function Gallery\Services\thumbnail_bound_pair_from_post;
+use function Gallery\Services\thumbnail_bounds_schema_ready;
+use function Gallery\Services\thumbnail_url;
+use function Gallery\Views\view_render_admin_openai_text_assist_tool;
+
 /**
  * Handles cms admin public update gallery logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_public_update_gallery(): void
 {
@@ -108,7 +145,6 @@ function cms_admin_public_update_gallery(): void
 
 /**
  * Handles cms admin public update image logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_public_update_image(): void
 {
@@ -169,18 +205,17 @@ function cms_admin_public_update_image(): void
  * inspectable by admins without becoming authoritative human copy.
  *
  * @param array<string,mixed> $image Image row currently being edited.
- * @return void
  */
 function render_admin_image_ai_metadata_panel(array $image): void
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('ai_image_metadata')) {
         return;
     }
-    if (!function_exists('ai_image_analysis_latest_metadata_for_image')) {
+    if (!function_exists('Gallery\\Services\\ai_image_analysis_latest_metadata_for_image')) {
         return;
     }
 
-    if (!function_exists('ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
+    if (!function_exists('Gallery\\Services\\ai_image_analysis_schema_ready') || !ai_image_analysis_schema_ready()) {
         echo '<div class="admin-ai-metadata-panel"><h2>' . e(t('admin.gallery_editor.ai_metadata_title', 'Internal AI metadata')) . '</h2><p class="muted">' . e(t('admin.gallery_editor.ai_metadata_migration_hidden', 'AI metadata inspection will be available after the AI image-analysis migration is applied.')) . '</p></div>';
         return;
     }
@@ -224,7 +259,6 @@ function render_admin_image_ai_metadata_panel(array $image): void
 
 /**
  * Handles cms admin edit image logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_edit_image(): void
 {
@@ -278,7 +312,7 @@ function cms_admin_edit_image(): void
     echo '<input type="hidden" name="id" value="' . (int) $image['id'] . '">';
     echo '<label>' . e(t('admin.gallery_editor.title', 'Title')) . '<input name="title" value="' . e($image['title']) . '"></label>';
     echo '<label>' . e(t('admin.gallery_editor.description', 'Description')) . '<textarea name="description" data-openai-description-textarea>' . e($image['description']) . '</textarea></label>';
-    if (function_exists('view_render_admin_openai_text_assist_tool')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_openai_text_assist_tool')) {
         view_render_admin_openai_text_assist_tool((int) ($image['gallery_id'] ?? 0), (int) $image['id'], 'image');
     }
     echo '<label>' . e(t('admin.gallery_editor.visibility', 'Visibility')) . '<select name="visibility">' . image_visibility_options((string) $image['visibility']) . '</select></label>';

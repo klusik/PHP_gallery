@@ -34,6 +34,21 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DateTimeImmutable;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use Throwable;
+use ZipArchive;
+use const Gallery\Core\CMS_GITHUB_REPOSITORY;
+use const Gallery\Core\CMS_UPDATE_BRANCHES;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\e;
+use function Gallery\Core\run_migrations;
+
 /**
  * Application update service model.
  *
@@ -49,6 +64,8 @@ declare(strict_types=1);
 
 /**
  * Return the configured upstream project URL.
+ *
+ * @return string Text result for the caller.
  */
 function cms_github_project_url(): string
 {
@@ -57,6 +74,9 @@ function cms_github_project_url(): string
 
 /**
  * Check GitHub release metadata for the newest published application version.
+ *
+ * @param bool $force Force value.
+ * @return array Structured result data for the caller.
  */
 function check_application_update(bool $force = false): array
 {
@@ -155,6 +175,10 @@ function check_application_update(bool $force = false): array
 
 /**
  * Return a cache-aware update status for the admin page.
+ *
+ * @param bool $force Force value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return array Structured result data for the caller.
  */
 function application_update_status_for_admin(bool $force = false, int $ttlSeconds = 18000): array
 {
@@ -180,6 +204,8 @@ function application_update_status_for_admin(bool $force = false, int $ttlSecond
 
 /**
  * Return the next safe GitHub request time according to saved rate-limit policy data.
+ *
+ * @return array Structured result data for the caller.
  */
 function application_update_github_wait_state(): array
 {
@@ -188,6 +214,9 @@ function application_update_github_wait_state(): array
 
 /**
  * Build a non-network update status when GitHub asked this installation to wait.
+ *
+ * @param array $waitState Wait state value.
+ * @return array Structured result data for the caller.
  */
 function application_update_rate_limited_status(array $waitState): array
 {
@@ -207,6 +236,8 @@ function application_update_rate_limited_status(array $waitState): array
 
 /**
  * Return persisted GitHub API diagnostics for the update page.
+ *
+ * @return array Structured result data for the caller.
  */
 function application_update_github_api_status(): array
 {
@@ -215,6 +246,10 @@ function application_update_github_api_status(): array
 
 /**
  * Persist GitHub API headers and calculate safe retry windows from official response headers.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $status Status value.
+ * @param array $headers Headers value.
  */
 function application_update_record_github_response(string $url, int $status, array $headers): void
 {
@@ -224,6 +259,10 @@ function application_update_record_github_response(string $url, int $status, arr
 
 /**
  * Return parsed remote patch notes for the update page viewer.
+ *
+ * @param ?string $preferredBranch Preferred branch value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return array Structured result data for the caller.
  */
 function application_patch_notes_viewer_data(?string $preferredBranch = null, int $ttlSeconds = 1800): array
 {
@@ -276,6 +315,8 @@ function application_patch_notes_viewer_data(?string $preferredBranch = null, in
 
 /**
  * Return the writable file-cache directory for remote patch notes payloads.
+ *
+ * @return string Text result for the caller.
  */
 function application_patch_notes_cache_dir(): string
 {
@@ -289,6 +330,9 @@ function application_patch_notes_cache_dir(): string
 
 /**
  * Return the cache file path for a trusted update branch.
+ *
+ * @param string $branch Branch value.
+ * @return string Text result for the caller.
  */
 function application_patch_notes_cache_path(string $branch): string
 {
@@ -299,6 +343,10 @@ function application_patch_notes_cache_path(string $branch): string
 
 /**
  * Read a fresh file-backed patch notes payload when available.
+ *
+ * @param string $branch Branch value.
+ * @param int $ttlSeconds Ttl seconds value.
+ * @return ?array Structured result data for the caller.
  */
 function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?array
 {
@@ -327,6 +375,9 @@ function application_patch_notes_read_cache(string $branch, int $ttlSeconds): ?a
 
 /**
  * Store a patch notes payload in the filesystem cache.
+ *
+ * @param string $branch Branch value.
+ * @param array $data Input data.
  */
 function application_patch_notes_write_cache(string $branch, array $data): void
 {
@@ -343,6 +394,8 @@ function application_patch_notes_write_cache(string $branch, array $data): void
 
 /**
  * Remove cached patch notes so the next view refreshes from the source.
+ *
+ * @param ?string $branch Branch value.
  */
 function application_patch_notes_clear_cache(?string $branch = null): void
 {
@@ -361,6 +414,9 @@ function application_patch_notes_clear_cache(?string $branch = null): void
 
 /**
  * Parse PATCH_NOTES.md into normalized version sections.
+ *
+ * @param string $markdown Markdown value.
+ * @return array Structured result data for the caller.
  */
 function application_patch_notes_parse_versions(string $markdown): array
 {
@@ -417,6 +473,9 @@ function application_patch_notes_parse_versions(string $markdown): array
 
 /**
  * Return release metadata for a patch-note version from the checked-in release map.
+ *
+ * @param string $version Version value.
+ * @return array Structured result data for the caller.
  */
 function application_patch_notes_release_metadata_for_version(string $version): array
 {
@@ -460,6 +519,9 @@ function application_patch_notes_release_metadata_for_version(string $version): 
 
 /**
  * Convert the limited PATCH_NOTES.md syntax into safe admin HTML.
+ *
+ * @param string $markdown Markdown value.
+ * @return string Text result for the caller.
  */
 function application_patch_notes_markdown_to_html(string $markdown): string
 {
@@ -549,6 +611,9 @@ function application_patch_notes_markdown_to_html(string $markdown): string
 
 /**
  * Convert safe inline Markdown emphasis and code spans for patch notes.
+ *
+ * @param string $text Text value.
+ * @return string Text result for the caller.
  */
 function application_patch_notes_inline_markdown(string $text): string
 {
@@ -561,6 +626,10 @@ function application_patch_notes_inline_markdown(string $text): string
 
 /**
  * Return a cached update check for small UI badges.
+ *
+ * @param int $ttlSeconds Ttl seconds value.
+ * @param bool $refreshWhenStale Refresh when stale value.
+ * @return array Structured result data for the caller.
  */
 function cached_application_update_check(int $ttlSeconds = 3600, bool $refreshWhenStale = false): array
 {
@@ -604,6 +673,8 @@ function cached_application_update_check(int $ttlSeconds = 3600, bool $refreshWh
 
 /**
  * Return a safe placeholder when no local update metadata has been cached yet.
+ *
+ * @return array Structured result data for the caller.
  */
 function application_update_unknown_cached_status(): array
 {
@@ -621,6 +692,13 @@ function application_update_unknown_cached_status(): array
     ];
 }
 
+/**
+ * Handle cache application update check.
+ *
+ * Part of the related application service.
+ *
+ * @param array $status Status value.
+ */
 function cache_application_update_check(array $status): void
 {
     // $json stores the compact update status used by navigation badges.
@@ -635,6 +713,9 @@ function cache_application_update_check(array $status): void
 
 /**
  * Return true when an update status really points past the installed version.
+ *
+ * @param array $status Status value.
+ * @return bool True when the condition matches.
  */
 function application_update_status_is_pending(array $status): bool
 {
@@ -653,6 +734,8 @@ function application_update_status_is_pending(array $status): bool
 
 /**
  * Return true when the cached update check says a newer version is available.
+ *
+ * @return bool True when the condition matches.
  */
 function application_update_pending(): bool
 {
@@ -663,6 +746,8 @@ function application_update_pending(): bool
 
 /**
  * Return true when the application is currently on a beta/manual commit install.
+ *
+ * @return bool True when the condition matches.
  */
 function application_update_beta_active(): bool
 {
@@ -671,6 +756,8 @@ function application_update_beta_active(): bool
 
 /**
  * Return the currently installed beta code, if any.
+ *
+ * @return string Text result for the caller.
  */
 function application_update_beta_commit(): string
 {
@@ -679,6 +766,8 @@ function application_update_beta_commit(): string
 
 /**
  * Return true when automatic stable updates are enabled by admin settings.
+ *
+ * @return bool True when the condition matches.
  */
 function application_autoupdate_enabled(): bool
 {
@@ -687,6 +776,8 @@ function application_autoupdate_enabled(): bool
 
 /**
  * Persist the automatic stable update setting from the admin maintenance page.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_application_autoupdate_enabled(bool $enabled): void
 {
@@ -695,6 +786,8 @@ function set_application_autoupdate_enabled(bool $enabled): void
 
 /**
  * Return diagnostic state for the automatic updater card.
+ *
+ * @return array Structured result data for the caller.
  */
 function application_autoupdate_status(): array
 {
@@ -724,6 +817,9 @@ function application_autoupdate_status(): array
 
 /**
  * Return a readable automatic update check timestamp for admin diagnostics.
+ *
+ * @param int $lastCheckedAt Last checked at value.
+ * @return string Text result for the caller.
  */
 function application_autoupdate_last_checked_label(int $lastCheckedAt): string
 {
@@ -736,6 +832,9 @@ function application_autoupdate_last_checked_label(int $lastCheckedAt): string
 
 /**
  * Return a concise relative automatic update check age for admin diagnostics.
+ *
+ * @param int $lastCheckedAt Last checked at value.
+ * @return string Text result for the caller.
  */
 function application_autoupdate_relative_time_label(int $lastCheckedAt): string
 {
@@ -772,6 +871,8 @@ function application_autoupdate_relative_time_label(int $lastCheckedAt): string
  * This routine is intentionally conservative: it runs only on safe browser reads,
  * never changes the admin checkbox when beta code is active, and throttles remote
  * checks to one attempt per installation per configured interval.
+ *
+ * @param int $ttlSeconds Ttl seconds value.
  */
 function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
 {
@@ -817,6 +918,10 @@ function application_autoupdate_maybe_run(int $ttlSeconds = 18000): void
  * update detection, throttling, and the Last automatic check diagnostics without
  * replacing the pinned beta commit. Manual admin dry runs can force the same
  * safe check immediately from the update page.
+ *
+ * @param bool $force Force value.
+ * @param ?int $checkedAt Checked at value.
+ * @return array Structured result data for the caller.
  */
 function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = null): array
 {
@@ -866,6 +971,9 @@ function application_autoupdate_dry_run(bool $force = false, ?int $checkedAt = n
 
 /**
  * Return a compact persisted result label for a dry automatic update check.
+ *
+ * @param array $status Status value.
+ * @return string Text result for the caller.
  */
 function application_autoupdate_dry_run_result_label(array $status): string
 {
@@ -882,6 +990,10 @@ function application_autoupdate_dry_run_result_label(array $status): string
 
 /**
  * Run the automatic update check and install a stable release when pending.
+ *
+ * @param bool $force Force value.
+ * @param ?int $checkedAt Checked at value.
+ * @return array Structured result data for the caller.
  */
 function application_autoupdate_run_installing_check(bool $force = false, ?int $checkedAt = null): array
 {
@@ -927,6 +1039,8 @@ function application_autoupdate_run_installing_check(bool $force = false, ?int $
 
 /**
  * Return the stored beta backup archive path.
+ *
+ * @return string Text result for the caller.
  */
 function application_update_beta_backup_path(): string
 {
@@ -935,6 +1049,9 @@ function application_update_beta_backup_path(): string
 
 /**
  * Install a beta/manual code archive over the current application files.
+ *
+ * @param string $commitId Commit id identifier.
+ * @return array Structured result data for the caller.
  */
 function install_application_beta(string $commitId): array
 {
@@ -1014,6 +1131,8 @@ function install_application_beta(string $commitId): array
 
 /**
  * Restore the stable release from the GitHub branch head.
+ *
+ * @return array Structured result data for the caller.
  */
 function restore_application_stable_release(): array
 {
@@ -1088,6 +1207,8 @@ function restore_application_stable_release(): array
 
 /**
  * Backward-compatible wrapper for the stable release restore.
+ *
+ * @return array Structured result data for the caller.
  */
 function restore_application_stable_backup(): array
 {
@@ -1097,6 +1218,8 @@ function restore_application_stable_backup(): array
 
 /**
  * Reinstall the stable branch head over the current site and remove unmanaged application files.
+ *
+ * @return array Structured result data for the caller.
  */
 function clean_reinstall_current_application_version(): array
 {
@@ -1180,6 +1303,9 @@ function clean_reinstall_current_application_version(): array
 
 /**
  * Return the admin label for links that point to the update screen.
+ *
+ * @param bool $pending Pending value.
+ * @return string Text result for the caller.
  */
 function application_update_nav_label(bool $pending): string
 {
@@ -1188,6 +1314,8 @@ function application_update_nav_label(bool $pending): string
 
 /**
  * Install the newest GitHub branch archive over application-managed files.
+ *
+ * @return array Structured result data for the caller.
  */
 function install_application_update(): array
 {
@@ -1267,6 +1395,8 @@ function install_application_update(): array
 
 /**
  * Return the branch names the updater should try, newest preference first.
+ *
+ * @return array Structured result data for the caller.
  */
 function application_update_branch_candidates(): array
 {
@@ -1275,6 +1405,9 @@ function application_update_branch_candidates(): array
 
 /**
  * Build a GitHub archive URL for one code snapshot.
+ *
+ * @param string $commitId Commit id identifier.
+ * @return string Text result for the caller.
  */
 function application_update_commit_zip_url(string $commitId): string
 {
@@ -1287,6 +1420,9 @@ function application_update_commit_zip_url(string $commitId): string
 
 /**
  * Build a GitHub branch zip URL.
+ *
+ * @param string $branch Branch value.
+ * @return string Text result for the caller.
  */
 function application_update_zip_url(string $branch): string
 {
@@ -1297,6 +1433,8 @@ function application_update_zip_url(string $branch): string
 
 /**
  * Reject update sources outside the stable GitHub branches.
+ *
+ * @param string $branch Branch value.
  */
 function application_update_assert_allowed_branch(string $branch): void
 {
@@ -1307,6 +1445,10 @@ function application_update_assert_allowed_branch(string $branch): void
 
 /**
  * Build a GitHub Contents API URL for one trusted branch file.
+ *
+ * @param string $branch Branch value.
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function application_update_github_contents_api_url(string $branch, string $path): string
 {
@@ -1319,6 +1461,11 @@ function application_update_github_contents_api_url(string $branch, string $path
 
 /**
  * Fetch one small repository file through GitHub Contents API as raw text.
+ *
+ * @param string $branch Branch value.
+ * @param string $path Filesystem path.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function application_update_fetch_github_content(string $branch, string $path, int $timeoutSeconds): string
 {
@@ -1336,6 +1483,9 @@ function application_update_fetch_github_content(string $branch, string $path, i
 
 /**
  * Read the remote version marker that identifies the newest branch version.
+ *
+ * @param string $branch Branch value.
+ * @return array Structured result data for the caller.
  */
 function application_update_remote_version_candidates(string $branch): array
 {
@@ -1346,6 +1496,9 @@ function application_update_remote_version_candidates(string $branch): array
 
 /**
  * Read remote version markers and keep diagnostics for branches without a marker.
+ *
+ * @param string $branch Branch value.
+ * @return array Structured result data for the caller.
  */
 function application_update_remote_version_result(string $branch): array
 {
@@ -1397,6 +1550,9 @@ function application_update_remote_version_result(string $branch): array
 
 /**
  * Return the highest semantic version from remote version candidates.
+ *
+ * @param array $versionCandidates Version candidates value.
+ * @return string Text result for the caller.
  */
 function application_update_highest_version(array $versionCandidates): string
 {
@@ -1423,6 +1579,10 @@ function application_update_highest_version(array $versionCandidates): string
 
 /**
  * Return a readable label for the remote source that provided the selected version.
+ *
+ * @param array $versionCandidates Version candidates value.
+ * @param string $latestVersion Latest version value.
+ * @return string Text result for the caller.
  */
 function application_update_version_source_label(array $versionCandidates, string $latestVersion): string
 {
@@ -1440,6 +1600,9 @@ function application_update_version_source_label(array $versionCandidates, strin
 
 /**
  * Parse the CMS_VERSION constant from a remote bootstrap file.
+ *
+ * @param string $bootstrap Bootstrap value.
+ * @return ?string Text result for the caller.
  */
 function application_update_version_from_bootstrap(string $bootstrap): ?string
 {
@@ -1451,6 +1614,9 @@ function application_update_version_from_bootstrap(string $bootstrap): ?string
 
 /**
  * Parse the newest release version from PATCH_NOTES.md headings.
+ *
+ * @param string $markdown Markdown value.
+ * @return ?string Text result for the caller.
  */
 function application_update_version_from_patch_notes(string $markdown): ?string
 {
@@ -1468,6 +1634,9 @@ function application_update_version_from_patch_notes(string $markdown): ?string
 
 /**
  * Normalize version strings used in notes, tags, and constants.
+ *
+ * @param string $version Version value.
+ * @return ?string Text result for the caller.
  */
 function application_update_normalize_version(string $version): ?string
 {
@@ -1483,6 +1652,10 @@ function application_update_normalize_version(string $version): ?string
 
 /**
  * Fetch a small trusted remote URL with a bounded timeout.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @return string Text result for the caller.
  */
 function http_fetch(string $url, int $timeoutSeconds): string
 {
@@ -1491,6 +1664,11 @@ function http_fetch(string $url, int $timeoutSeconds): string
 
 /**
  * Fetch a trusted remote URL with optional request headers and a bounded timeout.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @param array $headers Headers value.
+ * @return string Text result for the caller.
  */
 function http_fetch_with_headers(string $url, int $timeoutSeconds, array $headers = []): string
 {
@@ -1501,6 +1679,11 @@ function http_fetch_with_headers(string $url, int $timeoutSeconds, array $header
 
 /**
  * Fetch a trusted remote URL and return body, status, and response headers.
+ *
+ * @param string $url URL used by this workflow.
+ * @param int $timeoutSeconds Timeout seconds value.
+ * @param array $headers Headers value.
+ * @return array Structured result data for the caller.
  */
 function http_fetch_response_with_headers(string $url, int $timeoutSeconds, array $headers = []): array
 {
@@ -1599,6 +1782,8 @@ function http_fetch_response_with_headers(string $url, int $timeoutSeconds, arra
 
 /**
  * Create an updater working directory when needed.
+ *
+ * @param string $path Filesystem path.
  */
 function application_update_ensure_dir(string $path): void
 {
@@ -1613,6 +1798,8 @@ function application_update_ensure_dir(string $path): void
 
 /**
  * Return the application project root that contains index.php, app, public, and cache.
+ *
+ * @return string Text result for the caller.
  */
 function application_update_project_root(): string
 {
@@ -1624,6 +1811,8 @@ function application_update_project_root(): string
 
 /**
  * Reject dangerous updater destinations before any files are copied or removed.
+ *
+ * @param string $root Root value.
  */
 function application_update_assert_project_root(string $root): void
 {
@@ -1659,6 +1848,8 @@ function application_update_assert_project_root(string $root): void
 
 /**
  * Validate that the extracted archive looks like a PHP Gallery repository snapshot.
+ *
+ * @param string $sourceRoot Source root value.
  */
 function application_update_assert_source_root(string $sourceRoot): void
 {
@@ -1680,6 +1871,9 @@ function application_update_assert_source_root(string $sourceRoot): void
 
 /**
  * Find the single root directory produced by GitHub zip extraction.
+ *
+ * @param string $extractDir Extract dir value.
+ * @return string Text result for the caller.
  */
 function application_update_extracted_root(string $extractDir): string
 {
@@ -1697,6 +1891,12 @@ function application_update_extracted_root(string $extractDir): string
 
 /**
  * Copy update files, backing up overwritten files and preserving local data.
+ *
+ * @param string $sourceRoot Source root value.
+ * @param string $destinationRoot Destination root value.
+ * @param string $backupPath Backup path filesystem path.
+ * @param bool $cleanUnexpectedFiles Clean unexpected files value.
+ * @return array Structured result data for the caller.
  */
 function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath, bool $cleanUnexpectedFiles = false): array
 {
@@ -1762,6 +1962,10 @@ function application_update_copy_files(string $sourceRoot, string $destinationRo
 
 /**
  * Return true when a path is within a directory that the updater owns.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @param bool $cleanUnexpectedFiles Clean unexpected files value.
+ * @return bool True when the condition matches.
  */
 function application_update_path_is_managed_by_updater(string $relativePath, bool $cleanUnexpectedFiles): bool
 {
@@ -1788,6 +1992,12 @@ function application_update_path_is_managed_by_updater(string $relativePath, boo
 
 /**
  * Remove local application files that are not present in the incoming release snapshot.
+ *
+ * @param string $sourceRoot Source root value.
+ * @param string $destinationRoot Destination root value.
+ * @param ZipArchive $backup Backup value.
+ * @param bool $cleanUnexpectedFiles Clean unexpected files value.
+ * @return array Structured result data for the caller.
  */
 function application_update_remove_obsolete_managed_paths(string $sourceRoot, string $destinationRoot, ZipArchive $backup, bool $cleanUnexpectedFiles): array
 {
@@ -1822,6 +2032,10 @@ function application_update_remove_obsolete_managed_paths(string $sourceRoot, st
 
 /**
  * Remove stale ZIP files and temporary update extraction folders from cache.
+ *
+ * @param string $root Root value.
+ * @param string $activeBackupPath Active backup path filesystem path.
+ * @return array Structured result data for the caller.
  */
 function application_update_clean_cache_artifacts(string $root, string $activeBackupPath = ''): array
 {
@@ -1871,6 +2085,9 @@ function application_update_clean_cache_artifacts(string $root, string $activeBa
 
 /**
  * Back up and remove a full project copy that was accidentally written inside app.
+ *
+ * @param string $root Root value.
+ * @param ZipArchive $backup Backup value.
  */
 function application_update_backup_and_remove_misplaced_project_copy(string $root, ZipArchive $backup): void
 {
@@ -1895,6 +2112,9 @@ function application_update_backup_and_remove_misplaced_project_copy(string $roo
 
 /**
  * Return known wrong locations created when the updater used app as the project root.
+ *
+ * @param string $root Root value.
+ * @return array Structured result data for the caller.
  */
 function application_update_misplaced_project_paths(string $root): array
 {
@@ -1950,6 +2170,9 @@ function application_update_misplaced_project_paths(string $root): array
 
 /**
  * Return true for normal entries that belong directly inside the app directory.
+ *
+ * @param string $entry Entry value.
+ * @return bool True when the condition matches.
  */
 function application_update_app_entry_is_expected(string $entry): bool
 {
@@ -1972,6 +2195,10 @@ function application_update_app_entry_is_expected(string $entry): bool
 
 /**
  * Add one file or directory tree to the updater backup archive.
+ *
+ * @param ZipArchive $backup Backup value.
+ * @param string $path Filesystem path.
+ * @param string $archivePath Archive path filesystem path.
  */
 function application_update_add_path_to_backup(ZipArchive $backup, string $path, string $archivePath): void
 {
@@ -2002,6 +2229,8 @@ function application_update_add_path_to_backup(ZipArchive $backup, string $path,
 
 /**
  * Remove a file or directory tree after it has been captured in the updater backup.
+ *
+ * @param string $path Filesystem path.
  */
 function application_update_remove_path(string $path): void
 {
@@ -2038,6 +2267,9 @@ function application_update_remove_path(string $path): void
 
 /**
  * Remove stale temporary extraction directories from cache/updates.
+ *
+ * @param string $updateDir Update dir value.
+ * @param string $activeExtractDir Active extract dir value.
  */
 function application_update_cleanup_transient_extracts(string $updateDir, string $activeExtractDir = ''): void
 {
@@ -2071,6 +2303,8 @@ function application_update_cleanup_transient_extracts(string $updateDir, string
 
 /**
  * Invalidate cached PHP bytecode for a freshly copied file when opcache is enabled.
+ *
+ * @param string $path Filesystem path.
  */
 function application_update_invalidate_opcache_for_path(string $path): void
 {
@@ -2084,6 +2318,9 @@ function application_update_invalidate_opcache_for_path(string $path): void
 
 /**
  * Invalidate cached PHP bytecode for restored application files under a source tree.
+ *
+ * @param string $destinationRoot Destination root value.
+ * @param string $sourceRoot Source root value.
  */
 function application_update_invalidate_opcache(string $destinationRoot, string $sourceRoot): void
 {
@@ -2109,6 +2346,9 @@ function application_update_invalidate_opcache(string $destinationRoot, string $
 
 /**
  * Read the CMS version from a local bootstrap file.
+ *
+ * @param string $bootstrapPath Bootstrap path filesystem path.
+ * @return ?string Text result for the caller.
  */
 function application_update_version_from_local_bootstrap(string $bootstrapPath): ?string
 {
@@ -2122,6 +2362,9 @@ function application_update_version_from_local_bootstrap(string $bootstrapPath):
 
 /**
  * Keep local-only files and directories out of automated updates.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return bool True when the condition matches.
  */
 function application_update_path_is_protected(string $relativePath): bool
 {

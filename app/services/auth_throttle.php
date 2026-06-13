@@ -35,16 +35,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\visitor_hash;
+
 /**
  * Return true when the optional auth throttling table exists.
+ *
+ * @return bool True when the condition matches.
  */
 function auth_throttle_schema_ready(): bool
 {
-    return function_exists('db_table_exists') && db_table_exists('auth_rate_limits');
+    return function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('auth_rate_limits');
 }
 
 /**
  * Return a secret used only for hashing throttle subjects.
+ *
+ * @return string Text result for the caller.
  */
 function auth_throttle_secret(): string
 {
@@ -54,6 +65,9 @@ function auth_throttle_secret(): string
 
 /**
  * Normalize user-submitted identifiers before hashing them for rate limits.
+ *
+ * @param string $identifier Identifier value.
+ * @return string Text result for the caller.
  */
 function auth_throttle_normalize_identifier(string $identifier): string
 {
@@ -62,6 +76,9 @@ function auth_throttle_normalize_identifier(string $identifier): string
 
 /**
  * Hash a throttle subject so raw IP addresses and submitted identifiers are never stored.
+ *
+ * @param string $subject Subject value.
+ * @return string Text result for the caller.
  */
 function auth_throttle_subject_hash(string $subject): string
 {
@@ -70,14 +87,19 @@ function auth_throttle_subject_hash(string $subject): string
 
 /**
  * Return the current anonymous visitor hash used for visitor-level throttling.
+ *
+ * @return string Text result for the caller.
  */
 function auth_throttle_visitor_subject(): string
 {
-    return function_exists('visitor_hash') ? visitor_hash() : auth_throttle_subject_hash((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : auth_throttle_subject_hash((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
 }
 
 /**
  * Return bucket policy values for a throttled action.
+ *
+ * @param string $bucket Bucket value.
+ * @return array Structured result data for the caller.
  */
 function auth_throttle_policy(string $bucket): array
 {
@@ -109,6 +131,10 @@ function auth_throttle_cleanup(): void
 
 /**
  * Return the current throttle row for a bucket and hashed subject.
+ *
+ * @param string $bucket Bucket value.
+ * @param string $subjectHash Subject hash value.
+ * @return ?array Structured result data for the caller.
  */
 function auth_throttle_row(string $bucket, string $subjectHash): ?array
 {
@@ -124,6 +150,10 @@ function auth_throttle_row(string $bucket, string $subjectHash): ?array
 
 /**
  * Check whether an action is currently allowed for a bucket and subject.
+ *
+ * @param string $bucket Bucket value.
+ * @param string $subject Subject value.
+ * @return array Structured result data for the caller.
  */
 function auth_throttle_check(string $bucket, string $subject): array
 {
@@ -153,6 +183,9 @@ function auth_throttle_check(string $bucket, string $subject): array
 
 /**
  * Record one failed or counted authentication-related attempt.
+ *
+ * @param string $bucket Bucket value.
+ * @param string $subject Subject value.
  */
 function auth_throttle_record_attempt(string $bucket, string $subject): void
 {
@@ -182,6 +215,9 @@ function auth_throttle_record_attempt(string $bucket, string $subject): void
 
 /**
  * Clear throttle rows after a successful login.
+ *
+ * @param string $bucket Bucket value.
+ * @param string $subject Subject value.
  */
 function auth_throttle_clear(string $bucket, string $subject): void
 {
@@ -195,6 +231,12 @@ function auth_throttle_clear(string $bucket, string $subject): void
 
 /**
  * Log a rate-limit event without storing raw IP addresses or submitted identifiers.
+ *
+ * @param string $eventKey Event key value.
+ * @param string $message Message value.
+ * @param string $bucket Bucket value.
+ * @param string $subject Subject value.
+ * @param array $check Check value.
  */
 function auth_throttle_log(string $eventKey, string $message, string $bucket, string $subject, array $check): void
 {
@@ -207,7 +249,7 @@ function auth_throttle_log(string $eventKey, string $message, string $bucket, st
         'subject_sha256' => auth_throttle_subject_hash($subject),
         'attempts' => (int) ($check['attempts'] ?? 0),
         'retry_after_seconds' => (int) ($check['retry_after_seconds'] ?? 0),
-        'visitor_hash' => function_exists('visitor_hash') ? visitor_hash() : '',
+        'visitor_hash' => function_exists('Gallery\\Core\\visitor_hash') ? visitor_hash() : '',
         'request_id' => function_exists('telemetry_request_id') ? telemetry_request_id() : '',
     ], ['category' => 'security', 'severity' => 'warning']);
 }

@@ -32,6 +32,22 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\slugify;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_zip_signature;
+use function Gallery\Services\image_abs_path;
+use function Gallery\Services\image_public_display_file;
+use function Gallery\Services\picture_manager_normalize_image_ids;
+use function Gallery\Services\picture_manager_owned_images_for_selection;
+use function Gallery\Services\public_image_visible_to_current_visitor;
+use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery;
+
 /**
  * Download and ZIP service model.
  *
@@ -47,6 +63,8 @@
 
 /**
  * Ensure the ZIP cache folder exists and return its normalized path.
+ *
+ * @return string Text result for the caller.
  */
 function zip_cache_dir(): string
 {
@@ -60,6 +78,8 @@ function zip_cache_dir(): string
 
 /**
  * Return the number of seconds a generated ZIP file may remain in cache.
+ *
+ * @return int Integer result for the caller.
  */
 function zip_cache_ttl_seconds(): int
 {
@@ -68,6 +88,10 @@ function zip_cache_ttl_seconds(): int
 
 /**
  * Return true when a cached ZIP path is still inside the ZIP cache and fresh enough to reuse.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param ?int $now Now value.
+ * @return bool True when the condition matches.
  */
 function zip_cache_file_is_fresh(string $filePath, ?int $now = null): bool
 {
@@ -88,6 +112,9 @@ function zip_cache_file_is_fresh(string $filePath, ?int $now = null): bool
 
 /**
  * Remove expired generated ZIP files and database rows from the ZIP cache.
+ *
+ * @param ?int $now Now value.
+ * @return array Structured result data for the caller.
  */
 function cleanup_expired_zip_cache(?int $now = null): array
 {
@@ -154,6 +181,10 @@ function cleanup_expired_zip_cache(?int $now = null): array
 
 /**
  * Return descendant galleries for one gallery, including the gallery itself.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function gallery_zip_gallery_rows(array $gallery, bool $publicOnly): array
 {
@@ -180,6 +211,9 @@ function gallery_zip_gallery_rows(array $gallery, bool $publicOnly): array
 
 /**
  * Return gallery IDs from rows as integer values.
+ *
+ * @param array $galleries Galleries value.
+ * @return array Structured result data for the caller.
  */
 function gallery_zip_gallery_ids(array $galleries): array
 {
@@ -193,6 +227,8 @@ function gallery_zip_gallery_ids(array $galleries): array
 
 /**
  * Build a content signature for the admin "all galleries" ZIP cache entry.
+ *
+ * @return string Text result for the caller.
  */
 function all_zip_signature(): string
 {
@@ -206,6 +242,10 @@ function all_zip_signature(): string
 
 /**
  * Create or reuse a ZIP archive for one gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param bool $publicOnly Public only value.
+ * @return string Text result for the caller.
  */
 function build_gallery_zip(int $galleryId, bool $publicOnly): string
 {
@@ -399,6 +439,8 @@ function build_selected_images_zip(int $sourceGalleryId, array $imageIds): strin
 
 /**
  * Create or reuse a ZIP archive containing every imported gallery.
+ *
+ * @return string Text result for the caller.
  */
 function build_all_zip(): string
 {
@@ -439,6 +481,10 @@ function build_all_zip(): string
 
 /**
  * Produce the directories and files that should be stored in a gallery ZIP.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function gallery_zip_entries(array $gallery, bool $publicOnly): array
 {
@@ -447,6 +493,10 @@ function gallery_zip_entries(array $gallery, bool $publicOnly): array
 
 /**
  * Produce ZIP entries from already selected gallery rows.
+ *
+ * @param array $galleries Galleries value.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly): array
 {
@@ -529,6 +579,9 @@ function gallery_zip_entries_from_galleries(array $galleries, bool $publicOnly):
 
 /**
  * Write a ZIP archive to disk.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param array $entries Entries value.
  */
 function create_zip(string $filePath, array $entries): void
 {
@@ -565,6 +618,9 @@ function create_zip(string $filePath, array $entries): void
 
 /**
  * Stream a ZIP file to the browser and stop processing.
+ *
+ * @param string $filePath File path filesystem path.
+ * @param string $downloadName Download name value.
  */
 function send_download(string $filePath, string $downloadName): never
 {

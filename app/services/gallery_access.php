@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Gallery access model.
  * 
@@ -43,6 +52,8 @@ declare(strict_types=1);
 
 /**
  * Return canonical gallery visibility values used by the simplified public model.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_visibility_values(): array
 {
@@ -51,6 +62,9 @@ function gallery_visibility_values(): array
 
 /**
  * Normalize legacy and current gallery visibility values to the public model.
+ *
+ * @param string $visibility Visibility value.
+ * @return string Text result for the caller.
  */
 function normalize_gallery_visibility(string $visibility): string
 {
@@ -63,6 +77,9 @@ function normalize_gallery_visibility(string $visibility): string
 
 /**
  * Return the effective visibility for a gallery row, including legacy listing flags.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_effective_visibility(array $gallery): string
 {
@@ -75,6 +92,9 @@ function gallery_effective_visibility(array $gallery): string
 
 /**
  * Return the database value to store for one gallery visibility.
+ *
+ * @param string $visibility Visibility value.
+ * @return string Text result for the caller.
  */
 function gallery_visibility_storage_value(string $visibility): string
 {
@@ -87,6 +107,8 @@ function gallery_visibility_storage_value(string $visibility): string
 
 /**
  * Return true when the current galleries.visibility enum accepts unpublished.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_visibility_schema_supports_unpublished(): bool
 {
@@ -105,6 +127,9 @@ function gallery_visibility_schema_supports_unpublished(): bool
 
 /**
  * Return the UI label for one canonical gallery visibility value.
+ *
+ * @param string $visibility Visibility value.
+ * @return string Text result for the caller.
  */
 function gallery_visibility_label(string $visibility): string
 {
@@ -117,12 +142,22 @@ function gallery_visibility_label(string $visibility): string
 
 /**
  * Return true when anonymous visitors may request this gallery by its normal URL.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_allows_direct_public_request(array $gallery): bool
 {
     return in_array(gallery_effective_visibility($gallery), ['public', 'unpublished'], true);
 }
 
+/**
+ * Handle admin feature schema ready.
+ *
+ * Part of the related application service.
+ *
+ * @return bool True when the condition matches.
+ */
 function admin_feature_schema_ready(): bool
 {
     return picture_game_schema_ready() && admin_log_schema_ready() && exif_gps_schema_ready() && gallery_access_schema_ready() && nsfw_guard_schema_ready();
@@ -130,6 +165,7 @@ function admin_feature_schema_ready(): bool
 
 /**
  * Handles gallery access schema ready logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function gallery_access_schema_ready(): bool
@@ -151,6 +187,8 @@ function gallery_access_schema_ready(): bool
 
 /**
  * Return true when the NSFW Guard database columns are available.
+ *
+ * @return bool True when the condition matches.
  */
 function nsfw_guard_schema_ready(): bool
 {
@@ -174,6 +212,9 @@ function nsfw_guard_schema_ready(): bool
 
 /**
  * Return the nearest gallery that applies an inherited NSFW restriction.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return ?array Structured result data for the caller.
  */
 function gallery_nsfw_requirement(array $gallery): ?array
 {
@@ -197,6 +238,10 @@ function gallery_nsfw_requirement(array $gallery): ?array
 
 /**
  * Return true when one image is restricted by its own flag or by gallery ancestry.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function image_nsfw_restricted(array $image, array $gallery): bool
 {
@@ -208,6 +253,10 @@ function image_nsfw_restricted(array $image, array $gallery): bool
 
 /**
  * Return true when one public image may be exposed to the current visitor.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function public_image_visible_to_current_visitor(array $image, array $gallery): bool
 {
@@ -225,6 +274,10 @@ function public_image_visible_to_current_visitor(array $image, array $gallery): 
 
 /**
  * Return true when public media for one gallery needs private cache semantics.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function public_media_needs_private_cache(array $gallery, ?array $image = null): bool
 {
@@ -236,6 +289,8 @@ function public_media_needs_private_cache(array $gallery, ?array $image = null):
 
 /**
  * Build the single session key used for NSFW age acknowledgment.
+ *
+ * @return string Text result for the caller.
  */
 function nsfw_guard_session_key(): string
 {
@@ -252,6 +307,8 @@ function grant_nsfw_guard_access(): void
 
 /**
  * Return true when this visitor already confirmed the NSFW warning in session.
+ *
+ * @return bool True when the condition matches.
  */
 function nsfw_guard_session_is_valid(): bool
 {
@@ -264,6 +321,8 @@ function nsfw_guard_session_is_valid(): bool
  * The current CMS user schema does not define age or birth-date columns. This
  * helper still supports future installs that add one of the common fields, and
  * otherwise treats age as unknown so the normal session confirmation is used.
+ *
+ * @return bool True when the condition matches.
  */
 function current_user_is_known_under_18(): bool
 {
@@ -295,6 +354,8 @@ function current_user_is_known_under_18(): bool
 
 /**
  * Return true when the current visitor may pass NSFW Guard.
+ *
+ * @return bool True when the condition matches.
  */
 function visitor_can_access_nsfw_content(): bool
 {
@@ -309,6 +370,7 @@ function visitor_can_access_nsfw_content(): bool
 
 /**
  * Handles gallery has password policy logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -319,6 +381,7 @@ function gallery_has_password_policy(array $gallery): bool
 
 /**
  * Handles gallery access requirement logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -344,6 +407,7 @@ function gallery_access_requirement(array $gallery): ?array
 
 /**
  * Handles gallery access session key logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -354,6 +418,7 @@ function gallery_access_session_key(int $galleryId): string
 
 /**
  * Handles gallery access lifetime seconds logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function gallery_access_lifetime_seconds(): int
@@ -363,8 +428,8 @@ function gallery_access_lifetime_seconds(): int
 
 /**
  * Handles grant gallery public access logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function grant_gallery_public_access(int $galleryId): void
 {
@@ -373,6 +438,7 @@ function grant_gallery_public_access(int $galleryId): void
 
 /**
  * Handles gallery public access session is valid logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -394,6 +460,7 @@ function gallery_public_access_session_is_valid(int $galleryId): bool
 
 /**
  * Handles request share token allows gallery logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -421,6 +488,7 @@ function request_share_token_allows_gallery(array $gallery): bool
 
 /**
  * Handles visitor can access gallery logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -453,6 +521,7 @@ function visitor_can_access_gallery(array $gallery): bool
 
 /**
  * Handles gallery is public listed logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -469,6 +538,7 @@ function gallery_is_public_listed(array $gallery): bool
 
 /**
  * Handles regenerate gallery share token logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $expiresAt Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -493,8 +563,8 @@ function regenerate_gallery_share_token(int $galleryId, ?string $expiresAt): str
 
 /**
  * Handles revoke gallery share token logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function revoke_gallery_share_token(int $galleryId): void
 {
@@ -507,6 +577,7 @@ function revoke_gallery_share_token(int $galleryId): void
 
 /**
  * Handles gallery access share token schema ready logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function gallery_access_share_token_schema_ready(): bool
@@ -522,6 +593,7 @@ function gallery_access_share_token_schema_ready(): bool
 
 /**
  * Handles gallery share token for admin logic for the gallery application.
+ *
  * @param mixed $gallery Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -558,6 +630,7 @@ function gallery_share_token_for_admin(array $gallery): ?string
 
 /**
  * Handles encrypt gallery share token logic for the gallery application.
+ *
  * @param mixed $token Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -580,6 +653,7 @@ function encrypt_gallery_share_token(string $token): ?string
 
 /**
  * Handles decrypt gallery share token logic for the gallery application.
+ *
  * @param mixed $stored Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -606,6 +680,7 @@ function decrypt_gallery_share_token(string $stored): ?string
 
 /**
  * Handles gallery share token key logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function gallery_share_token_key(): string

@@ -38,8 +38,13 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/services/app_settings.php';
 
 if (!function_exists('t')) {
-    /**
+        /**
      * Minimal translation shim for this database-free service test.
+     *
+     * @param string $key Lookup key.
+     * @param string $fallback Fallback value.
+     * @param array $parameters Parameters value.
+     * @return string Text result for the caller.
      */
     function t(string $key, string $fallback = '', array $parameters = []): string
     {
@@ -53,8 +58,12 @@ if (!function_exists('t')) {
 $GLOBALS['gallery_lightbox_mode_test_schema_ready'] = true;
 
 if (!function_exists('db_column_exists')) {
-    /**
+        /**
      * Minimal schema shim used to exercise both migrated and pre-migration flows.
+     *
+     * @param string $table Table value.
+     * @param string $column Column value.
+     * @return bool True when the condition matches.
      */
     function db_column_exists(string $table, string $column): bool
     {
@@ -68,6 +77,10 @@ require_once __DIR__ . '/../app/services/gallery_lightbox_mode.php';
 
 /**
  * Assert that two values are identical.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $message Message value.
  */
 function assert_gallery_lightbox_mode_same(mixed $expected, mixed $actual, string $message): void
 {

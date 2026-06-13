@@ -34,6 +34,10 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\asset_url;
+
 /**
  * Resolve the active custom CSS file path.
  *
@@ -41,6 +45,8 @@ declare(strict_types=1);
  * dirname(__DIR__, 2). Keeping this calculation local prevents the path
  * regression that previously happened when theme-adjacent helpers were moved
  * out of app/services.php.
+ *
+ * @return string Text result for the caller.
  */
 function custom_css_path(): string
 {
@@ -53,6 +59,8 @@ function custom_css_path(): string
  * Preset files stay outside public/assets/ on purpose. The admin page copies
  * a selected preset into the active public stylesheet instead of serving the
  * preset directory directly.
+ *
+ * @return string Text result for the caller.
  */
 function custom_css_preset_dir(): string
 {
@@ -65,6 +73,8 @@ function custom_css_preset_dir(): string
  * The returned array keeps the filename as the stable UI key and the absolute
  * file path as the copy source. This preserves the existing admin behavior
  * while moving the path handling into a dedicated service.
+ *
+ * @return array Structured result data for the caller.
  */
 function custom_css_presets(): array
 {
@@ -91,6 +101,9 @@ function custom_css_presets(): array
  *
  * Only plain filenames ending in .css are accepted. This prevents directory
  * traversal while keeping the existing admin form contract unchanged.
+ *
+ * @param string $filename Filename value.
+ * @return ?string Text result for the caller.
  */
 function custom_css_preset_path(string $filename): ?string
 {
@@ -108,6 +121,8 @@ function custom_css_preset_path(string $filename): ?string
  *
  * The actual file is still public/assets/custom.css. This helper only decides
  * whether the optional stylesheet should be advertised to the browser.
+ *
+ * @return ?string Text result for the caller.
  */
 function custom_css_url(): ?string
 {

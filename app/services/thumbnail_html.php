@@ -34,8 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\e;
+
 /**
  * Handles progressive thumbnail picture html logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $fallbackSize Input used by this operation.
  * @param mixed $srcsetSizes Input used by this operation.
@@ -43,6 +48,7 @@ declare(strict_types=1);
  * @param mixed $finalSizes Input used by this operation.
  * @param mixed $alt Input used by this operation.
  * @param mixed $extraAttributes Input used by this operation.
+ * @param ?array $thumbnailBundle Thumbnail bundle value.
  * @return mixed Result produced by this operation.
  */
 function thumbnail_progressive_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $initialSizes, string $finalSizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string
@@ -50,7 +56,7 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
     // $thumbnailBundle stores all generated thumbnail variants resolved once for this image during the current request.
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
     // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
-    $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    $preferredFormat = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
     // $selectedFallback stores the first image URL and whether it had to fall back to the original media file.
     $selectedFallback = thumbnail_bundle_select_variant($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $fallbackUrl stores the small first image used for the initial responsive paint.
@@ -93,12 +99,14 @@ function thumbnail_progressive_picture_html(array $image, int $fallbackSize, arr
 
 /**
  * Handles thumbnail picture html logic for the gallery application.
+ *
  * @param mixed $image Input used by this operation.
  * @param mixed $fallbackSize Input used by this operation.
  * @param mixed $srcsetSizes Input used by this operation.
  * @param mixed $sizes Input used by this operation.
  * @param mixed $alt Input used by this operation.
  * @param mixed $extraAttributes Input used by this operation.
+ * @param ?array $thumbnailBundle Thumbnail bundle value.
  * @return mixed Result produced by this operation.
  */
 function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSizes, string $sizes, string $alt, string $extraAttributes = '', ?array $thumbnailBundle = null): string
@@ -106,7 +114,7 @@ function thumbnail_picture_html(array $image, int $fallbackSize, array $srcsetSi
     // $thumbnailBundle stores all generated thumbnail variants resolved once for this image during the current request.
     $thumbnailBundle = $thumbnailBundle ?: thumbnail_bundle($image);
     // $preferredFormat stores whether the active cache policy wants WebP or legacy JPEG fallback URLs.
-    $preferredFormat = function_exists('thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
+    $preferredFormat = function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg';
     // $selectedFallback stores the first image URL and whether it had to fall back to the original media file.
     $selectedFallback = thumbnail_bundle_select_variant($thumbnailBundle, $fallbackSize, $preferredFormat);
     // $fallbackUrl stores an intermediate value used by the surrounding gallery workflow.

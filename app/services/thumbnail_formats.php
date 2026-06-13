@@ -34,8 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Imagick;
+use Throwable;
+use function Gallery\Core\is_dng_image_path;
+
 /**
  * Handles thumbnail webp required for source logic for the gallery application.
+ *
  * @param mixed $sourcePath Input used by this operation.
  * @param mixed $mime Input used by this operation.
  * @return mixed Result produced by this operation.
@@ -45,8 +52,8 @@ function thumbnail_webp_required_for_source(string $sourcePath, string $mime): b
     if (!function_exists('imagewebp')) {
         return false;
     }
-    if ($mime === 'image/x-adobe-dng' || (function_exists('is_dng_image_path') && is_dng_image_path($sourcePath))) {
-        return function_exists('dng_derivative_generation_supported') && dng_derivative_generation_supported();
+    if ($mime === 'image/x-adobe-dng' || (function_exists('Gallery\\Core\\is_dng_image_path') && is_dng_image_path($sourcePath))) {
+        return function_exists('Gallery\\Services\\dng_derivative_generation_supported') && dng_derivative_generation_supported();
     }
 
     return in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true);
@@ -59,6 +66,8 @@ function thumbnail_webp_required_for_source(string $sourcePath, string $mime): b
  * In that state class_exists('Imagick') is true, but writeImage() still fails
  * for WebP targets. The maintenance scanner must not require WebP variants
  * that the generator will refuse or fail to create.
+ *
+ * @return bool True when the condition matches.
  */
 function thumbnail_imagick_webp_available(): bool
 {
@@ -82,14 +91,16 @@ function thumbnail_imagick_webp_available(): bool
  * dashboard counts, warmup repair, and upload thumbnail creation agree about
  * which output files should exist.
  *
- * @return array<int, string>
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return array<int string>.
  */
 function thumbnail_target_formats_for_source(string $sourcePath, string $mime): array
 {
     // $webpAvailable stores whether the current runtime can write a WebP variant for this source.
     $webpAvailable = $mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime);
 
-    if (function_exists('thumbnail_formats_for_compatibility_policy')) {
+    if (function_exists('Gallery\\Services\\thumbnail_formats_for_compatibility_policy')) {
         return thumbnail_formats_for_compatibility_policy($sourcePath, $mime, $webpAvailable);
     }
 
@@ -108,13 +119,17 @@ function thumbnail_target_formats_for_source(string $sourcePath, string $mime): 
 
 /**
  * Return the number of WebP variants intentionally not required for one source image.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return int Integer result for the caller.
  */
 function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $mime): int
 {
     if (function_exists('imagewebp')) {
         return 0;
     }
-    if (function_exists('thumbnail_policy_requested_formats') && in_array('webp', thumbnail_policy_requested_formats(), true)) {
+    if (function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') && in_array('webp', thumbnail_policy_requested_formats(), true)) {
         return count(thumbnail_sizes());
     }
     return 0;
@@ -123,6 +138,10 @@ function thumbnail_intentionally_skipped_webp_count(string $sourcePath, string $
 
 /**
  * Return why the current runtime cannot write WebP for one source image.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @return ?string Text result for the caller.
  */
 function thumbnail_webp_unavailable_reason_for_source(string $sourcePath, string $mime): ?string
 {
@@ -141,8 +160,10 @@ function thumbnail_webp_unavailable_reason_for_source(string $sourcePath, string
 /**
  * Return the complete thumbnail generation policy for logging and diagnostics.
  *
- * @param array<int, int>|null $requestedSizes Sizes requested by the current operation. Null means all enabled sizes.
- * @return array<string, mixed>
+ * @param string $sourcePath Source filesystem path.
+ * @param string $mime Mime value.
+ * @param ?array $requestedSizes Requested sizes value.
+ * @return array<string mixed>.
  */
 function thumbnail_generation_policy_summary(string $sourcePath, string $mime, ?array $requestedSizes = null): array
 {
@@ -153,21 +174,21 @@ function thumbnail_generation_policy_summary(string $sourcePath, string $mime, ?
         ? $enabledSizes
         : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, $enabledSizes, true))));
     // $requestedFormats stores the configured output intent before runtime capability checks.
-    $requestedFormats = function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
+    $requestedFormats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
     // $targetFormats stores the actual formats the generator is allowed to create for this source.
     $targetFormats = thumbnail_target_formats_for_source($sourcePath, $mime);
     // $webpAvailable stores the source-specific WebP capability used to produce target formats.
     $webpAvailable = $mime !== '' && thumbnail_webp_required_for_source($sourcePath, $mime);
 
     return [
-        'mode' => function_exists('thumbnail_compatibility_mode_log_value') ? thumbnail_compatibility_mode_log_value() : 'jpg_plus_webp',
-        'compatibility_mode' => function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'legacy',
+        'mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode_log_value') ? thumbnail_compatibility_mode_log_value() : 'jpg_plus_webp',
+        'compatibility_mode' => function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'legacy',
         'formats_requested' => $requestedFormats,
         'target_formats' => $targetFormats,
         'enabled_sizes' => $enabledSizes,
         'requested_sizes' => $operationSizes,
-        'jpg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
         'webp_available_for_source' => $webpAvailable,
         'webp_unavailable_reason' => $webpAvailable ? null : thumbnail_webp_unavailable_reason_for_source($sourcePath, $mime),
     ];

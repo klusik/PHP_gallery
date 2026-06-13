@@ -34,6 +34,30 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_tag_rows;
+use function Gallery\Services\admin_tag_usage_rows;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\delete_tag_by_id;
+use function Gallery\Services\find_tag_by_id;
+use function Gallery\Services\normalize_existing_tags;
+use function Gallery\Services\normalize_gallery_sidecar_tags_recursively;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_description_schema_ready;
+use function Gallery\Services\update_tag_metadata;
+
 /**
  * Render and process the admin tag editor.
  */
@@ -267,6 +291,9 @@ function cms_admin_tags(): void
 
 /**
  * Render the selected tag edit form.
+ *
+ * @param array $tag Tag value.
+ * @param string $sortMode Sort mode value.
  */
 function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 {
@@ -291,6 +318,8 @@ function render_admin_tag_form(array $tag, string $sortMode = 'usage'): void
 
 /**
  * Return whether the current admin tag request expects JSON.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_tags_request_wants_json(): bool
 {
@@ -299,6 +328,9 @@ function admin_tags_request_wants_json(): bool
 
 /**
  * Send a JSON response for the admin tag editor and stop execution.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function admin_tags_json_response(array $payload, int $status = 200): void
 {
@@ -310,6 +342,9 @@ function admin_tags_json_response(array $payload, int $status = 200): void
 
 /**
  * Keep delete fallbacks on same-origin relative URLs only.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function admin_tags_safe_return_url(string $url): string
 {
@@ -325,6 +360,9 @@ function admin_tags_safe_return_url(string $url): string
 
 /**
  * Return localized validation errors for the admin tag form.
+ *
+ * @param string $code Code value.
+ * @return string Text result for the caller.
  */
 function admin_tags_error_message(string $code): string
 {

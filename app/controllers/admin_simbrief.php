@@ -35,12 +35,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\simbrief_description_build_markdown;
+use function Gallery\Services\simbrief_description_extract_details;
+use function Gallery\Services\simbrief_description_fetch_latest_ofp;
+use function Gallery\Services\simbrief_description_identifier;
+use function Gallery\Services\simbrief_description_save_ofp_for_gallery;
+use function Gallery\Services\simbrief_description_save_route_map_from_ofp;
+use function Gallery\Services\t;
+use function Gallery\Views\view_simbrief_description_markdown;
+
 /**
  * Send a SimBrief JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
  * @param int $statusCode HTTP status code.
- * @return void
  */
 function admin_simbrief_json_response(array $payload, int $statusCode = 200): void
 {
@@ -51,8 +66,6 @@ function admin_simbrief_json_response(array $payload, int $statusCode = 200): vo
 
 /**
  * Generate a gallery-description draft from the latest SimBrief OFP.
- *
- * @return void
  */
 function cms_admin_simbrief_description(): void
 {
@@ -84,13 +97,13 @@ function cms_admin_simbrief_description(): void
         );
         $payload = simbrief_description_fetch_latest_ofp($identifier);
         $details = simbrief_description_extract_details($payload);
-        $description = function_exists('view_simbrief_description_markdown')
+        $description = function_exists('Gallery\\Views\\view_simbrief_description_markdown')
             ? view_simbrief_description_markdown($details)
             : simbrief_description_build_markdown($details);
-        $routeResult = function_exists('simbrief_description_save_route_map_from_ofp')
+        $routeResult = function_exists('Gallery\\Services\\simbrief_description_save_route_map_from_ofp')
             ? simbrief_description_save_route_map_from_ofp($galleryId, $payload, $details)
             : ['saved' => false, 'route_text' => '', 'point_count' => 0, 'unresolved_count' => 0, 'points' => [], 'unresolved' => []];
-        $ofpResult = function_exists('simbrief_description_save_ofp_for_gallery')
+        $ofpResult = function_exists('Gallery\\Services\\simbrief_description_save_ofp_for_gallery')
             ? simbrief_description_save_ofp_for_gallery($gallery, $payload, $identifier, $details, $routeResult)
             : ['saved' => false, 'path' => '', 'manifest_path' => '', 'filename' => 'simbrief-ofp.json', 'error' => 'OFP storage helper is unavailable.'];
 

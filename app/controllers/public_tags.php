@@ -34,6 +34,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\find_tag_by_slug;
+use function Gallery\Services\public_galleries_for_tag;
+use function Gallery\Services\t;
+use function Gallery\Services\tag_description_schema_ready;
+
 /**
  * Tag and voting controllers.
  *
@@ -84,6 +98,8 @@ function cms_tag(): void
  * The edit action uses the reusable right-side admin panel. The delete action
  * remains a CSRF-protected form with a normal POST fallback, matching gallery
  * and photo contextual controls on public pages.
+ *
+ * @param array $tag Tag value.
  */
 function render_public_tag_admin_actions(array $tag): void
 {
@@ -100,6 +116,8 @@ function render_public_tag_admin_actions(array $tag): void
 
 /**
  * Render the public tag delete action for logged-in admins.
+ *
+ * @param array $tag Tag value.
  */
 function render_public_tag_admin_delete_form(array $tag): void
 {
@@ -119,6 +137,9 @@ function render_public_tag_admin_delete_form(array $tag): void
 
 /**
  * Render clickable tag pills.
+ *
+ * @param array $tags Tags value.
+ * @param ?string $label Label value.
  */
 function render_tag_list(array $tags, ?string $label = null): void
 {
@@ -142,6 +163,9 @@ function render_tag_list(array $tags, ?string $label = null): void
  * helper keeps card metadata visually stable beside the optional manual date
  * by showing the first tags inline and replacing the remaining tags with a
  * compact ellipsis indicator.
+ *
+ * @param array $tags Tags value.
+ * @param int $visibleLimit Visible limit value.
  */
 function render_compact_tag_list(array $tags, int $visibleLimit = 3): void
 {

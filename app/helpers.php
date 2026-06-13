@@ -34,8 +34,72 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDO;
+use RuntimeException;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\application_update_nav_label;
+use function Gallery\Services\application_update_pending;
+use function Gallery\Services\cms_github_project_url;
+use function Gallery\Services\custom_css_path;
+use function Gallery\Services\custom_css_url;
+use function Gallery\Services\dev_mode_enabled;
+use function Gallery\Services\dng_conversion_supported;
+use function Gallery\Services\favicon_asset_url;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_branding_asset_url;
+use function Gallery\Services\gallery_branding_schema_ready;
+use function Gallery\Services\gallery_cover_collage_images;
+use function Gallery\Services\gallery_cover_image;
+use function Gallery\Services\gallery_nsfw_requirement;
+use function Gallery\Services\heic_conversion_supported;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\public_gallery_metadata;
+use function Gallery\Services\public_gallery_sitemap_entries;
+use function Gallery\Services\public_render_profile_count;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\public_sitemap_entries;
+use function Gallery\Services\public_sitemap_image_last_modified;
+use function Gallery\Services\public_sitemap_lastmod;
+use function Gallery\Services\site_name;
+use function Gallery\Services\t;
+use function Gallery\Services\theme_branding_asset_url;
+use function Gallery\Services\theme_favorite_gallery_navigation_items;
+use function Gallery\Services\theme_page_width_mode;
+use function Gallery\Services\theme_settings;
+use function Gallery\Services\thumbnail_abs_path;
+use function Gallery\Services\thumbnail_existing_fallback;
+use function Gallery\Services\thumbnail_serving_url;
+use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\translation_active_language;
+use function Gallery\Services\translation_default_language;
+use function Gallery\Services\translation_load_language;
+use function Gallery\Services\url_rewrite_should_emit_clean_urls;
+use function Gallery\Views\view_admin_menu_item_is_active;
+use function Gallery\Views\view_admin_menu_structure;
+use function Gallery\Views\view_cms_browser_i18n_strings;
+use function Gallery\Views\view_public_header_branding_model;
+use function Gallery\Views\view_render_admin_sidebar;
+use function Gallery\Views\view_render_admin_subtab_panel;
+use function Gallery\Views\view_render_admin_subtabs;
+use function Gallery\Views\view_render_admin_tab_panel;
+use function Gallery\Views\view_render_admin_tabs;
+use function Gallery\Views\view_render_browser_i18n_script;
+use function Gallery\Views\view_render_footer;
+use function Gallery\Views\view_render_gallery_json_ld;
+use function Gallery\Views\view_render_header;
+use function Gallery\Views\view_render_link_tag;
+use function Gallery\Views\view_render_meta_tag;
+use function Gallery\Views\view_render_missing_admin_email_notice;
+use function Gallery\Views\view_render_public_seo_tags;
+
 /**
  * Escape text for safe HTML output.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function e(?string $value): string
 {
@@ -44,6 +108,8 @@ function e(?string $value): string
 
 /**
  * Return whether the current request reached the app through HTTPS.
+ *
+ * @return bool True when the condition matches.
  */
 function request_is_https(): bool
 {
@@ -65,6 +131,8 @@ function request_is_https(): bool
 
 /**
  * Return the current request host without a port.
+ *
+ * @return string Text result for the caller.
  */
 function request_host_name(): string
 {
@@ -75,6 +143,8 @@ function request_host_name(): string
 
 /**
  * Return the base path implied by the current front controller request.
+ *
+ * @return string Text result for the caller.
  */
 function request_script_base_path(): string
 {
@@ -93,6 +163,9 @@ function request_script_base_path(): string
 
 /**
  * Keep configured absolute URLs compatible with the current HTTPS request.
+ *
+ * @param string $base Base value.
+ * @return string Text result for the caller.
  */
 function request_aware_base_url(string $base): string
 {
@@ -140,6 +213,9 @@ function request_aware_base_url(string $base): string
 
 /**
  * Build an absolute or root-relative URL using the configured base URL.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function base_url(string $path = ''): string
 {
@@ -163,6 +239,8 @@ function base_url(string $path = ''): string
  * The value is intentionally stored as a relative URI from REQUEST_URI rather
  * than as a full absolute URL. That keeps the login workflow tied to this same
  * installation and avoids trusting a host supplied by the browser.
+ *
+ * @return string Text result for the caller.
  */
 function current_login_return_target(): string
 {
@@ -181,6 +259,10 @@ function current_login_return_target(): string
  * Only same-site relative URLs are accepted. Absolute URLs, protocol-relative
  * URLs, login/logout routes, setup routes, and malformed values are ignored so
  * the login form cannot be abused as an open redirect.
+ *
+ * @param string $target Target value.
+ * @param string $fallback Fallback value.
+ * @return string Text result for the caller.
  */
 function sanitize_login_return_target(string $target, string $fallback = ''): string
 {
@@ -244,6 +326,10 @@ function sanitize_login_return_target(string $target, string $fallback = ''): st
 
 /**
  * Build a query-string route URL.
+ *
+ * @param string $page Page number or page data.
+ * @param array $params Params value.
+ * @return string Text result for the caller.
  */
 function url_for(string $page, array $params = []): string
 {
@@ -257,6 +343,8 @@ function url_for(string $page, array $params = []): string
 
 /**
  * Build the public base URL for canonical and sitemap output.
+ *
+ * @return string Text result for the caller.
  */
 function public_base_url(): string
 {
@@ -274,6 +362,9 @@ function public_base_url(): string
 
 /**
  * Convert an app URL to an absolute public URL for crawler-facing metadata.
+ *
+ * @param string $url URL used by this workflow.
+ * @return string Text result for the caller.
  */
 function absolute_public_url(string $url): string
 {
@@ -295,6 +386,9 @@ function absolute_public_url(string $url): string
 
 /**
  * Encode one relative public path while preserving slashes.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function public_path_segment(string $path): string
 {
@@ -315,6 +409,8 @@ function public_path_segment(string $path): string
  *
  * The request keeps the admin session intact, but public controllers can use this
  * read-only flag to apply anonymous visibility, access gates, and navigation.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_anonymous_preview_active(): bool
 {
@@ -326,6 +422,10 @@ function admin_anonymous_preview_active(): bool
 
 /**
  * Add or remove the anonymous preview query flag for the supplied URL.
+ *
+ * @param string $url URL used by this workflow.
+ * @param bool $enabled Enabled flag.
+ * @return string Text result for the caller.
  */
 function anonymous_preview_url(string $url, bool $enabled): string
 {
@@ -373,6 +473,9 @@ function anonymous_preview_url(string $url, bool $enabled): string
 
 /**
  * Encode one relative gallery path for clean public URLs while preserving slashes.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_public_path_segment(string $folderPath): string
 {
@@ -381,6 +484,9 @@ function gallery_public_path_segment(string $folderPath): string
 
 /**
  * Build the preferred public URL for one gallery, using its clean public path when available.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_public_url(array $gallery): string
 {
@@ -402,6 +508,10 @@ function gallery_public_url(array $gallery): string
 
 /**
  * Build the preferred public URL for one image detail page.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function image_public_url(array $image, array $gallery): string
 {
@@ -430,6 +540,10 @@ function image_public_url(array $image, array $gallery): string
 
 /**
  * Build the preferred clean public media URL for one original image file.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function image_public_media_url(array $image, array $gallery): string
 {
@@ -438,6 +552,12 @@ function image_public_media_url(array $image, array $gallery): string
 
 /**
  * Build the preferred clean public thumbnail URL for one generated image variant.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @return string Text result for the caller.
  */
 function image_public_thumbnail_url(array $image, array $gallery, int $size, string $format = 'jpg'): string
 {
@@ -448,6 +568,9 @@ function image_public_thumbnail_url(array $image, array $gallery, int $size, str
 
 /**
  * Build the canonical public URL for one gallery.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function canonical_url_for_gallery(array $gallery): string
 {
@@ -456,6 +579,9 @@ function canonical_url_for_gallery(array $gallery): string
 
 /**
  * Return the best public title for one gallery page.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_seo_title(array $gallery): string
 {
@@ -466,6 +592,9 @@ function gallery_seo_title(array $gallery): string
 
 /**
  * Return the best public description for one gallery page.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_seo_description(array $gallery): string
 {
@@ -476,6 +605,11 @@ function gallery_seo_description(array $gallery): string
 
 /**
  * Build safe alt text for one gallery image.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $index Index value.
+ * @return string Text result for the caller.
  */
 function image_alt_text(array $image, array $gallery, int $index = 1): string
 {
@@ -507,7 +641,9 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
  * prefers an existing generated JPEG thumbnail because it is smaller than the
  * original upload and does not depend on WebP support in the crawler.
  *
- * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Structured result data for the caller.
  */
 function gallery_social_preview_image(array $gallery, array $images = []): ?array
 {
@@ -564,7 +700,10 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
 /**
  * Build crawler-facing metadata for one generated JPEG thumbnail.
  *
- * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null
+ * @param array $image Image row or image data.
+ * @param array $currentGallery Current gallery value.
+ * @param int $preferredSize Preferred size value.
+ * @return array{url:string,secure_url:string,type:string,width:int,height:int,alt:string}|null Structured result data for the caller.
  */
 function social_preview_image_from_thumbnail(array $image, array $currentGallery, int $preferredSize = 1280): ?array
 {
@@ -627,6 +766,10 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
  * Discord, Slack, Facebook, and other crawlers cache fetched preview images. A
  * version marker based on the generated thumbnail file keeps the URL stable for
  * normal sharing, but changes when the thumbnail is rebuilt.
+ *
+ * @param string $url URL used by this workflow.
+ * @param string $filePath File path filesystem path.
+ * @return string Text result for the caller.
  */
 function social_preview_cache_busted_url(string $url, string $filePath): string
 {
@@ -644,10 +787,14 @@ function social_preview_cache_busted_url(string $url, string $filePath): string
 
 /**
  * Emit one meta tag followed by a newline so crawler diagnostics are readable.
+ *
+ * @param string $attributeName Attribute name value.
+ * @param string $attributeValue Attribute value value.
+ * @param string $content Content value.
  */
 function render_meta_tag(string $attributeName, string $attributeValue, string $content): void
 {
-    if (function_exists('view_render_meta_tag')) {
+    if (function_exists('Gallery\\Views\\view_render_meta_tag')) {
         view_render_meta_tag($attributeName, $attributeValue, $content);
         return;
     }
@@ -656,10 +803,13 @@ function render_meta_tag(string $attributeName, string $attributeValue, string $
 
 /**
  * Emit one link tag followed by a newline so crawler diagnostics are readable.
+ *
+ * @param string $rel Rel value.
+ * @param string $href Href value.
  */
 function render_link_tag(string $rel, string $href): void
 {
-    if (function_exists('view_render_link_tag')) {
+    if (function_exists('Gallery\\Views\\view_render_link_tag')) {
         view_render_link_tag($rel, $href);
         return;
     }
@@ -668,10 +818,13 @@ function render_link_tag(string $rel, string $href): void
 
 /**
  * Render SEO tags for a gallery page.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
  */
 function render_public_seo_tags(array $gallery, array $images = []): void
 {
-    if (function_exists('view_render_public_seo_tags')) {
+    if (function_exists('Gallery\\Views\\view_render_public_seo_tags')) {
         view_render_public_seo_tags($gallery, $images);
         return;
     }
@@ -726,10 +879,13 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  * body, while crawler metadata stays capped to the visible pagination slice so
  * large galleries do not perform thumbnail resolution for every image during a
  * normal request.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
  */
 function render_gallery_json_ld(array $gallery, array $images = []): void
 {
-    if (function_exists('view_render_gallery_json_ld')) {
+    if (function_exists('Gallery\\Views\\view_render_gallery_json_ld')) {
         view_render_gallery_json_ld($gallery, $images);
         return;
     }
@@ -761,7 +917,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
         if (!empty($image['height'])) {
             $item['height'] = (int) $image['height'];
         }
-        if (function_exists('public_sitemap_lastmod')) {
+        if (function_exists('Gallery\\Services\\public_sitemap_lastmod')) {
             $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
             if ($dateModified !== null) {
                 $item['dateModified'] = $dateModified;
@@ -797,7 +953,7 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
 function output_sitemap_xml(): void
 {
     header('Content-Type: application/xml; charset=utf-8');
-    $entries = function_exists('public_sitemap_entries')
+    $entries = function_exists('Gallery\\Services\\public_sitemap_entries')
         ? public_sitemap_entries()
         : array_map(static fn (string $url): array => ['loc' => $url, 'images' => []], public_gallery_sitemap_entries());
 
@@ -959,13 +1115,13 @@ function unique_slug(PDO $pdo, string $title, ?int $excludeGalleryId = null): st
  */
 function admin_menu_structure(): array
 {
-    if (function_exists('view_admin_menu_structure')) {
+    if (function_exists('Gallery\\Views\\view_admin_menu_structure')) {
         return view_admin_menu_structure();
     }
     // $updatePending stores an intermediate value used by the surrounding gallery workflow.
-    $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
+    $updatePending = function_exists('Gallery\\Services\\application_update_pending') ? application_update_pending() : false;
     // $updateLabel stores an intermediate value used by the surrounding gallery workflow.
-    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
+    $updateLabel = function_exists('Gallery\\Services\\application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
     return [
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
@@ -1013,7 +1169,7 @@ function admin_menu_structure(): array
  */
 function admin_menu_item_is_active(array $item, string $currentPage): bool
 {
-    if (function_exists('view_admin_menu_item_is_active')) {
+    if (function_exists('Gallery\\Views\\view_admin_menu_item_is_active')) {
         return view_admin_menu_item_is_active($item, $currentPage);
     }
     // $itemPage stores an intermediate value used by the surrounding gallery workflow.
@@ -1047,7 +1203,7 @@ function admin_menu_item_is_active(array $item, string $currentPage): bool
  */
 function render_admin_tabs(array $tabs, string $activeId = ''): void
 {
-    if (function_exists('view_render_admin_tabs')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_tabs')) {
         view_render_admin_tabs($tabs, $activeId);
         return;
     }
@@ -1105,7 +1261,7 @@ function render_admin_tabs(array $tabs, string $activeId = ''): void
  */
 function render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
 {
-    if (function_exists('view_render_admin_tab_panel')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_tab_panel')) {
         view_render_admin_tab_panel($id, $contentHtml, $active);
         return;
     }
@@ -1132,7 +1288,7 @@ function render_admin_tab_panel(string $id, string $contentHtml, bool $active = 
  */
 function render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
 {
-    if (function_exists('view_render_admin_subtabs')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_subtabs')) {
         view_render_admin_subtabs($tabs, $activeId, $ariaLabel);
         return;
     }
@@ -1186,7 +1342,7 @@ function render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLa
  */
 function render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
 {
-    if (function_exists('view_render_admin_subtab_panel')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_subtab_panel')) {
         view_render_admin_subtab_panel($id, $contentHtml, $active);
         return;
     }
@@ -1202,7 +1358,7 @@ function render_admin_subtab_panel(string $id, string $contentHtml, bool $active
  */
 function render_admin_sidebar(string $currentPage): void
 {
-    if (function_exists('view_render_admin_sidebar')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_sidebar')) {
         view_render_admin_sidebar($currentPage);
         return;
     }
@@ -1215,7 +1371,7 @@ function render_admin_sidebar(string $currentPage): void
         foreach ((array) $group['items'] as $item) {
             // $featureKey stores the optional feature gate assigned to this menu item.
             $featureKey = (string) ($item['feature'] ?? '');
-            if ($featureKey !== '' && function_exists('feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+            if ($featureKey !== '' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
                 continue;
             }
             // $activeClass stores an intermediate value used by the surrounding gallery workflow.
@@ -1235,7 +1391,7 @@ function render_admin_sidebar(string $currentPage): void
  */
 function render_missing_admin_email_notice(?array $user, string $currentPage): void
 {
-    if (function_exists('view_render_missing_admin_email_notice')) {
+    if (function_exists('Gallery\\Views\\view_render_missing_admin_email_notice')) {
         view_render_missing_admin_email_notice($user, $currentPage);
         return;
     }
@@ -1259,7 +1415,7 @@ function render_missing_admin_email_notice(?array $user, string $currentPage): v
  */
 function public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
 {
-    if (function_exists('view_public_header_branding_model')) {
+    if (function_exists('Gallery\\Views\\view_public_header_branding_model')) {
         return view_public_header_branding_model($siteName, $currentGallery, $publicOnly, $bodyClass);
     }
     // $model stores URLs used by render_header without forcing callers to know the branding precedence.
@@ -1271,16 +1427,16 @@ function public_header_branding_model(string $siteName, ?array $currentGallery =
     if ($bodyClass !== 'public-page') {
         return $model;
     }
-    if ($currentGallery !== null && function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if ($currentGallery !== null && function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         // Per-gallery artwork overrides Theme fallback artwork on that gallery page.
         $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
         $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
         $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
     }
-    if ($model['banner_url'] === '' && function_exists('theme_branding_asset_url')) {
+    if ($model['banner_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
         $model['banner_url'] = theme_branding_asset_url('banner');
     }
-    if ($model['separator_url'] === '' && function_exists('theme_branding_asset_url')) {
+    if ($model['separator_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
         $model['separator_url'] = theme_branding_asset_url('separator');
     }
     return $model;
@@ -1314,7 +1470,7 @@ function favorite_gallery_nav_html(array $items): string
  */
 function render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
-    if (function_exists('view_render_header')) {
+    if (function_exists('Gallery\\Views\\view_render_header')) {
         view_render_header($title, $currentGallery, $publicOnly);
         return;
     }
@@ -1333,7 +1489,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     // $pageWidthClass stores a public layout class selected in Theme settings.
     // Admin pages intentionally keep their own workspace width so dense tables remain practical.
     $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
-    echo '<!doctype html><html lang="' . e(function_exists('translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
+    echo '<!doctype html><html lang="' . e(function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     // Variable $faviconUrl stores this steps working value.
@@ -1424,7 +1580,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
     // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
     $favoritePublicOnly = !$user || $anonymousPreview;
     // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
-    $favoriteGalleryItems = function_exists('theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
+    $favoriteGalleryItems = function_exists('Gallery\\Services\\theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
     echo favorite_gallery_nav_html($favoriteGalleryItems);
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
@@ -1552,7 +1708,7 @@ function cms_current_version(): string
  */
 function cms_browser_i18n_strings(): array
 {
-    if (function_exists('view_cms_browser_i18n_strings')) {
+    if (function_exists('Gallery\\Views\\view_cms_browser_i18n_strings')) {
         return view_cms_browser_i18n_strings();
     }
 
@@ -1648,7 +1804,7 @@ function cms_browser_i18n_strings(): array
  */
 function render_browser_i18n_script(): void
 {
-    if (function_exists('view_render_browser_i18n_script')) {
+    if (function_exists('Gallery\\Views\\view_render_browser_i18n_script')) {
         view_render_browser_i18n_script();
         return;
     }
@@ -1668,7 +1824,7 @@ function render_browser_i18n_script(): void
  */
 function render_footer(): void
 {
-    if (function_exists('view_render_footer')) {
+    if (function_exists('Gallery\\Views\\view_render_footer')) {
         view_render_footer();
         return;
     }
@@ -1727,11 +1883,11 @@ function supported_image_extensions(): array
 {
     // $extensions stores an intermediate value used by the surrounding gallery workflow.
     $extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    if (function_exists('heic_conversion_supported') && heic_conversion_supported()) {
+    if (function_exists('Gallery\\Services\\heic_conversion_supported') && heic_conversion_supported()) {
         $extensions[] = 'heic';
         $extensions[] = 'heif';
     }
-    if (function_exists('dng_conversion_supported') && dng_conversion_supported()) {
+    if (function_exists('Gallery\\Services\\dng_conversion_supported') && dng_conversion_supported()) {
         $extensions[] = 'dng';
     }
     return $extensions;

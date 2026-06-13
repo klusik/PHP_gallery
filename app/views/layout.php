@@ -34,6 +34,50 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\asset_url;
+use function Gallery\Core\cms_current_version;
+use function Gallery\Core\cms_footer_scripts_html;
+use function Gallery\Core\cms_head_extras_html;
+use function Gallery\Core\current_login_return_target;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\theme_cache_key;
+use function Gallery\Core\url_for;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\application_update_nav_label;
+use function Gallery\Services\application_update_pending;
+use function Gallery\Services\cms_github_project_url;
+use function Gallery\Services\custom_css_path;
+use function Gallery\Services\custom_css_url;
+use function Gallery\Services\dev_mode_enabled;
+use function Gallery\Services\favicon_asset_url;
+use function Gallery\Services\gallery_branding_asset_url;
+use function Gallery\Services\gallery_branding_schema_ready;
+use function Gallery\Services\seo_request_guard_canonical_head_html;
+use function Gallery\Services\site_name;
+use function Gallery\Services\t;
+use function Gallery\Services\theme_branding_asset_url;
+use function Gallery\Services\theme_favorite_gallery_navigation_items;
+use function Gallery\Services\theme_page_width_mode;
+use function Gallery\Services\theme_settings;
+use function Gallery\Services\translation_active_language;
+use function Gallery\Services\translation_default_language;
+use function Gallery\Services\translation_load_language;
+
+/**
+ * Handle view public header branding model.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $siteName Site name value.
+ * @param ?array $currentGallery Current gallery value.
+ * @param bool $publicOnly Public only value.
+ * @param string $bodyClass Body class value.
+ * @return array Structured result data for the caller.
+ */
 function view_public_header_branding_model(string $siteName, ?array $currentGallery = null, bool $publicOnly = true, string $bodyClass = 'public-page'): array
 {
     $model = [
@@ -44,15 +88,15 @@ function view_public_header_branding_model(string $siteName, ?array $currentGall
     if ($bodyClass !== 'public-page') {
         return $model;
     }
-    if ($currentGallery !== null && function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if ($currentGallery !== null && function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         $model['banner_url'] = gallery_branding_asset_url($currentGallery, 'banner', $publicOnly);
         $model['logo_url'] = gallery_branding_asset_url($currentGallery, 'logo', $publicOnly);
         $model['separator_url'] = gallery_branding_asset_url($currentGallery, 'separator', $publicOnly);
     }
-    if ($model['banner_url'] === '' && function_exists('theme_branding_asset_url')) {
+    if ($model['banner_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
         $model['banner_url'] = theme_branding_asset_url('banner');
     }
-    if ($model['separator_url'] === '' && function_exists('theme_branding_asset_url')) {
+    if ($model['separator_url'] === '' && function_exists('Gallery\\Services\\theme_branding_asset_url')) {
         $model['separator_url'] = theme_branding_asset_url('separator');
     }
     return $model;
@@ -62,7 +106,7 @@ function view_public_header_branding_model(string $siteName, ?array $currentGall
 /**
  * Render configured favorite gallery shortcut links for the top navigation.
  *
- * @param array<int, array<string, mixed>> $items Resolved favorite gallery navigation items.
+ * @param array $items Items value.
  * @return string Favorite gallery anchor markup, or an empty string when none are configured.
  */
 function view_favorite_gallery_nav_html(array $items): string
@@ -86,7 +130,7 @@ function view_favorite_gallery_nav_html(array $items): string
 /**
  * Return the full legacy stylesheet set required by admin screens and logged-in public tools.
  *
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_admin_stylesheet_files(): array
 {
@@ -119,7 +163,7 @@ function view_admin_stylesheet_files(): array
  * The shared public file contains only visitor-facing rules extracted from
  * mixed legacy admin stylesheets after visual verification.
  *
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_public_stylesheet_files(): array
 {
@@ -137,7 +181,7 @@ function view_public_stylesheet_files(): array
  * Return whether the current request needs the full admin asset set.
  *
  * @param string $bodyClass Rendered body class for the current page family.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
  * @return bool True when admin or logged-in public tooling must stay available.
  */
@@ -150,9 +194,9 @@ function view_should_load_admin_assets(string $bodyClass, ?array $user, bool $an
  * Return stylesheet files for the current page context.
  *
  * @param string $bodyClass Rendered body class for the current page family.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
- * @return array<int, string> Stylesheet paths relative to the public web root.
+ * @return array<int string> Stylesheet paths relative to the public web root.
  */
 function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool $anonymousPreview): array
 {
@@ -165,7 +209,7 @@ function view_stylesheet_files_for_context(string $bodyClass, ?array $user, bool
  * Return the browser entrypoint for the current page context.
  *
  * @param bool $isAdminPage Whether the current route renders an admin or setup page.
- * @param array<string, mixed>|null $user Logged-in user record, or null for anonymous visitors.
+ * @param ?array $user User value.
  * @param bool $anonymousPreview Whether an admin explicitly requested anonymous preview mode.
  * @return string Script path relative to the public web root.
  */
@@ -174,6 +218,15 @@ function view_script_asset_for_context(bool $isAdminPage, ?array $user, bool $an
     return (!$isAdminPage && ($user === null || $anonymousPreview)) ? 'assets/public-gallery.js' : 'assets/gallery.js';
 }
 
+/**
+ * Handle view render header.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $title Title value.
+ * @param ?array $currentGallery Current gallery value.
+ * @param bool $publicOnly Public only value.
+ */
 function view_render_header(string $title, ?array $currentGallery = null, bool $publicOnly = true): void
 {
     $user = current_user();
@@ -183,7 +236,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     $page = (string) ($_GET['page'] ?? 'home');
     $bodyClass = str_starts_with($page, 'admin') || $page === 'setup' ? 'admin-page' : 'public-page';
     $pageWidthClass = $bodyClass === 'public-page' ? ' page-width-' . theme_page_width_mode((string) ($theme['page_width'] ?? 'default')) : '';
-    echo '<!doctype html><html lang="' . e(function_exists('translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
+    echo '<!doctype html><html lang="' . e(function_exists('Gallery\\Services\\translation_active_language') ? translation_active_language() : 'en') . '" translate="no"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<title>' . e($title === $siteName ? $siteName : $title . ' - ' . $siteName) . '</title>';
     $faviconUrl = favicon_asset_url();
@@ -215,7 +268,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
         echo '<link rel="stylesheet" href="' . e(asset_url($mobileGalleryStyle)) . '?v=' . filemtime($mobileGalleryStylePath) . '">';
     }
     $headExtras = cms_head_extras_html();
-    if ($bodyClass === 'public-page' && function_exists('seo_request_guard_canonical_head_html')) {
+    if ($bodyClass === 'public-page' && function_exists('Gallery\\Services\\seo_request_guard_canonical_head_html')) {
         echo seo_request_guard_canonical_head_html($page, $currentGallery, $headExtras);
     }
     echo $headExtras;
@@ -242,7 +295,7 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     // $favoritePublicOnly stores whether shortcuts should be restricted to public listed galleries.
     $favoritePublicOnly = !$user || $anonymousPreview;
     // $favoriteGalleryItems stores resolved gallery shortcuts for the top navigation.
-    $favoriteGalleryItems = function_exists('theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
+    $favoriteGalleryItems = function_exists('Gallery\\Services\\theme_favorite_gallery_navigation_items') ? theme_favorite_gallery_navigation_items($favoritePublicOnly) : [];
     echo view_favorite_gallery_nav_html($favoriteGalleryItems);
     if ($user && !$anonymousPreview) {
         if ($bodyClass === 'public-page') {
@@ -270,6 +323,13 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
     }
 }
 
+/**
+ * Handle view cms browser i18n strings.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @return array Structured result data for the caller.
+ */
 function view_cms_browser_i18n_strings(): array
 {
     $activeStrings = translation_load_language(translation_active_language());
@@ -339,6 +399,11 @@ function view_cms_browser_i18n_strings(): array
     ]);
 }
 
+/**
+ * Handle view render browser i18n script.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_browser_i18n_script(): void
 {
     $payload = [
@@ -352,6 +417,11 @@ function view_render_browser_i18n_script(): void
     echo '<script>window.PHP_GALLERY_I18N = ' . $json . ';</script>';
 }
 
+/**
+ * Handle view render footer.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_footer(): void
 {
     $page = (string) ($_GET['page'] ?? 'home');

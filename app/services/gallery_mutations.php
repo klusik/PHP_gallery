@@ -34,12 +34,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use FilesystemIterator;
+use PDO;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+
 /**
  * Gallery mutation model.
- * 
+ *
  * This module owns filesystem-backed gallery changes: subtree deletion, folder moves, imports, ancestor creation, and parent synchronization. It intentionally keeps the filesystem as the source of truth and updates the database to follow it.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return array Structured result data for the caller.
  */
-
 function gallery_subtree_rows(int $galleryId): array
 {
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
@@ -57,6 +72,7 @@ function gallery_subtree_rows(int $galleryId): array
 
 /**
  * Handles delete gallery subtrees logic for the gallery application.
+ *
  * @param mixed $galleryIds Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -145,9 +161,9 @@ function delete_gallery_subtrees(array $galleryIds): array
 
 /**
  * Handles delete directory tree logic for the gallery application.
+ *
  * @param mixed $directory Input used by this operation.
  * @param mixed $allowedRoot Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function delete_directory_tree(string $directory, string $allowedRoot): void
 {
@@ -199,7 +215,7 @@ function delete_directory_tree(string $directory, string $allowedRoot): void
  *
  * @param int $galleryId Gallery that must own every selected image.
  * @param array<int> $imageIds Image ids submitted by the admin UI.
- * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int}
+ * @return array{requested:int,deleted:int,files_deleted:int,derivatives_deleted:int,missing_files:int} Structured result data for the caller.
  */
 function delete_gallery_images(int $galleryId, array $imageIds): array
 {
@@ -266,7 +282,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
             }
         }
 
-        if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+        if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
             // $displayMasterPath stores the full-size generated WebP used for public DNG display.
             $displayMasterPath = dng_display_master_abs_path($image, $gallery, false);
             if (thumbnail_path_inside_existing_gallery($galleryRoot, $displayMasterPath) && is_file($displayMasterPath)) {
@@ -346,7 +362,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
  * @param int $sourceGalleryId Gallery that currently owns the selected images.
  * @param int $destinationGalleryId Gallery that will receive the selected images.
  * @param array<int> $imageIds Image ids submitted by the admin UI.
- * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null}
+ * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Structured result data for the caller.
  */
 function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
 {
@@ -602,6 +618,10 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
 
 /**
  * Resolve a destination image path without requiring nested target directories to exist yet.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function gallery_image_target_abs_path(array $image, array $gallery): string
 {
@@ -625,6 +645,10 @@ function gallery_image_target_abs_path(array $image, array $gallery): string
  *
  * @param array<int,array{from:string,to:string,kind:string}> $manifest Mutable list of file renames.
  * @param array<string,string> $targetPaths Target paths already used by this move.
+ * @param string $sourcePath Source filesystem path.
+ * @param string $destinationPath Destination path filesystem path.
+ * @param string $kind Kind value.
+ * @param string $imageLabel Image label value.
  * @param array<int,string> $failures Mutable validation errors.
  */
 function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetPaths, string $sourcePath, string $destinationPath, string $kind, string $imageLabel, array &$failures): void
@@ -646,7 +670,12 @@ function gallery_add_image_move_manifest_entry(array &$manifest, array &$targetP
 /**
  * Return generated files that should move with one source image.
  *
- * @return array<int,array{from:string,to:string}>
+ * @param array $image Image row or image data.
+ * @param array $sourceGallery Source gallery value.
+ * @param array $destinationGallery Destination gallery value.
+ * @param string $sourceRoot Source root value.
+ * @param string $destinationRoot Destination root value.
+ * @return array<int,array{from:string,to:string}> Structured result data for the caller.
  */
 function gallery_image_derivative_move_paths(array $image, array $sourceGallery, array $destinationGallery, string $sourceRoot, string $destinationRoot): array
 {
@@ -671,7 +700,7 @@ function gallery_image_derivative_move_paths(array $image, array $sourceGallery,
         }
     }
 
-    if (function_exists('image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
+    if (function_exists('Gallery\\Services\\image_uses_dng_display_derivatives') && image_uses_dng_display_derivatives($image)) {
         // $sourceDisplayMaster stores the generated full-size WebP display derivative.
         $sourceDisplayMaster = dng_display_master_abs_path($image, $sourceGallery, false);
         if (thumbnail_path_inside_existing_gallery($sourceRoot, $sourceDisplayMaster) && is_file($sourceDisplayMaster)) {
@@ -710,8 +739,9 @@ function gallery_rollback_image_file_moves(array $movedFiles): void
 /**
  * Build destination sort_order values by appending moved images after current destination images.
  *
+ * @param int $destinationGalleryId Destination gallery id identifier.
  * @param array<int> $imageIdsToMove Validated image ids in source order.
- * @return array<int,int>
+ * @return array<int,int> Structured result data for the caller.
  */
 function gallery_destination_sort_orders(int $destinationGalleryId, array $imageIdsToMove): array
 {
@@ -732,7 +762,9 @@ function gallery_destination_sort_orders(int $destinationGalleryId, array $image
 /**
  * Choose the source gallery title picture after selected images leave.
  *
+ * @param int $sourceGalleryId Source gallery id identifier.
  * @param array<int> $movedImageIds Validated image ids that are being moved away.
+ * @return ?int Integer result for the caller.
  */
 function gallery_cover_id_after_source_move(int $sourceGalleryId, array $movedImageIds): ?int
 {
@@ -749,6 +781,9 @@ function gallery_cover_id_after_source_move(int $sourceGalleryId, array $movedIm
 
 /**
  * Choose a valid destination title picture without overwriting an existing valid one.
+ *
+ * @param int $destinationGalleryId Destination gallery id identifier.
+ * @return ?int Integer result for the caller.
  */
 function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?int
 {
@@ -768,7 +803,9 @@ function gallery_cover_id_after_destination_move(int $destinationGalleryId): ?in
 /**
  * Return the first direct image that can be used as a gallery title picture.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<int> $excludedImageIds Image ids not eligible for the result.
+ * @return ?int Integer result for the caller.
  */
 function gallery_first_cover_candidate_excluding(int $galleryId, array $excludedImageIds): ?int
 {
@@ -793,6 +830,10 @@ function gallery_first_cover_candidate_excluding(int $galleryId, array $excluded
 
 /**
  * Check whether an image currently belongs to a gallery or one of its descendants.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $galleryId Gallery identifier.
+ * @return bool True when the condition matches.
  */
 function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): bool
 {
@@ -811,6 +852,7 @@ function gallery_image_belongs_to_gallery_branch(int $imageId, int $galleryId): 
 
 /**
  * Handles move gallery folder to parent logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @param mixed $parentId Input used by this operation.
  * @param mixed $folderName Input used by this operation.
@@ -932,6 +974,7 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
 
 /**
  * Handles ensure gallery ancestors for path logic for the gallery application.
+ *
  * @param mixed $folderPath Input used by this operation.
  * @return mixed Result produced by this operation.
  */
@@ -966,51 +1009,15 @@ function ensure_gallery_ancestors_for_path(string $folderPath): array
 
 /**
  * Handles import galleries logic for the gallery application.
+ *
  * @param mixed $folderPaths Input used by this operation.
  * @param mixed $createThumbnails Input used by this operation.
  * @return mixed Result produced by this operation.
  */
 function import_galleries(array $folderPaths, bool $createThumbnails = false): array
 {
-    // Variable $candidates stores this steps working value.
-    $candidates = [];
-    foreach (discover_gallery_candidates() as $candidate) {
-        $candidates[$candidate['folder_path']] = $candidate;
-    }
-
-    // Variable $requested stores this steps working value.
-    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
-    // Variable $folderPaths stores this steps working value.
-    $folderPaths = [];
-    foreach ($requested as $requestedPath) {
-        if ($requestedPath === '') {
-            continue;
-        }
-
-        // Import missing ancestors first. This is important when the admin
-        // selects only a deep child folder from the discovery screen. Without
-        // these rows, sync_gallery_parent_ids() has no parent record to attach
-        // the child to, so the child appears as a top-level gallery.
-        // Variable $segments stores this steps working value.
-        $segments = explode('/', $requestedPath);
-        // Variable $ancestorSegments stores this steps working value.
-        $ancestorSegments = [];
-        while (count($segments) > 1) {
-            $ancestorSegments[] = array_shift($segments);
-            // Variable $ancestorPath stores this steps working value.
-            $ancestorPath = implode('/', $ancestorSegments);
-            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
-                $folderPaths[$ancestorPath] = $ancestorPath;
-            }
-        }
-
-        foreach (array_keys($candidates) as $candidatePath) {
-            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
-                $folderPaths[$candidatePath] = $candidatePath;
-            }
-        }
-    }
-    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    // $folderPaths stores the ordered import queue expanded from the admin selection.
+    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // Variable $imported stores this steps working value.
     $imported = 0;
@@ -1045,49 +1052,19 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
             $thumbs += create_gallery_thumbnails($galleryId);
         }
     }
-    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs];
+    return ['imported' => $imported, 'scanned' => $scanned, 'thumbnails' => $thumbs, 'gallery_ids' => $importedIds];
 }
 
 /**
  * Handles import galleries without thumbnails logic for the gallery application.
+ *
  * @param mixed $folderPaths Input used by this operation.
  * @return mixed Result produced by this operation.
  */
 function import_galleries_without_thumbnails(array $folderPaths): array
 {
-    // Variable $candidates stores this steps working value.
-    $candidates = [];
-    foreach (discover_gallery_candidates() as $candidate) {
-        $candidates[$candidate['folder_path']] = $candidate;
-    }
-
-    // Variable $requested stores this steps working value.
-    $requested = array_map(static fn ($path): string => normalize_relative_path((string) $path), $folderPaths);
-    // Variable $folderPaths stores this steps working value.
-    $folderPaths = [];
-    foreach ($requested as $requestedPath) {
-        if ($requestedPath === '') {
-            continue;
-        }
-        // $segments stores an intermediate value used by the surrounding gallery workflow.
-        $segments = explode('/', $requestedPath);
-        // $ancestorSegments stores an intermediate value used by the surrounding gallery workflow.
-        $ancestorSegments = [];
-        while (count($segments) > 1) {
-            $ancestorSegments[] = array_shift($segments);
-            // $ancestorPath stores an intermediate value used by the surrounding gallery workflow.
-            $ancestorPath = implode('/', $ancestorSegments);
-            if (isset($candidates[$ancestorPath]) || is_dir(gallery_abs_path($ancestorPath))) {
-                $folderPaths[$ancestorPath] = $ancestorPath;
-            }
-        }
-        foreach (array_keys($candidates) as $candidatePath) {
-            if ($candidatePath === $requestedPath || str_starts_with($candidatePath, $requestedPath . '/')) {
-                $folderPaths[$candidatePath] = $candidatePath;
-            }
-        }
-    }
-    usort($folderPaths, static fn ($a, $b): int => substr_count((string) $a, '/') <=> substr_count((string) $b, '/'));
+    // $folderPaths stores the ordered import queue expanded from the admin selection.
+    $folderPaths = admin_gallery_discovery_expand_requested_import_paths($folderPaths);
 
     // $imported stores an intermediate value used by the surrounding gallery workflow.
     $imported = 0;
@@ -1116,7 +1093,6 @@ function import_galleries_without_thumbnails(array $folderPaths): array
 
 /**
  * Handles sync gallery parent ids logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function sync_gallery_parent_ids(): void
 {
@@ -1171,6 +1147,7 @@ function sync_gallery_parent_ids(): void
 
 /**
  * Handles gallery subtree ids logic for the gallery application.
+ *
  * @param mixed $galleryId Input used by this operation.
  * @return mixed Result produced by this operation.
  */

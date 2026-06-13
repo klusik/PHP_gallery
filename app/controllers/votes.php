@@ -34,8 +34,35 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Core\verify_vote_rate_limit;
+use function Gallery\Core\visitor_hash;
+use function Gallery\Services\current_vote_for_image;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\t;
+use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\vote_score;
+
 /**
  * Build the public vote controls and current vote state.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $score Score value.
+ * @param int $currentVote Current vote value.
+ * @param bool $votingAllowed Voting allowed value.
+ * @return string Text result for the caller.
  */
 function render_vote_form_html(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): string
 {
@@ -55,6 +82,11 @@ function render_vote_form_html(int $imageId, int $score, int $currentVote, bool 
 
 /**
  * Render the public vote controls and current vote state.
+ *
+ * @param int $imageId Image identifier.
+ * @param int $score Score value.
+ * @param int $currentVote Current vote value.
+ * @param bool $votingAllowed Voting allowed value.
  */
 function render_vote_form(int $imageId, int $score, int $currentVote, bool $votingAllowed = true): void
 {

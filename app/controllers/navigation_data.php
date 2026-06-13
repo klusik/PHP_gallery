@@ -34,10 +34,31 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_dashboard_notice_messages;
+use function Gallery\Services\navigation_data_navigraph_authorization_url;
+use function Gallery\Services\navigation_data_navigraph_disconnect;
+use function Gallery\Services\navigation_data_navigraph_exchange_code;
+use function Gallery\Services\navigation_data_navigraph_refresh_packages;
+use function Gallery\Services\navigation_data_normalize_ident;
+use function Gallery\Services\navigation_data_resolve_ident;
+use function Gallery\Services\navigation_data_status;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_navigation_data;
+
 /**
  * Send a navigation-data JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function navigation_data_json_response(array $payload, int $statusCode = 200): void
 {

@@ -34,6 +34,28 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\next_picture_game_pair;
+use function Gallery\Services\picture_game_top_images;
+use function Gallery\Services\public_image_display_title;
+use function Gallery\Services\record_picture_game_vote;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_srcset;
+use function Gallery\Services\thumbnail_url;
+use function Gallery\Services\visitor_can_access_gallery;
+
 /**
  * Public picture-game controller layer.
  *
@@ -100,6 +122,9 @@ function cms_picture_game(): void
 
 /**
  * Render one selectable picture-game choice.
+ *
+ * @param array $image Image row or image data.
+ * @param string $side Side value.
  */
 function render_picture_game_choice(array $image, string $side): void
 {
@@ -123,6 +148,8 @@ function render_picture_game_choice(array $image, string $side): void
 
 /**
  * Render top global picture-game winners for one gallery.
+ *
+ * @param array $topImages Top images value.
  */
 function render_picture_game_stats(array $topImages): void
 {

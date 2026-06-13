@@ -34,12 +34,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
+use PDO;
+use PDOException;
+use Throwable;
+use function Gallery\Services\admin_log_event;
+use function Gallery\Services\thumbnail_metadata_storage_snapshot;
+
 /**
  * Apply all pending database migrations in filename order.
  *
  * MySQL can auto-commit DDL statements such as CREATE TABLE, so migrations are
  * not wrapped in an explicit transaction. Each migration records its version
  * only after every SQL statement in that file has executed successfully.
+ *
+ * @return array Structured result data for the caller.
  */
 function run_migrations(): array
 {
@@ -59,6 +69,12 @@ function run_migrations(): array
     sort($files);
     // Variable $ran stores this steps working value.
     $ran = [];
+    // $migrationDiagnostics stores detailed timing data for admin update logs.
+    $migrationDiagnostics = [];
+    // $migrationStartedAt stores the full migration batch start timestamp.
+    $migrationStartedAt = microtime(true);
+    // $thumbnailMetadataSnapshotBefore stores a pre-migration storage snapshot when thumbnail metadata helpers are loaded.
+    $thumbnailMetadataSnapshotBefore = function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [];
 
     foreach ($files as $file) {
         // Variable $version stores this steps working value.
@@ -68,20 +84,47 @@ function run_migrations(): array
         }
         // Variable $statements stores this steps working value.
         $statements = require $file;
+        // $singleMigrationStartedAt stores per-migration duration for diagnostics.
+        $singleMigrationStartedAt = microtime(true);
+        // $statementDiagnostics stores per-SQL timing and replay data for this migration.
+        $statementDiagnostics = [];
         try {
-            foreach ($statements as $statement) {
-                apply_migration_statement($pdo, $statement);
+            foreach ($statements as $statementIndex => $statement) {
+                $statementDiagnostic = apply_migration_statement($pdo, $statement);
+                $statementDiagnostic['statement_number'] = (int) $statementIndex + 1;
+                $statementDiagnostics[] = $statementDiagnostic;
             }
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
             $stmt->execute([$version, now_sql()]);
             $ran[] = $version;
+            $migrationDiagnostics[] = [
+                'version' => $version,
+                'statement_count' => count($statements),
+                'duration_seconds' => round(microtime(true) - $singleMigrationStartedAt, 4),
+                'statements' => $statementDiagnostics,
+            ];
         } catch (Throwable $exception) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
             throw $exception;
         }
+    }
+
+    if ($ran && function_exists('Gallery\\Services\\admin_log_event')) {
+        admin_log_event('info', 'migrations.ran_detailed', 'Database migrations completed with timing diagnostics.', [
+            'versions' => $ran,
+            'migration_count' => count($ran),
+            'started_at_utc' => gmdate('c', (int) $migrationStartedAt),
+            'finished_at_utc' => gmdate('c'),
+            'php_max_execution_time' => ini_get('max_execution_time'),
+            'php_memory_limit' => ini_get('memory_limit'),
+            'total_duration_seconds' => round(microtime(true) - $migrationStartedAt, 4),
+            'migrations' => $migrationDiagnostics,
+            'thumbnail_metadata_snapshot_before' => $thumbnailMetadataSnapshotBefore,
+            'thumbnail_metadata_snapshot_after' => function_exists('Gallery\\Services\\thumbnail_metadata_storage_snapshot') ? thumbnail_metadata_storage_snapshot() : [],
+        ], ['category' => 'database', 'severity' => 'notice']);
     }
 
     return $ran;
@@ -94,20 +137,69 @@ function run_migrations(): array
  * table/column/index already present but schema_migrations not yet recorded.
  * MySQL and MariaDB differ on IF NOT EXISTS support for ALTER TABLE, so the
  * portable path is to treat duplicate DDL errors as successful replays.
+ *
+ * @param PDO $pdo Database connection.
+ * @param string $statement Statement value.
+ * @return array<string mixed> Structured diagnostic data for the caller.
  */
-function apply_migration_statement(PDO $pdo, string $statement): void
+function apply_migration_statement(PDO $pdo, string $statement): array
 {
+    $startedAt = microtime(true);
+    $diagnostic = migration_statement_diagnostic($statement);
     try {
         $pdo->exec($statement);
+        $diagnostic['status'] = 'applied';
     } catch (PDOException $exception) {
         if (!migration_duplicate_ddl_error($exception)) {
+            $diagnostic['status'] = 'failed';
+            $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+            $diagnostic['error_message'] = $exception->getMessage();
+            $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);
             throw $exception;
         }
+
+        $diagnostic['status'] = 'duplicate_ddl_replayed';
+        $diagnostic['error_code'] = (int) ($exception->errorInfo[1] ?? $exception->getCode());
+        $diagnostic['error_message'] = $exception->getMessage();
     }
+
+    $diagnostic['duration_seconds'] = round(microtime(true) - $startedAt, 4);
+    return $diagnostic;
+}
+
+/**
+ * Return a log-safe summary for one migration SQL statement.
+ *
+ * @param string $statement Statement value.
+ * @return array<string mixed> Structured diagnostic data for the caller.
+ */
+function migration_statement_diagnostic(string $statement): array
+{
+    $normalized = trim((string) preg_replace('/\s+/', ' ', $statement));
+    $operation = 'UNKNOWN';
+    if (preg_match('/^([A-Z]+)/i', $normalized, $match) === 1) {
+        $operation = strtoupper((string) $match[1]);
+    }
+
+    $object = '';
+    if (preg_match('/\b(?:TABLE|INTO|FROM|JOIN)\s+`?([a-zA-Z0-9_]+)`?/i', $normalized, $match) === 1) {
+        $object = (string) $match[1];
+    }
+
+    return [
+        'operation' => $operation,
+        'object' => $object,
+        'length_bytes' => strlen($statement),
+        'signature' => substr(hash('sha256', $normalized), 0, 16),
+        'preview' => substr($normalized, 0, 240),
+    ];
 }
 
 /**
  * Return true when an exception is a duplicate object error from idempotent DDL.
+ *
+ * @param PDOException $exception Exception value.
+ * @return bool True when the condition matches.
  */
 function migration_duplicate_ddl_error(PDOException $exception): bool
 {
@@ -128,6 +220,8 @@ function migration_duplicate_ddl_error(PDOException $exception): bool
 
 /**
  * Return true when at least one migration file has not been recorded yet.
+ *
+ * @return bool True when the condition matches.
  */
 function pending_migrations_exist(): bool
 {

@@ -237,16 +237,15 @@ class WatcherConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
         """
         Build a typed configuration object from decoded JSON data.
-
+        
         Missing keys are treated as defaults. This makes configuration upgrades
         safe because older config files keep working when new fields are added.
         Numeric values are coerced from strings where possible because manual
         edits and GUI variables often produce text.
-
-        @param data: Dictionary loaded from the JSON configuration file.
-        @return: Normalized WatcherConfig instance.
-        @raises ValueError: Raised by float conversion when numeric values are
-            present but cannot be parsed.
+        
+        @param Dict[str, Any] data: Dictionary loaded from the JSON configuration file.
+        @return WatcherConfig Normalized WatcherConfig instance.
+        @raises ValueError: Raised by float conversion when numeric values are present but cannot be parsed.
         """
         return cls(
             watched_folder=str(data.get("watched_folder", "")),
@@ -280,8 +279,8 @@ class WatcherConfig:
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert this configuration to a JSON-serializable dictionary.
-
-        @return: Plain dictionary suitable for json.dumps().
+        
+        @return Dict[str, Any] Plain dictionary suitable for json.dumps().
         """
         return {
             "watched_folder": self.watched_folder,
@@ -345,8 +344,8 @@ class SimCameraLocation:
     def upload_fields(self) -> Dict[str, str]:
         """
         Convert the camera position into upload automation metadata fields.
-
-        @return: Multipart form fields accepted by PHP Gallery.
+        
+        @return Dict[str, str] Multipart form fields accepted by PHP Gallery.
         """
         return {
             "sim_location_source": "simconnect_camera",
@@ -430,9 +429,9 @@ class _SimConnectRecvCameraStatus(ctypes.Structure):
 def simconnect_hresult_failed(value: int) -> bool:
     """
     Return whether a signed HRESULT indicates failure.
-
-    @param value: HRESULT returned by SimConnect.
-    @return: True when the HRESULT is a failure code.
+    
+    @param int value: HRESULT returned by SimConnect.
+    @return bool True when the HRESULT is a failure code.
     """
     return int(value) < 0
 
@@ -440,9 +439,9 @@ def simconnect_hresult_failed(value: int) -> bool:
 def simconnect_camera_position_valid(location: SimCameraLocation) -> bool:
     """
     Validate a world camera position before sending it to PHP Gallery.
-
-    @param location: Candidate camera position.
-    @return: True when latitude, longitude, and altitude are usable.
+    
+    @param SimCameraLocation location: Candidate camera position.
+    @return bool True when latitude, longitude, and altitude are usable.
     """
     return (
         math.isfinite(location.latitude)
@@ -466,9 +465,9 @@ class SimConnectCameraClient:
     def __init__(self, dll_path: str = "", timeout_seconds: float = SIMCONNECT_CAMERA_QUERY_TIMEOUT_SECONDS) -> None:
         """
         Create a camera client.
-
-        @param dll_path: Optional explicit SimConnect.dll path selected by the user.
-        @param timeout_seconds: Maximum time to wait for one camera response.
+        
+        @param str dll_path: Optional explicit SimConnect.dll path selected by the user.
+        @param float timeout_seconds: Maximum time to wait for one camera response.
         """
         self.timeout_seconds = max(0.2, float(timeout_seconds))
         self.configured_dll_path = trim_path(dll_path)
@@ -485,8 +484,8 @@ class SimConnectCameraClient:
     def current_camera_location(self) -> Tuple[Optional[SimCameraLocation], str]:
         """
         Query the current Flight Simulator camera location.
-
-        @return: Tuple containing the location or None, plus a diagnostic string.
+        
+        @return Tuple[Optional[SimCameraLocation], str] Tuple containing the location or None, plus a diagnostic string.
         """
         if os.name != "nt":
             return None, "SimConnect camera metadata is available only on Windows."
@@ -556,10 +555,9 @@ class SimConnectCameraClient:
     def configure_functions(self, dll: Any, dispatch_type: Any) -> None:
         """
         Configure ctypes signatures for the SimConnect functions used here.
-
-        @param dll: Loaded SimConnect.dll handle.
-        @param dispatch_type: Callback type used by SimConnect_CallDispatch.
-        @return: None.
+        
+        @param Any dll: Loaded SimConnect.dll handle.
+        @param Any dispatch_type: Callback type used by SimConnect_CallDispatch.
         """
         dll.SimConnect_Open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
         dll.SimConnect_Open.restype = ctypes.c_long
@@ -579,12 +577,18 @@ class SimConnectCameraClient:
     def resolve_dll_path(self) -> Tuple[Optional[Path], List[Path]]:
         """
         Find a usable SimConnect client DLL on the local machine.
-
-        @return: Tuple of the selected DLL path and every absolute candidate checked.
+        
+        @return Tuple[Optional[Path], List[Path]] Tuple of the selected DLL path and every absolute candidate checked.
         """
         tried_paths: List[Path] = []
 
         def record(candidate: Optional[Path]) -> Optional[Path]:
+            """
+            Handle record.
+            
+            @param Optional[Path] candidate: Candidate value.
+            @return Optional[Path] Result value for the caller.
+            """
             if candidate is None:
                 return None
             resolved = candidate.resolve(strict=False)
@@ -619,8 +623,8 @@ class SimConnectCameraClient:
     def dll_resolution_message(self) -> str:
         """
         Describe which SimConnect DLL path would be used without opening the sim.
-
-        @return: Human-readable DLL resolution summary.
+        
+        @return str Human-readable DLL resolution summary.
         """
         dll_path, tried_paths = self.resolve_dll_path()
         if dll_path is not None:
@@ -632,9 +636,9 @@ class SimConnectCameraClient:
     def diagnostic_message(self, reason: str) -> str:
         """
         Build one compact diagnostic message for the watcher console.
-
-        @param reason: Primary reason camera coordinates were not returned.
-        @return: Human-readable diagnostic summary.
+        
+        @param str reason: Primary reason camera coordinates were not returned.
+        @return str Human-readable diagnostic summary.
         """
         details = list(self.diagnostics)
         if self.status_message:
@@ -648,11 +652,10 @@ class SimConnectCameraClient:
     def dispatch(self, data: ctypes.POINTER(_SimConnectRecv), size: int, _context: ctypes.c_void_p) -> None:
         """
         Receive one SimConnect dispatch packet.
-
-        @param data: Pointer to the base SimConnect receive structure.
-        @param size: Packet byte length.
-        @param _context: Unused callback context.
-        @return: None.
+        
+        @param ctypes.POINTER(_SimConnectRecv) data: Pointer to the base SimConnect receive structure.
+        @param int size: Packet byte length.
+        @param ctypes.c_void_p _context: Unused callback context.
         """
         if not data:
             return
@@ -704,9 +707,9 @@ class SimConnectCameraClient:
 def trim_path(value: str) -> Optional[Path]:
     """
     Convert one optional path string into a usable Path object.
-
-    @param value: Raw environment variable or config value.
-    @return: Path when the string is non-empty, otherwise None.
+    
+    @param str value: Raw environment variable or config value.
+    @return Optional[Path] Path when the string is non-empty, otherwise None.
     """
     text = str(value).strip()
     if not text:
@@ -726,20 +729,20 @@ class ConfigStore:
     def __init__(self, path: Path = CONFIG_PATH) -> None:
         """
         Create a config store for one JSON file.
-
-        @param path: Path to the JSON configuration file.
+        
+        @param Path path: Path to the JSON configuration file.
         """
         self.path = path
 
     def load(self) -> WatcherConfig:
         """
         Load the configuration file.
-
+        
         Invalid, missing, or non-object JSON content falls back to defaults. The
         watcher should remain startable even after a user accidentally damages
         the local config file.
-
-        @return: Loaded configuration, or defaults when the file is unusable.
+        
+        @return WatcherConfig Loaded configuration, or defaults when the file is unusable.
         """
         if not self.path.is_file():
             return WatcherConfig()
@@ -754,12 +757,11 @@ class ConfigStore:
     def save(self, config: WatcherConfig) -> None:
         """
         Persist configuration atomically.
-
+        
         The temporary file plus replace pattern avoids leaving a half-written
         config if Windows, antivirus, or the process interrupts the write.
-
-        @param config: Configuration object to persist.
-        @return: None.
+        
+        @param WatcherConfig config: Configuration object to persist.
         @raises OSError: Propagated when the file cannot be written.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -781,8 +783,8 @@ class UploadState:
     def __init__(self, path: Path = STATE_PATH) -> None:
         """
         Create and load the upload state store.
-
-        @param path: Path to the JSON state file.
+        
+        @param Path path: Path to the JSON state file.
         """
         self.path = path
         self.data: Dict[str, Any] = {
@@ -795,12 +797,10 @@ class UploadState:
     def load(self) -> None:
         """
         Load upload state from disk into memory.
-
+        
         Malformed sections are ignored individually so one damaged section does
         not invalidate all upload history. This matters because state is only an
         optimization and retry aid, not canonical gallery data.
-
-        @return: None.
         """
         if not self.path.is_file():
             return
@@ -819,8 +819,7 @@ class UploadState:
     def save(self) -> None:
         """
         Persist upload state atomically.
-
-        @return: None.
+        
         @raises OSError: Propagated when the state file cannot be written.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -831,10 +830,10 @@ class UploadState:
     def already_uploaded_path(self, path: Path, file_hash: str) -> bool:
         """
         Check whether the exact path and content were already uploaded.
-
-        @param path: Local image path being considered.
-        @param file_hash: SHA-256 hash of the current file content.
-        @return: True when this path already succeeded with the same content.
+        
+        @param Path path: Local image path being considered.
+        @param str file_hash: SHA-256 hash of the current file content.
+        @return bool True when this path already succeeded with the same content.
         """
         entry = self.data["uploaded_paths"].get(str(path))
         return isinstance(entry, dict) and entry.get("sha256") == file_hash
@@ -842,21 +841,20 @@ class UploadState:
     def already_uploaded_hash(self, file_hash: str) -> bool:
         """
         Check whether identical content already uploaded under any file name.
-
-        @param file_hash: SHA-256 hash of the current file content.
-        @return: True when this byte-identical file content is already known.
+        
+        @param str file_hash: SHA-256 hash of the current file content.
+        @return bool True when this byte-identical file content is already known.
         """
         return file_hash in self.data["uploaded_hashes"]
 
     def mark_uploaded(self, path: Path, file_hash: str, size: int, response: Dict[str, Any]) -> None:
         """
         Record a successful upload after the server confirms it.
-
-        @param path: Local file path that was uploaded.
-        @param file_hash: SHA-256 hash captured at upload time.
-        @param size: File size in bytes captured at upload time.
-        @param response: JSON object returned by the PHP Gallery endpoint.
-        @return: None.
+        
+        @param Path path: Local file path that was uploaded.
+        @param str file_hash: SHA-256 hash captured at upload time.
+        @param int size: File size in bytes captured at upload time.
+        @param Dict[str, Any] response: JSON object returned by the PHP Gallery endpoint.
         """
         now = time.time()
         record = {
@@ -877,14 +875,13 @@ class UploadState:
     def mark_duplicate(self, path: Path, file_hash: str, size: int) -> None:
         """
         Record a skipped file whose content was already uploaded earlier.
-
+        
         The path-level record prevents the same duplicate file from being
         repeatedly revisited during later scans.
-
-        @param path: Local duplicate file path.
-        @param file_hash: SHA-256 hash matching already uploaded content.
-        @param size: File size in bytes.
-        @return: None.
+        
+        @param Path path: Local duplicate file path.
+        @param str file_hash: SHA-256 hash matching already uploaded content.
+        @param int size: File size in bytes.
         """
         self.data["uploaded_paths"][str(path)] = {
             "sha256": file_hash,
@@ -898,14 +895,14 @@ class UploadState:
     def retry_allowed(self, path: Path, file_hash: str) -> bool:
         """
         Determine whether a failed upload may be attempted now.
-
+        
         Retry delay is keyed by path and content hash. Replacing the file with
         different content immediately clears the wait because it is no longer
         the same failed upload attempt.
-
-        @param path: Local file path being considered.
-        @param file_hash: Current SHA-256 hash of the file.
-        @return: True when no backoff delay is active.
+        
+        @param Path path: Local file path being considered.
+        @param str file_hash: Current SHA-256 hash of the file.
+        @return bool True when no backoff delay is active.
         """
         failure = self.data["failures"].get(str(path))
         if not isinstance(failure, dict):
@@ -917,15 +914,14 @@ class UploadState:
     def mark_failure(self, path: Path, file_hash: str, message: str) -> None:
         """
         Record a failed upload attempt and schedule a later retry.
-
+        
         The retry delay uses exponential backoff capped at one hour. This avoids
         hammering the gallery endpoint while still recovering automatically from
         transient network, hosting, or maintenance failures.
-
-        @param path: Local file path that failed to upload.
-        @param file_hash: SHA-256 hash of the file at failure time.
-        @param message: Human-readable failure reason.
-        @return: None.
+        
+        @param Path path: Local file path that failed to upload.
+        @param str file_hash: SHA-256 hash of the file at failure time.
+        @param str message: Human-readable failure reason.
         """
         previous = self.data["failures"].get(str(path))
         previous_attempts = int(previous.get("attempts", 0)) if isinstance(previous, dict) and previous.get("sha256") == file_hash else 0
@@ -955,9 +951,8 @@ class FileStabilityTracker:
     def __init__(self, stable_seconds: float) -> None:
         """
         Create a stability tracker.
-
-        @param stable_seconds: Required unchanged duration before a file is
-            considered ready. Values below 0.5 are clamped to 0.5 seconds.
+        
+        @param float stable_seconds: Required unchanged duration before a file is.
         """
         self.stable_seconds = max(0.5, stable_seconds)
         self._seen: Dict[Path, Tuple[int, float, float]] = {}
@@ -965,11 +960,9 @@ class FileStabilityTracker:
     def stable(self, path: Path) -> bool:
         """
         Check whether a path has remained unchanged long enough.
-
-        @param path: File path to inspect.
-        @return: True when size and modification time have been stable for the
-            configured duration. False when the file is new, changing, missing,
-            or temporarily unreadable.
+        
+        @param Path path: File path to inspect.
+        @return bool True when size and modification time have been stable for the.
         """
         try:
             stat = path.stat()
@@ -993,11 +986,9 @@ class FileStabilityTracker:
 def setup_logging() -> None:
     """
     Configure file logging for watcher diagnostics.
-
+    
     The GUI shows recent status in the window, but the file log survives restarts
     and is more useful when diagnosing upload or hosting issues later.
-
-    @return: None.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -1010,14 +1001,14 @@ def setup_logging() -> None:
 def normalize_upload_url(value: str) -> str:
     """
     Convert a site root or endpoint-like value into the upload endpoint URL.
-
+    
     Accepted input forms include a bare host, a gallery root URL, index.php, an
     index.php URL already containing page=upload_automation_upload, or a future
     /api/upload style endpoint. The function is deliberately tolerant because
     users are likely to paste whatever URL they currently have open.
-
-    @param value: User-provided site URL or upload endpoint.
-    @return: Normalized upload endpoint URL, or an empty string for blank input.
+    
+    @param str value: User-provided site URL or upload endpoint.
+    @return str Normalized upload endpoint URL, or an empty string for blank input.
     """
     raw = value.strip()
     if not raw:
@@ -1039,13 +1030,13 @@ def normalize_upload_url(value: str) -> str:
 def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
     """
     Revoke the active upload automation key through the gallery endpoint.
-
+    
     The gallery revokes the token identified by the authenticated API key, so
     the companion app does not need a second admin-only credential or token id.
-
-    @param upload_url: Normalized PHP Gallery upload endpoint.
-    @param api_key: Current gallery-scoped API key.
-    @return: Parsed JSON response from the server.
+    
+    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    @param str api_key: Current gallery-scoped API key.
+    @return Dict[str, Any] Parsed JSON response from the server.
     @raises RuntimeError: Raised for network, HTTP, or non-JSON failures.
     """
     body = parse.urlencode({"action": "revoke"}).encode("ascii")
@@ -1091,18 +1082,18 @@ def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
 def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
     """
     Submit one JSON API request and parse the JSON response.
-
+    
     The companion app uses JSON only for metadata handshakes. Image bytes still
     use multipart/form-data because PHP Gallery routes them through the normal
     upload pipeline. Keeping this helper separate from multipart_upload makes the
     reconnect inventory request cheap and safe to call repeatedly during long
     batches.
-
-    @param upload_url: Normalized PHP Gallery upload endpoint.
-    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
-    @param payload: JSON-serializable request object.
-    @param timeout_seconds: Network timeout for this metadata request.
-    @return: Parsed JSON response from the server.
+    
+    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    @param str api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param Dict[str, Any] payload: JSON-serializable request object.
+    @param float timeout_seconds: Network timeout for this metadata request.
+    @return Dict[str, Any] Parsed JSON response from the server.
     @raises RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
     """
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -1153,18 +1144,18 @@ def post_binary_to_file(
 ) -> Tuple[str, int]:
     """
     Submit one form-encoded request and stream the binary response to a file.
-
+    
     AI-analysis workers use this helper to download only the server-assigned
     image asset for a claimed job. The API key and claim token remain required;
     the public gallery URL is not used, so private or unpublished images do not
     need to be exposed to anonymous visitors for processing.
-
-    @param upload_url: Normalized PHP Gallery upload endpoint.
-    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
-    @param fields: Form fields accepted by the upload automation endpoint.
-    @param target_path: Local path where the downloaded asset should be stored.
-    @param timeout_seconds: Network timeout for the download request.
-    @return: Tuple of response content type and downloaded byte count.
+    
+    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    @param str api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param Dict[str, str] fields: Form fields accepted by the upload automation endpoint.
+    @param Path target_path: Local path where the downloaded asset should be stored.
+    @param float timeout_seconds: Network timeout for the download request.
+    @return Tuple[str, int] Tuple of response content type and downloaded byte count.
     @raises RuntimeError: Raised for network or HTTP failures.
     """
     body = parse.urlencode(fields).encode("utf-8")
@@ -1208,10 +1199,10 @@ def post_binary_to_file(
 def extension_for_content_type(content_type: str, fallback_name: str) -> str:
     """
     Return a safe filename suffix for a downloaded AI job asset.
-
-    @param content_type: Response Content-Type header.
-    @param fallback_name: Original filename from the claimed job payload.
-    @return: File extension including the leading dot.
+    
+    @param str content_type: Response Content-Type header.
+    @param str fallback_name: Original filename from the claimed job payload.
+    @return str File extension including the leading dot.
     """
     fallback_suffix = Path(fallback_name).suffix.lower()
     if fallback_suffix in SUPPORTED_SUFFIXES:
@@ -1226,11 +1217,11 @@ def extension_for_content_type(content_type: str, fallback_name: str) -> str:
 def ai_worker_id() -> str:
     """
     Return a stable local worker id for server-side lease diagnostics.
-
+    
     The value is not a secret and is not used for authorization. It lets the
     server show which companion app instance currently owns a claim.
-
-    @return: Stable worker identifier for this Windows profile and machine.
+    
+    @return str Stable worker identifier for this Windows profile and machine.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     worker_path = CONFIG_DIR / "worker_id.txt"
@@ -1249,12 +1240,10 @@ def ai_worker_id() -> str:
 def enter_background_thread_mode() -> None:
     """
     Ask Windows to schedule the current thread as background work.
-
+    
     This keeps optional image analysis from competing aggressively with the tray
     UI and ordinary uploads. Unsupported platforms silently continue because the
     worker can still run correctly without this scheduling hint.
-
-    @return: None.
     """
     if os.name != "nt":
         return
@@ -1273,11 +1262,11 @@ def enter_background_thread_mode() -> None:
 def inventory_candidate(path: Path, file_hash: Optional[str] = None, size: Optional[int] = None) -> Dict[str, Any]:
     """
     Build one file descriptor for a remote gallery inventory request.
-
-    @param path: Local image path being compared with the target gallery.
-    @param file_hash: Optional precomputed SHA-256 hash. When omitted, the file is hashed now.
-    @param size: Optional precomputed file size. When omitted, stat() is used now.
-    @return: JSON-safe file descriptor accepted by PHP Gallery.
+    
+    @param Path path: Local image path being compared with the target gallery.
+    @param Optional[str] file_hash: Optional precomputed SHA-256 hash. When omitted, the file is hashed now.
+    @param Optional[int] size: Optional precomputed file size. When omitted, stat() is used now.
+    @return Dict[str, Any] JSON-safe file descriptor accepted by PHP Gallery.
     @raises OSError: Propagated when the file cannot be read or statted.
     """
     resolved_hash = file_hash or sha256_file(path)
@@ -1304,10 +1293,9 @@ class RemoteInventorySession:
     def __init__(self, refresh_seconds: float, emit: Any) -> None:
         """
         Create a remote inventory session.
-
-        @param refresh_seconds: Minimum seconds between planned inventory probes.
-        @param emit: Callback receiving status level and message.
-        @return: None.
+        
+        @param float refresh_seconds: Minimum seconds between planned inventory probes.
+        @param Any emit: Callback receiving status level and message.
         """
         self.refresh_seconds = max(1.0, float(refresh_seconds or DEFAULT_INVENTORY_REFRESH_SECONDS))
         self.emit = emit
@@ -1319,17 +1307,17 @@ class RemoteInventorySession:
     def due(self) -> bool:
         """
         Return whether the planned reconnect interval has elapsed.
-
-        @return: True when another inventory handshake should be made.
+        
+        @return bool True when another inventory handshake should be made.
         """
         return (time.time() - self.last_refresh_at) >= self.refresh_seconds
 
     def remember_existing(self, payload: Dict[str, Any]) -> int:
         """
         Store hashes confirmed by a gallery inventory response.
-
-        @param payload: Parsed inventory response returned by PHP Gallery.
-        @return: Number of confirmed remote files in this response.
+        
+        @param Dict[str, Any] payload: Parsed inventory response returned by PHP Gallery.
+        @return int Number of confirmed remote files in this response.
         """
         existing = payload.get("existing", [])
         if not isinstance(existing, list):
@@ -1349,12 +1337,12 @@ class RemoteInventorySession:
     def refresh(self, upload_url: str, api_key: str, candidates: List[Dict[str, Any]], force: bool = False) -> bool:
         """
         Ask the passive gallery which submitted files already exist.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @param api_key: Gallery-scoped API key.
-        @param candidates: Local file descriptors to compare with the gallery.
-        @param force: When True, refresh even before the planned interval elapses.
-        @return: True when the API call completed successfully.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
+        @param str api_key: Gallery-scoped API key.
+        @param List[Dict[str, Any]] candidates: Local file descriptors to compare with the gallery.
+        @param bool force: When True, refresh even before the planned interval elapses.
+        @return bool True when the API call completed successfully.
         """
         if not candidates:
             return False
@@ -1383,20 +1371,20 @@ class RemoteInventorySession:
     def has_hash(self, file_hash: str) -> bool:
         """
         Return whether the remote gallery has confirmed this content hash.
-
-        @param file_hash: SHA-256 hash of a local file.
-        @return: True when a previous inventory response matched it.
+        
+        @param str file_hash: SHA-256 hash of a local file.
+        @return bool True when a previous inventory response matched it.
         """
         return file_hash.lower() in self.existing_hashes
 
     def confirm_after_failure(self, upload_url: str, api_key: str, candidate: Dict[str, Any]) -> bool:
         """
         Force a reconnect probe after an upload request failed or timed out.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @param api_key: Gallery-scoped API key.
-        @param candidate: File descriptor for the request that just failed.
-        @return: True when the gallery now reports the file as already present.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
+        @param str api_key: Gallery-scoped API key.
+        @param Dict[str, Any] candidate: File descriptor for the request that just failed.
+        @return bool True when the gallery now reports the file as already present.
         """
         self.refresh(upload_url, api_key, [candidate], force=True)
         return self.has_hash(str(candidate.get("sha256", "")))
@@ -1405,9 +1393,9 @@ class RemoteInventorySession:
 def sha256_file(path: Path) -> str:
     """
     Calculate a file SHA-256 hash without loading the whole file at once.
-
-    @param path: File to hash.
-    @return: Hex-encoded SHA-256 digest.
+    
+    @param Path path: File to hash.
+    @return str Hex-encoded SHA-256 digest.
     @raises OSError: Propagated when the file cannot be opened or read.
     """
     digest = hashlib.sha256()
@@ -1423,14 +1411,13 @@ def sha256_file(path: Path) -> str:
 def iter_candidate_files(folder: Path) -> List[Path]:
     """
     Return supported image files directly inside the watched folder.
-
+    
     The watcher is intentionally non-recursive. A watched import/drop folder is
     expected to act as a flat staging area, while gallery hierarchy and final
     placement remain controlled by PHP Gallery.
-
-    @param folder: Folder to scan.
-    @return: Sorted list of supported image paths. Missing or unreadable folders
-        return an empty list.
+    
+    @param Path folder: Folder to scan.
+    @return List[Path] Sorted list of supported image paths. Missing or unreadable folders.
     """
     try:
         candidates = [item for item in folder.iterdir() if item.is_file() and item.suffix.lower() in SUPPORTED_SUFFIXES]
@@ -1445,11 +1432,11 @@ def iter_candidate_files(folder: Path) -> List[Path]:
 def multipart_field_part(boundary: str, name: str, value: str) -> bytes:
     """
     Build one text field for a multipart/form-data request body.
-
-    @param boundary: Multipart boundary string without the leading dashes.
-    @param name: Submitted field name.
-    @param value: Submitted field value.
-    @return: Encoded multipart field bytes.
+    
+    @param str boundary: Multipart boundary string without the leading dashes.
+    @param str name: Submitted field name.
+    @param str value: Submitted field value.
+    @return bytes Encoded multipart field bytes.
     """
     return b"".join([
         f"--{boundary}\r\n".encode("ascii"),
@@ -1462,12 +1449,12 @@ def multipart_field_part(boundary: str, name: str, value: str) -> bytes:
 def multipart_file_part(boundary: str, field_name: str, path: Path, filename: Optional[str] = None) -> bytes:
     """
     Build one file field for a multipart/form-data request body.
-
-    @param boundary: Multipart boundary string without the leading dashes.
-    @param field_name: Submitted file field name.
-    @param path: Local file path whose bytes should be sent.
-    @param filename: Optional remote file name. When omitted, path.name is used.
-    @return: Encoded multipart file bytes including the file content.
+    
+    @param str boundary: Multipart boundary string without the leading dashes.
+    @param str field_name: Submitted file field name.
+    @param Path path: Local file path whose bytes should be sent.
+    @param Optional[str] filename: Optional remote file name. When omitted, path.name is used.
+    @return bytes Encoded multipart file bytes including the file content.
     @raises OSError: Propagated when the file cannot be read.
     """
     safe_name = (filename or path.name).replace('"', "_")
@@ -1492,24 +1479,22 @@ def multipart_upload(
 ) -> Dict[str, Any]:
     """
     Upload one image file using standard-library HTTP multipart/form-data.
-
+    
     The same endpoint is used for watch-folder uploads and manual uploads. Manual
     uploads may include locally generated thumbnail files in the same request. The
     server still stores the original image through the existing gallery upload
     pipeline, then installs the supplied thumbnail variants beside the final image
     record.
-
-    @param upload_url: Normalized PHP Gallery upload endpoint.
-    @param api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
-    @param path: Local image path to upload.
-    @param create_thumbnails: Whether to ask the gallery to generate thumbnails.
-    @param thumbnails: Optional local thumbnail variants to send with the image.
-    @param client_upload_id: Optional stable request-local ID used to map supplied
-        thumbnails to the stored image after server-side filename normalization.
-    @param metadata_fields: Optional text fields to submit beside the image.
-    @return: Parsed JSON response from the server.
-    @raises RuntimeError: Raised for HTTP errors, network errors, non-JSON
-        responses, malformed JSON payloads, or server-declared upload failure.
+    
+    @param str upload_url: Normalized PHP Gallery upload endpoint.
+    @param str api_key: Gallery-scoped API key sent as X-Gallery-API-Key.
+    @param Path path: Local image path to upload.
+    @param bool create_thumbnails: Whether to ask the gallery to generate thumbnails.
+    @param Optional[List[LocalThumbnail]] thumbnails: Optional local thumbnail variants to send with the image.
+    @param Optional[str] client_upload_id: Optional stable request-local ID used to map supplied.
+    @param Optional[Dict[str, str]] metadata_fields: Optional text fields to submit beside the image.
+    @return Dict[str, Any] Parsed JSON response from the server.
+    @raises RuntimeError: Raised for HTTP errors, network errors, non-JSON responses, malformed JSON payloads, or server-declared upload failure.
     @raises OSError: Propagated when the image or a thumbnail cannot be read.
     """
     boundary = "PHPGalleryUpload" + uuid.uuid4().hex
@@ -1579,8 +1564,8 @@ def multipart_upload(
 def selected_image_filetypes() -> List[Tuple[str, str]]:
     """
     Return file picker filters for manual image selection.
-
-    @return: Tkinter-compatible file type filters.
+    
+    @return List[Tuple[str, str]] Tkinter-compatible file type filters.
     """
     return [
         ("Image files", "*.jpg *.jpeg *.png *.gif *.webp *.heic *.heif *.dng"),
@@ -1594,9 +1579,9 @@ def selected_image_filetypes() -> List[Tuple[str, str]]:
 def filter_supported_paths(paths: Iterable[str]) -> List[Path]:
     """
     Normalize manually selected paths and keep only supported image suffixes.
-
-    @param paths: Raw path strings returned by Tkinter.
-    @return: Sorted, de-duplicated Path objects.
+    
+    @param Iterable[str] paths: Raw path strings returned by Tkinter.
+    @return List[Path] Sorted, de-duplicated Path objects.
     """
     unique: Dict[str, Path] = {}
     for raw_path in paths:
@@ -1609,8 +1594,8 @@ def filter_supported_paths(paths: Iterable[str]) -> List[Path]:
 def local_thumbnail_supported() -> bool:
     """
     Return whether Pillow is available for client-side thumbnail generation.
-
-    @return: True when Pillow imports are available.
+    
+    @return bool True when Pillow imports are available.
     """
     return Image is not None and ImageOps is not None
 
@@ -1618,12 +1603,12 @@ def local_thumbnail_supported() -> bool:
 def thumbnail_runtime_status() -> str:
     """
     Build a clear status line for the Python runtime used by this process.
-
+    
     Windows can have multiple Python installations and Microsoft Store aliases.
     The app must report the exact executable currently running the GUI because
     optional helper packages have to be installed into this same interpreter.
-
-    @return: Human-readable runtime and Pillow availability status.
+    
+    @return str Human-readable runtime and Pillow availability status.
     """
     executable = sys.executable or "unknown Python executable"
     version = sys.version.split()[0]
@@ -1637,11 +1622,11 @@ def thumbnail_runtime_status() -> str:
 def clamp_int(value: int, minimum: int, maximum: int) -> int:
     """
     Restrict an integer to a configured inclusive range.
-
-    @param value: Candidate integer value.
-    @param minimum: Lowest accepted value.
-    @param maximum: Highest accepted value.
-    @return: Value restricted to the accepted range.
+    
+    @param int value: Candidate integer value.
+    @param int minimum: Lowest accepted value.
+    @param int maximum: Highest accepted value.
+    @return int Value restricted to the accepted range.
     """
     return max(minimum, min(maximum, int(value)))
 
@@ -1649,13 +1634,13 @@ def clamp_int(value: int, minimum: int, maximum: int) -> int:
 def automatic_thumbnail_worker_count() -> int:
     """
     Choose a conservative multiprocessing thumbnail worker count.
-
+    
     The automatic value intentionally avoids using every logical CPU. Image
     resizing and WebP encoding also consume disk I/O, memory bandwidth, and RAM.
     On high-core CPUs, using roughly half the logical CPUs is usually faster and
     more stable than launching one encoder process per thread.
-
-    @return: Worker process count for thumbnail generation.
+    
+    @return int Worker process count for thumbnail generation.
     """
     cpu_count = os.cpu_count() or 4
     return clamp_int(max(2, cpu_count // 2), 2, min(MAX_THUMBNAIL_WORKERS, cpu_count))
@@ -1664,13 +1649,13 @@ def automatic_thumbnail_worker_count() -> int:
 def automatic_upload_worker_count() -> int:
     """
     Choose a conservative manual upload worker count.
-
+    
     Upload concurrency should remain lower than thumbnail concurrency because the
     shared-hosting server, PHP process limits, and network uplink are often the
     bottleneck. Too many concurrent uploads can make the gallery slower instead
     of faster.
-
-    @return: Worker thread count for multipart uploads.
+    
+    @return int Worker thread count for multipart uploads.
     """
     return DEFAULT_UPLOAD_WORKERS
 
@@ -1678,9 +1663,9 @@ def automatic_upload_worker_count() -> int:
 def resolve_thumbnail_worker_count(configured_value: int) -> int:
     """
     Resolve the manual thumbnail worker setting into a real process count.
-
-    @param configured_value: Stored UI value, where zero means automatic.
-    @return: Safe worker process count.
+    
+    @param int configured_value: Stored UI value, where zero means automatic.
+    @return int Safe worker process count.
     """
     if int(configured_value) <= 0:
         return automatic_thumbnail_worker_count()
@@ -1690,9 +1675,9 @@ def resolve_thumbnail_worker_count(configured_value: int) -> int:
 def resolve_upload_worker_count(configured_value: int) -> int:
     """
     Resolve the manual upload worker setting into a real thread count.
-
-    @param configured_value: Stored UI value, where zero means automatic.
-    @return: Safe worker thread count.
+    
+    @param int configured_value: Stored UI value, where zero means automatic.
+    @return int Safe worker thread count.
     """
     if int(configured_value) <= 0:
         return automatic_upload_worker_count()
@@ -1702,9 +1687,9 @@ def resolve_upload_worker_count(configured_value: int) -> int:
 def worker_choice_values(maximum: int) -> List[str]:
     """
     Build human-readable worker choices for the Tkinter comboboxes.
-
-    @param maximum: Highest explicit worker value to offer.
-    @return: List containing Auto plus numeric worker counts.
+    
+    @param int maximum: Highest explicit worker value to offer.
+    @return List[str] List containing Auto plus numeric worker counts.
     """
     values = ["Auto"]
     for value in [1, 2, 4, 6, 8, 12, 16, 24, 32]:
@@ -1716,9 +1701,9 @@ def worker_choice_values(maximum: int) -> List[str]:
 def parse_worker_choice(value: str) -> int:
     """
     Convert a UI worker choice into the persisted integer representation.
-
-    @param value: Combobox text, either Auto or a positive integer.
-    @return: Zero for Auto, otherwise a positive integer.
+    
+    @param str value: Combobox text, either Auto or a positive integer.
+    @return int Zero for Auto, otherwise a positive integer.
     """
     text = str(value).strip()
     if not text or text.lower() == "auto":
@@ -1729,9 +1714,9 @@ def parse_worker_choice(value: str) -> int:
 def normalize_ai_vision_backend(value: str) -> str:
     """
     Return a supported AI vision backend identifier.
-
-    @param value: Raw backend value from config or UI.
-    @return: One of the supported backend identifiers.
+    
+    @param str value: Raw backend value from config or UI.
+    @return str One of the supported backend identifiers.
     """
     normalized = value.strip().lower()
     if normalized in AI_VISION_BACKEND_CHOICES:
@@ -1742,9 +1727,9 @@ def normalize_ai_vision_backend(value: str) -> str:
 def format_worker_choice(value: int) -> str:
     """
     Convert a persisted worker value into combobox text.
-
-    @param value: Stored worker value, where zero means Auto.
-    @return: Combobox text.
+    
+    @param int value: Stored worker value, where zero means Auto.
+    @return str Combobox text.
     """
     if int(value) <= 0:
         return "Auto"
@@ -1754,11 +1739,11 @@ def format_worker_choice(value: int) -> str:
 def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
     """
     Install or repair winapp dependencies for the exact Python interpreter.
-
+    
     This avoids the common Windows issue where install.bat installs packages into
     one Python version while a .pyw file association launches another version.
-
-    @return: Tuple containing success flag and command output text.
+    
+    @return Tuple[bool, str] Tuple containing success flag and command output text.
     """
     command = [sys.executable, "-m", "pip", "install", "--user"]
     if REQUIREMENTS_PATH.is_file():
@@ -1793,13 +1778,13 @@ def install_dependencies_for_current_runtime() -> Tuple[bool, str]:
 def install_semantic_ai_dependencies_for_current_runtime() -> Tuple[bool, str]:
     """
     Install optional in-process semantic AI packages for this Python runtime.
-
+    
     These packages are intentionally not listed in requirements.txt because they
     are large and are needed only when the operator selects the Transformers
     backend. The normal uploader, tray icon, manual upload, and Pillow fallback
     continue to use the lightweight required dependency set.
-
-    @return: Tuple containing success flag and command output text.
+    
+    @return Tuple[bool, str] Tuple containing success flag and command output text.
     """
     command = [
         sys.executable,
@@ -1836,9 +1821,9 @@ def install_semantic_ai_dependencies_for_current_runtime() -> Tuple[bool, str]:
 def image_has_alpha(image: Any) -> bool:
     """
     Return whether a Pillow image contains transparency that matters for output.
-
-    @param image: Pillow image instance.
-    @return: True when the image has an alpha channel or palette transparency.
+    
+    @param Any image: Pillow image instance.
+    @return bool True when the image has an alpha channel or palette transparency.
     """
     return image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info)
 
@@ -1846,12 +1831,12 @@ def image_has_alpha(image: Any) -> bool:
 def prepare_jpeg_image(image: Any) -> Any:
     """
     Convert a Pillow image to the RGB canvas expected by JPEG output.
-
+    
     Transparent pixels are composited over white to match the gallery server's
     JPEG thumbnail behavior.
-
-    @param image: Pillow image instance.
-    @return: RGB Pillow image suitable for JPEG encoding.
+    
+    @param Any image: Pillow image instance.
+    @return Any RGB Pillow image suitable for JPEG encoding.
     """
     if image_has_alpha(image):
         rgba = image.convert("RGBA")
@@ -1864,9 +1849,9 @@ def prepare_jpeg_image(image: Any) -> Any:
 def prepare_webp_image(image: Any) -> Any:
     """
     Convert a Pillow image to a WebP-friendly mode while preserving alpha.
-
-    @param image: Pillow image instance.
-    @return: Pillow image suitable for WebP encoding.
+    
+    @param Any image: Pillow image instance.
+    @return Any Pillow image suitable for WebP encoding.
     """
     if image_has_alpha(image):
         return image.convert("RGBA")
@@ -1876,16 +1861,16 @@ def prepare_webp_image(image: Any) -> Any:
 def generate_local_thumbnails(source_path: Path, output_root: Path, client_upload_id: str) -> List[LocalThumbnail]:
     """
     Generate PHP Gallery responsive thumbnail variants on the client computer.
-
+    
     The size list and naming intent mirror PHP Gallery's thumbnail service:
     300, 600, 800, 960, 1280, and 1600 pixels on the long side, emitted as JPG
     and WebP. The server decides where those files belong after it stores the
     original and resolves the final image record.
-
-    @param source_path: Original image selected for manual upload.
-    @param output_root: Temporary parent directory for generated files.
-    @param client_upload_id: Request-local ID shared with the server metadata.
-    @return: Generated thumbnail descriptors.
+    
+    @param Path source_path: Original image selected for manual upload.
+    @param Path output_root: Temporary parent directory for generated files.
+    @param str client_upload_id: Request-local ID shared with the server metadata.
+    @return List[LocalThumbnail] Generated thumbnail descriptors.
     @raises RuntimeError: Raised when Pillow is unavailable.
     @raises OSError: Propagated when files cannot be read or written.
     @raises Exception: Propagated when Pillow cannot decode or encode the image.
@@ -1943,15 +1928,14 @@ class PeriodicAIHeartbeat(threading.Thread):
     ) -> None:
         """
         Create a heartbeat thread for one claimed job.
-
-        @param upload_url: Normalized upload automation endpoint.
-        @param api_key: Gallery-scoped API key.
-        @param job_id: Server job id from the claim response.
-        @param claim_token: Server claim token returned with the job.
-        @param lease_seconds: Requested lease extension length.
-        @param progress_callback: Callable returning progress percent and text.
-        @param emit: Status callback receiving level and message.
-        @return: None.
+        
+        @param str upload_url: Normalized upload automation endpoint.
+        @param str api_key: Gallery-scoped API key.
+        @param int job_id: Server job id from the claim response.
+        @param str claim_token: Server claim token returned with the job.
+        @param int lease_seconds: Requested lease extension length.
+        @param Any progress_callback: Callable returning progress percent and text.
+        @param Any emit: Status callback receiving level and message.
         """
         super().__init__(name="PHPGalleryAIHeartbeat", daemon=True)
         self.upload_url = upload_url
@@ -1967,16 +1951,12 @@ class PeriodicAIHeartbeat(threading.Thread):
     def stop(self) -> None:
         """
         Request heartbeat shutdown.
-
-        @return: None.
         """
         self.stop_event.set()
 
     def run(self) -> None:
         """
         Send heartbeats until stopped.
-
-        @return: None.
         """
         while not self.stop_event.wait(self.interval):
             try:
@@ -2011,9 +1991,8 @@ class AIImageAnalyzer:
     def __init__(self, config: WatcherConfig) -> None:
         """
         Create an analyzer adapter from the current worker configuration.
-
-        @param config: Worker configuration captured at start time.
-        @return: None.
+        
+        @param WatcherConfig config: Worker configuration captured at start time.
         """
         self.config = config
         self.external_command = config.ai_external_command.strip()
@@ -2029,12 +2008,11 @@ class AIImageAnalyzer:
     def analyze(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Analyze one downloaded image asset and return internal metadata.
-
-        @param image_path: Local path to the claimed image asset.
-        @param job: Job payload returned by the PHP Gallery server.
-        @return: Tuple of metadata dictionary and explicit searchable text.
-        @raises RuntimeError: Raised when neither the external command nor the
-            built-in Pillow analysis can produce metadata.
+        
+        @param Path image_path: Local path to the claimed image asset.
+        @param Dict[str, Any] job: Job payload returned by the PHP Gallery server.
+        @return Tuple[Dict[str, Any], str] Tuple of metadata dictionary and explicit searchable text.
+        @raises RuntimeError: Raised when neither the external command nor the built-in Pillow analysis can produce metadata.
         """
         if self.vision_backend == "external":
             if not self.external_command:
@@ -2061,14 +2039,14 @@ class AIImageAnalyzer:
     def analyze_with_external_command(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Run an operator-provided local analyzer command.
-
+        
         The command must print a JSON object to stdout. Accepted shapes are:
         {"metadata": {...}, "searchable_text": "..."} or any JSON object, which
         will be stored directly as metadata.
-
-        @param image_path: Local path to the downloaded image.
-        @param job: Server job payload.
-        @return: Tuple of metadata dictionary and explicit searchable text.
+        
+        @param Path image_path: Local path to the downloaded image.
+        @param Dict[str, Any] job: Server job payload.
+        @return Tuple[Dict[str, Any], str] Tuple of metadata dictionary and explicit searchable text.
         @raises RuntimeError: Raised when the command fails or returns bad JSON.
         """
         image = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
@@ -2106,16 +2084,16 @@ class AIImageAnalyzer:
     def analyze_with_transformers(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Produce semantic metadata inside this Python process with Transformers.
-
+        
         This backend does not require a separate local server. It imports the
         optional Hugging Face Transformers and PyTorch packages directly, loads
         the configured models in-process, and analyzes the assigned image on the
         worker PC. First use may download model files into the normal local
         Hugging Face cache for the current Windows user.
-
-        @param image_path: Local path to the downloaded image.
-        @param job: Server job payload.
-        @return: Tuple of metadata dictionary and searchable text.
+        
+        @param Path image_path: Local path to the downloaded image.
+        @param Dict[str, Any] job: Server job payload.
+        @return Tuple[Dict[str, Any], str] Tuple of metadata dictionary and searchable text.
         @raises RuntimeError: Raised when optional packages or models are absent.
         """
         if Image is None or ImageOps is None:
@@ -2167,9 +2145,9 @@ class AIImageAnalyzer:
     def transformers_caption(self, image: Any) -> str:
         """
         Return one concise caption from the configured in-process caption model.
-
-        @param image: RGB Pillow image.
-        @return: Caption text, lower-case and whitespace-normalized.
+        
+        @param Any image: RGB Pillow image.
+        @return str Caption text, lower-case and whitespace-normalized.
         @raises RuntimeError: Raised when the model cannot run.
         """
         last_error: Optional[Exception] = None
@@ -2189,13 +2167,13 @@ class AIImageAnalyzer:
     def transformers_caption_text_from_result(self, result: Any) -> str:
         """
         Extract normalized caption text from multiple Transformers result shapes.
-
+        
         Transformers versions differ in their preferred image captioning task and
         output field names. This helper keeps the analyzer tolerant while keeping
         diagnostic details out of metadata sent to the gallery server.
-
-        @param result: Raw pipeline result returned by Transformers.
-        @return: Lower-case, whitespace-normalized caption text.
+        
+        @param Any result: Raw pipeline result returned by Transformers.
+        @return str Lower-case, whitespace-normalized caption text.
         """
         if isinstance(result, list) and result:
             first = result[0]
@@ -2212,14 +2190,14 @@ class AIImageAnalyzer:
     def transformers_object_detections(self, image: Any) -> List[Dict[str, Any]]:
         """
         Return zero-shot object detections from the configured local model.
-
+        
         The detector is optional even when the Transformers backend is selected.
         If the detector model fails after a caption has been produced, the
         analyzer keeps the caption result and stores a diagnostic object label
         only in local logs through the raised message when no caption exists.
-
-        @param image: RGB Pillow image.
-        @return: List of compact detection dictionaries.
+        
+        @param Any image: RGB Pillow image.
+        @return List[Dict[str, Any]] List of compact detection dictionaries.
         """
         labels = self.transformers_candidate_labels()
         if not labels:
@@ -2262,10 +2240,10 @@ class AIImageAnalyzer:
     def transformers_pipeline(self, task: str, model_name: str) -> Any:
         """
         Load and cache one Transformers pipeline inside the current process.
-
-        @param task: Transformers pipeline task name.
-        @param model_name: Hugging Face model identifier or local model path.
-        @return: Pipeline callable.
+        
+        @param str task: Transformers pipeline task name.
+        @param str model_name: Hugging Face model identifier or local model path.
+        @return Any Pipeline callable.
         @raises RuntimeError: Raised when optional packages are not installed.
         """
         cache_key = (task, model_name)
@@ -2290,18 +2268,18 @@ class AIImageAnalyzer:
     def transformers_candidate_labels(self) -> List[str]:
         """
         Return normalized object labels for local zero-shot detection.
-
-        @return: Deduplicated candidate label list.
+        
+        @return List[str] Deduplicated candidate label list.
         """
         return self.normalize_label_list(self.transformers_object_labels)
 
     def labels_from_caption(self, caption: str, candidates: List[str]) -> List[str]:
         """
         Extract configured search labels explicitly mentioned in a caption.
-
-        @param caption: Caption text from the local caption model.
-        @param candidates: Candidate labels configured for object detection.
-        @return: Labels found in the caption.
+        
+        @param str caption: Caption text from the local caption model.
+        @param List[str] candidates: Candidate labels configured for object detection.
+        @return List[str] Labels found in the caption.
         """
         caption_text = " " + " ".join(caption.lower().replace("-", " ").split()) + " "
         found: List[str] = []
@@ -2318,14 +2296,14 @@ class AIImageAnalyzer:
     def analyze_with_ollama(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Produce semantic image metadata with a local Ollama vision model.
-
+        
         This backend keeps heavy analysis on the Windows machine. It contacts
         only the configured local Ollama endpoint and never sends image bytes to
         PHP Gallery except for the final internal metadata result.
-
-        @param image_path: Local path to the downloaded image.
-        @param job: Server job payload.
-        @return: Tuple of metadata dictionary and searchable text.
+        
+        @param Path image_path: Local path to the downloaded image.
+        @param Dict[str, Any] job: Server job payload.
+        @return Tuple[Dict[str, Any], str] Tuple of metadata dictionary and searchable text.
         @raises RuntimeError: Raised when Ollama is unavailable or returns bad data.
         """
         image_info = job.get("image", {}) if isinstance(job.get("image"), dict) else {}
@@ -2403,13 +2381,13 @@ class AIImageAnalyzer:
     def parse_semantic_json(self, raw_response: str) -> Dict[str, Any]:
         """
         Decode the JSON object produced by a local vision model.
-
+        
         Vision models sometimes wrap JSON in explanatory text despite explicit
         prompting. This parser first tries strict JSON, then extracts the first
         object-shaped range as a practical recovery path.
-
-        @param raw_response: Raw response text from the local model.
-        @return: Decoded dictionary.
+        
+        @param str raw_response: Raw response text from the local model.
+        @return Dict[str, Any] Decoded dictionary.
         @raises RuntimeError: Raised when no JSON object can be decoded.
         """
         try:
@@ -2430,9 +2408,9 @@ class AIImageAnalyzer:
     def normalize_label_list(self, value: Any) -> List[str]:
         """
         Normalize model-produced labels into short searchable strings.
-
-        @param value: Raw JSON value, usually a list of strings.
-        @return: Deduplicated list of lower-case labels.
+        
+        @param Any value: Raw JSON value, usually a list of strings.
+        @return List[str] Deduplicated list of lower-case labels.
         """
         if isinstance(value, str):
             candidates = [part.strip() for part in value.replace(";", ",").split(",")]
@@ -2450,12 +2428,12 @@ class AIImageAnalyzer:
     def semantic_description_from_parts(self, scene: str, objects: List[str], activities: List[str], labels: List[str]) -> str:
         """
         Create a compact fallback sentence from semantic model fields.
-
-        @param scene: Scene label returned by the model.
-        @param objects: Visible object labels.
-        @param activities: Visible activity labels.
-        @param labels: General labels.
-        @return: Compact internal description.
+        
+        @param str scene: Scene label returned by the model.
+        @param List[str] objects: Visible object labels.
+        @param List[str] activities: Visible activity labels.
+        @param List[str] labels: General labels.
+        @return str Compact internal description.
         """
         parts: List[str] = []
         if scene:
@@ -2471,14 +2449,14 @@ class AIImageAnalyzer:
     def analyze_with_pillow(self, image_path: Path, job: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Produce internal searchable metadata using local Pillow inspection.
-
+        
         This is a conservative fallback, not an authoritative human caption. It
         records technical and visual descriptors that help search find likely
         images while a stronger local model can be configured later.
-
-        @param image_path: Local path to the downloaded image.
-        @param job: Server job payload.
-        @return: Tuple of metadata dictionary and searchable text.
+        
+        @param Path image_path: Local path to the downloaded image.
+        @param Dict[str, Any] job: Server job payload.
+        @return Tuple[Dict[str, Any], str] Tuple of metadata dictionary and searchable text.
         @raises RuntimeError: Raised when Pillow is unavailable or cannot read the file.
         """
         if Image is None or ImageOps is None or ImageStat is None:
@@ -2541,9 +2519,9 @@ class AIImageAnalyzer:
     def colorfulness_score(self, stat: Any) -> float:
         """
         Return a simple RGB dispersion score for colorfulness.
-
-        @param stat: ImageStat.Stat instance for a sampled RGB image.
-        @return: Approximate colorfulness score.
+        
+        @param Any stat: ImageStat.Stat instance for a sampled RGB image.
+        @return float Approximate colorfulness score.
         """
         if not stat.mean or len(stat.mean) < 3:
             return 0.0
@@ -2555,9 +2533,9 @@ class AIImageAnalyzer:
     def dominant_color_labels(self, image: Any) -> List[str]:
         """
         Return compact color labels from a sampled image.
-
-        @param image: PIL RGB image.
-        @return: List of color labels suitable for internal search.
+        
+        @param Any image: PIL RGB image.
+        @return List[str] List of color labels suitable for internal search.
         """
         adaptive_palette = getattr(Image, "ADAPTIVE", None)
         if adaptive_palette is None and hasattr(Image, "Palette"):
@@ -2577,9 +2555,9 @@ class AIImageAnalyzer:
     def rgb_label(self, rgb: Tuple[int, int, int]) -> str:
         """
         Convert one RGB color into a coarse human-readable label.
-
-        @param rgb: Red, green, and blue tuple.
-        @return: Coarse color label.
+        
+        @param Tuple[int, int, int] rgb: Red, green, and blue tuple.
+        @return str Coarse color label.
         """
         red, green, blue = rgb
         maximum = max(red, green, blue)
@@ -2613,10 +2591,10 @@ class AIImageAnalyzer:
     def orientation_label(self, width: int, height: int) -> str:
         """
         Return landscape, portrait, square, or panorama from image dimensions.
-
-        @param width: Image width in pixels.
-        @param height: Image height in pixels.
-        @return: Orientation label.
+        
+        @param int width: Image width in pixels.
+        @param int height: Image height in pixels.
+        @return str Orientation label.
         """
         if width <= 0 or height <= 0:
             return "unknown orientation"
@@ -2632,9 +2610,9 @@ class AIImageAnalyzer:
     def brightness_label(self, luminance: float) -> str:
         """
         Return a coarse brightness label.
-
-        @param luminance: Mean luminance from 0 to 255.
-        @return: Brightness label.
+        
+        @param float luminance: Mean luminance from 0 to 255.
+        @return str Brightness label.
         """
         if luminance < 55:
             return "dark"
@@ -2647,9 +2625,9 @@ class AIImageAnalyzer:
     def contrast_label(self, stddev: float) -> str:
         """
         Return a coarse contrast label.
-
-        @param stddev: Luminance standard deviation.
-        @return: Contrast label.
+        
+        @param float stddev: Luminance standard deviation.
+        @return str Contrast label.
         """
         if stddev < 28:
             return "low contrast"
@@ -2660,9 +2638,9 @@ class AIImageAnalyzer:
     def colorfulness_label(self, score: float) -> str:
         """
         Return a coarse colorfulness label.
-
-        @param score: Approximate colorfulness score.
-        @return: Colorfulness label.
+        
+        @param float score: Approximate colorfulness score.
+        @return str Colorfulness label.
         """
         if score < 18:
             return "muted colors"
@@ -2683,10 +2661,9 @@ class AIAnalysisWorkerThread(threading.Thread):
     def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
         """
         Create a background AI-analysis worker.
-
-        @param config: Runtime configuration captured when the worker starts.
-        @param events: Queue used to send status lines back to the UI.
-        @return: None.
+        
+        @param WatcherConfig config: Runtime configuration captured when the worker starts.
+        @param queue.Queue[Tuple[str, str]] events: Queue used to send status lines back to the UI.
         """
         super().__init__(name="PHPGalleryAIAnalysisWorker", daemon=True)
         self.config = config
@@ -2700,18 +2677,15 @@ class AIAnalysisWorkerThread(threading.Thread):
     def stop(self) -> None:
         """
         Request the worker loop to stop.
-
-        @return: None.
         """
         self.stop_event.set()
 
     def emit(self, level: str, message: str) -> None:
         """
         Send one worker event to the UI and file log.
-
-        @param level: Severity label.
-        @param message: Human-readable status text.
-        @return: None.
+        
+        @param str level: Severity label.
+        @param str message: Human-readable status text.
         """
         logging.log(logging.ERROR if level == "error" else logging.INFO, "%s", message)
         self.events.put((level, message))
@@ -2719,10 +2693,9 @@ class AIAnalysisWorkerThread(threading.Thread):
     def update_progress(self, percent: int, message: str) -> None:
         """
         Store the current progress text used by heartbeat requests.
-
-        @param percent: Integer progress from 0 to 99 while running.
-        @param message: Short status text.
-        @return: None.
+        
+        @param int percent: Integer progress from 0 to 99 while running.
+        @param str message: Short status text.
         """
         with self.progress_lock:
             self.progress_percent = max(0, min(99, int(percent)))
@@ -2731,8 +2704,8 @@ class AIAnalysisWorkerThread(threading.Thread):
     def current_progress(self) -> Tuple[int, str]:
         """
         Return the latest heartbeat progress tuple.
-
-        @return: Progress percent and message.
+        
+        @return Tuple[int, str] Progress percent and message.
         """
         with self.progress_lock:
             return self.progress_percent, self.progress_message
@@ -2740,8 +2713,6 @@ class AIAnalysisWorkerThread(threading.Thread):
     def run(self) -> None:
         """
         Poll the server and process claimed jobs until stopped.
-
-        @return: None.
         """
         enter_background_thread_mode()
         upload_url = normalize_upload_url(self.config.gallery_url)
@@ -2789,12 +2760,11 @@ class AIAnalysisWorkerThread(threading.Thread):
     def process_job(self, upload_url: str, api_key: str, job: Dict[str, Any], lease_seconds: int) -> None:
         """
         Download, analyze, and report one claimed AI job.
-
-        @param upload_url: Normalized upload automation endpoint.
-        @param api_key: Gallery-scoped API key.
-        @param job: Claimed job payload from the server.
-        @param lease_seconds: Requested lease extension length.
-        @return: None.
+        
+        @param str upload_url: Normalized upload automation endpoint.
+        @param str api_key: Gallery-scoped API key.
+        @param Dict[str, Any] job: Claimed job payload from the server.
+        @param int lease_seconds: Requested lease extension length.
         """
         job_id = int(job.get("job_id") or 0)
         claim_token = str(job.get("claim_token") or "")
@@ -2860,14 +2830,13 @@ class AIAnalysisWorkerThread(threading.Thread):
     def report_failure(self, upload_url: str, api_key: str, job_id: int, claim_token: str, filename: str, exc: Exception) -> None:
         """
         Report one failed job to the server without hiding local diagnostics.
-
-        @param upload_url: Normalized upload automation endpoint.
-        @param api_key: Gallery-scoped API key.
-        @param job_id: Failed server job id.
-        @param claim_token: Claim token returned with the job.
-        @param filename: Original filename for readable logging.
-        @param exc: Exception raised during processing.
-        @return: None.
+        
+        @param str upload_url: Normalized upload automation endpoint.
+        @param str api_key: Gallery-scoped API key.
+        @param int job_id: Failed server job id.
+        @param str claim_token: Claim token returned with the job.
+        @param str filename: Original filename for readable logging.
+        @param Exception exc: Exception raised during processing.
         """
         message = str(exc)
         try:
@@ -2901,10 +2870,9 @@ class WatcherThread(threading.Thread):
     def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
         """
         Create a watcher worker.
-
-        @param config: Runtime configuration captured when the worker starts.
-        @param events: Thread-safe queue used to send status messages to the GUI
-            or command-line runner.
+        
+        @param WatcherConfig config: Runtime configuration captured when the worker starts.
+        @param queue.Queue[Tuple[str, str]] events: Thread-safe queue used to send status messages to the GUI.
         """
         super().__init__(daemon=True)
         self.config = config
@@ -2919,18 +2887,15 @@ class WatcherThread(threading.Thread):
     def stop(self) -> None:
         """
         Request the worker to stop.
-
-        @return: None.
         """
         self.stop_event.set()
 
     def emit(self, level: str, message: str) -> None:
         """
         Send a message to the UI queue and the persistent log file.
-
-        @param level: Logging level name such as info, warning, or error.
-        @param message: Human-readable status message.
-        @return: None.
+        
+        @param str level: Logging level name such as info, warning, or error.
+        @param str message: Human-readable status message.
         """
         self.events.put((level, message))
         log_method = getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")
@@ -2939,12 +2904,10 @@ class WatcherThread(threading.Thread):
     def run(self) -> None:
         """
         Run the polling loop until stopped.
-
+        
         Existing files are captured before the first scan and ignored for the
         lifetime of this worker. That makes the app behave like a live import
         bridge: only files added after Start watching are uploaded.
-
-        @return: None.
         """
         folder = Path(self.config.watched_folder)
         upload_url = normalize_upload_url(self.config.gallery_url)
@@ -2976,10 +2939,9 @@ class WatcherThread(threading.Thread):
     def scan_once(self, folder: Path, upload_url: str) -> None:
         """
         Scan the watched folder once and process files that are ready.
-
-        @param folder: Folder to scan.
-        @param upload_url: Normalized endpoint used for uploads.
-        @return: None.
+        
+        @param Path folder: Folder to scan.
+        @param str upload_url: Normalized endpoint used for uploads.
         """
         for path in iter_candidate_files(folder):
             if self.stop_event.is_set():
@@ -3053,9 +3015,9 @@ class WatcherThread(threading.Thread):
     def sim_camera_metadata_fields(self, path: Path) -> Dict[str, str]:
         """
         Return Flight Simulator camera metadata fields for one watched upload.
-
-        @param path: Local image path about to be uploaded.
-        @return: Multipart form fields, or an empty dictionary when unavailable.
+        
+        @param Path path: Local image path about to be uploaded.
+        @return Dict[str, str] Multipart form fields, or an empty dictionary when unavailable.
         """
         if not self.config.attach_sim_camera_metadata:
             return {}
@@ -3078,13 +3040,12 @@ class WatcherThread(threading.Thread):
     def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
         """
         Delete a watched-folder file after a confirmed successful upload.
-
+        
         The watcher deletes only originals that the gallery reports as uploaded.
         Skipped, duplicate, or failed files remain in place.
-
-        @param path: Local image file that was just submitted.
-        @param payload: Successful JSON response returned by the gallery.
-        @return: None.
+        
+        @param Path path: Local image file that was just submitted.
+        @param Dict[str, Any] payload: Successful JSON response returned by the gallery.
         """
         uploaded_count = int(payload.get("uploaded", 0) or 0)
         if uploaded_count <= 0:
@@ -3123,14 +3084,13 @@ class ManualUploadThread(threading.Thread):
     ) -> None:
         """
         Create a manual upload worker.
-
-        @param config: Shared connection configuration captured from the UI.
-        @param paths: Image paths selected by the user for manual upload.
-        @param client_thumbnails: Whether to generate responsive thumbnails on
-            this computer before uploading each original.
-        @param thumbnail_workers: Process count used for local thumbnail work.
-        @param upload_workers: Thread count used for concurrent HTTP uploads.
-        @param events: Thread-safe queue used to send status messages to the GUI.
+        
+        @param WatcherConfig config: Shared connection configuration captured from the UI.
+        @param List[Path] paths: Image paths selected by the user for manual upload.
+        @param bool client_thumbnails: Whether to generate responsive thumbnails on.
+        @param int thumbnail_workers: Process count used for local thumbnail work.
+        @param int upload_workers: Thread count used for concurrent HTTP uploads.
+        @param queue.Queue[Tuple[str, str]] events: Thread-safe queue used to send status messages to the GUI.
         """
         super().__init__(daemon=True)
         self.config = config
@@ -3150,18 +3110,15 @@ class ManualUploadThread(threading.Thread):
     def stop(self) -> None:
         """
         Request the manual upload worker to stop after the current item.
-
-        @return: None.
         """
         self.stop_event.set()
 
     def emit(self, level: str, message: str) -> None:
         """
         Send a status message to the GUI and persistent log.
-
-        @param level: Logging level name such as info, warning, or error.
-        @param message: Human-readable status message.
-        @return: None.
+        
+        @param str level: Logging level name such as info, warning, or error.
+        @param str message: Human-readable status message.
         """
         self.events.put((level, message))
         log_method = getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")
@@ -3170,8 +3127,6 @@ class ManualUploadThread(threading.Thread):
     def run(self) -> None:
         """
         Run the selected manual upload mode.
-
-        @return: None.
         """
         upload_url = normalize_upload_url(self.config.gallery_url)
         if not upload_url or not self.config.api_key.strip():
@@ -3197,9 +3152,8 @@ class ManualUploadThread(threading.Thread):
     def preload_remote_inventory(self, upload_url: str) -> None:
         """
         Ask the gallery which selected files are already present before a batch.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @return: None.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
         """
         candidates: List[Dict[str, Any]] = []
         for path in self.paths:
@@ -3215,12 +3169,12 @@ class ManualUploadThread(threading.Thread):
     def remote_skip_before_work(self, upload_url: str, path: Path, file_hash: str, size: int) -> bool:
         """
         Return whether an upload should be skipped because the gallery has it.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @param path: Local image path being considered.
-        @param file_hash: SHA-256 hash of the local image.
-        @param size: Local file size in bytes.
-        @return: True when the remote gallery confirms the file already exists.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
+        @param Path path: Local image path being considered.
+        @param str file_hash: SHA-256 hash of the local image.
+        @param int size: Local file size in bytes.
+        @return bool True when the remote gallery confirms the file already exists.
         """
         candidate = inventory_candidate(path, file_hash, size)
         self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
@@ -3235,13 +3189,12 @@ class ManualUploadThread(threading.Thread):
     def run_with_server_thumbnails(self, upload_url: str) -> None:
         """
         Upload selected originals and ask PHP Gallery to create thumbnails.
-
+        
         This mode still uses parallel HTTP uploads because multipart requests are
         network-bound. The worker count is intentionally modest so shared hosting
         is not overwhelmed by many simultaneous PHP upload requests.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @return: None.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
         """
         self.emit("info", f"Uploading with {self.upload_workers} upload thread(s).")
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.upload_workers) as executor:
@@ -3252,8 +3205,8 @@ class ManualUploadThread(threading.Thread):
             def submit_next() -> bool:
                 """
                 Submit one server-thumbnail upload when input remains.
-
-                @return: True when an upload task was queued.
+                
+                @return bool True when an upload task was queued.
                 """
                 try:
                     index, path = next(path_iterator)
@@ -3286,16 +3239,15 @@ class ManualUploadThread(threading.Thread):
     def run_with_client_thumbnails(self, upload_url: str) -> None:
         """
         Generate thumbnails in separate processes and upload in parallel threads.
-
+        
         This is a producer-consumer pipeline tuned for large manual batches. CPU
         heavy resize and encode work runs in a ProcessPoolExecutor so Windows can
         schedule it across many CPU cores. Network-bound multipart uploads run in
         a separate ThreadPoolExecutor. Thumbnail generation, uploading, and temp
         file cleanup overlap, but both queues remain bounded so a 500-photo batch
         does not fill the disk with completed thumbnail sets waiting to upload.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @return: None.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
         """
         if not local_thumbnail_supported():
             self.emit("error", "Client-side thumbnails require Pillow. Run: python -m pip install Pillow")
@@ -3313,12 +3265,12 @@ class ManualUploadThread(threading.Thread):
         def submit_next_thumbnail() -> bool:
             """
             Submit one thumbnail job to the process pool when input remains.
-
+            
             Files already confirmed by the remote gallery are consumed here
             without starting local thumbnail generation. The loop continues until
             it either queues real work or exhausts the selected file list.
-
-            @return: True when a thumbnail task was submitted.
+            
+            @return bool True when a thumbnail task was submitted.
             """
             while not self.stop_event.is_set():
                 try:
@@ -3352,16 +3304,13 @@ class ManualUploadThread(threading.Thread):
         ) -> None:
             """
             Submit one upload job to the upload thread pool.
-
-            @param path: Original image path to upload.
-            @param index: One-based item index for progress messages.
-            @param thumbnails: Local thumbnail files to include in the request.
-            @param client_upload_id: Request-local ID mapping thumbnails to the
-                original image on the server.
-            @param create_server_thumbnails: Whether the server should generate
-                thumbnails after accepting the original.
-            @param cleanup_dir: Temporary directory to delete after upload.
-            @return: None.
+            
+            @param Path path: Original image path to upload.
+            @param int index: One-based item index for progress messages.
+            @param List[LocalThumbnail] thumbnails: Local thumbnail files to include in the request.
+            @param Optional[str] client_upload_id: Request-local ID mapping thumbnails to the.
+            @param bool create_server_thumbnails: Whether the server should generate.
+            @param Path cleanup_dir: Temporary directory to delete after upload.
             """
             future = upload_executor.submit(
                 self.upload_one,
@@ -3377,10 +3326,8 @@ class ManualUploadThread(threading.Thread):
         def drain_completed_uploads(wait_for_one: bool) -> None:
             """
             Collect completed upload jobs and remove their temp directories.
-
-            @param wait_for_one: When True, wait until at least one upload has
-                completed. When False, only collect uploads already finished.
-            @return: None.
+            
+            @param bool wait_for_one: When True, wait until at least one upload has.
             """
             if not pending_uploads:
                 return
@@ -3471,16 +3418,13 @@ class ManualUploadThread(threading.Thread):
     ) -> None:
         """
         Upload one original, optionally with locally generated thumbnails.
-
-        @param upload_url: Normalized PHP Gallery upload endpoint.
-        @param path: Original image path to upload.
-        @param index: One-based item index for status messages.
-        @param thumbnails: Local thumbnail files to submit with the original.
-        @param client_upload_id: Request-local ID used to map thumbnails to the
-            stored image record.
-        @param create_server_thumbnails: Whether PHP Gallery should generate
-            thumbnails after accepting the original.
-        @return: None.
+        
+        @param str upload_url: Normalized PHP Gallery upload endpoint.
+        @param Path path: Original image path to upload.
+        @param int index: One-based item index for status messages.
+        @param List[LocalThumbnail] thumbnails: Local thumbnail files to submit with the original.
+        @param Optional[str] client_upload_id: Request-local ID used to map thumbnails to the.
+        @param bool create_server_thumbnails: Whether PHP Gallery should generate.
         """
         try:
             file_hash = sha256_file(path)
@@ -3549,8 +3493,7 @@ class WatcherApp:
     def __init__(self) -> None:
         """
         Initialize the Tkinter application and load saved configuration.
-
-        @return: None.
+        
         @raises RuntimeError: Raised when Tkinter is not available.
         """
         if tk is None or ttk is None or filedialog is None or messagebox is None:
@@ -3625,8 +3568,6 @@ class WatcherApp:
     def build_ui(self) -> None:
         """
         Create the visible controls and initial status text.
-
-        @return: None.
         """
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill="both", expand=True)
@@ -3697,8 +3638,6 @@ class WatcherApp:
     def configure_window_icon(self) -> None:
         """
         Apply the bundled Windows icon to the Tkinter window when available.
-
-        @return: None.
         """
         if not TRAY_ICON_ICO_PATH.is_file():
             return
@@ -3710,8 +3649,6 @@ class WatcherApp:
     def start_tray_icon(self) -> None:
         """
         Start the Windows tray icon in a background thread.
-
-        @return: None.
         """
         if pystray is None or Image is None:
             self.write_log("System tray unavailable. Run install.bat to install pystray and Pillow.", "warning")
@@ -3744,9 +3681,8 @@ class WatcherApp:
     def schedule_ui(self, callback: Any) -> None:
         """
         Run a tray callback on the Tkinter UI thread.
-
-        @param callback: Callable with no arguments.
-        @return: None.
+        
+        @param Any callback: Callable with no arguments.
         """
         if self.exiting:
             return
@@ -3758,56 +3694,54 @@ class WatcherApp:
     def tray_restore_window(self, *_args: Any) -> None:
         """
         Restore the hidden window from a tray icon action.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.restore_from_tray)
 
     def tray_start_watching(self, *_args: Any) -> None:
         """
         Start the watcher from the tray menu.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.start)
 
     def tray_stop_watching(self, *_args: Any) -> None:
         """
         Stop the watcher from the tray menu.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.stop)
 
     def tray_start_ai_worker(self, *_args: Any) -> None:
         """
         Start the optional AI metadata worker from the tray menu.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.start_ai_worker)
 
     def tray_stop_ai_worker(self, *_args: Any) -> None:
         """
         Stop the optional AI metadata worker from the tray menu.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.stop_ai_worker)
 
     def tray_exit_application(self, *_args: Any) -> None:
         """
         Exit the application from the tray menu.
-
-        @return: None.
+        
+        @param Any _args: Args value.
         """
         self.schedule_ui(self.close)
 
     def request_window_close(self) -> None:
         """
         Hide to tray when the window close button is used.
-
-        @return: None.
         """
         if not self.tray_icon:
             self.close()
@@ -3829,8 +3763,8 @@ class WatcherApp:
     def background_work_active(self) -> bool:
         """
         Return whether any background worker is running.
-
-        @return: True when any background worker is alive.
+        
+        @return bool True when any background worker is alive.
         """
         return bool(
             (self.worker and self.worker.is_alive())
@@ -3841,9 +3775,8 @@ class WatcherApp:
     def handle_window_unmap(self, event: Any) -> None:
         """
         Convert normal window minimization into tray hiding.
-
-        @param event: Tkinter unmap event.
-        @return: None.
+        
+        @param Any event: Tkinter unmap event.
         """
         if self.exiting or self.window_hidden_to_tray or event.widget is not self.root:
             return
@@ -3852,8 +3785,6 @@ class WatcherApp:
     def hide_if_minimized(self) -> None:
         """
         Hide the window to tray after a user minimize action.
-
-        @return: None.
         """
         if self.exiting or self.window_hidden_to_tray or not self.tray_icon:
             return
@@ -3866,8 +3797,6 @@ class WatcherApp:
     def hide_to_tray(self) -> None:
         """
         Hide the window while keeping the app alive in the system tray.
-
-        @return: None.
         """
         if not self.tray_icon:
             return
@@ -3878,8 +3807,6 @@ class WatcherApp:
     def restore_from_tray(self) -> None:
         """
         Show the Tkinter window from the tray icon.
-
-        @return: None.
         """
         if self.exiting:
             return
@@ -3895,8 +3822,6 @@ class WatcherApp:
     def stop_tray_icon(self) -> None:
         """
         Stop the tray icon loop during application shutdown.
-
-        @return: None.
         """
         icon = self.tray_icon
         self.tray_icon = None
@@ -3911,9 +3836,8 @@ class WatcherApp:
     def build_watch_tab(self, parent: Any) -> None:
         """
         Build controls dedicated to watch-folder uploading.
-
-        @param parent: Tkinter frame that receives the controls.
-        @return: None.
+        
+        @param Any parent: Tkinter frame that receives the controls.
         """
         parent.columnconfigure(1, weight=1)
 
@@ -3958,9 +3882,8 @@ class WatcherApp:
     def build_manual_tab(self, parent: Any) -> None:
         """
         Build controls dedicated to manual bulk uploading.
-
-        @param parent: Tkinter frame that receives the controls.
-        @return: None.
+        
+        @param Any parent: Tkinter frame that receives the controls.
         """
         parent.columnconfigure(0, weight=1)
 
@@ -4021,14 +3944,13 @@ class WatcherApp:
     def build_ai_tab(self, parent: Any) -> None:
         """
         Build controls for the optional AI metadata worker.
-
+        
         The tab intentionally keeps the normal operator view small. The common
         workflow is enable, choose the local backend, install dependencies if
         needed, and start the worker. Low-level tuning fields stay available in
         a collapsible advanced section, but they do not dominate the UI.
-
-        @param parent: Tkinter frame that receives the controls.
-        @return: None.
+        
+        @param Any parent: Tkinter frame that receives the controls.
         """
         parent.columnconfigure(1, weight=1)
 
@@ -4134,8 +4056,6 @@ class WatcherApp:
     def toggle_ai_advanced_settings(self) -> None:
         """
         Show or hide low-level AI worker tuning controls.
-
-        @return: None.
         """
         if not self.ai_advanced_frame:
             return
@@ -4147,8 +4067,6 @@ class WatcherApp:
     def refresh_thumbnail_controls(self) -> None:
         """
         Refresh local thumbnail availability in the manual upload tab.
-
-        @return: None.
         """
         self.thumbnail_runtime_var.set(thumbnail_runtime_status())
         if local_thumbnail_supported():
@@ -4160,8 +4078,6 @@ class WatcherApp:
     def repair_dependencies(self) -> None:
         """
         Install winapp dependencies into the current Python interpreter.
-
-        @return: None.
         """
         self.write_log("Installing or repairing Python dependencies for the current runtime...")
         ok, output = install_dependencies_for_current_runtime()
@@ -4178,8 +4094,8 @@ class WatcherApp:
     def current_config(self) -> WatcherConfig:
         """
         Read and validate the current UI values.
-
-        @return: WatcherConfig built from the current form state.
+        
+        @return WatcherConfig WatcherConfig built from the current form state.
         @raises ValueError: Raised when numeric settings cannot be parsed.
         """
         try:
@@ -4226,8 +4142,6 @@ class WatcherApp:
     def browse_folder(self) -> None:
         """
         Open a folder picker and store the selected path in the UI.
-
-        @return: None.
         """
         selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
         if selected:
@@ -4236,8 +4150,6 @@ class WatcherApp:
     def browse_simconnect_dll(self) -> None:
         """
         Open a file picker for the optional SimConnect client DLL.
-
-        @return: None.
         """
         selected = filedialog.askopenfilename(
             title="Select SimConnect.dll",
@@ -4250,8 +4162,6 @@ class WatcherApp:
     def select_manual_files(self) -> None:
         """
         Open a file picker and add supported images to the manual upload list.
-
-        @return: None.
         """
         selected = filedialog.askopenfilenames(
             title="Select pictures to upload",
@@ -4270,8 +4180,6 @@ class WatcherApp:
     def clear_manual_files(self) -> None:
         """
         Clear the manual upload selection.
-
-        @return: None.
         """
         self.manual_paths = []
         self.refresh_manual_file_label()
@@ -4279,8 +4187,6 @@ class WatcherApp:
     def refresh_manual_file_label(self) -> None:
         """
         Refresh the visible manual selection count.
-
-        @return: None.
         """
         count = len(self.manual_paths)
         if count == 0:
@@ -4293,8 +4199,6 @@ class WatcherApp:
     def save_config(self) -> None:
         """
         Persist current settings to the local config file.
-
-        @return: None.
         """
         try:
             config = self.current_config()
@@ -4308,11 +4212,9 @@ class WatcherApp:
     def start(self) -> None:
         """
         Start the watcher worker using the current form values.
-
+        
         The configuration is saved before starting so command-line mode and later
         GUI launches use the same values.
-
-        @return: None.
         """
         if self.worker and self.worker.is_alive():
             self.write_log("Watcher is already running.")
@@ -4335,8 +4237,6 @@ class WatcherApp:
     def stop(self) -> None:
         """
         Stop the watcher worker if one exists.
-
-        @return: None.
         """
         if self.worker:
             self.worker.stop()
@@ -4347,8 +4247,6 @@ class WatcherApp:
     def start_manual_upload(self) -> None:
         """
         Start the manual upload worker using the current shared connection fields.
-
-        @return: None.
         """
         if self.manual_worker and self.manual_worker.is_alive():
             self.write_log("Manual upload is already running.")
@@ -4384,8 +4282,6 @@ class WatcherApp:
     def stop_manual_upload(self) -> None:
         """
         Request the manual upload worker to stop.
-
-        @return: None.
         """
         if self.manual_worker:
             self.manual_worker.stop()
@@ -4395,14 +4291,12 @@ class WatcherApp:
     def repair_semantic_ai_dependencies(self) -> None:
         """
         Install optional in-process AI packages without freezing the tray UI.
-
+        
         PyTorch and Transformers are large packages, so pip can run for a long
         time and produce a lot of output. The installation is therefore handled
         by a small background thread and reported through the same event queue as
         watcher and AI worker messages. Tkinter remains responsive while pip is
         downloading or checking packages.
-
-        @return: None.
         """
         if self.semantic_ai_install_running:
             self.write_log("Optional local AI module dependency installation is already running.")
@@ -4416,8 +4310,6 @@ class WatcherApp:
         def installer() -> None:
             """
             Run pip installation away from the Tkinter event loop.
-
-            @return: None.
             """
             ok, output = install_semantic_ai_dependencies_for_current_runtime()
             safe_output = output.strip() if output else "pip produced no output"
@@ -4431,8 +4323,6 @@ class WatcherApp:
     def start_ai_worker(self) -> None:
         """
         Start the optional AI metadata worker using current shared connection fields.
-
-        @return: None.
         """
         if self.ai_worker and self.ai_worker.is_alive():
             self.write_log("AI metadata worker is already running.")
@@ -4460,8 +4350,6 @@ class WatcherApp:
     def stop_ai_worker(self) -> None:
         """
         Request the optional AI metadata worker to stop.
-
-        @return: None.
         """
         if self.ai_worker:
             self.ai_worker.stop()
@@ -4473,8 +4361,6 @@ class WatcherApp:
     def refresh_revoke_button_state(self) -> None:
         """
         Enable revocation only when the watcher and manual uploader are idle.
-
-        @return: None.
         """
         if not hasattr(self, "revoke_button"):
             return
@@ -4490,8 +4376,6 @@ class WatcherApp:
     def revoke_api_key(self) -> None:
         """
         Revoke the saved API key on the gallery and clear it locally.
-
-        @return: None.
         """
         if self.worker and self.worker.is_alive():
             messagebox.showwarning("Revoke API key", "Stop watching before revoking the key.")
@@ -4528,8 +4412,6 @@ class WatcherApp:
     def close(self) -> None:
         """
         Stop background work and close the window.
-
-        @return: None.
         """
         if self.exiting:
             return
@@ -4543,8 +4425,6 @@ class WatcherApp:
     def open_config_folder(self) -> None:
         """
         Open the folder containing config, state, and log files.
-
-        @return: None.
         """
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         webbrowser.open(str(CONFIG_DIR))
@@ -4552,13 +4432,11 @@ class WatcherApp:
     def refresh_activity_monitor_state(self) -> None:
         """
         Recalculate the top activity indicator from the live worker objects.
-
+        
         The tray app has three independent background activities: folder
         monitoring, manual upload, and optional AI metadata processing. Stopping
         one activity must not leave stale text from another activity in the
         shared monitor strip.
-
-        @return: None.
         """
         watcher_running = bool(self.worker and self.worker.is_alive())
         manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
@@ -4578,12 +4456,10 @@ class WatcherApp:
     def drain_events(self) -> None:
         """
         Move worker events into the visible log.
-
+        
         This method is scheduled on the Tkinter event loop instead of being
         called directly from the worker thread. Tkinter widgets must only be
         updated by the main UI thread.
-
-        @return: None.
         """
         if self.exiting:
             return
@@ -4647,8 +4523,6 @@ class WatcherApp:
     def configure_log_tags(self) -> None:
         """
         Configure log colors and styles for fast visual scanning.
-
-        @return: None.
         """
         if self.log_tags_ready:
             return
@@ -4668,10 +4542,9 @@ class WatcherApp:
     def update_monitor_state(self, state: str, detail: str) -> None:
         """
         Update the small monitoring light and its text labels.
-
-        @param state: One of disabled, green, or red.
-        @param detail: Short human-readable explanation.
-        @return: None.
+        
+        @param str state: One of disabled, green, or red.
+        @param str detail: Short human-readable explanation.
         """
         state = state if state in {"disabled", "green", "red"} else "red"
         self.monitor_state = state
@@ -4690,10 +4563,10 @@ class WatcherApp:
     def classify_log_level(self, level: str, message: str) -> str:
         """
         Convert watcher events into readable log colors.
-
-        @param level: Original worker severity.
-        @param message: Event text.
-        @return: Tk text tag name.
+        
+        @param str level: Original worker severity.
+        @param str message: Event text.
+        @return str Tk text tag name.
         """
         lower = message.lower()
         if level == "error":
@@ -4711,10 +4584,9 @@ class WatcherApp:
     def write_log(self, message: str, tag: str = "system") -> None:
         """
         Append one line to the status log.
-
-        @param message: Message text to append.
-        @param tag: Log color tag name.
-        @return: None.
+        
+        @param str message: Message text to append.
+        @param str tag: Log color tag name.
         """
         stamp = time.strftime("%H:%M:%S")
         self.log_text.configure(state="normal")
@@ -4729,8 +4601,6 @@ class WatcherApp:
     def run(self) -> None:
         """
         Run the Tkinter event loop.
-
-        @return: None.
         """
         self.root.mainloop()
 
@@ -4738,13 +4608,13 @@ class WatcherApp:
 def run_once(config: WatcherConfig) -> int:
     """
     Run one scan without showing the GUI.
-
+    
     This is mostly useful for testing and scheduled execution. Note that the
     live watcher behavior of ignoring pre-existing files is not applied here
     unless initial_paths is explicitly populated before calling scan_once().
-
-    @param config: Configuration to use for the scan.
-    @return: Process exit code. Zero means the scan command completed.
+    
+    @param WatcherConfig config: Configuration to use for the scan.
+    @return int Process exit code. Zero means the scan command completed.
     """
     setup_logging()
     events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
@@ -4763,9 +4633,9 @@ def run_once(config: WatcherConfig) -> int:
 def parse_args(argv: List[str]) -> argparse.Namespace:
     """
     Parse optional command-line switches.
-
-    @param argv: Command-line argument list without the executable name.
-    @return: Parsed argparse namespace.
+    
+    @param List[str] argv: Command-line argument list without the executable name.
+    @return argparse.Namespace Parsed argparse namespace.
     """
     parser = argparse.ArgumentParser(description="Watch a folder and upload new images to PHP Gallery.")
     parser.add_argument("--once", action="store_true", help="Run one scan using saved configuration and exit.")
@@ -4776,10 +4646,9 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def main(argv: Optional[List[str]] = None) -> int:
     """
     Application entry point.
-
-    @param argv: Optional command-line argument list. When omitted, sys.argv is
-        used.
-    @return: Process exit code.
+    
+    @param Optional[List[str]] argv: Optional command-line argument list. When omitted, sys.argv is.
+    @return int Process exit code.
     """
     setup_logging()
     args = parse_args(list(argv) if argv is not None else sys.argv[1:])

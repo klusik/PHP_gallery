@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 /**
  * EXIF and GPS metadata service module.
  *
@@ -48,6 +57,8 @@ declare(strict_types=1);
  *
  * The application keeps this as a runtime check so the public site still works
  * before the administrator runs pending migrations after uploading new files.
+ *
+ * @return bool True when the condition matches.
  */
 function exif_gps_schema_ready(): bool
 {
@@ -71,6 +82,8 @@ function exif_gps_schema_ready(): bool
  * Older installations have a NOT NULL boolean column. The new display-default
  * workflow requires NULL for inherited settings, so write paths use this guard
  * until the administrator applies the migration.
+ *
+ * @return bool True when the condition matches.
  */
 function exif_gps_override_schema_ready(): bool
 {
@@ -86,6 +99,8 @@ function exif_gps_override_schema_ready(): bool
 
 /**
  * Return the app_settings key for the global EXIF/GPS display default.
+ *
+ * @return string Text result for the caller.
  */
 function exif_gps_default_enabled_setting_key(): string
 {
@@ -94,6 +109,8 @@ function exif_gps_default_enabled_setting_key(): string
 
 /**
  * Return whether galleries inherit public EXIF/GPS map display as enabled by default.
+ *
+ * @return bool True when the condition matches.
  */
 function exif_gps_default_enabled(): bool
 {
@@ -102,6 +119,8 @@ function exif_gps_default_enabled(): bool
 
 /**
  * Persist the global EXIF/GPS display default used by galleries without overrides.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_exif_gps_default_enabled(bool $enabled): void
 {
@@ -113,6 +132,9 @@ function set_exif_gps_default_enabled(bool $enabled): void
  *
  * Returns null for inherited/default behavior, 1 for explicit enabled, and 0 for
  * explicit disabled.
+ *
+ * @param mixed $value Value to process.
+ * @return ?int Integer result for the caller.
  */
 function gallery_gps_map_storage_value(mixed $value): ?int
 {
@@ -137,6 +159,9 @@ function gallery_gps_map_storage_value(mixed $value): ?int
 
 /**
  * Return the legacy recursive GPS map behavior used before inherited overrides existed.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_legacy_allows_gps_maps(array $gallery): bool
 {
@@ -161,10 +186,13 @@ function gallery_legacy_allows_gps_maps(array $gallery): bool
  * The closest explicit gallery override wins. Without any override, the global
  * default controls display. Before the nullable-column migration is applied, the
  * legacy boolean branch behavior is preserved to avoid unsafe NULL writes.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_effective_gps_map_enabled(array $gallery): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('gallery_maps')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('gallery_maps')) {
         return false;
     }
     if (!exif_gps_schema_ready()) {
@@ -196,6 +224,9 @@ function gallery_effective_gps_map_enabled(array $gallery): bool
  * Return whether maps are enabled for one gallery branch.
  *
  * This wrapper preserves the public function name used by routes and renderers.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_allows_gps_maps(array $gallery): bool
 {
@@ -204,6 +235,8 @@ function gallery_allows_gps_maps(array $gallery): bool
 
 /**
  * Count galleries that currently have an explicit EXIF/GPS display override.
+ *
+ * @return int Integer result for the caller.
  */
 function exif_gps_gallery_override_count(): int
 {
@@ -220,6 +253,8 @@ function exif_gps_gallery_override_count(): int
 
 /**
  * Reset every per-gallery EXIF/GPS display override so galleries inherit defaults.
+ *
+ * @return int Integer result for the caller.
  */
 function reset_all_gallery_gps_map_overrides(): int
 {
@@ -238,7 +273,7 @@ function reset_all_gallery_gps_map_overrides(): int
     foreach ($rows as $gallery) {
         $gallery['gps_map_enabled'] = null;
         $gallery['updated_at'] = now_sql();
-        if (function_exists('write_gallery_sidecar')) {
+        if (function_exists('Gallery\\Services\\write_gallery_sidecar')) {
             write_gallery_sidecar($gallery);
         }
     }
@@ -248,6 +283,9 @@ function reset_all_gallery_gps_map_overrides(): int
 
 /**
  * Convert one EXIF rational value such as 35/10 into a float.
+ *
+ * @param mixed $value Value to process.
+ * @return ?float Numeric result for the caller.
  */
 function exif_rational_to_float(mixed $value): ?float
 {
@@ -274,6 +312,10 @@ function exif_rational_to_float(mixed $value): ?float
 
 /**
  * Convert EXIF GPS degree/minute/second triplets into signed decimal degrees.
+ *
+ * @param mixed $coordinate Coordinate value.
+ * @param mixed $reference Reference value.
+ * @return ?float Numeric result for the caller.
  */
 function exif_gps_coordinate_to_decimal(mixed $coordinate, mixed $reference): ?float
 {
@@ -301,6 +343,9 @@ function exif_gps_coordinate_to_decimal(mixed $coordinate, mixed $reference): ?f
 
 /**
  * Normalize common EXIF date strings into MySQL DATETIME format.
+ *
+ * @param mixed $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function exif_datetime_to_sql(mixed $value): ?string
 {
@@ -318,6 +363,10 @@ function exif_datetime_to_sql(mixed $value): ?string
 
 /**
  * Format a rational EXIF value with a suffix while preserving useful precision.
+ *
+ * @param mixed $value Value to process.
+ * @param string $suffix Suffix value.
+ * @return ?string Text result for the caller.
  */
 function exif_format_rational(mixed $value, string $suffix = ''): ?string
 {
@@ -337,7 +386,13 @@ function exif_format_rational(mixed $value, string $suffix = ''): ?string
 /**
  * Read one TIFF/DNG field value list for EXIF extraction.
  *
- * @return array<int, mixed>
+ * @param string $data Input data.
+ * @param int $entryOffset Entry offset value.
+ * @param string $endian Endian value.
+ * @param int $type Type value.
+ * @param int $count Count value.
+ * @param int $valueOffset Value offset value.
+ * @return array<int mixed>.
  */
 function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endian, int $type, int $count, int $valueOffset): array
 {
@@ -388,7 +443,10 @@ function exif_dng_tiff_entry_values(string $data, int $entryOffset, string $endi
 /**
  * Read all entries from one TIFF/DNG image file directory.
  *
- * @return array<int, array<int, mixed>>
+ * @param string $data Input data.
+ * @param int $ifdOffset Ifd offset value.
+ * @param string $endian Endian value.
+ * @return array<int array<int, mixed>>.
  */
 function exif_dng_tiff_ifd_entries(string $data, int $ifdOffset, string $endian): array
 {
@@ -423,7 +481,8 @@ function exif_dng_tiff_ifd_entries(string $data, int $ifdOffset, string $endian)
 /**
  * Extract GPS fields from a DNG/TIFF source without requiring PHP exif_read_data DNG support.
  *
- * @return array{gps_lat:?float,gps_lng:?float,gps_altitude:?float,gps_extracted_at:?string}
+ * @param string $path Filesystem path.
+ * @return array{gps_lat:?float,gps_lng:?float,gps_altitude:?float,gps_extracted_at:?string} Structured result data for the caller.
  */
 function extract_dng_gps_metadata(string $path): array
 {
@@ -468,6 +527,9 @@ function extract_dng_gps_metadata(string $path): array
  *
  * Missing EXIF support, unsupported formats, corrupt metadata, and missing GPS
  * fields all return nullable values instead of failing the scan.
+ *
+ * @param string $path Filesystem path.
+ * @return array Structured result data for the caller.
  */
 function extract_image_exif_metadata(string $path): array
 {
@@ -539,6 +601,9 @@ function extract_image_exif_metadata(string $path): array
 
 /**
  * Return true when an image record contains usable GPS coordinates.
+ *
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function image_has_gps(array $image): bool
 {
@@ -547,6 +612,12 @@ function image_has_gps(array $image): bool
 
 /**
  * Convert one image record into the map marker shape consumed by JavaScript.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $includeThumb Include thumb value.
+ * @param ?array $thumbnailBundle Thumbnail bundle value.
+ * @return array Structured result data for the caller.
  */
 function image_map_point(array $image, array $gallery, bool $includeThumb = true, ?array $thumbnailBundle = null): array
 {
@@ -573,6 +644,8 @@ function image_map_point(array $image, array $gallery, bool $includeThumb = true
 
 /**
  * Return the cache directory used for lazily generated gallery map point payloads.
+ *
+ * @return string Text result for the caller.
  */
 function gallery_map_cache_dir(): string
 {
@@ -586,6 +659,11 @@ function gallery_map_cache_dir(): string
 
 /**
  * Build the SQL WHERE parts and parameters shared by map availability and map payload generation.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return array Structured result data for the caller.
  */
 function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursive): array
 {
@@ -604,7 +682,7 @@ function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursi
         $params[] = (int) $gallery['id'];
     }
     if ($publicOnly) {
-        $conditions[] = public_gallery_listing_condition('g');
+        $conditions[] = public_gallery_listing_sql_fragment('g');
         $conditions[] = "i.visibility = 'public'";
     }
     return ['conditions' => $conditions, 'params' => $params];
@@ -616,6 +694,11 @@ function gallery_map_query_parts(array $gallery, bool $publicOnly, bool $recursi
  * The fingerprint changes when GPS-capable images or their containing galleries
  * change. This gives the map cache deterministic invalidation without requiring
  * every upload, edit, delete, and move workflow to remember a separate cache call.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return string Text result for the caller.
  */
 function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $recursive): string
 {
@@ -643,6 +726,12 @@ function gallery_map_cache_fingerprint(array $gallery, bool $publicOnly, bool $r
 
 /**
  * Return the cache file path for one gallery map point payload.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @param string $fingerprint Fingerprint value.
+ * @return string Text result for the caller.
  */
 function gallery_map_cache_file(array $gallery, bool $publicOnly, bool $recursive, string $fingerprint): string
 {
@@ -653,6 +742,11 @@ function gallery_map_cache_file(array $gallery, bool $publicOnly, bool $recursiv
 
 /**
  * Remove older cache files for one gallery map payload family after writing a fresh payload.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @param string $keepFile Keep file value.
  */
 function gallery_map_cache_prune(array $gallery, bool $publicOnly, bool $recursive, string $keepFile): void
 {
@@ -684,6 +778,11 @@ function gallery_map_cache_clear_all(): void
 
 /**
  * Return true when a gallery branch has at least one map point without building the full marker payload.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return bool True when the condition matches.
  */
 function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursive = true): bool
 {
@@ -706,10 +805,15 @@ function gallery_has_map_points(array $gallery, bool $publicOnly, bool $recursiv
  *
  * EXIF GPS keeps the existing photo-point behavior. A stored flight path belongs
  * to the gallery container itself and is already resolved before display.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return bool True when the condition matches.
  */
 function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): bool
 {
-    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_has_flight_path_map') && gallery_has_flight_path_map($gallery)) {
         return true;
     }
 
@@ -722,10 +826,15 @@ function gallery_has_map_payload(array $gallery, bool $publicOnly, bool $recursi
  * A saved flight path takes priority for the gallery-level map because it
  * represents the whole simflying gallery. When GPS photo points are available,
  * they are layered onto the route without changing the stored route geometry.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return array Structured result data for the caller.
  */
 function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive = true): array
 {
-    if (function_exists('feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('gallery_flight_map_payload')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && feature_flag_enabled('flight_maps') && function_exists('Gallery\\Services\\gallery_flight_map_payload')) {
         $flightPayload = gallery_flight_map_payload($gallery);
         if (is_array($flightPayload) && !empty($flightPayload['points'])) {
             $photoPoints = gallery_map_points($gallery, $publicOnly, $recursive);
@@ -752,6 +861,11 @@ function gallery_map_payload(array $gallery, bool $publicOnly, bool $recursive =
 
 /**
  * Return GPS map points for one gallery, optionally including subgalleries.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @param bool $recursive Recursive value.
+ * @return array Structured result data for the caller.
  */
 function gallery_map_points(array $gallery, bool $publicOnly, bool $recursive = true): array
 {

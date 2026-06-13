@@ -40,6 +40,14 @@ const legacyAdminTabHashes = new Map([
 ]);
 
 // Function `normalizedAdminTabHash` executes this focused behavior.
+/**
+ * Handle normalized admin tab hash.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {boolean} hash Hash value.
+ * @return {string} Text result for the caller.
+ */
 function normalizedAdminTabHash(hash) {
     if (!hash) {
         return '';
@@ -48,6 +56,14 @@ function normalizedAdminTabHash(hash) {
 }
 
 
+/**
+ * Set admin panel visibility.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {HTMLElement} panel Panel value.
+ * @param {boolean} isVisible Is visible flag.
+ */
 function setAdminPanelVisibility(panel, isVisible) {
     panel.classList.remove('is-admin-panel-entering');
     if (!isVisible) {
@@ -77,7 +93,7 @@ function setAdminPanelVisibility(panel, isVisible) {
  * and All galleries active for #admin-tab-galleries.
  *
  * @param {string} activeHash Normalized URL fragment including the leading #.
- * @returns {void}
+ * @return {void} Result value for the caller.
  */
 function syncAdminSidebarHashSelection(activeHash) {
     const sidebar = document.querySelector('.admin-sidebar');
@@ -128,6 +144,13 @@ function syncAdminSidebarHashSelection(activeHash) {
     });
 }
 
+/**
+ * Handle setup admin tabs.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} root Root value.
+ */
 export function setupAdminTabs(root = document) {
     setupAdminTabsInRoot(root);
 }
@@ -136,7 +159,6 @@ export function setupAdminTabs(root = document) {
  * Attach admin tab behavior inside one document area.
  *
  * @param {ParentNode} root DOM root that contains admin tab controls.
- * @returns {void}
  */
 export function setupAdminTabsInRoot(root) {
     root.querySelectorAll('[data-admin-tabs]').forEach((tabsRoot) => {
@@ -160,6 +182,14 @@ export function setupAdminTabsInRoot(root) {
         const shouldManageHash = !tabsRoot.closest('[data-admin-side-panel]');
 
         // activateTab stores behavior for selecting one tab and hiding the other panels.
+        /**
+         * Handle activate tab.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {number} targetId Target id identifier.
+         * @param {object} options Optional behavior flags.
+         */
         const activateTab = (targetId, options = {}) => {
             // targetPanel stores the panel selected by the current hash or click.
             const targetPanel = panels.find((panel) => panel.id === targetId) || panels[0];
@@ -249,6 +279,11 @@ export function setupAdminTabsInRoot(root) {
         }
 
         // handleHashNavigation stores behavior shared by hashchange and history traversal.
+        /**
+         * Handle hash navigation.
+         *
+         * Used by browser-side gallery behavior.
+         */
         const handleHashNavigation = () => {
             // hash stores the normalized browser hash after navigation.
             const hash = normalizedAdminTabHash(window.location.hash);
@@ -271,7 +306,7 @@ export function setupAdminTabsInRoot(root) {
  * Return the active tab id inside one injected admin region.
  *
  * @param {ParentNode|null} root DOM root to inspect.
- * @returns {string} Active tab target id or an empty string.
+ * @return {string} Active tab target id or an empty string.
  */
 export function activeAdminTabId(root) {
     if (!root || typeof root.querySelector !== 'function') {
@@ -286,7 +321,6 @@ export function activeAdminTabId(root) {
  *
  * @param {ParentNode} root DOM root that contains admin tabs.
  * @param {string} targetId Tab panel id to show.
- * @returns {void}
  */
 export function activateAdminTabInRoot(root, targetId) {
     if (!targetId) {

@@ -34,15 +34,22 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+
 /**
  * Return whether the current request should collect admin dashboard profiling data.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_render_profile_enabled(): bool
 {
     if (PHP_SAPI === 'cli') {
         return false;
     }
-    if (!function_exists('current_user')) {
+    if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
     return current_user() !== null && (string) ($_GET['page'] ?? '') === 'admin';
@@ -50,6 +57,8 @@ function admin_render_profile_enabled(): bool
 
 /**
  * Return the mutable admin profiler state for this request.
+ *
+ * @return array Structured result data for the caller.
  */
 function &admin_render_profile_state(): array
 {
@@ -85,6 +94,8 @@ function &admin_render_profile_state(): array
 
 /**
  * Start one named admin dashboard profile request.
+ *
+ * @param string $route Route value.
  */
 function admin_render_profile_start(string $route): void
 {
@@ -98,6 +109,9 @@ function admin_render_profile_start(string $route): void
 
 /**
  * Add to a named admin dashboard profile counter.
+ *
+ * @param string $counter Counter value.
+ * @param int $amount Amount value.
  */
 function admin_render_profile_count(string $counter, int $amount = 1): void
 {
@@ -113,6 +127,9 @@ function admin_render_profile_count(string $counter, int $amount = 1): void
 
 /**
  * Set one admin dashboard profile counter to an exact value.
+ *
+ * @param string $counter Counter value.
+ * @param int $value Value to process.
  */
 function admin_render_profile_set_counter(string $counter, int $value): void
 {
@@ -125,6 +142,9 @@ function admin_render_profile_set_counter(string $counter, int $value): void
 
 /**
  * Add elapsed time to one named admin dashboard timer.
+ *
+ * @param string $timer Timer value.
+ * @param float $elapsedMs Elapsed ms value.
  */
 function admin_render_profile_add_time(string $timer, float $elapsedMs): void
 {
@@ -147,9 +167,10 @@ function admin_render_profile_add_time(string $timer, float $elapsedMs): void
 /**
  * Measure one callback and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function admin_render_profile_span(string $timer, callable $callback)
 {
@@ -167,9 +188,10 @@ function admin_render_profile_span(string $timer, callable $callback)
 /**
  * Measure one database callback, count it, and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function admin_render_profile_db(string $timer, callable $callback)
 {
@@ -190,9 +212,10 @@ function admin_render_profile_db(string $timer, callable $callback)
 /**
  * Measure one schema readiness callback, count it, and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function admin_render_profile_schema(string $timer, callable $callback)
 {
@@ -203,9 +226,10 @@ function admin_render_profile_schema(string $timer, callable $callback)
 /**
  * Measure one app-setting read callback, count it, and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function admin_render_profile_setting_read(string $timer, callable $callback)
 {
@@ -216,9 +240,10 @@ function admin_render_profile_setting_read(string $timer, callable $callback)
 /**
  * Measure one app-setting write callback, count it, and return its result unchanged.
  *
+ * @param string $timer Timer value.
+ * @param callable():T $callback Callback invoked by this workflow.
+ * @return T Result value for the caller.
  * @template T
- * @param callable():T $callback
- * @return T
  */
 function admin_render_profile_setting_write(string $timer, callable $callback)
 {

@@ -34,16 +34,60 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\canonical_url_for_gallery;
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_seo_description;
+use function Gallery\Core\gallery_seo_title;
+use function Gallery\Core\gallery_social_preview_image;
+use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_url;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\public_gallery_metadata;
+use function Gallery\Services\public_render_profile_count;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\public_sitemap_image_last_modified;
+use function Gallery\Services\public_sitemap_lastmod;
+use function Gallery\Services\site_name;
+use function Gallery\Services\thumbnail_url;
+
+/**
+ * Handle view render meta tag.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $attributeName Attribute name value.
+ * @param string $attributeValue Attribute value value.
+ * @param string $content Content value.
+ */
 function view_render_meta_tag(string $attributeName, string $attributeValue, string $content): void
 {
     echo '<meta ' . $attributeName . '="' . e($attributeValue) . '" content="' . e($content) . '">' . "\n";
 }
 
+/**
+ * Handle view render link tag.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $rel Rel value.
+ * @param string $href Href value.
+ */
 function view_render_link_tag(string $rel, string $href): void
 {
     echo '<link rel="' . e($rel) . '" href="' . e($href) . '">' . "\n";
 }
 
+/**
+ * Handle view render public seo tags.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ */
 function view_render_public_seo_tags(array $gallery, array $images = []): void
 {
     $title = gallery_seo_title($gallery);
@@ -84,6 +128,14 @@ function view_render_public_seo_tags(array $gallery, array $images = []): void
     }
 }
 
+/**
+ * Handle view render gallery json ld.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ */
 function view_render_gallery_json_ld(array $gallery, array $images = []): void
 {
     $items = [];
@@ -111,7 +163,7 @@ function view_render_gallery_json_ld(array $gallery, array $images = []): void
         if (!empty($image['height'])) {
             $item['height'] = (int) $image['height'];
         }
-        if (function_exists('public_sitemap_lastmod')) {
+        if (function_exists('Gallery\\Services\\public_sitemap_lastmod')) {
             $dateModified = public_sitemap_lastmod(public_sitemap_image_last_modified($image));
             if ($dateModified !== null) {
                 $item['dateModified'] = $dateModified;

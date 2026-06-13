@@ -34,5 +34,7 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
 require_once __DIR__ . '/public_tags.php';
 require_once __DIR__ . '/votes.php';

@@ -34,6 +34,46 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_login_return_target;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_upload_accept_value_for_mode;
+use function Gallery\Services\admin_upload_auto_rename_enabled;
+use function Gallery\Services\admin_upload_client_format_mode;
+use function Gallery\Services\admin_upload_client_format_mode_normalize;
+use function Gallery\Services\create_image_thumbnails_result;
+use function Gallery\Services\experimental_upload_browser_config;
+use function Gallery\Services\experimental_upload_server_upload_limit_bytes;
+use function Gallery\Services\experimental_upload_settings;
+use function Gallery\Services\experimental_upload_store_prepared_zip_batch;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_upload_entries;
+use function Gallery\Services\gallery_upload_entries_or_empty;
+use function Gallery\Services\heic_conversion_supported;
+use function Gallery\Services\raw_conversion_supported;
+use function Gallery\Services\set_admin_upload_auto_rename_enabled;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\set_experimental_upload_settings;
+use function Gallery\Services\store_uploaded_gallery_images;
+use function Gallery\Services\t;
+use function Gallery\Views\view_render_admin_upload_settings_page;
+use function Gallery\Views\view_render_admin_upload_support_panel;
+
 /**
  * Admin upload controller model.
  * 
@@ -47,6 +87,9 @@ declare(strict_types=1);
  * The value is used only as a refresh source after JSON uploads. Keeping this
  * validation server-side prevents a submitted form from turning the refresh
  * URL into an arbitrary external target.
+ *
+ * @param mixed $value Value to process.
+ * @return string Text result for the caller.
  */
 function admin_upload_safe_refresh_url(mixed $value): string
 {
@@ -80,7 +123,8 @@ function admin_upload_safe_refresh_url(mixed $value): string
 /**
  * Emit a JSON upload response and stop this request path cleanly.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function admin_upload_experimental_json_response(array $payload, int $statusCode = 200): void
 {
@@ -102,6 +146,8 @@ function admin_upload_experimental_verify_csrf(): void
 
 /**
  * Reject requests that PHP has already discarded because the multipart body exceeded limits.
+ *
+ * @return bool True when the condition matches.
  */
 function admin_upload_experimental_reject_discarded_body(): bool
 {
@@ -109,7 +155,7 @@ function admin_upload_experimental_reject_discarded_body(): bool
     if ($contentLength <= 0 || $_POST !== [] || $_FILES !== []) {
         return false;
     }
-    $uploadLimit = function_exists('experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 0;
+    $uploadLimit = function_exists('Gallery\\Services\\experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 0;
     admin_log_event('warning', 'gallery.experimental_upload_rejected', 'Experimental upload request body was discarded before PHP could read files.', [
         'content_length' => $contentLength,
         'upload_limit_bytes' => $uploadLimit,
@@ -126,6 +172,9 @@ function admin_upload_experimental_reject_discarded_body(): bool
 
 /**
  * Normalize the dedicated upload settings tab used by the Admin settings page.
+ *
+ * @param string $tab Tab value.
+ * @return string Text result for the caller.
  */
 function admin_upload_settings_normalize_tab(string $tab): string
 {
@@ -135,7 +184,9 @@ function admin_upload_settings_normalize_tab(string $tab): string
 /**
  * Build the upload settings page model from current application settings.
  *
- * @return array<string, mixed>
+ * @param string $activeTab Active tab value.
+ * @param string $notice Notice value.
+ * @return array<string mixed>.
  */
 function admin_upload_settings_view_model(string $activeTab, string $notice = ''): array
 {
@@ -153,14 +204,14 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'support' => admin_upload_support_model(),
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
-        'experimental_settings' => function_exists('experimental_upload_settings') ? experimental_upload_settings() : [],
+        'experimental_settings' => function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : [],
     ];
 }
 
 /**
  * Return upload support capabilities for reusable Admin upload views.
  *
- * @return array<string, bool>
+ * @return array<string bool>.
  */
 function admin_upload_support_model(): array
 {
@@ -172,6 +223,8 @@ function admin_upload_support_model(): array
 
 /**
  * Persist general upload preferences from the dedicated Admin settings page.
+ *
+ * @param array $input Input value.
  */
 function admin_upload_save_general_settings(array $input): void
 {
@@ -200,7 +253,7 @@ function cms_admin_upload_settings(): void
             redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
         }
         if (!empty($_POST['update_experimental_upload_settings'])) {
-            if (function_exists('set_experimental_upload_settings')) {
+            if (function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
                 $settings = set_experimental_upload_settings($_POST);
                 admin_log_event('info', 'settings.experimental_upload_updated', 'Admin updated experimental browser upload settings.', [
                     'enabled' => !empty($settings['enabled']),
@@ -243,7 +296,7 @@ function cms_admin_upload_experimental_batch(): void
 
     try {
         admin_upload_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
@@ -269,6 +322,11 @@ function cms_admin_upload_experimental_batch(): void
     }
 }
 
+/**
+ * Handle cms admin upload.
+ *
+ * Used by HTTP controller routing for this workflow.
+ */
 function cms_admin_upload(): void
 {
     // $isAjaxUpload stores an intermediate value used by the surrounding gallery workflow.
@@ -295,7 +353,7 @@ function cms_admin_upload(): void
         try {
             if (!empty($_POST['update_upload_preferences'])) {
                 admin_upload_save_general_settings($_POST);
-                if (!empty($_POST['update_experimental_upload_settings']) && function_exists('set_experimental_upload_settings')) {
+                if (!empty($_POST['update_experimental_upload_settings']) && function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
                     set_experimental_upload_settings($_POST);
                 }
                 flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
@@ -476,6 +534,13 @@ function cms_admin_upload(): void
 
 /**
  * Render the focused upload workflow inside the reusable admin side panel.
+ *
+ * @param int $prefillGalleryId Prefill gallery id identifier.
+ * @param ?array $prefillGallery Prefill gallery value.
+ * @param string $error Error value.
+ * @param string $requestedUploadMode Requested upload mode value.
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param ?array $prefillParentGallery Prefill parent gallery value.
  */
 function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGallery, string $error, string $requestedUploadMode = 'existing', int $prefillParentId = 0, ?array $prefillParentGallery = null): void
 {
@@ -508,6 +573,8 @@ function render_admin_upload_side_panel(int $prefillGalleryId, ?array $prefillGa
 
 /**
  * Return the upload accept attribute shared by upload page and side-panel forms.
+ *
+ * @return string Text result for the caller.
  */
 function admin_upload_accept_value(): string
 {
@@ -526,10 +593,12 @@ function render_admin_upload_support_panel(): void
 
 /**
  * Render the opt-in experimental client-side upload checkbox.
+ *
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_experimental_checkbox(bool $panelMode = false): void
 {
-    $config = function_exists('experimental_upload_browser_config') ? experimental_upload_browser_config() : ['enabled' => false];
+    $config = function_exists('Gallery\\Services\\experimental_upload_browser_config') ? experimental_upload_browser_config() : ['enabled' => false];
     $encodedConfig = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encodedConfig)) {
         $encodedConfig = '{}';
@@ -541,6 +610,9 @@ function render_admin_upload_experimental_checkbox(bool $panelMode = false): voi
 
 /**
  * Render the existing-gallery upload form without changing the upload endpoint.
+ *
+ * @param int $prefillGalleryId Prefill gallery id identifier.
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $panelMode = false): void
 {
@@ -573,6 +645,8 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
 
 /**
  * Render the new-gallery upload form used by the direct admin upload page.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
  */
 function render_admin_upload_new_gallery_form(int $prefillParentId): void
 {
@@ -581,6 +655,8 @@ function render_admin_upload_new_gallery_form(int $prefillParentId): void
 
 /**
  * Render the new-gallery upload form used inside the public-page side panel.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
  */
 function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 {
@@ -589,6 +665,9 @@ function render_admin_upload_new_gallery_panel_form(int $prefillParentId): void
 
 /**
  * Render the shared create-and-upload form while preserving the existing upload route.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param bool $panelMode Panel mode value.
  */
 function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $panelMode): void
 {
@@ -628,6 +707,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
 
 /**
  * Handles admin wants json logic for the gallery application.
+ *
  * @return mixed Result produced by this operation.
  */
 function admin_wants_json(): bool

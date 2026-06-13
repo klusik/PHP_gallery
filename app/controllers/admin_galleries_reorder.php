@@ -34,6 +34,25 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\child_galleries;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_folder_name_from_path;
+use function Gallery\Services\gallery_path_diagnostics;
+use function Gallery\Services\move_gallery_folder_to_parent;
+use function Gallery\Services\public_path_schema_ready;
+use function Gallery\Services\regenerate_public_paths;
+use function Gallery\Services\sync_gallery_parent_ids;
+use function Gallery\Services\t;
+use function Gallery\Services\write_gallery_sidecar;
+
 /**
  * Handles cms admin gallery reorder logic for the gallery application.
  *
@@ -42,8 +61,6 @@ declare(strict_types=1);
  * database before any filesystem move or sort_order update is attempted. Parent
  * changes are delegated to move_gallery_folder_to_parent(), so the gallery
  * folder tree remains the source of truth and database paths follow disk state.
- *
- * @return mixed Result produced by this operation.
  */
 function cms_admin_reorder_galleries(): void
 {
@@ -312,6 +329,10 @@ function cms_admin_reorder_galleries(): void
  * low-level filesystem details out of the red UI message while making the real
  * configured root, source folder, parent folder, and target folder visible for
  * troubleshooting.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param ?int $parentId Parent id identifier.
+ * @return array Structured result data for the caller.
  */
 function admin_gallery_reorder_move_diagnostics(int $galleryId, ?int $parentId): array
 {
@@ -398,7 +419,7 @@ function admin_reorder_galleries_user_error_message(Throwable $exception): strin
  *
  * @param bool $ok Whether the operation completed successfully.
  * @param string $message Human-readable result message.
- * @return void
+ * @param bool $cleanBufferedOutput Clean buffered output value.
  */
 function admin_reorder_galleries_response(bool $ok, string $message, bool $cleanBufferedOutput = false): void
 {
@@ -498,8 +519,6 @@ function admin_decode_reorder_id_list(string $rawOrder): ?array
  * It never changes parent_id values and never nests galleries. It only reshuffles
  * the direct children of the gallery currently being viewed, and only when the
  * submitted ids match the visible pagination slice rendered into the page.
- *
- * @return mixed Result produced by this operation.
  */
 function cms_admin_reorder_public_galleries(): void
 {
@@ -576,7 +595,6 @@ function cms_admin_reorder_public_galleries(): void
  *
  * @param bool $ok Whether the operation completed successfully.
  * @param string $message Human-readable result for the inline toolbar.
- * @return void
  */
 function admin_reorder_public_page_response(bool $ok, string $message): void
 {

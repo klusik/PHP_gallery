@@ -35,7 +35,7 @@
  * Returns table rows as a safe array.
  *
  * @param {HTMLTableRowElement|HTMLTableRowElement[]} rows One row or a list of rows.
- * @returns {HTMLTableRowElement[]} Normalized row list.
+ * @return {HTMLTableRowElement[]} Normalized row list.
  */
 function normalizeRows(rows) {
     if (Array.isArray(rows)) {
@@ -53,7 +53,6 @@ function normalizeRows(rows) {
  *
  * @param {HTMLTableRowElement} sourceRow Real row being cloned.
  * @param {HTMLTableRowElement} cloneRow Cloned row shown inside the drag ghost.
- * @returns {void}
  */
 export function copyTableCellWidths(sourceRow, cloneRow) {
     const sourceCells = Array.from(sourceRow.children);
@@ -76,7 +75,6 @@ export function copyTableCellWidths(sourceRow, cloneRow) {
  *
  * @param {HTMLElement} clone Cloned row or clone container.
  * @param {string[]} removeAttributes Additional data attributes to remove from the cloned row.
- * @returns {void}
  */
 function sanitizeGhostClone(clone, removeAttributes) {
     removeAttributes.forEach((attributeName) => {
@@ -94,8 +92,8 @@ function sanitizeGhostClone(clone, removeAttributes) {
  * the caller can represent the total moved height through the placeholder.
  *
  * @param {HTMLTableRowElement|HTMLTableRowElement[]} rows One row or a list of moved rows.
- * @param {{className?: string, removeAttributes?: string[]}} options Visual and cleanup options.
- * @returns {HTMLTableElement|null} Ghost table appended to the document body, or null when no row is available.
+ * @param {object} options Optional behavior flags.
+ * @return {HTMLTableElement|null} Ghost table appended to the document body, or null when no row is available.
  */
 export function createTableDragGhost(rows, options = {}) {
     const sourceRows = normalizeRows(rows);
@@ -128,8 +126,8 @@ export function createTableDragGhost(rows, options = {}) {
  * Creates a height-matched table placeholder for the supplied row list.
  *
  * @param {HTMLTableRowElement|HTMLTableRowElement[]} rows One row or the moved row list.
- * @param {{className?: string, minHeight?: number}} options Visual options for the placeholder.
- * @returns {HTMLTableRowElement|null} Placeholder row ready to insert, or null when no source row is available.
+ * @param {object} options Optional behavior flags.
+ * @return {HTMLTableRowElement|null} Placeholder row ready to insert, or null when no source row is available.
  */
 export function createTableDragPlaceholder(rows, options = {}) {
     const sourceRows = normalizeRows(rows);
@@ -158,7 +156,6 @@ export function createTableDragPlaceholder(rows, options = {}) {
  * @param {HTMLTableElement|null} ghost Ghost table returned by createTableDragGhost().
  * @param {number} clientY Current pointer Y coordinate.
  * @param {number} pointerOffsetY Pointer distance from the source row top.
- * @returns {void}
  */
 export function moveTableDragGhostY(ghost, clientY, pointerOffsetY) {
     if (!ghost) {

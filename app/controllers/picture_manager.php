@@ -35,12 +35,31 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\copy_gallery_images;
+use function Gallery\Services\create_empty_gallery;
+use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_shows_filenames;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\move_gallery_images;
+use function Gallery\Services\picture_manager_normalize_image_ids;
+use function Gallery\Services\t;
+
 /**
  * Send one JSON response for Picture manager endpoints.
  *
  * @param array<string,mixed> $payload JSON-serializable response payload.
  * @param int $status HTTP status code.
- * @return void
  */
 function picture_manager_json_response(array $payload, int $status = 200): void
 {
@@ -131,8 +150,6 @@ function picture_manager_copy_result_message(int $copied, int $skipped, string $
 
 /**
  * Move selected pictures from the current public gallery into another gallery.
- *
- * @return void
  */
 function cms_picture_manager_move(): void
 {
@@ -203,8 +220,6 @@ function cms_picture_manager_move(): void
 
 /**
  * Copy selected pictures from the current public gallery into another existing gallery.
- *
- * @return void
  */
 function cms_picture_manager_copy(): void
 {
@@ -278,8 +293,6 @@ function cms_picture_manager_copy(): void
 
 /**
  * Create a child gallery from selected pictures by copying source files and image metadata.
- *
- * @return void
  */
 function cms_picture_manager_create_gallery(): void
 {

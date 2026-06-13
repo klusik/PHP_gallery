@@ -37,8 +37,6 @@
  * be hostile to long AJAX requests and streamed progress. This helper gives the
  * administrator immediate confirmation that the request has started, then lets
  * the existing PHP controller perform the database update and redirect back.
- *
- * @returns {void}
  */
 export function setupAdminNavdataUpdateFeedback() {
     document.querySelectorAll('[data-navdata-update-form]').forEach((form) => {
@@ -74,7 +72,6 @@ export function setupAdminNavdataUpdateFeedback() {
  * Put the navdata form into a visible submitting state.
  *
  * @param {HTMLFormElement} form Form that is about to submit.
- * @returns {void}
  */
 function showNavdataSubmittingState(form) {
     form.dataset.navdataSubmitting = '1';

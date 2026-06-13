@@ -51,7 +51,7 @@
  * @param {string} key Translation key emitted by the server.
  * @param {string} fallback Safe English fallback.
  * @param {Object<string, string|number>} parameters Placeholder values.
- * @returns {string} Browser-facing translated text.
+ * @return {string} Browser-facing translated text.
  */
 function i18n(key, fallback, parameters = {}) {
     const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
@@ -63,6 +63,13 @@ function i18n(key, fallback, parameters = {}) {
     return text;
 }
 
+/**
+ * Handle setup admin bulk selection.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {boolean} True when the condition matches.
+ */
 export function setupAdminBulkSelection() {
     // Table-level select-all checkboxes are scoped by input name and form. When
     // a table is filtered, hidden rows are left untouched so bulk operations
@@ -99,6 +106,11 @@ export function setupAdminBulkSelection() {
     });
 }
 
+/**
+ * Handle setup gallery bulk delete confirmation.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupGalleryBulkDeleteConfirmation() {
     // Confirm destructive gallery bulk deletes with the exact selected names.
     document.addEventListener('submit', (event) => {
@@ -138,6 +150,13 @@ export function setupGalleryBulkDeleteConfirmation() {
 }
 
 
+/**
+ * Handle setup image bulk move fields.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {string} Text result for the caller.
+ */
 export function setupImageBulkMoveFields() {
     document.querySelectorAll('[data-admin-image-bulk-form]').forEach((form) => {
         if (!(form instanceof HTMLFormElement)) {
@@ -178,20 +197,20 @@ export function setupImageBulkMoveFields() {
         // Variable `moveAction` stores the staged action selected inside the guided panel.
         let moveAction = actionSelect.value === 'move_existing' || actionSelect.value === 'move_new' ? actionSelect.value : '';
 
-        /**
+                /**
          * Return checked photo boxes from this form only.
          *
-         * @returns {HTMLInputElement[]} Selected image checkboxes.
+         * @return {HTMLInputElement[]} Selected image checkboxes.
          */
         function selectedImageCheckboxes() {
             return Array.from(form.querySelectorAll('input[type="checkbox"][name="image_ids[]"]:checked'))
                 .filter((checkbox) => checkbox instanceof HTMLInputElement);
         }
 
-        /**
+                /**
          * Return readable names for selected photos.
          *
-         * @returns {string[]} Selected photo names.
+         * @return {string[]} Selected photo names.
          */
         function selectedImageNames() {
             return selectedImageCheckboxes()
@@ -200,10 +219,8 @@ export function setupImageBulkMoveFields() {
                 .map((row) => row.dataset.imageName || row.querySelector('[data-admin-image-name-cell]')?.textContent?.trim() || i18n('admin.bulk.image_fallback', 'Image {id}', {id: row.dataset.imageId || ''}).trim());
         }
 
-        /**
+                /**
          * Show or hide the staged target fields for the selected move action.
-         *
-         * @returns {void}
          */
         function updateTargetVisibility() {
             if (existingFields instanceof HTMLElement) {
@@ -231,10 +248,10 @@ export function setupImageBulkMoveFields() {
             });
         }
 
-        /**
+                /**
          * Return the current target label for the confirmation summary.
          *
-         * @returns {string} Human-readable target label.
+         * @return {string} Human-readable target label.
          */
         function targetLabel() {
             if (moveAction === 'move_existing' && destinationInput instanceof HTMLInputElement) {
@@ -248,10 +265,8 @@ export function setupImageBulkMoveFields() {
             return '';
         }
 
-        /**
+                /**
          * Update selected count, summary text, and submit availability.
-         *
-         * @returns {void}
          */
         function updateMoveState() {
             const names = selectedImageNames();
@@ -306,11 +321,10 @@ export function setupImageBulkMoveFields() {
             updateTargetVisibility();
         }
 
-        /**
+                /**
          * Set the active move action and mirror it into the submitted select field.
          *
          * @param {string} value Submitted backend action value.
-         * @returns {void}
          */
         function chooseMoveAction(value) {
             moveAction = value === 'move_existing' || value === 'move_new' ? value : '';
@@ -400,6 +414,11 @@ export function setupImageBulkMoveFields() {
     });
 }
 
+/**
+ * Handle setup image bulk delete confirmation.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupImageBulkDeleteConfirmation() {
     // Confirm destructive photo deletes and guard physical photo moves from the dedicated admin edit-gallery image table.
     document.addEventListener('submit', (event) => {
@@ -484,6 +503,11 @@ export function setupImageBulkDeleteConfirmation() {
     });
 }
 
+/**
+ * Handle setup thumbnail cache delete confirmation.
+ *
+ * Used by browser-side gallery behavior.
+ */
 export function setupThumbnailCacheDeleteConfirmation() {
     // Confirm all-thumbnail deletion with a randomly selected simple word. The
     // server still verifies the posted word so a missed browser prompt cannot

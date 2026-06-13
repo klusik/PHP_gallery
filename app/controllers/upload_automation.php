@@ -35,6 +35,62 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use JsonException;
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\AI_IMAGE_ANALYSIS_DEFAULT_LEASE_SECONDS;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\sanitize_login_return_target;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_render_profile_start;
+use function Gallery\Services\ai_image_analysis_claim_next_job;
+use function Gallery\Services\ai_image_analysis_claimed_asset;
+use function Gallery\Services\ai_image_analysis_complete_failure;
+use function Gallery\Services\ai_image_analysis_complete_success;
+use function Gallery\Services\ai_image_analysis_limit_text;
+use function Gallery\Services\ai_image_analysis_normalize_label;
+use function Gallery\Services\ai_image_analysis_normalize_lease_seconds;
+use function Gallery\Services\ai_image_analysis_normalize_worker_id;
+use function Gallery\Services\ai_image_analysis_record_heartbeat;
+use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\create_gallery_upload_automation_token;
+use function Gallery\Services\create_image_thumbnails_result;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\find_upload_automation_token;
+use function Gallery\Services\gallery_upload_automation_tokens;
+use function Gallery\Services\gallery_upload_entries;
+use function Gallery\Services\mark_upload_automation_token_used;
+use function Gallery\Services\revoke_gallery_upload_automation_token;
+use function Gallery\Services\store_uploaded_gallery_images;
+use function Gallery\Services\t;
+use function Gallery\Services\upload_automation_apply_sim_camera_metadata;
+use function Gallery\Services\upload_automation_bool;
+use function Gallery\Services\upload_automation_client_thumbnail_entries;
+use function Gallery\Services\upload_automation_gallery_inventory_response;
+use function Gallery\Services\upload_automation_image_client_ids;
+use function Gallery\Services\upload_automation_install_client_thumbnails;
+use function Gallery\Services\upload_automation_inventory_candidates;
+use function Gallery\Services\upload_automation_request_token;
+use function Gallery\Services\upload_automation_schema_ready;
+use function Gallery\Services\upload_automation_sim_camera_metadata;
+use function Gallery\Services\upload_automation_tokens_for_manager;
+use function Gallery\Services\upload_automation_uploaded_files;
+use function Gallery\Services\upload_automation_with_gallery_lock;
+
 /**
  * Upload automation controller model.
  *
@@ -44,6 +100,9 @@ declare(strict_types=1);
 
 /**
  * Send a JSON response for the upload automation endpoint.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function upload_automation_json(array $payload, int $status = 200): void
 {
@@ -155,6 +214,7 @@ function upload_automation_handle_ai_action(string $action, int $galleryId, arra
 /**
  * Claim and return one AI image-analysis job for a worker.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -198,6 +258,7 @@ function upload_automation_handle_ai_next_job(int $galleryId, array $tokenRow, a
 /**
  * Extend one active AI job lease for a worker.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -225,6 +286,7 @@ function upload_automation_handle_ai_heartbeat(int $galleryId, array $tokenRow, 
 /**
  * Complete or fail one active AI image-analysis job.
  *
+ * @param int $galleryId Gallery identifier.
  * @param array<string,mixed> $tokenRow Upload automation token row.
  * @param array<string,mixed> $jsonPayload Decoded JSON request body.
  */
@@ -283,6 +345,8 @@ function upload_automation_handle_ai_complete(int $galleryId, array $tokenRow, a
 
 /**
  * Stream the image asset for one active claimed AI job.
+ *
+ * @param int $galleryId Gallery identifier.
  */
 function upload_automation_stream_ai_asset(int $galleryId): void
 {
@@ -658,7 +722,6 @@ function upload_automation_token_csrf_valid(): bool
  *
  * @param array<string,mixed> $payload JSON-safe response payload.
  * @param int $status HTTP status code to send with the response.
- * @return void
  */
 function upload_automation_token_json_response(array $payload, int $status = 200): void
 {
@@ -739,6 +802,9 @@ function upload_automation_return_url_allowed(string $url, int $galleryId): bool
 
 /**
  * Render gallery-scoped upload automation controls inside the image editor tab.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $returnTab Return tab value.
  */
 function render_admin_gallery_upload_automation_panel(array $gallery, string $returnTab = 'admin-edit-api'): void
 {

@@ -34,6 +34,15 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\slugify;
+
 /**
 Gallery path service helpers.
  *
@@ -44,6 +53,8 @@ Gallery path service helpers.
 
 /**
  * Configured filesystem root where gallery folders are stored.
+ *
+ * @return string Text result for the caller.
  */
 function galleries_root(): string
 {
@@ -52,6 +63,9 @@ function galleries_root(): string
 
 /**
  * Resolve a gallery's relative folder path to an absolute filesystem path.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_abs_path(string $relativePath): string
 {
@@ -77,6 +91,10 @@ function gallery_abs_path(string $relativePath): string
  * filesystem values so false positives from realpath(), missing folders,
  * path casing, trailing separators, or configured-root mistakes are visible
  * in the admin log context.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @param string $label Label value.
+ * @return array Structured result data for the caller.
  */
 function gallery_path_diagnostics(string $relativePath, string $label = 'gallery'): array
 {
@@ -128,6 +146,14 @@ function gallery_path_diagnostics(string $relativePath, string $label = 'gallery
     return $diagnostics;
 }
 
+/**
+ * Handle gallery target abs path.
+ *
+ * Part of the related application service.
+ *
+ * @param string $relativePath Relative path filesystem path.
+ * @return string Text result for the caller.
+ */
 function gallery_target_abs_path(string $relativePath): string
 {
     // $relativePath stores an intermediate value used by the surrounding gallery workflow.
@@ -158,6 +184,9 @@ function gallery_target_abs_path(string $relativePath): string
  * validate the destination before the destination directory exists. This helper
  * keeps realpath() anchoring for the configured gallery root and for existing
  * targets, while safely normalizing future target paths textually.
+ *
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function gallery_filesystem_path_inside_root(string $path): bool
 {
@@ -188,6 +217,10 @@ function gallery_filesystem_path_inside_root(string $path): bool
 
 /**
  * Compare two filesystem paths after platform-consistent textual normalization.
+ *
+ * @param string $root Root value.
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function gallery_normalized_path_inside_root(string $root, string $path): bool
 {
@@ -206,6 +239,9 @@ function gallery_normalized_path_inside_root(string $root, string $path): bool
 
 /**
  * Normalize a filesystem path string without requiring the target to exist.
+ *
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_normalize_filesystem_path(string $path): string
 {
@@ -251,6 +287,10 @@ function gallery_normalize_filesystem_path(string $path): string
 
 /**
  * Build a path safety exception message with enough diagnostics for admin logs.
+ *
+ * @param string $summary Summary value.
+ * @param string $path Filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_path_boundary_error_message(string $summary, string $path): string
 {
@@ -271,6 +311,9 @@ function gallery_path_boundary_error_message(string $summary, string $path): str
 
 /**
  * Convert an admin-entered folder name into one safe directory segment.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function gallery_folder_segment(string $value): string
 {
@@ -279,6 +322,9 @@ function gallery_folder_segment(string $value): string
 
 /**
  * Return the final path segment for a gallery folder path.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return string Text result for the caller.
  */
 function gallery_folder_name_from_path(string $folderPath): string
 {
@@ -289,6 +335,10 @@ function gallery_folder_name_from_path(string $folderPath): string
 
 /**
  * Build a relative child folder path under an optional parent gallery.
+ *
+ * @param ?array $parent Parent value.
+ * @param string $folderName Folder name value.
+ * @return string Text result for the caller.
  */
 function gallery_child_folder_path(?array $parent, string $folderName): string
 {
@@ -305,6 +355,10 @@ function gallery_child_folder_path(?array $parent, string $folderName): string
 
 /**
  * Return an unused child folder path, appending a numeric suffix when needed.
+ *
+ * @param ?array $parent Parent value.
+ * @param string $folderName Folder name value.
+ * @return string Text result for the caller.
  */
 function unique_gallery_child_folder_path(?array $parent, string $folderName): string
 {
@@ -324,6 +378,10 @@ function unique_gallery_child_folder_path(?array $parent, string $folderName): s
 
 /**
  * Resolve an image record to its absolute file path inside its gallery folder.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function image_abs_path(array $image, array $gallery): string
 {

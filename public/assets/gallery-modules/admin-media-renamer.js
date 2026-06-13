@@ -36,8 +36,6 @@ let mediaRenamerReady = false;
 
 /**
  * Attach delegated media-renamer form handling once per page.
- *
- * @returns {void}
  */
 export function setupAdminMediaRenamer() {
     if (mediaRenamerReady) {
@@ -52,7 +50,6 @@ export function setupAdminMediaRenamer() {
  * Refresh the site-wide selector when filter-style options change.
  *
  * @param {Event} event Browser change event.
- * @returns {void}
  */
 function handleMediaRenamerSettingChange(event) {
     const control = event.target;
@@ -84,7 +81,6 @@ function handleMediaRenamerSettingChange(event) {
  * Submit preview and apply forms without navigating away from the current view.
  *
  * @param {SubmitEvent} event Browser submit event.
- * @returns {void}
  */
 async function handleMediaRenamerSubmit(event) {
     const form = event.target;
@@ -141,7 +137,7 @@ async function handleMediaRenamerSubmit(event) {
  * Detect the explicit on-demand availability scan button.
  *
  * @param {HTMLElement|null} submitter Button that submitted the form.
- * @returns {boolean} True when the submitter starts the availability scan.
+ * @return {boolean} True when the submitter starts the availability scan.
  */
 function isAvailabilityCheckSubmitter(submitter) {
     return submitter instanceof HTMLButtonElement
@@ -153,7 +149,7 @@ function isAvailabilityCheckSubmitter(submitter) {
  * Detect the site-wide physical apply form.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {boolean} True when the form should be applied through photo batches.
+ * @return {boolean} True when the form should be applied through photo batches.
  */
 function isSiteWideApplyForm(form) {
     const action = form.querySelector('input[name="renamer_action"]');
@@ -170,7 +166,7 @@ function isSiteWideApplyForm(form) {
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {HTMLElement|null} progress Progress element.
- * @returns {Promise<object>} Final workspace JSON payload.
+ * @return {Promise<object>} Final workspace JSON payload.
  */
 async function submitApplyInBatches(form, submitter, progress) {
     const imageIds = renameCandidateImageIdsFromForm(form);
@@ -216,7 +212,7 @@ async function submitApplyInBatches(form, submitter, progress) {
  * Return planned image ids from the apply form.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {string[]} Image ids in preview order.
+ * @return {string[]} Image ids in preview order.
  */
 function renameCandidateImageIdsFromForm(form) {
     const ids = [];
@@ -232,7 +228,7 @@ function renameCandidateImageIdsFromForm(form) {
  * Return selected gallery ids from the apply form.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {string[]} Gallery ids.
+ * @return {string[]} Gallery ids.
  */
 function galleryIdsFromForm(form) {
     const ids = [];
@@ -249,7 +245,7 @@ function galleryIdsFromForm(form) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {string[]} batchIds Image ids in this batch.
- * @returns {Promise<Response>} Fetch response.
+ * @return {Promise<Response>} Fetch response.
  */
 async function submitApplyBatch(form, batchIds) {
     const body = new FormData(form);
@@ -278,7 +274,7 @@ async function submitApplyBatch(form, batchIds) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {object} aggregate Aggregate result from all batches.
- * @returns {Promise<Response>} Fetch response.
+ * @return {Promise<Response>} Fetch response.
  */
 async function submitApplyFinalRefresh(form, aggregate) {
     const body = new FormData(form);
@@ -304,7 +300,7 @@ async function submitApplyFinalRefresh(form, aggregate) {
 /**
  * Return an empty aggregate result object matching the PHP result shape.
  *
- * @returns {object} Mutable aggregate result.
+ * @return {object} Mutable aggregate result.
  */
 function emptyApplyResult() {
     return {
@@ -331,7 +327,6 @@ function emptyApplyResult() {
  *
  * @param {object} target Aggregate result.
  * @param {object} source Batch result from PHP.
- * @returns {void}
  */
 function mergeApplyResult(target, source) {
     ['galleries_processed', 'renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'].forEach((key) => {
@@ -353,7 +348,6 @@ function mergeApplyResult(target, source) {
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {number} processed Processed photo count.
  * @param {number} total Total photo count.
- * @returns {void}
  */
 function updateApplyButton(submitter, processed, total) {
     if (!(submitter instanceof HTMLButtonElement)) {
@@ -370,7 +364,7 @@ function updateApplyButton(submitter, processed, total) {
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {HTMLElement|null} progress Progress element.
- * @returns {Promise<object>} Final workspace JSON payload.
+ * @return {Promise<object>} Final workspace JSON payload.
  */
 async function submitAvailabilityCheckInBatches(form, submitter, progress) {
     const galleryIds = availabilityGalleryIdsFromForm(form);
@@ -414,7 +408,7 @@ async function submitAvailabilityCheckInBatches(form, submitter, progress) {
  * Return gallery ids currently present in the site-wide gallery table.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {string[]} Gallery ids in current UI order.
+ * @return {string[]} Gallery ids in current UI order.
  */
 function availabilityGalleryIdsFromForm(form) {
     const ids = [];
@@ -431,7 +425,7 @@ function availabilityGalleryIdsFromForm(form) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {string[]} batchIds Gallery ids in this batch.
- * @returns {Promise<Response>} Fetch response.
+ * @return {Promise<Response>} Fetch response.
  */
 async function submitAvailabilityBatch(form, batchIds) {
     const body = new FormData(form);
@@ -459,7 +453,7 @@ async function submitAvailabilityBatch(form, batchIds) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {object} availability Availability counts keyed by gallery id.
- * @returns {Promise<Response>} Fetch response.
+ * @return {Promise<Response>} Fetch response.
  */
 async function submitAvailabilityFinalRefresh(form, availability) {
     const body = new FormData(form);
@@ -486,7 +480,7 @@ async function submitAvailabilityFinalRefresh(form, availability) {
  * Resolve the explicit form action URL.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {string} Absolute request URL.
+ * @return {string} Absolute request URL.
  */
 function formActionUrl(form) {
     const action = form.getAttribute('action') || window.location.href;
@@ -499,7 +493,6 @@ function formActionUrl(form) {
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {number} processed Processed gallery count.
  * @param {number} total Total gallery count.
- * @returns {void}
  */
 function updateAvailabilityButton(submitter, processed, total) {
     if (!(submitter instanceof HTMLButtonElement)) {
@@ -516,7 +509,7 @@ function updateAvailabilityButton(submitter, processed, total) {
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} submitter Button that submitted the form.
  * @param {(percent: number, label: string) => void} updateProgress Progress updater.
- * @returns {Promise<Response>} Fetch response.
+ * @return {Promise<Response>} Fetch response.
  */
 async function submitRenamerForm(form, submitter, updateProgress) {
     const method = (form.method || 'get').toLowerCase();
@@ -569,7 +562,7 @@ async function submitRenamerForm(form, submitter, updateProgress) {
  * Find the workspace that should show progress.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @returns {HTMLElement|null} Workspace element.
+ * @return {HTMLElement|null} Workspace element.
  */
 function findRenamerWorkspace(form) {
     const selector = form.dataset.mediaRenamerTarget || '';
@@ -587,7 +580,7 @@ function findRenamerWorkspace(form) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {HTMLElement|null} workspace Workspace element.
- * @returns {HTMLElement} Progress element.
+ * @return {HTMLElement} Progress element.
  */
 function ensureRenamerProgress(form, workspace) {
     let progress = workspace?.querySelector('[data-admin-media-renamer-progress]');
@@ -610,7 +603,6 @@ function ensureRenamerProgress(form, workspace) {
  * @param {HTMLElement|null} progress Progress element.
  * @param {number} percent Percentage value.
  * @param {string} label Visible status label.
- * @returns {void}
  */
 function setRenamerProgress(progress, percent, label) {
     if (!(progress instanceof HTMLElement)) {
@@ -635,7 +627,6 @@ function setRenamerProgress(progress, percent, label) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {boolean} disabled Disabled state.
- * @returns {void}
  */
 function setRenamerFormDisabled(form, disabled) {
     form.querySelectorAll('button').forEach((control) => {
@@ -651,7 +642,7 @@ function setRenamerFormDisabled(form, disabled) {
  *
  * @param {Response} response Fetch response.
  * @param {HTMLFormElement} form Submitted form.
- * @returns {Promise<object>} Parsed JSON payload.
+ * @return {Promise<object>} Parsed JSON payload.
  */
 async function parseRenamerJsonResponse(response, form) {
     const contentType = response.headers.get('content-type') || '';
@@ -701,7 +692,7 @@ async function parseRenamerJsonResponse(response, form) {
  * @param {Response} response Fetch response.
  * @param {string} contentType Response content type.
  * @param {string} snippet First response bytes.
- * @returns {string} Visible error text.
+ * @return {string} Visible error text.
  */
 function buildNonJsonMessage(response, contentType, snippet) {
     const prefix = response.redirected
@@ -720,7 +711,6 @@ function buildNonJsonMessage(response, contentType, snippet) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {object} details Diagnostic details.
- * @returns {Promise<void>} Completion promise.
  */
 async function logRenamerClientError(form, details) {
     const token = form.querySelector('input[name="csrf_token"]');
@@ -769,8 +759,7 @@ async function logRenamerClientError(form, details) {
  * Replace the current renamer workspace from the JSON response.
  *
  * @param {HTMLFormElement} form Submitted form.
- * @param {{panel_html?: string, body_html?: string}} payload Server response payload.
- * @returns {void}
+ * @param {object} payload Payload value.
  */
 function replaceRenamerWorkspace(form, payload) {
     const selector = form.dataset.mediaRenamerTarget || '';

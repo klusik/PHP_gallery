@@ -34,18 +34,37 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\experimental_thumbnail_rebuild_browser_config;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\public_home_search_enabled;
+use function Gallery\Services\seo_request_guard_status;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_compatibility_mode;
+use function Gallery\Services\thumbnail_maintenance_last_check;
+
 /**
  * Return true when an optional dashboard feature should be rendered.
+ *
+ * @param string $featureKey Feature key value.
+ * @return bool True when the condition matches.
  */
 function view_admin_dashboard_feature_enabled(string $featureKey): bool
 {
-    return !function_exists('feature_flag_enabled') || feature_flag_enabled($featureKey);
+    return !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled($featureKey);
 }
 
 /**
  * Return a safe boolean value from the dashboard model.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @return bool True when the condition matches.
  */
 function view_admin_dashboard_bool(array $model, string $key): bool
 {
@@ -55,7 +74,10 @@ function view_admin_dashboard_bool(array $model, string $key): bool
 /**
  * Return a safe integer value from the dashboard model.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function view_admin_dashboard_int(array $model, string $key, int $fallback = 0): int
 {
@@ -65,8 +87,9 @@ function view_admin_dashboard_int(array $model, string $key, int $fallback = 0):
 /**
  * Return a safe array value from the dashboard model.
  *
- * @param array<string, mixed> $model
- * @return array<string, mixed>
+ * @param array $model Model value.
+ * @param string $key Lookup key.
+ * @return array<string mixed>.
  */
 function view_admin_dashboard_array(array $model, string $key): array
 {
@@ -76,7 +99,7 @@ function view_admin_dashboard_array(array $model, string $key): array
 /**
  * Render the focused Overview tab.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_overview_panel(array $model): void
 {
@@ -116,7 +139,7 @@ function view_render_admin_dashboard_overview_panel(array $model): void
 /**
  * Render summary metric cards for the dashboard overview.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_metric_grid(array $model): void
 {
@@ -197,8 +220,9 @@ function view_render_admin_dashboard_upload_card(): void
  */
 function view_render_admin_dashboard_discover_card(): void
 {
-    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form>' . csrf_field();
-    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button></form>';
+    echo '<form method="post" action="' . e(url_for('admin_discover')) . '" class="admin-action-card" data-refresh-galleries-form data-admin-discovery-launch data-discovery-endpoint="' . e(url_for('admin_discover')) . '" data-csrf-token="' . e(csrf_token()) . '">' . csrf_field();
+    echo '<strong>' . e(t('admin.dashboard.discover_folders', 'Discover folders')) . '</strong><span>' . e(t('admin.dashboard.discover_folders_hint', 'Scan the galleries directory for new folders.')) . '</span><button type="submit">' . e(t('admin.dashboard.check_new_folders', 'Check for new gallery folders')) . '</button>';
+    echo '<div class="thumbnail-progress" data-admin-discovery-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-admin-discovery-progress-bar></progress><p class="muted" data-admin-discovery-status></p><p class="muted" data-admin-discovery-counts></p></div></form>';
 }
 
 /**
@@ -212,7 +236,7 @@ function view_render_admin_dashboard_open_maintenance_card(): void
 /**
  * Render the Maintenance tab as nested, logical tool groups.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_maintenance_panel(array $model): void
 {
@@ -256,7 +280,7 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
 /**
  * Render maintenance tools that affect public display and metadata policy.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_content_display_tools(array $model): void
 {
@@ -285,7 +309,7 @@ function view_render_admin_dashboard_content_display_tools(array $model): void
 /**
  * Render maintenance tools for generated media and archives.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_media_tools(array $model): void
 {
@@ -310,7 +334,7 @@ function view_render_admin_dashboard_media_tools(array $model): void
 /**
  * Render maintenance tools for maps and flight navigation data.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_navigation_tools(array $model): void
 {
@@ -332,7 +356,7 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
 /**
  * Render maintenance tools for application health and diagnostics.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
  */
 function view_render_admin_dashboard_system_tools(array $model): void
 {
@@ -367,6 +391,8 @@ function view_render_admin_dashboard_system_tools(array $model): void
 
 /**
  * Render the public search settings card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_public_search_card(string $className): void
 {
@@ -378,6 +404,8 @@ function view_render_admin_dashboard_public_search_card(string $className): void
 
 /**
  * Render the clean public-path regeneration card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_public_paths_card(string $className): void
 {
@@ -387,10 +415,12 @@ function view_render_admin_dashboard_public_paths_card(string $className): void
 
 /**
  * Render public crawler safety settings.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_seo_guard_card(string $className): void
 {
-    $status = function_exists('seo_request_guard_status') ? seo_request_guard_status() : [
+    $status = function_exists('Gallery\\Services\\seo_request_guard_status') ? seo_request_guard_status() : [
         'enabled' => true,
         'logging_enabled' => true,
         'log_day' => '',
@@ -416,14 +446,15 @@ function view_render_admin_dashboard_seo_guard_card(string $className): void
 /**
  * Render thumbnail cache actions.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_thumbnail_card(array $model, string $className): void
 {
     $thumbnailSummary = view_admin_dashboard_array($model, 'thumbnail_summary');
     $missingThumbnailVariants = view_admin_dashboard_int($model, 'missing_thumbnail_variants');
-    $compatibilityMode = function_exists('thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
-    $lastThumbnailCheck = function_exists('thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
+    $compatibilityMode = function_exists('Gallery\\Services\\thumbnail_compatibility_mode') ? thumbnail_compatibility_mode() : 'modern';
+    $lastThumbnailCheck = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : [];
 
     echo '<article class="' . e($className) . ' admin-thumbnail-maintenance-card">';
     echo '<strong>' . e(t('admin.dashboard.thumbnail_maintenance', 'Thumbnail maintenance')) . '</strong>';
@@ -501,9 +532,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
     echo '</form>';
 
-    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
-    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
-    $experimentalRebuildConfig = function_exists('experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $experimentalRebuildConfig = function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
     $experimentalRebuildJson = json_encode($experimentalRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($experimentalRebuildJson)) {
         $experimentalRebuildJson = '{}';
@@ -517,9 +546,15 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
             ? t('admin.thumbnails.create_missing_ready_hint', 'Targeted repair is ready. Use Create missing thumbnails to process only the images reported by the last full check.')
             : t('admin.thumbnails.create_missing_none_hint', 'The last full check found no missing or stale thumbnails. Run Check missing thumbnails again after importing or changing files.'))
         : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
+
+    echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
     echo '<label class="admin-compact-toggle experimental-thumbnail-rebuild-toggle"><input type="checkbox" name="experimental_thumbnail_rebuild" value="1" data-experimental-thumbnail-rebuild-toggle data-experimental-thumbnail-rebuild-config="' . e($experimentalRebuildJson) . '"' . ($experimentalRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.experimental_rebuild_label', 'Experimental browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.experimental_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
-    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div>';
+    echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button></div>';
     echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
+
+    echo '<form method="post" action="' . e(url_for('admin_delete_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-delete-all-thumbnails-form>' . csrf_field();
+    echo '<input type="hidden" name="confirmation_expected" value=""><input type="hidden" name="confirmation_typed" value="">';
+    echo '<div class="nav"><button type="submit" class="secondary danger" data-delete-all-thumbnails data-confirm-words="archive,remove,clean,thumbs,purge,reset,delete,cache,media,confirm">' . e(t('admin.dashboard.delete_all_thumbnails', 'Delete all thumbnails')) . '</button></div></form>';
     echo '</article>';
 }
 
@@ -527,7 +562,8 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
 /**
  * Render the scheduled site-maintenance settings card.
  *
- * @param array<string, mixed> $model
+ * @param array $model Model value.
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_site_maintenance_card(array $model, string $className): void
 {
@@ -634,6 +670,8 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
 
 /**
  * Render the complete gallery archive card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_archive_card(string $className): void
 {
@@ -642,6 +680,8 @@ function view_render_admin_dashboard_archive_card(string $className): void
 
 /**
  * Render the media renamer shortcut card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_media_renamer_card(string $className): void
 {
@@ -650,6 +690,8 @@ function view_render_admin_dashboard_media_renamer_card(string $className): void
 
 /**
  * Render the pending database migration card.
+ *
+ * @param string $className Class name value.
  */
 function view_render_admin_dashboard_migration_card(string $className): void
 {

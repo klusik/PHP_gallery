@@ -34,8 +34,19 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use finfo;
+use Imagick;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\is_dng_image_path;
+
 /**
  * Return whether one image row represents a DNG original that needs display derivatives.
+ *
+ * @param array $image Image row or image data.
+ * @return bool True when the condition matches.
  */
 function image_uses_dng_display_derivatives(array $image): bool
 {
@@ -46,7 +57,7 @@ function image_uses_dng_display_derivatives(array $image): bool
 /**
  * Return supported DNG source policy values.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function dng_conversion_source_policy_options(): array
 {
@@ -56,7 +67,7 @@ function dng_conversion_source_policy_options(): array
 /**
  * Return supported DNG color policy values.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function dng_conversion_color_policy_options(): array
 {
@@ -65,6 +76,9 @@ function dng_conversion_color_policy_options(): array
 
 /**
  * Normalize one DNG source policy value.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function dng_normalize_conversion_source_policy(?string $value): string
 {
@@ -74,6 +88,9 @@ function dng_normalize_conversion_source_policy(?string $value): string
 
 /**
  * Normalize one DNG color policy value.
+ *
+ * @param ?string $value Value to process.
+ * @return string Text result for the caller.
  */
 function dng_normalize_conversion_color_policy(?string $value): string
 {
@@ -83,30 +100,34 @@ function dng_normalize_conversion_color_policy(?string $value): string
 
 /**
  * Return the configured DNG source conversion policy.
+ *
+ * @return string Text result for the caller.
  */
 function dng_conversion_source_policy(): string
 {
-    return dng_normalize_conversion_source_policy(function_exists('app_setting') ? app_setting('dng_conversion_source_policy', 'auto_fallback') : 'auto_fallback');
+    return dng_normalize_conversion_source_policy(function_exists('Gallery\\Services\\app_setting') ? app_setting('dng_conversion_source_policy', 'auto_fallback') : 'auto_fallback');
 }
 
 /**
  * Return the configured DNG color handling policy.
+ *
+ * @return string Text result for the caller.
  */
 function dng_conversion_color_policy(): string
 {
-    return dng_normalize_conversion_color_policy(function_exists('app_setting') ? app_setting('dng_conversion_color_policy', 'force_srgb') : 'force_srgb');
+    return dng_normalize_conversion_color_policy(function_exists('Gallery\\Services\\app_setting') ? app_setting('dng_conversion_color_policy', 'force_srgb') : 'force_srgb');
 }
 
 /**
  * Return available DNG derivative source paths for the current runtime.
  *
- * @return array{raw:bool,preview_imagick:bool,preview_gd:bool}
+ * @return array{raw:bool,preview_imagick:bool,preview_gd:bool} Structured result data for the caller.
  */
 function dng_conversion_runtime_capabilities(): array
 {
     return [
-        'raw' => function_exists('dng_conversion_supported') && dng_conversion_supported(),
-        'preview_imagick' => class_exists('Imagick') && function_exists('imagick_format_supported') && imagick_format_supported('JPEG') && imagick_format_supported('WEBP'),
+        'raw' => function_exists('Gallery\\Services\\dng_conversion_supported') && dng_conversion_supported(),
+        'preview_imagick' => class_exists('Imagick') && function_exists('Gallery\\Services\\imagick_format_supported') && imagick_format_supported('JPEG') && imagick_format_supported('WEBP'),
         'preview_gd' => extension_loaded('gd') && function_exists('imagecreatefromjpeg') && function_exists('imagewebp'),
     ];
 }
@@ -114,8 +135,9 @@ function dng_conversion_runtime_capabilities(): array
 /**
  * Build the ordered source attempts for one configured DNG policy.
  *
- * @param array{raw?:bool,preview_imagick?:bool,preview_gd?:bool} $capabilities
- * @return array<int, string>
+ * @param string $sourcePolicy Source policy value.
+ * @param array{raw?:bool,preview_imagick?:bool,preview_gd?:bool} $capabilities Capabilities value.
+ * @return array<int string>.
  */
 function dng_conversion_attempt_order(string $sourcePolicy, array $capabilities): array
 {
@@ -141,6 +163,10 @@ function dng_conversion_attempt_order(string $sourcePolicy, array $capabilities)
 
 /**
  * Store the most recent DNG conversion diagnostic for this request.
+ *
+ * @param string $code Code value.
+ * @param string $message Message value.
+ * @param array $context Context value.
  */
 function dng_set_last_conversion_error(string $code, string $message, array $context = []): void
 {
@@ -150,7 +176,7 @@ function dng_set_last_conversion_error(string $code, string $message, array $con
 /**
  * Return the most recent DNG conversion diagnostic for this request.
  *
- * @return array{code:string,message:string,context:array<string,mixed>}|null
+ * @return array{code:string,message:string,context:array<string,mixed>}|null Structured result data for the caller.
  */
 function dng_last_conversion_error(): ?array
 {
@@ -167,17 +193,21 @@ function dng_clear_last_conversion_error(): void
 
 /**
  * Return whether DNG display derivative generation is available.
+ *
+ * @return bool True when the condition matches.
  */
 function dng_derivative_generation_supported(): bool
 {
-    if (function_exists('dng_conversion_supported') && dng_conversion_supported()) {
+    if (function_exists('Gallery\\Services\\dng_conversion_supported') && dng_conversion_supported()) {
         return true;
     }
-    return function_exists('dng_embedded_preview_supported') && dng_embedded_preview_supported();
+    return function_exists('Gallery\\Services\\dng_embedded_preview_supported') && dng_embedded_preview_supported();
 }
 
 /**
  * Return a readable status explaining whether DNG derivative generation can run.
+ *
+ * @return array Structured result data for the caller.
  */
 function dng_derivative_generation_status(): array
 {
@@ -205,6 +235,9 @@ function dng_derivative_generation_status(): array
 
 /**
  * Return the generated WebP master filename for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function dng_display_master_filename(array $image): string
 {
@@ -218,6 +251,11 @@ function dng_display_master_filename(array $image): string
 
 /**
  * Return the absolute generated WebP master path for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $create Create value.
+ * @return string Text result for the caller.
  */
 function dng_display_master_abs_path(array $image, array $gallery, bool $create = false): string
 {
@@ -226,6 +264,10 @@ function dng_display_master_abs_path(array $image, array $gallery, bool $create 
 
 /**
  * Return a stable source MIME value for derivative decisions.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param array $image Image row or image data.
+ * @return string Text result for the caller.
  */
 function image_source_mime_for_derivatives(string $sourcePath, array $image = []): string
 {
@@ -241,14 +283,17 @@ function image_source_mime_for_derivatives(string $sourcePath, array $image = []
 /**
  * Return the file that public media routes are allowed to stream for visible display.
  *
- * @return array{path:string,mime:string,filename:string,variant:string}|null
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $createIfMissing Create if missing value.
+ * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
  */
 function image_public_display_file(array $image, array $gallery, bool $createIfMissing = false): ?array
 {
     // $sourcePath stores the original uploaded source file.
     $sourcePath = image_abs_path($image, $gallery);
     if (!is_file($sourcePath)) {
-        return null;
+        return image_public_display_derivative_fallback_file($image, $gallery);
     }
 
     if (image_uses_dng_display_derivatives($image)) {
@@ -256,7 +301,7 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
             // $masterPath stores the generated browser-displayable WebP master.
             $masterPath = dng_display_master_abs_path($image, $gallery, $createIfMissing);
         } catch (RuntimeException) {
-            return null;
+            return image_public_display_derivative_fallback_file($image, $gallery);
         }
         // $sourceMtime stores the original DNG timestamp used to refresh stale derivatives.
         $sourceMtime = filemtime($sourcePath) ?: 0;
@@ -264,7 +309,7 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
             create_dng_display_master($sourcePath, $masterPath);
         }
         if (!is_file($masterPath)) {
-            return null;
+            return image_public_display_derivative_fallback_file($image, $gallery);
         }
         return [
             'path' => $masterPath,
@@ -279,7 +324,7 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
     // $mime stores an intermediate value used by the surrounding gallery workflow.
     $mime = (string) ($finfo->file($sourcePath) ?: mime_content_type($sourcePath));
     if (!str_starts_with($mime, 'image/')) {
-        return null;
+        return image_public_display_derivative_fallback_file($image, $gallery);
     }
 
     return [
@@ -291,7 +336,49 @@ function image_public_display_file(array $image, array $gallery, bool $createIfM
 }
 
 /**
+ * Return the largest existing browser-displayable derivative when the source file cannot be streamed.
+ *
+ * Media routes prefer real source files or DNG display masters. This fallback keeps
+ * lightbox viewing functional for legacy imports whose generated derivatives exist
+ * but whose original source file is unavailable.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @return array{path:string,mime:string,filename:string,variant:string}|null Structured result data for the caller.
+ */
+function image_public_display_derivative_fallback_file(array $image, array $gallery): ?array
+{
+    // $sizes stores supported thumbnail sizes from largest to smallest.
+    $sizes = array_reverse(thumbnail_sizes());
+    foreach ($sizes as $size) {
+        foreach (['webp', 'jpg'] as $format) {
+            try {
+                // $path stores the generated derivative candidate inspected for media fallback streaming.
+                $path = thumbnail_abs_path($image, $gallery, (int) $size, $format);
+            } catch (RuntimeException) {
+                continue;
+            }
+            if (!is_file($path)) {
+                continue;
+            }
+            return [
+                'path' => $path,
+                'mime' => $format === 'webp' ? 'image/webp' : 'image/jpeg',
+                'filename' => basename($path),
+                'variant' => 'display_derivative_' . (int) $size . '_' . $format,
+            ];
+        }
+    }
+
+    return null;
+}
+
+/**
  * Create or refresh the full-size WebP display master for a DNG source.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @return bool True when the condition matches.
  */
 function create_dng_display_master(string $sourcePath, string $targetPath): bool
 {
@@ -301,6 +388,8 @@ function create_dng_display_master(string $sourcePath, string $targetPath): bool
 
 /**
  * Apply the configured color policy to an Imagick DNG or preview image.
+ *
+ * @param Imagick $image Image row or image data.
  */
 function dng_apply_imagick_color_policy(Imagick $image): void
 {
@@ -336,10 +425,16 @@ function dng_apply_imagick_color_policy(Imagick $image): void
 
 /**
  * Write one DNG derivative through Imagick.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_imagick_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
-    if (!function_exists('dng_conversion_supported') || !dng_conversion_supported()) {
+    if (!function_exists('Gallery\\Services\\dng_conversion_supported') || !dng_conversion_supported()) {
         dng_set_last_conversion_error('raw_delegate_missing', t('thumbnail.dng_error.raw_delegate_missing', 'Imagick is available, but the required DNG, JPEG, or WebP delegate support is missing.'));
         return false;
     }
@@ -389,6 +484,12 @@ function write_dng_imagick_derivative(string $sourcePath, string $targetPath, st
 
 /**
  * Write one resized derivative from an extracted DNG JPEG preview through Imagick.
+ *
+ * @param string $previewPath Preview path filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_preview_derivative_with_imagick(string $previewPath, string $targetPath, string $format, int $maxSide): bool
 {
@@ -439,10 +540,17 @@ function write_dng_preview_derivative_with_imagick(string $previewPath, string $
 
 /**
  * Write one DNG derivative from the embedded JPEG preview fallback.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @param ?string $forcedPreviewPath Forced preview path filesystem path.
+ * @return bool True when the condition matches.
  */
 function write_dng_embedded_preview_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide, ?string $forcedPreviewPath = null): bool
 {
-    if (!function_exists('dng_extract_embedded_jpeg_preview') || !dng_embedded_preview_supported()) {
+    if (!function_exists('Gallery\\Services\\dng_extract_embedded_jpeg_preview') || !dng_embedded_preview_supported()) {
         dng_set_last_conversion_error('preview_decoder_missing', t('thumbnail.dng_error.preview_decoder_missing', 'No usable embedded DNG preview decoder is available through Imagick or GD.'));
         return false;
     }
@@ -507,6 +615,12 @@ function write_dng_embedded_preview_derivative(string $sourcePath, string $targe
 
 /**
  * Write one DNG derivative through the strongest available source path.
+ *
+ * @param string $sourcePath Source filesystem path.
+ * @param string $targetPath Target filesystem path.
+ * @param string $format Format value.
+ * @param ?int $maxSide Max side value.
+ * @return bool True when the condition matches.
  */
 function write_dng_derivative(string $sourcePath, string $targetPath, string $format, ?int $maxSide): bool
 {
@@ -541,6 +655,12 @@ function write_dng_derivative(string $sourcePath, string $targetPath, string $fo
 
 /**
  * Create thumbnails plus the WebP display master for one DNG source.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $sourcePath Source filesystem path.
+ * @param ?array $requestedSizes Requested sizes value.
+ * @return array Structured result data for the caller.
  */
 function create_dng_image_derivatives_result(array $image, array $gallery, string $sourcePath, ?array $requestedSizes = null): array
 {
@@ -572,7 +692,7 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     // $invalidGeometryFiles stores removed cache filenames for diagnostics.
     $invalidGeometryFiles = [];
     // $sourceGeometry stores source dimensions used by derivative metadata validation.
-    $sourceGeometry = function_exists('thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
+    $sourceGeometry = function_exists('Gallery\\Services\\thumbnail_source_geometry_dimensions') ? thumbnail_source_geometry_dimensions($sourcePath, $image) : null;
 
     // $masterPath stores the browser-displayable full-size WebP master.
     $masterPath = dng_display_master_abs_path($image, $gallery, true);
@@ -589,23 +709,23 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
     }
 
     // $formats stores thumbnail derivative formats required by the active compatibility mode.
-    $formats = function_exists('thumbnail_target_formats_for_source') ? thumbnail_target_formats_for_source($sourcePath, 'image/x-adobe-dng') : ['jpg', 'webp'];
+    $formats = function_exists('Gallery\\Services\\thumbnail_target_formats_for_source') ? thumbnail_target_formats_for_source($sourcePath, 'image/x-adobe-dng') : ['jpg', 'webp'];
     // $sizes stores the requested thumbnail sizes. Null means all standard sizes.
     $sizes = $requestedSizes === null ? thumbnail_sizes() : array_values(array_unique(array_filter(array_map('intval', $requestedSizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
     // $thumbnailPolicy stores the exact generation policy for diagnostics and warmup logs.
-    $thumbnailPolicy = function_exists('thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, 'image/x-adobe-dng', $sizes) : null;
+    $thumbnailPolicy = function_exists('Gallery\\Services\\thumbnail_generation_policy_summary') ? thumbnail_generation_policy_summary($sourcePath, 'image/x-adobe-dng', $sizes) : null;
     foreach ($sizes as $size) {
         foreach ($formats as $format) {
             // $targetPath stores the derivative path for this size and format.
             $targetPath = thumbnail_abs_path($image, $gallery, (int) $size, $format);
             if (is_file($targetPath) && filemtime($targetPath) >= $sourceMtime) {
                 $geometryStatus = ['valid' => true, 'reason' => 'geometry_validation_unavailable'];
-                if (is_array($sourceGeometry) && function_exists('thumbnail_file_geometry_status')) {
+                if (is_array($sourceGeometry) && function_exists('Gallery\\Services\\thumbnail_file_geometry_status')) {
                     // $geometryStatus stores whether a fresh DNG thumbnail derivative has valid dimensions.
                     $geometryStatus = thumbnail_file_geometry_status($targetPath, (int) $sourceGeometry['width'], (int) $sourceGeometry['height'], (int) $size);
                 }
                 if (!empty($geometryStatus['valid'])) {
-                    if (function_exists('thumbnail_metadata_record_file')) {
+                    if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                         thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, false);
                     }
                     $skipped++;
@@ -613,25 +733,25 @@ function create_dng_image_derivatives_result(array $image, array $gallery, strin
                 }
                 $invalidGeometryDeleted++;
                 $invalidGeometryFiles[] = basename($targetPath);
-                if (function_exists('thumbnail_delete_invalid_geometry_file')) {
+                if (function_exists('Gallery\\Services\\thumbnail_delete_invalid_geometry_file')) {
                     thumbnail_delete_invalid_geometry_file($targetPath);
                 } elseif (is_file($targetPath)) {
                     @unlink($targetPath);
                 }
-                if (function_exists('thumbnail_metadata_delete_variant')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, $format);
                 }
             }
             // $written stores whether the DNG derivative was created successfully.
             $written = write_dng_derivative($sourcePath, $targetPath, $format, (int) $size);
             if ($written) {
-                if (function_exists('thumbnail_metadata_record_file')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                     thumbnail_metadata_record_file($image, $gallery, (int) $size, $format, $targetPath, $sourcePath, true);
                 }
                 $created++;
                 $createdFiles[] = basename($targetPath);
             } else {
-                if (function_exists('thumbnail_metadata_delete_variant')) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_variant')) {
                     thumbnail_metadata_delete_variant($image, (int) $size, $format);
                 }
                 $failed++;

@@ -35,11 +35,22 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\gallery_branding_asset_column;
+use function Gallery\Services\gallery_branding_mime_extension;
+use function Gallery\Services\gallery_branding_upload_extension_allowed;
+use function Gallery\Services\theme_branding_asset_filename_stem;
+use function Gallery\Services\theme_branding_asset_setting;
+
+require_once __DIR__ . '/support/namespaced_shims.php';
 require_once __DIR__ . '/../app/services/gallery_branding.php';
 
 if (!function_exists('t')) {
-    /**
+        /**
      * Return a deterministic translation fallback for standalone model tests.
+     *
+     * @param string $key Lookup key.
+     * @param string $fallback Fallback value.
+     * @return string Text result for the caller.
      */
     function t(string $key, string $fallback = ''): string
     {
@@ -49,6 +60,10 @@ if (!function_exists('t')) {
 
 /**
  * Throw when a branding model expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_gallery_branding_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -59,6 +74,9 @@ function assert_gallery_branding_same(mixed $expected, mixed $actual, string $la
 
 /**
  * Return the public title mode implied by configured branding paths.
+ *
+ * @param array $paths Paths filesystem path.
+ * @return string Text result for the caller.
  */
 function test_gallery_branding_title_mode(array $paths): string
 {
@@ -67,6 +85,9 @@ function test_gallery_branding_title_mode(array $paths): string
 
 /**
  * Return true when the public header should reserve space for a logo.
+ *
+ * @param array $paths Paths filesystem path.
+ * @return bool True when the condition matches.
  */
 function test_gallery_branding_uses_logo(array $paths): bool
 {
@@ -75,6 +96,9 @@ function test_gallery_branding_uses_logo(array $paths): bool
 
 /**
  * Return true when a separator should be rendered before gallery content.
+ *
+ * @param array $paths Paths filesystem path.
+ * @return bool True when the condition matches.
  */
 function test_gallery_branding_uses_separator(array $paths): bool
 {

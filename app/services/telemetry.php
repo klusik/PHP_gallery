@@ -32,6 +32,15 @@
  *   2026-05-04
  */
 
+use function Gallery\Core\append_cms_footer_html;
+use function Gallery\Core\append_cms_footer_script;
+use function Gallery\Core\asset_url;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\e;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\url_for;
+
 /**
  * Anonymous telemetry service.
  *
@@ -42,6 +51,8 @@
 
 /**
  * Return whether the core telemetry event table exists.
+ *
+ * @return bool True when the condition matches.
  */
 function telemetry_schema_ready(): bool
 {
@@ -56,6 +67,8 @@ function telemetry_schema_ready(): bool
 
 /**
  * Return a stable request id for this PHP request.
+ *
+ * @return string Text result for the caller.
  */
 function telemetry_request_id(): string
 {
@@ -69,6 +82,8 @@ function telemetry_request_id(): string
 
 /**
  * Return whether the current request should be excluded from public telemetry.
+ *
+ * @return bool True when the condition matches.
  */
 function telemetry_request_excluded(): bool
 {
@@ -86,6 +101,9 @@ function telemetry_request_excluded(): bool
 
 /**
  * Return a normalized event name or null when the event is not supported.
+ *
+ * @param mixed $eventName Event name value.
+ * @return ?string Text result for the caller.
  */
 function telemetry_event_name(mixed $eventName): ?string
 {
@@ -108,7 +126,6 @@ function telemetry_event_name(mixed $eventName): ?string
         'client.performance.image_display',
         'client.error.javascript',
         'media.image.served',
-        'media.thumbnail.served',
         'media.download.served',
         'cache.thumbnail.hit',
         'cache.thumbnail.miss',
@@ -122,6 +139,10 @@ function telemetry_event_name(mixed $eventName): ?string
 
 /**
  * Return the aggregate metric name used for one raw event.
+ *
+ * @param string $eventName Event name value.
+ * @param array $event Browser or application event.
+ * @return ?string Text result for the caller.
  */
 function telemetry_metric_name_for_event(string $eventName, array $event): ?string
 {
@@ -159,6 +180,8 @@ function telemetry_metric_name_for_event(string $eventName, array $event): ?stri
 
 /**
  * Record one telemetry event after strict normalization.
+ *
+ * @param array $event Browser or application event.
  */
 function telemetry_record_event(array $event): void
 {
@@ -244,6 +267,17 @@ function telemetry_record_event(array $event): void
 
 /**
  * Create or update one anonymous session summary row.
+ *
+ * @param ?string $sessionHash Session hash value.
+ * @param string $eventName Event name value.
+ * @param array $event Browser or application event.
+ * @param ?int $galleryId Gallery identifier.
+ * @param ?int $imageId Image identifier.
+ * @param string $referrerCategory Referrer category value.
+ * @param string $browserFamily Browser family value.
+ * @param string $osFamily Os family value.
+ * @param string $deviceType Device type value.
+ * @param string $viewportClass Viewport class value.
  */
 function telemetry_touch_session(?string $sessionHash, string $eventName, array $event, ?int $galleryId, ?int $imageId, string $referrerCategory, string $browserFamily, string $osFamily, string $deviceType, string $viewportClass): void
 {
@@ -306,6 +340,17 @@ function telemetry_touch_session(?string $sessionHash, string $eventName, array 
 
 /**
  * Record one immediate hourly metric for dashboard responsiveness.
+ *
+ * @param string $eventName Event name value.
+ * @param array $event Browser or application event.
+ * @param ?int $galleryId Gallery identifier.
+ * @param ?int $imageId Image identifier.
+ * @param string $referrerCategory Referrer category value.
+ * @param string $browserFamily Browser family value.
+ * @param string $osFamily Os family value.
+ * @param string $deviceType Device type value.
+ * @param string $viewportClass Viewport class value.
+ * @param ?int $durationMs Duration ms value.
  */
 function telemetry_record_hourly_metric(string $eventName, array $event, ?int $galleryId, ?int $imageId, string $referrerCategory, string $browserFamily, string $osFamily, string $deviceType, string $viewportClass, ?int $durationMs): void
 {
@@ -365,6 +410,13 @@ function telemetry_record_hourly_metric(string $eventName, array $event, ?int $g
 
 /**
  * Record one served public media response for anonymous telemetry.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $eventName Event name value.
+ * @param int $bytes Bytes value.
+ * @param string $mediaVariant Media variant value.
+ * @param string $cacheResult Cache result value.
  */
 function telemetry_record_media_served_event(array $image, array $gallery, string $eventName, int $bytes, string $mediaVariant, string $cacheResult = 'miss'): void
 {
@@ -392,6 +444,10 @@ function telemetry_record_media_served_event(array $image, array $gallery, strin
  *
  * The telemetry dashboard uses binary units so large media totals stay readable
  * without implying decimal SI scaling.
+ *
+ * @param int|float $bytes Bytes value.
+ * @param int $precision Precision value.
+ * @return string Text result for the caller.
  */
 function telemetry_format_bytes(int|float $bytes, int $precision = 1): string
 {
@@ -410,6 +466,9 @@ function telemetry_format_bytes(int|float $bytes, int $precision = 1): string
 
 /**
  * Return public telemetry bootstrap config for the rendered page.
+ *
+ * @param array $context Context value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_public_config(array $context = []): array
 {
@@ -433,6 +492,8 @@ function telemetry_public_config(array $context = []): array
 
 /**
  * Append the public telemetry script config to the current page footer.
+ *
+ * @param array $context Context value.
  */
 function telemetry_append_public_script(array $context = []): void
 {
@@ -456,6 +517,10 @@ function telemetry_append_public_script(array $context = []): void
 
 /**
  * Return one aggregate metric sum from hourly metrics.
+ *
+ * @param string $metricName Metric name value.
+ * @param int $days Days value.
+ * @return float Numeric result for the caller.
  */
 function telemetry_metric_sum(string $metricName, int $days = 30): float
 {
@@ -470,6 +535,10 @@ function telemetry_metric_sum(string $metricName, int $days = 30): float
 
 /**
  * Return one aggregate event count from hourly metrics.
+ *
+ * @param string $metricName Metric name value.
+ * @param int $days Days value.
+ * @return int Integer result for the caller.
  */
 function telemetry_metric_events(string $metricName, int $days = 30): int
 {
@@ -484,6 +553,10 @@ function telemetry_metric_events(string $metricName, int $days = 30): int
 
 /**
  * Return top viewed photos using hourly aggregates.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_top_photos(int $days = 30, int $limit = 15): array
 {
@@ -505,6 +578,10 @@ function telemetry_top_photos(int $days = 30, int $limit = 15): array
 
 /**
  * Return longest viewed photos using capped view-time aggregates.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
 {
@@ -527,6 +604,9 @@ function telemetry_longest_viewed_photos(int $days = 30, int $limit = 15): array
 
 /**
  * Return browser family mix using anonymous session aggregates.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_browser_mix(int $days = 30): array
 {
@@ -541,6 +621,9 @@ function telemetry_browser_mix(int $days = 30): array
 
 /**
  * Return cache result distribution from hourly metrics.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_cache_mix(int $days = 30): array
 {
@@ -555,6 +638,11 @@ function telemetry_cache_mix(int $days = 30): array
 
 /**
  * Return a bounded integer for report query limits and day windows.
+ *
+ * @param int $value Value to process.
+ * @param int $min Min value.
+ * @param int $max Max value.
+ * @return int Integer result for the caller.
  */
 function telemetry_report_bound_int(int $value, int $min, int $max): int
 {
@@ -563,6 +651,9 @@ function telemetry_report_bound_int(int $value, int $min, int $max): int
 
 /**
  * Return the table row count when a telemetry table exists.
+ *
+ * @param string $tableName Table name value.
+ * @return int Integer result for the caller.
  */
 function telemetry_report_table_count(string $tableName): int
 {
@@ -587,6 +678,10 @@ function telemetry_report_table_count(string $tableName): int
 
 /**
  * Return a single scalar value from a parameterized telemetry report query.
+ *
+ * @param string $sql Sql value.
+ * @param array $params Params value.
+ * @return float Numeric result for the caller.
  */
 function telemetry_report_scalar(string $sql, array $params = []): float
 {
@@ -601,6 +696,10 @@ function telemetry_report_scalar(string $sql, array $params = []): float
 
 /**
  * Return rows from a parameterized telemetry report query.
+ *
+ * @param string $sql Sql value.
+ * @param array $params Params value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_rows(string $sql, array $params = []): array
 {
@@ -615,6 +714,9 @@ function telemetry_report_rows(string $sql, array $params = []): array
 
 /**
  * Return the session quality summary for the report window.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_session_summary(int $days): array
 {
@@ -635,6 +737,9 @@ function telemetry_report_session_summary(int $days): array
 
 /**
  * Return daily trend rows for common report metrics.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_daily_trends(int $days): array
 {
@@ -653,6 +758,10 @@ function telemetry_report_daily_trends(int $days): array
 
 /**
  * Return top gallery engagement rows for the report window.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_top_galleries(int $days, int $limit = 25): array
 {
@@ -672,6 +781,10 @@ function telemetry_report_top_galleries(int $days, int $limit = 25): array
 
 /**
  * Return top route rows for the report window.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_top_routes(int $days, int $limit = 25): array
 {
@@ -690,6 +803,12 @@ function telemetry_report_top_routes(int $days, int $limit = 25): array
 
 /**
  * Return a distribution from hourly aggregate dimensions.
+ *
+ * @param string $dimension Dimension value.
+ * @param int $days Days value.
+ * @param string $metricName Metric name value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_metric_distribution(string $dimension, int $days, string $metricName, int $limit = 20): array
 {
@@ -708,6 +827,11 @@ function telemetry_report_metric_distribution(string $dimension, int $days, stri
 
 /**
  * Return session distribution rows from the session table.
+ *
+ * @param string $dimension Dimension value.
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_session_distribution(string $dimension, int $days, int $limit = 20): array
 {
@@ -730,6 +854,9 @@ function telemetry_report_session_distribution(string $dimension, int $days, int
 
 /**
  * Return web vital and browser performance aggregates.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_performance_metrics(int $days): array
 {
@@ -747,6 +874,10 @@ function telemetry_report_performance_metrics(int $days): array
 
 /**
  * Return client error distribution rows.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_client_errors(int $days, int $limit = 25): array
 {
@@ -764,6 +895,10 @@ function telemetry_report_client_errors(int $days, int $limit = 25): array
 
 /**
  * Return recent anonymized telemetry events for the access log section.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_recent_events(int $days, int $limit = 80): array
 {
@@ -779,6 +914,10 @@ function telemetry_report_recent_events(int $days, int $limit = 80): array
 
 /**
  * Return database telemetry summary rows.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_database_summary(int $days, int $limit = 40): array
 {
@@ -801,6 +940,9 @@ function telemetry_report_database_summary(int $days, int $limit = 40): array
 
 /**
  * Return total database telemetry counters for the report window.
+ *
+ * @param int $days Days value.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_database_totals(int $days): array
 {
@@ -813,6 +955,10 @@ function telemetry_report_database_totals(int $days): array
 
 /**
  * Return database fingerprint hot spots.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_database_fingerprints(int $days, int $limit = 30): array
 {
@@ -832,6 +978,10 @@ function telemetry_report_database_fingerprints(int $days, int $limit = 30): arr
 
 /**
  * Return recent telemetry job runs.
+ *
+ * @param int $days Days value.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function telemetry_report_job_runs(int $days, int $limit = 40): array
 {

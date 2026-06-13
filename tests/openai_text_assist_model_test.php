@@ -37,10 +37,10 @@
 declare(strict_types=1);
 
 if (!function_exists('cms_config')) {
-    /**
+        /**
      * Return deterministic config material for isolated encryption tests.
      *
-     * @return array<string,mixed>
+     * @return array<string,mixed> Structured result data for the caller.
      */
     function cms_config(): array
     {
@@ -64,7 +64,6 @@ require_once __DIR__ . '/../app/services/openai_text_assist.php';
  * @param mixed $expected Expected value.
  * @param mixed $actual Actual value.
  * @param string $label Human-readable assertion label.
- * @return void
  */
 function assert_openai_text_assist_same(mixed $expected, mixed $actual, string $label): void
 {
@@ -79,7 +78,6 @@ function assert_openai_text_assist_same(mixed $expected, mixed $actual, string $
  * @param string $needle Required text.
  * @param string $haystack String being checked.
  * @param string $label Human-readable assertion label.
- * @return void
  */
 function assert_openai_text_assist_contains(string $needle, string $haystack, string $label): void
 {

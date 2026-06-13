@@ -35,8 +35,6 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Attach OpenAI text-assistance behavior to admin editor controls.
- *
- * @returns {void}
  */
 export function setupOpenAITextAssist() {
     if (document.body?.dataset.openaiTextAssistBound === '1') {
@@ -77,7 +75,7 @@ export function setupOpenAITextAssist() {
  * Return whether the selected task uses thumbnail image input.
  *
  * @param {string} task OpenAI task id.
- * @returns {boolean}
+ * @return {boolean} True when the condition matches.
  */
 function taskUsesImages(task) {
     return task === 'image_visual_description' || task === 'gallery_visual_description';
@@ -88,7 +86,7 @@ function taskUsesImages(task) {
  *
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {HTMLFormElement} form Editor form.
- * @returns {FormData} Shared request body.
+ * @return {FormData} Shared request body.
  */
 function buildOpenAIBaseBody(tool, form) {
     const body = new FormData();
@@ -104,7 +102,7 @@ function buildOpenAIBaseBody(tool, form) {
  *
  * @param {string} endpoint Endpoint URL.
  * @param {FormData} body Request payload.
- * @returns {Promise<Record<string, *>>} Parsed JSON response.
+ * @return {Promise<Record<string, *>>} Parsed JSON response.
  */
 async function postOpenAIJson(endpoint, body) {
     const response = await fetch(endpoint, {
@@ -128,7 +126,6 @@ async function postOpenAIJson(endpoint, body) {
  *
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {HTMLButtonElement} button Generate button.
- * @returns {Promise<void>}
  */
 async function generateOpenAITextSuggestion(tool, button) {
     const form = tool.closest('form');
@@ -198,7 +195,6 @@ async function generateOpenAITextSuggestion(tool, button) {
  *
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {HTMLButtonElement} button Bulk button.
- * @returns {Promise<void>}
  */
 async function generateOpenAIBulkPhotoDescriptions(tool, button) {
     const form = tool.closest('form');
@@ -261,7 +257,7 @@ async function generateOpenAIBulkPhotoDescriptions(tool, button) {
  * Parse an admin JSON response and convert HTML errors into a readable message.
  *
  * @param {Response} response Fetch response.
- * @returns {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
+ * @return {Promise<Record<string, *>>} Parsed JSON or normalized error payload.
  */
 async function readOpenAIJson(response) {
     const text = await response.text();
@@ -284,7 +280,6 @@ async function readOpenAIJson(response) {
  * @param {HTMLElement} tool OpenAI text-assistance tool root.
  * @param {string} message Status text.
  * @param {boolean} failed True when the status is an error.
- * @returns {void}
  */
 function setOpenAIStatus(tool, message, failed) {
     const status = tool.querySelector('[data-openai-status]');

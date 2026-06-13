@@ -656,6 +656,11 @@ Aviation-related gallery features are intentionally modular.
 
 The route map should prefer explicit coordinates from OFP data when available, with local nav points or cached provider lookup as fallback.
 
+
+## Admin Gallery Discovery
+
+Filesystem gallery discovery is handled by `app/controllers/admin_galleries_discovery.php`, `app/services/admin_gallery_discovery.php`, `public/assets/gallery-modules/admin-refresh-progress.js`, and `public/assets/gallery-modules/admin-thumbnail-progress.js`. The Admin dashboard button starts an Ajax job instead of submitting a long blocking request. The service stores a short-lived session job, scans a bounded number of directories per request, tracks candidate folder paths, and returns plain-language review rows to the browser. The completed table lets the admin import folders in place, move discovered photo files into an existing gallery folder, or delete selected unmanaged folders from disk. Candidate rows show user-facing photo counts, destination previews, visibility, title-duplicate warnings, and the exact effect of the selected action. Rows that look like existing sibling gallery titles are highlighted and left unchecked by default. Metadata-only folders without supported photos are reported as ignored instead of being offered for import, which prevents empty duplicate rows from stale `gallery.json` files. Import expansion reuses the same service helper so selected folders are expanded from the selected subtree instead of rescanning the entire gallery root, filters already-known exact, case-folded, realpath, and same-title sibling matches, and refuses paths whose branch contains no supported images. Move actions only accept unmanaged discovered folders, move supported photo files into the selected existing gallery folder with unique destination names, scan the destination gallery, and remove source directories only when they become empty. Delete actions refuse known database gallery folders and remove only selected unmanaged directory trees. Thumbnail follow-up jobs are skipped when the import or move scans zero images, and Ajax failures show the concrete server error instead of a generic thumbnail failure.
+
 ## EXIF/GPS Public Display Policy
 
 EXIF/GPS display is default-enabled globally through `app_settings.exif_gps_maps_default_enabled`. The nullable `galleries.gps_map_enabled` column stores only branch-level overrides: `NULL` inherits, `1` forces display on, and `0` forces display off. The effective state is resolved by `gallery_effective_gps_map_enabled()` in `app/services/exif.php`, which walks from the current gallery to its parents and falls back to the global default when no explicit override exists.
@@ -731,6 +736,7 @@ Logs support category, severity, status, subject, request id, route, method, AJA
 | `public/assets/styles.css` | Main public and admin styling. |
 | `public/assets/gallery.js` | Gallery UI behavior, search, maps, inline admin behavior and related browser interactions. |
 | `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | In-place apply workflow for the reusable per-gallery EXIF date suggestion component in full editor and side-panel contexts. |
+| `public/assets/gallery-modules/admin-refresh-progress.js` | Ajax progress workflow for Admin filesystem gallery discovery. |
 | `public/assets/telemetry.js` | Telemetry event capture. |
 | `public/assets/usage.js` | Usage collection helper. |
 | `public/assets/custom.css` | Public custom CSS entry. |
@@ -769,6 +775,12 @@ When adding logic-heavy services, prefer creating a direct test script that exer
 10. Do not hardcode public paths when URL helper functions already exist.
 11. Keep comments practical and close to the relevant code.
 12. Avoid adding new dependencies unless the feature cannot be implemented reasonably without them.
+
+### Comment and Docstring Rules
+
+Every PHP function or method should keep a short PHPDoc entry above it. The entry should start with one factual purpose sentence, then list every parameter with `@param`, a concrete type, and a short description. Add `@return` when the function returns data. Mention important caller context, dependencies, or downstream service calls only when that context helps maintenance.
+
+Keep descriptions brief and factual. Do not remove existing file headers or function docstrings while editing unrelated logic. Prefer normal inline comments for local reasoning, avoid decorative separator lines, and keep comments near the code they explain.
 
 ## Recommended AI Maintenance Workflow
 

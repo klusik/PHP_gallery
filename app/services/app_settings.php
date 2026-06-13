@@ -34,6 +34,12 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use function Gallery\Core\db;
+use function Gallery\Core\now_sql;
+
 /**
  * Application settings service.
  *
@@ -437,6 +443,10 @@ declare(strict_types=1);
 
 /**
  * Read one application setting with a fallback.
+ *
+ * @param string $key Lookup key.
+ * @param ?string $default Default value when no explicit value is available.
+ * @return ?string Text result for the caller.
  */
 function app_setting(string $key, ?string $default = null): ?string
 {
@@ -466,6 +476,9 @@ function app_setting(string $key, ?string $default = null): ?string
 
 /**
  * Upsert one application setting.
+ *
+ * @param string $key Lookup key.
+ * @param string $value Value to process.
  */
 function set_app_setting(string $key, string $value): void
 {
@@ -481,6 +494,8 @@ function set_app_setting(string $key, string $value): void
 
 /**
  * Remove one or more application settings.
+ *
+ * @param array $keys Keys value.
  */
 function delete_app_settings(array $keys): void
 {
@@ -510,6 +525,8 @@ function delete_app_settings(array $keys): void
  * The default is intentionally enabled to preserve the historic application
  * behavior. Administrators can store url_rewrite_enabled = 0 when their hosting
  * cannot route clean URLs reliably.
+ *
+ * @return bool True when the condition matches.
  */
 function url_rewrite_enabled(): bool
 {
@@ -518,6 +535,8 @@ function url_rewrite_enabled(): bool
 
 /**
  * Persist the clean URL rewrite preference.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_url_rewrite_enabled(bool $enabled): void
 {
@@ -526,6 +545,9 @@ function set_url_rewrite_enabled(bool $enabled): void
 
 /**
  * Return whether one .htaccess file contains rewrite rules for this app.
+ *
+ * @param string $path Filesystem path.
+ * @return bool True when the condition matches.
  */
 function url_rewrite_marker_file_ok(string $path): bool
 {
@@ -547,9 +569,9 @@ function url_rewrite_marker_file_ok(string $path): bool
  * remaining checks look for the files and server indicators that this project
  * needs on typical Apache, LiteSpeed, and compatible shared hosting.
  *
- * @param array<string, string>|null $server Override used by tests.
+ * @param ?array $server Server value.
  * @param string|null $root Override used by tests.
- * @return array{enabled: bool, status: string, supported: bool, confidence: string, reasons: array<int, string>, details: array<string, mixed>}
+ * @return array{enabled: bool, status: string, supported: bool, confidence: string, reasons: array<int, string>, details: array<string, mixed>}.
  */
 function url_rewrite_compatibility(?array $server = null, ?string $root = null): array
 {
@@ -642,6 +664,8 @@ function url_rewrite_compatibility(?array $server = null, ?string $root = null):
 
 /**
  * Return true when pretty public URLs should be emitted for the current request.
+ *
+ * @return bool True when the condition matches.
  */
 function url_rewrite_should_emit_clean_urls(): bool
 {
@@ -655,6 +679,8 @@ function url_rewrite_should_emit_clean_urls(): bool
 
 /**
  * Public site name shown in the header and browser title.
+ *
+ * @return string Text result for the caller.
  */
 function site_name(): string
 {
@@ -665,6 +691,8 @@ function site_name(): string
 
 /**
  * Return true when admin-only JavaScript diagnostics should be rendered.
+ *
+ * @return bool True when the condition matches.
  */
 function dev_mode_enabled(): bool
 {
@@ -673,6 +701,8 @@ function dev_mode_enabled(): bool
 
 /**
  * Persist the admin-only JavaScript diagnostics switch.
+ *
+ * @param bool $enabled Enabled flag.
  */
 function set_dev_mode_enabled(bool $enabled): void
 {
@@ -681,6 +711,8 @@ function set_dev_mode_enabled(bool $enabled): void
 
 /**
  * Return gallery IDs whose admin tree rows should start collapsed.
+ *
+ * @return array Structured result data for the caller.
  */
 function collapsed_gallery_ids(): array
 {
@@ -694,6 +726,8 @@ function collapsed_gallery_ids(): array
 
 /**
  * Persist the admin gallery tree collapse state.
+ *
+ * @param array $ids Ids value.
  */
 function set_collapsed_gallery_ids(array $ids): void
 {

@@ -37,6 +37,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\url_for;
+
 const EXPERIMENTAL_UPLOAD_DEFAULT_WORKER_COUNT = 8;
 const EXPERIMENTAL_UPLOAD_MIN_WORKER_COUNT = 1;
 const EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP = 32;
@@ -54,7 +66,7 @@ const EXPERIMENTAL_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES = 128 * 1024 * 1024;
 /**
  * Return default settings for the experimental client-side upload pipeline.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_default_settings(): array
 {
@@ -67,12 +79,18 @@ function experimental_upload_default_settings(): array
         'zip_size_threshold_ratio' => EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO,
         'max_items_per_batch' => EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
         'max_zip_batch_bytes' => EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES,
-        'thumbnail_rebuild_source_chunk_bytes' => defined('EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024,
+        'thumbnail_rebuild_source_chunk_bytes' => defined('Gallery\\Services\\EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024,
     ];
 }
 
 /**
  * Clamp an integer setting while tolerating missing or malformed input.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallback Fallback value.
+ * @param int $minimum Minimum value.
+ * @param int $maximum Maximum value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_clamped_int(mixed $value, int $fallback, int $minimum, int $maximum): int
 {
@@ -89,6 +107,10 @@ function experimental_upload_clamped_int(mixed $value, int $fallback, int $minim
 
 /**
  * Clamp a ratio setting while tolerating missing or malformed input.
+ *
+ * @param mixed $value Value to process.
+ * @param float $fallback Fallback value.
+ * @return float Numeric result for the caller.
  */
 function experimental_upload_clamped_ratio(mixed $value, float $fallback): float
 {
@@ -105,6 +127,10 @@ function experimental_upload_clamped_ratio(mixed $value, float $fallback): float
 
 /**
  * Convert a human-editable megabyte setting into bytes for ZIP batch caps.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallbackBytes Fallback bytes value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_megabytes_to_bytes(mixed $value, int $fallbackBytes): int
 {
@@ -124,8 +150,8 @@ function experimental_upload_megabytes_to_bytes(mixed $value, int $fallbackBytes
 /**
  * Normalize raw settings from POST data, migrations, or app_settings rows.
  *
- * @param array<string, mixed> $raw
- * @return array<string, mixed>
+ * @param array $raw Raw value.
+ * @return array<string mixed>.
  */
 function experimental_upload_normalize_settings(array $raw): array
 {
@@ -175,7 +201,7 @@ function experimental_upload_normalize_settings(array $raw): array
             EXPERIMENTAL_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES,
             EXPERIMENTAL_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES
         ),
-        'thumbnail_rebuild_source_chunk_bytes' => function_exists('experimental_thumbnail_rebuild_clamped_source_chunk_bytes')
+        'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_clamped_source_chunk_bytes')
             ? experimental_thumbnail_rebuild_clamped_source_chunk_bytes($raw['thumbnail_rebuild_source_chunk_bytes'] ?? $defaults['thumbnail_rebuild_source_chunk_bytes'])
             : (int) ($raw['thumbnail_rebuild_source_chunk_bytes'] ?? $defaults['thumbnail_rebuild_source_chunk_bytes']),
     ];
@@ -184,7 +210,7 @@ function experimental_upload_normalize_settings(array $raw): array
 /**
  * Read normalized experimental upload settings from app_settings.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_settings(): array
 {
@@ -197,15 +223,15 @@ function experimental_upload_settings(): array
         'zip_size_threshold_ratio' => app_setting('experimental_upload_zip_size_threshold_ratio', (string) EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO),
         'max_items_per_batch' => app_setting('experimental_upload_max_items_per_batch', (string) EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
         'max_zip_batch_bytes' => app_setting('experimental_upload_max_zip_batch_bytes', (string) EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
-        'thumbnail_rebuild_source_chunk_bytes' => app_setting('experimental_thumbnail_rebuild_source_chunk_bytes', (string) (defined('EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024)),
+        'thumbnail_rebuild_source_chunk_bytes' => app_setting('experimental_thumbnail_rebuild_source_chunk_bytes', (string) (defined('Gallery\\Services\\EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES') ? EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES : 512 * 1024 * 1024)),
     ]);
 }
 
 /**
  * Persist experimental upload settings submitted by an administrator.
  *
- * @param array<string, mixed> $input
- * @return array<string, mixed>
+ * @param array $input Input value.
+ * @return array<string mixed>.
  */
 function set_experimental_upload_settings(array $input): array
 {
@@ -218,7 +244,7 @@ function set_experimental_upload_settings(array $input): array
         'zip_size_threshold_ratio' => $input['experimental_upload_zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO,
         'max_items_per_batch' => $input['experimental_upload_max_items_per_batch'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH,
         'max_zip_batch_bytes' => experimental_upload_megabytes_to_bytes($input['experimental_upload_max_zip_batch_megabytes'] ?? null, EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES),
-        'thumbnail_rebuild_source_chunk_bytes' => function_exists('experimental_thumbnail_rebuild_megabytes_to_bytes')
+        'thumbnail_rebuild_source_chunk_bytes' => function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_megabytes_to_bytes')
             ? experimental_thumbnail_rebuild_megabytes_to_bytes($input['experimental_thumbnail_rebuild_source_chunk_megabytes'] ?? null)
             : (512 * 1024 * 1024),
     ]);
@@ -238,6 +264,9 @@ function set_experimental_upload_settings(array $input): array
 
 /**
  * Convert a PHP shorthand byte value, for example 128M, into bytes.
+ *
+ * @param string $value Value to process.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_php_size_to_bytes(string $value): int
 {
@@ -261,6 +290,8 @@ function experimental_upload_php_size_to_bytes(string $value): int
 
 /**
  * Return the effective PHP request upload ceiling in bytes.
+ *
+ * @return int Integer result for the caller.
  */
 function experimental_upload_server_upload_limit_bytes(): int
 {
@@ -275,6 +306,10 @@ function experimental_upload_server_upload_limit_bytes(): int
 
 /**
  * Derive a safe target ZIP size from the PHP upload limit and configured ratio.
+ *
+ * @param int $uploadLimitBytes Upload limit bytes value.
+ * @param float $ratio Ratio value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_batch_target_bytes(int $uploadLimitBytes, float $ratio): int
 {
@@ -287,6 +322,11 @@ function experimental_upload_batch_target_bytes(int $uploadLimitBytes, float $ra
 
 /**
  * Return the final browser ZIP target after PHP limits and the admin absolute cap are both applied.
+ *
+ * @param int $uploadLimitBytes Upload limit bytes value.
+ * @param float $ratio Ratio value.
+ * @param int $maxZipBatchBytes Max zip batch bytes value.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_effective_batch_target_bytes(int $uploadLimitBytes, float $ratio, int $maxZipBatchBytes): int
 {
@@ -303,13 +343,13 @@ function experimental_upload_effective_batch_target_bytes(int $uploadLimitBytes,
 /**
  * Return the current browser-facing experimental upload configuration.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_upload_browser_config(): array
 {
     $settings = experimental_upload_settings();
     $uploadLimit = experimental_upload_server_upload_limit_bytes();
-    $formats = function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
+    $formats = function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp'];
     $formats = array_values(array_filter(array_map('strval', $formats), static fn (string $format): bool => in_array($format, ['jpg', 'webp'], true)));
     if (!$formats) {
         $formats = ['jpg'];
@@ -327,16 +367,20 @@ function experimental_upload_browser_config(): array
         'batch_target_bytes' => experimental_upload_effective_batch_target_bytes($uploadLimit, (float) $settings['zip_size_threshold_ratio'], (int) $settings['max_zip_batch_bytes']),
         'max_items_per_batch' => (int) $settings['max_items_per_batch'],
         'max_zip_batch_bytes' => (int) $settings['max_zip_batch_bytes'],
-        'thumbnail_sizes' => function_exists('thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
+        'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
         'thumbnail_formats' => $formats,
-        'jpeg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpeg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
         'supported_mime_types' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ];
 }
 
 /**
  * Read a little-endian unsigned 16-bit value from binary data.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_zip_uint16(string $data, int $offset): int
 {
@@ -346,6 +390,10 @@ function experimental_upload_zip_uint16(string $data, int $offset): int
 
 /**
  * Read a little-endian unsigned 32-bit value from binary data.
+ *
+ * @param string $data Input data.
+ * @param int $offset Starting offset.
+ * @return int Integer result for the caller.
  */
 function experimental_upload_zip_uint32(string $data, int $offset): int
 {
@@ -356,7 +404,9 @@ function experimental_upload_zip_uint32(string $data, int $offset): int
 /**
  * Parse a browser-created store-only ZIP file into safe named entries.
  *
- * @return array<string, string>
+ * @param string $zipPath Zip path filesystem path.
+ * @param int $maxBytes Max bytes value.
+ * @return array<string string>.
  */
 function experimental_upload_parse_store_zip(string $zipPath, int $maxBytes): array
 {
@@ -424,6 +474,8 @@ function experimental_upload_parse_store_zip(string $zipPath, int $maxBytes): ar
 
 /**
  * Return a safe idempotency cache directory for acknowledged batches.
+ *
+ * @return string Text result for the caller.
  */
 function experimental_upload_batch_cache_dir(): string
 {
@@ -438,6 +490,11 @@ function experimental_upload_batch_cache_dir(): string
 
 /**
  * Build a cache key for a processed client-side upload batch.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return string Text result for the caller.
  */
 function experimental_upload_batch_cache_key(int $galleryId, string $sessionId, int $batchIndex): string
 {
@@ -448,7 +505,10 @@ function experimental_upload_batch_cache_key(int $galleryId, string $sessionId, 
 /**
  * Read a cached success response for a previously acknowledged batch.
  *
- * @return array<string, mixed>|null
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return array<string mixed>|null.
  */
 function experimental_upload_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex): ?array
 {
@@ -464,7 +524,10 @@ function experimental_upload_cached_batch_response(int $galleryId, string $sessi
 /**
  * Cache a success response so client retries do not duplicate stored files.
  *
- * @param array<string, mixed> $response
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @param array $response Response data.
  */
 function experimental_upload_store_cached_batch_response(int $galleryId, string $sessionId, int $batchIndex, array $response): void
 {
@@ -478,6 +541,9 @@ function experimental_upload_store_cached_batch_response(int $galleryId, string 
 
 /**
  * Validate one original image payload before it is placed into a gallery.
+ *
+ * @param string $filename Filename value.
+ * @param string $payload Payload value.
  */
 function experimental_upload_validate_original_payload(string $filename, string $payload): void
 {
@@ -504,6 +570,9 @@ function experimental_upload_validate_original_payload(string $filename, string 
 
 /**
  * Validate one browser-created thumbnail payload.
+ *
+ * @param string $format Format value.
+ * @param string $payload Payload value.
  */
 function experimental_upload_validate_thumbnail_payload(string $format, string $payload): void
 {
@@ -523,8 +592,8 @@ function experimental_upload_validate_thumbnail_payload(string $format, string $
 /**
  * Return database image rows keyed by image id.
  *
- * @param array<int, int> $imageIds
- * @return array<int, array<string, mixed>>
+ * @param array $imageIds Image ids value.
+ * @return array<int array<string, mixed>>.
  */
 function experimental_upload_image_rows_by_ids(array $imageIds): array
 {
@@ -545,8 +614,8 @@ function experimental_upload_image_rows_by_ids(array $imageIds): array
 /**
  * Decode and validate a browser upload manifest.
  *
- * @param array<string, string> $entries
- * @return array<string, mixed>
+ * @param array $entries Entries value.
+ * @return array<string mixed>.
  */
 function experimental_upload_manifest_from_entries(array $entries): array
 {
@@ -564,8 +633,11 @@ function experimental_upload_manifest_from_entries(array $entries): array
 /**
  * Store one browser-prepared ZIP package in a target gallery.
  *
- * @param array<string, mixed> $uploadedZip
- * @return array<string, mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param array $uploadedZip Uploaded zip value.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return array<string mixed>.
  */
 function experimental_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex): array
 {
@@ -690,10 +762,10 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
                     throw new RuntimeException(t('experimental_upload.error_thumbnail_store_failed', 'Could not store a prepared thumbnail.'));
                 }
                 $sourcePath = image_abs_path($image, $gallery);
-                if (function_exists('thumbnail_touch_generated_file_for_source')) {
+                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
                     thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
                 }
-                if (function_exists('thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
                     $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
                     if (empty($metadata['valid'])) {
                         $thumbnailFailed++;

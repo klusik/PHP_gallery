@@ -35,6 +35,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Core;
+
 require_once __DIR__ . '/views/seo.php';
 require_once __DIR__ . '/views/admin_chrome.php';
 require_once __DIR__ . '/views/admin_ui.php';

@@ -54,7 +54,7 @@
  * @param {string} key Translation key emitted by the server.
  * @param {string} fallback Safe English fallback.
  * @param {Object<string, string|number>} parameters Placeholder values.
- * @returns {string} Browser-facing translated text.
+ * @return {string} Browser-facing translated text.
  */
 function i18n(key, fallback, parameters = {}) {
     const root = window.PHP_GALLERY_I18N && typeof window.PHP_GALLERY_I18N === 'object' ? window.PHP_GALLERY_I18N : {};
@@ -75,8 +75,6 @@ const galleryLightboxState = {
 
 /**
  * Releases lightbox listeners and viewer-held DOM references before public gallery content is replaced.
- *
- * @returns {void}
  */
 export function teardownGalleryLightbox() {
     if (typeof galleryLightboxState.cleanup === 'function') {
@@ -89,6 +87,13 @@ export function teardownGalleryLightbox() {
     }
 }
 
+/**
+ * Handle setup gallery lightbox.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @return {object} Object result for the caller.
+ */
 export function setupGalleryLightbox() {
     teardownGalleryLightbox();
 
@@ -127,7 +132,7 @@ export function setupGalleryLightbox() {
     );
     // lightboxGalleryMapPayloadPromises stores lazy gallery map fetches keyed by endpoint URL.
     const lightboxGalleryMapPayloadPromises = new Map();
-    /**
+        /**
      * Normalize the browsing mode emitted by PHP before it drives DOM behavior.
      *
      * Older deployments used strip as the stored picture-strip value. The public
@@ -135,7 +140,7 @@ export function setupGalleryLightbox() {
      * cached markup and not-yet-migrated rows from falling back unexpectedly.
      *
      * @param {string} value Raw server-rendered browsing mode value.
-     * @returns {'single'|'picture_strip'|'3d_carousel'} Supported browser mode.
+     * @return {'single'|'picture_strip'|'3d_carousel'} Supported browser mode.
      */
     function normalizeLightboxBrowsingMode(value) {
         const mode = String(value || '').trim().toLowerCase();
@@ -154,15 +159,13 @@ export function setupGalleryLightbox() {
     // lightboxPendingWindows stores in-flight async metadata requests keyed by endpoint range.
     const lightboxPendingWindows = new Map();
 
-    /**
+        /**
      * Refreshes the lightbox order after an admin reorders visible photo cards or replaces public gallery content.
      *
      * Navigation must read the current DOM order so Next and Previous match the
      * saved gallery order without requiring a full page reload. Paginated pages
      * use a sparse client-side cache, so non-visible images are fetched only when
      * the user approaches them in the viewer.
-     *
-     * @returns {void}
      */
     function refreshLightboxOrderFromDom() {
         const nextVisibleCards = Array.from(document.querySelectorAll('[data-lightbox-image]'));
@@ -185,12 +188,12 @@ export function setupGalleryLightbox() {
         cards = nextVisibleCards;
     }
 
-    /**
+        /**
      * Return a card's zero-based lightbox index.
      *
      * @param {Element} card Server-rendered or async-created lightbox source element.
      * @param {number} fallbackIndex Position used by legacy markup without explicit indexes.
-     * @returns {number} Zero-based index, or -1 when no usable index exists.
+     * @return {number} Zero-based index, or -1 when no usable index exists.
      */
     function lightboxIndexForCard(card, fallbackIndex = -1) {
         if (!(card instanceof HTMLElement)) {
@@ -203,11 +206,11 @@ export function setupGalleryLightbox() {
         return Number.isInteger(fallbackIndex) && fallbackIndex >= 0 ? fallbackIndex : -1;
     }
 
-    /**
+        /**
      * Build a detached source element from one lazy lightbox JSON item.
      *
      * @param {Object<string, *>} item JSON item returned by the lightbox endpoint.
-     * @returns {HTMLElement|null} Detached source element, or null when the payload is invalid.
+     * @return {HTMLElement|null} Detached source element, or null when the payload is invalid.
      */
     function createLightboxCardFromItem(item) {
         if (!item || typeof item !== 'object') {
@@ -245,11 +248,10 @@ export function setupGalleryLightbox() {
         return card;
     }
 
-    /**
+        /**
      * Store async lightbox items in the sparse client cache.
      *
      * @param {Array<Object<string, *>>} items JSON items returned by the endpoint.
-     * @returns {void}
      */
     function mergeLightboxItems(items) {
         if (!Array.isArray(items)) {
@@ -267,11 +269,11 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Return an async metadata window that contains the requested index.
      *
      * @param {number} index Zero-based lightbox index.
-     * @returns {{offset:number, limit:number}} Endpoint range parameters.
+     * @return {{offset:number, limit:number} } Endpoint range parameters.
      */
     function lightboxWindowForIndex(index) {
         if (cards.length <= 0) {
@@ -284,12 +286,12 @@ export function setupGalleryLightbox() {
         return {offset, limit: Math.max(1, limit)};
     }
 
-    /**
+        /**
      * Return true when the requested sparse cache range already has metadata.
      *
      * @param {number} offset Zero-based range offset.
      * @param {number} limit Maximum number of positions to inspect.
-     * @returns {boolean} True when every position in the range has a card.
+     * @return {boolean} True when every position in the range has a card.
      */
     function lightboxRangeLoaded(offset, limit) {
         const end = Math.min(cards.length, offset + limit);
@@ -301,12 +303,12 @@ export function setupGalleryLightbox() {
         return true;
     }
 
-    /**
+        /**
      * Fetch one async metadata range unless it is already loaded or in flight.
      *
      * @param {number} offset Zero-based range offset.
      * @param {number} limit Maximum items to request.
-     * @returns {Promise<boolean>} True when the request completed successfully or was unnecessary.
+     * @return {Promise<boolean>} True when the request completed successfully or was unnecessary.
      */
     function fetchLightboxRange(offset, limit) {
         if (!lightboxEndpoint || cards.length === 0 || lightboxRangeLoaded(offset, limit)) {
@@ -352,11 +354,11 @@ export function setupGalleryLightbox() {
         return promise;
     }
 
-    /**
+        /**
      * Ensure that metadata around one index is available.
      *
      * @param {number} index Zero-based lightbox index.
-     * @returns {Promise<boolean>} True when the surrounding metadata is available.
+     * @return {Promise<boolean>} True when the surrounding metadata is available.
      */
     function fetchLightboxWindowAround(index) {
         const range = lightboxWindowForIndex(index);
@@ -602,10 +604,8 @@ export function setupGalleryLightbox() {
         document.body.classList.remove('has-lightbox', 'has-mobile-lightbox', 'has-map-overlay');
     };
 
-    /**
+        /**
      * Move the mobile overlay to the body root so fixed positioning is not affected by page layout wrappers.
-     *
-     * @returns {void}
      */
     function prepareMobileLightboxOverlay() {
         if (!isMobileTouchDevice || overlay.parentElement === document.body) {
@@ -614,10 +614,8 @@ export function setupGalleryLightbox() {
         document.body.append(overlay);
     }
 
-    /**
+        /**
      * Keep the CSS fullscreen shell aligned with the currently visible mobile viewport.
-     *
-     * @returns {void}
      */
     function updateMobileLightboxViewport() {
         if (!isMobileTouchDevice) {
@@ -632,9 +630,8 @@ export function setupGalleryLightbox() {
         overlay.style.setProperty('--lightbox-mobile-viewport-height', `${viewportHeight}px`);
     }
 
-    /**
+        /**
      * Handles clear lightbox stage focus behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearLightboxStageFocus() {
         if (stageLink && document.activeElement === stageLink) {
@@ -645,9 +642,8 @@ export function setupGalleryLightbox() {
     // activeLightboxImageToken stores state or configuration for the gallery front-end flow.
     let activeLightboxImageToken = 0;
 
-    /**
+        /**
      * Handles clear pending full image swap behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearPendingFullImageSwap() {
         if (pendingFullImageSwapTimer) {
@@ -656,7 +652,7 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Read one numeric lightbox timing setting from the server-rendered overlay.
      *
      * The current markup only exposes defaults. Keeping the values in data
@@ -667,7 +663,7 @@ export function setupGalleryLightbox() {
      * @param {number} fallbackMs Fallback duration in milliseconds.
      * @param {number} minimumMs Lowest accepted duration in milliseconds.
      * @param {number} maximumMs Highest accepted duration in milliseconds.
-     * @returns {number} Safe duration in milliseconds.
+     * @return {number} Safe duration in milliseconds.
      */
     function readLightboxTimingSetting(datasetKey, fallbackMs, minimumMs, maximumMs) {
         const rawValue = Number.parseInt(overlay.dataset[datasetKey] || '', 10);
@@ -677,22 +673,23 @@ export function setupGalleryLightbox() {
         return Math.max(minimumMs, Math.min(maximumMs, rawValue));
     }
 
-    /**
+        /**
      * Return the transition duration for the next image blend.
      *
      * Manual navigation keeps the existing snappy transition. Slideshow mode
      * uses the slower configurable blend requested for automatic playback.
      *
-     * @returns {number} Transition duration in milliseconds.
+     * @return {number} Transition duration in milliseconds.
      */
     function currentLightboxTransitionDuration() {
         return lightboxSlideshowActive ? lightboxSlideshowTransitionDuration : lightboxDefaultTransitionDuration;
     }
 
-    /**
+        /**
      * Handles decode loaded image behavior for the gallery UI.
+     *
      * @param {*} loadedImage Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function decodeLoadedImage(loadedImage) {
         if (typeof loadedImage.decode !== 'function') {
@@ -701,9 +698,8 @@ export function setupGalleryLightbox() {
         return loadedImage.decode().catch(() => undefined);
     }
 
-    /**
+        /**
      * Handles setup gallery dev mode overlay behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function setupGalleryDevModeOverlay() {
         if (!galleryDevModeEnabled) {
@@ -731,10 +727,10 @@ export function setupGalleryLightbox() {
         renderGalleryDevModeOverlay();
     }
 
-    /**
+        /**
      * Handles dev frame tick behavior for the gallery UI.
+     *
      * @param {*} timestamp Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function devFrameTick(timestamp) {
         if (!galleryDevModeEnabled || controller.signal.aborted) {
@@ -747,13 +743,14 @@ export function setupGalleryLightbox() {
         galleryDevModeState.frameId = requestAnimationFrame(devFrameTick);
     }
 
-    /**
+        /**
      * Handles dev register source behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} kind Value supplied by the caller or event context.
      * @param {*} index Value supplied by the caller or event context.
      * @param {*} status Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devRegisterSource(src, kind, index, status) {
         if (!galleryDevModeEnabled || !src) {
@@ -789,10 +786,11 @@ export function setupGalleryLightbox() {
         return stat;
     }
 
-    /**
+        /**
      * Handles dev find source kind behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devFindSourceKind(src) {
         if (!src) {
@@ -815,10 +813,11 @@ export function setupGalleryLightbox() {
         return 'unknown';
     }
 
-    /**
+        /**
      * Handles dev find source index behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devFindSourceIndex(src) {
         if (!src) {
@@ -827,13 +826,13 @@ export function setupGalleryLightbox() {
         return cards.findIndex((card) => card && (card.dataset.previewSrc === src || card.dataset.fullSrc === src));
     }
 
-    /**
+        /**
      * Handles dev mark source behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} status Value supplied by the caller or event context.
      * @param {*} reason Value supplied by the caller or event context.
      * @param {*} imageNode Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function devMarkSource(src, status, reason, imageNode = null) {
         if (!galleryDevModeEnabled || !src) {
@@ -865,10 +864,10 @@ export function setupGalleryLightbox() {
         devLog(`${kind}:${status}:${reason || 'state'}`);
     }
 
-    /**
+        /**
      * Handles dev log behavior for the gallery UI.
+     *
      * @param {*} message Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function devLog(message) {
         if (!galleryDevModeEnabled) {
@@ -878,9 +877,10 @@ export function setupGalleryLightbox() {
         galleryDevModeState.eventLog = galleryDevModeState.eventLog.slice(0, 8);
     }
 
-    /**
+        /**
      * Handles dev decoded memory bytes behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devDecodedMemoryBytes() {
         // total stores state or configuration for the gallery front-end flow.
@@ -900,9 +900,10 @@ export function setupGalleryLightbox() {
         return total;
     }
 
-    /**
+        /**
      * Handles dev status counts behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devStatusCounts() {
         // counts stores state or configuration for the gallery front-end flow.
@@ -913,9 +914,10 @@ export function setupGalleryLightbox() {
         return counts;
     }
 
-    /**
+        /**
      * Handles dev current window summary behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devCurrentWindowSummary() {
         if (galleryDevModeState.currentIndex < 0) {
@@ -941,10 +943,11 @@ export function setupGalleryLightbox() {
         return rows.join(' ');
     }
 
-    /**
+        /**
      * Handles dev short status behavior for the gallery UI.
+     *
      * @param {*} stat Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devShortStatus(stat) {
         if (!stat) {
@@ -953,9 +956,10 @@ export function setupGalleryLightbox() {
         return {idle: 'i', preloading: 'p', loading: 'l', ready: 'r', error: 'e'}[stat.status] || '?';
     }
 
-    /**
+        /**
      * Handles dev browser memory line behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devBrowserMemoryLine() {
         // memory stores state or configuration for the gallery front-end flow.
@@ -969,9 +973,10 @@ export function setupGalleryLightbox() {
         return 'heap unavailable';
     }
 
-    /**
+        /**
      * Handles dev connection line behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function devConnectionLine() {
         // connection stores state or configuration for the gallery front-end flow.
@@ -993,9 +998,8 @@ export function setupGalleryLightbox() {
         return parts.length ? parts.join(', ') : 'network hints unavailable';
     }
 
-    /**
+        /**
      * Handles render gallery dev mode overlay behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function renderGalleryDevModeOverlay() {
         if (!galleryDevModeEnabled || !galleryDevModeState.overlay || !galleryDevModeState.text) {
@@ -1040,9 +1044,8 @@ export function setupGalleryLightbox() {
         drawGalleryDevModeGraph();
     }
 
-    /**
+        /**
      * Handles draw gallery dev mode graph behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function drawGalleryDevModeGraph() {
         // canvas stores state or configuration for the gallery front-end flow.
@@ -1080,14 +1083,14 @@ export function setupGalleryLightbox() {
         context.fillText('memory / ready / frame', 8, 14);
     }
 
-    /**
+        /**
      * Handles draw dev line behavior for the gallery UI.
+     *
      * @param {*} samples Value supplied by the caller or event context.
      * @param {*} selector Value supplied by the caller or event context.
      * @param {*} height Value supplied by the caller or event context.
      * @param {*} width Value supplied by the caller or event context.
      * @param {*} alpha Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function drawDevLine(samples, selector, height, width, alpha = 1) {
         // context stores state or configuration for the gallery front-end flow.
@@ -1114,10 +1117,11 @@ export function setupGalleryLightbox() {
         context.globalAlpha = 1;
     }
 
-    /**
+        /**
      * Handles format bytes behavior for the gallery UI.
+     *
      * @param {*} bytes Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function formatBytes(bytes) {
         if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -1136,19 +1140,21 @@ export function setupGalleryLightbox() {
         return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
     }
 
-    /**
+        /**
      * Handles format dev time behavior for the gallery UI.
+     *
      * @param {*} ms Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function formatDevTime(ms) {
         return `${(ms / 1000).toFixed(1)}s`;
     }
 
-    /**
+        /**
      * Handles shorten dev url behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function shortenDevUrl(src) {
         if (!src) {
@@ -1165,10 +1171,11 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles load fresh decoded lightbox image behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function loadFreshDecodedLightboxImage(src) {
         return new Promise((resolve, reject) => {
@@ -1197,11 +1204,12 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles remember decoded lightbox image behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} preloadPromise Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function rememberDecodedLightboxImage(src, preloadPromise) {
         if (decodedLightboxImages.has(src)) {
@@ -1212,9 +1220,8 @@ export function setupGalleryLightbox() {
         return preloadPromise;
     }
 
-    /**
+        /**
      * Handles trim decoded lightbox image cache behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function trimDecodedLightboxImageCache() {
         while (decodedLightboxImages.size > lightboxDecodedImageCacheLimit) {
@@ -1231,10 +1238,11 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles preload decoded lightbox image behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function preloadDecodedLightboxImage(src) {
         if (!src) {
@@ -1257,10 +1265,11 @@ export function setupGalleryLightbox() {
         return rememberDecodedLightboxImage(src, preloadPromise);
     }
 
-    /**
+        /**
      * Handles load decoded lightbox image behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function loadDecodedLightboxImage(src) {
         if (!src) {
@@ -1290,10 +1299,10 @@ export function setupGalleryLightbox() {
         return freshPromise;
     }
 
-    /**
+        /**
      * Handles remove transition image behavior for the gallery UI.
+     *
      * @param {*} node Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function removeTransitionImage(node) {
         // imageToRemove stores state or configuration for the gallery front-end flow.
@@ -1307,10 +1316,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles update normal lightbox stage size behavior for the gallery UI.
+     *
      * @param {*} card Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function updateNormalLightboxStageSize(card) {
         if (!card) {
@@ -1323,7 +1332,7 @@ export function setupGalleryLightbox() {
         updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight);
     }
 
-    /**
+        /**
      * Resize the normal lightbox stage from trusted intrinsic dimensions.
      *
      * Database dimensions can be wrong for EXIF-oriented JPEGs until the
@@ -1333,7 +1342,6 @@ export function setupGalleryLightbox() {
      *
      * @param {number} naturalWidth Intrinsic browser display width.
      * @param {number} naturalHeight Intrinsic browser display height.
-     * @returns {void}
      */
     function updateNormalLightboxStageSizeFromDimensions(naturalWidth, naturalHeight) {
         if (!stageLink || overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen')) {
@@ -1368,14 +1376,13 @@ export function setupGalleryLightbox() {
         stageLink.style.setProperty('--lightbox-stage-height', `${Math.round(stageHeight)}px`);
     }
 
-    /**
+        /**
      * Correct the normal stage size after the browser has decoded an image.
      *
      * This prevents a temporary white letterbox caused by stale scan dimensions
      * or EXIF orientation differences between PHP metadata and browser display.
      *
      * @param {HTMLImageElement|null} loadedImage Decoded image used by the lightbox.
-     * @returns {void}
      */
     function updateNormalLightboxStageSizeFromLoadedImage(loadedImage) {
         if (!(loadedImage instanceof HTMLImageElement)) {
@@ -1384,11 +1391,11 @@ export function setupGalleryLightbox() {
         updateNormalLightboxStageSizeFromDimensions(loadedImage.naturalWidth || 0, loadedImage.naturalHeight || 0);
     }
 
-    /**
+        /**
      * Handles apply lightbox image source behavior for the gallery UI.
+     *
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} altText Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function applyLightboxImageSource(src, altText) {
         if (!src) {
@@ -1406,14 +1413,16 @@ export function setupGalleryLightbox() {
         image.alt = altText;
     }
 
-    /**
+        /**
      * Handles show lightbox image source behavior for the gallery UI.
+     *
      * @param {*} index Value supplied by the caller or event context.
      * @param {*} token Value supplied by the caller or event context.
      * @param {*} src Value supplied by the caller or event context.
      * @param {*} altText Value supplied by the caller or event context.
      * @param {*} immediate Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @param {*} decodedImage Decoded image value.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function showLightboxImageSource(index, token, src, altText, immediate, decodedImage = null) {
         if (!src) {
@@ -1426,7 +1435,16 @@ export function setupGalleryLightbox() {
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
             applyLightboxImageSource(src, altText);
-            return Promise.resolve(true);
+            if (!initialLightboxLoadActive) {
+                return Promise.resolve(true);
+            }
+            return loadDecodedLightboxImage(src).then((loadedImage) => {
+                if (currentIndex !== index || activeLightboxImageToken !== token || image.getAttribute('src') !== src) {
+                    return false;
+                }
+                updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
+                return true;
+            }).catch(() => currentIndex === index && activeLightboxImageToken === token && image.getAttribute('src') === src);
         }
         return loadDecodedLightboxImage(src).then((loadedImage) => new Promise((resolve) => {
             if (currentIndex !== index || activeLightboxImageToken !== token) {
@@ -1494,14 +1512,15 @@ export function setupGalleryLightbox() {
         })).catch(() => false);
     }
 
-    /**
+        /**
      * Handles swap lightbox image after decode behavior for the gallery UI.
+     *
      * @param {*} index Value supplied by the caller or event context.
      * @param {*} token Value supplied by the caller or event context.
      * @param {*} previewSrc Value supplied by the caller or event context.
      * @param {*} fullSrc Value supplied by the caller or event context.
      * @param {*} altText Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function swapLightboxImageAfterDecode(index, token, previewSrc, fullSrc, altText) {
         if (!fullSrc || !previewSrc || fullSrc === previewSrc) {
@@ -1524,7 +1543,7 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Return the nearby-photo radius that is usable for the current viewport and mode.
      *
      * Picture-strip mode shows the same nearby-photo radius in a flat rail.
@@ -1532,7 +1551,7 @@ export function setupGalleryLightbox() {
      * reduces the radius on cramped or touch-first screens so navigation remains
      * usable and the central image stays dominant.
      *
-     * @returns {number} Number of neighbors to attempt on each side.
+     * @return {number} Number of neighbors to attempt on each side.
      */
     function pictureStripRadius() {
         const viewportWidth = window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || 0;
@@ -1551,11 +1570,11 @@ export function setupGalleryLightbox() {
         return 3;
     }
 
-    /**
+        /**
      * Return a normalized neighbor index when the gallery can be navigated in a loop.
      *
      * @param {number} index Candidate gallery index.
-     * @returns {number} Index wrapped into the known card range.
+     * @return {number} Index wrapped into the known card range.
      */
     function normalizeLightboxIndex(index) {
         if (cards.length <= 0) {
@@ -1564,7 +1583,7 @@ export function setupGalleryLightbox() {
         return ((index % cards.length) + cards.length) % cards.length;
     }
 
-    /**
+        /**
      * Return a small signed offset from the active image to a rendered neighbor.
      *
      * Wrapped galleries need this helper so the last image can appear as the
@@ -1574,7 +1593,7 @@ export function setupGalleryLightbox() {
      *
      * @param {number} itemIndex Candidate gallery index.
      * @param {number} centerIndex Active lightbox index.
-     * @returns {number} Signed relative offset near the active image.
+     * @return {number} Signed relative offset near the active image.
      */
     function lightboxRelativeOffset(itemIndex, centerIndex) {
         if (cards.length <= 0) {
@@ -1591,7 +1610,7 @@ export function setupGalleryLightbox() {
     }
 
 
-    /**
+        /**
      * Return presentation variables for one 3D carousel neighbor.
      *
      * CSS receives explicit distance, scale, depth, and blur values instead of
@@ -1601,7 +1620,7 @@ export function setupGalleryLightbox() {
      * remains intentionally neutral here.
      *
      * @param {number} relativeOffset Signed distance from the active image.
-     * @returns {{x: string, scale: string, hoverScale: string, rotate: string, opacity: string, blur: string, brightness: string, depth: string, hoverDepth: string, zIndex: number}}
+     * @return {{x: string, scale: string, hoverScale: string, rotate: string, opacity: string, blur: string, brightness: string, depth: string, hoverDepth: string, zIndex: number} }.
      */
     function threeDCarouselPresentation(relativeOffset) {
         const absoluteOffset = Math.min(3, Math.abs(relativeOffset));
@@ -1630,7 +1649,7 @@ export function setupGalleryLightbox() {
         };
     }
 
-    /**
+        /**
      * Ensure lazy metadata for the strip neighborhood is available.
      *
      * The strip is visual navigation, so it must tolerate paginated galleries and
@@ -1639,7 +1658,6 @@ export function setupGalleryLightbox() {
      * those items arrive. The function never changes the authoritative order.
      *
      * @param {number} centerIndex Active lightbox index.
-     * @returns {void}
      */
     function fetchPictureStripNeighbors(centerIndex) {
         if (!lightboxNeighborBrowserEnabled || cards.length <= 0) {
@@ -1658,11 +1676,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Preload strip thumbnails and close neighbors without promoting every item to full-size preloading.
      *
      * @param {number} centerIndex Active lightbox index.
-     * @returns {void}
      */
     function preloadPictureStripNeighbors(centerIndex) {
         if (!lightboxNeighborBrowserEnabled || shouldLimitLightboxPreloading()) {
@@ -1678,13 +1695,13 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Build one accessible strip thumbnail button for an already loaded card.
      *
      * @param {HTMLElement} card Lightbox metadata source for the thumbnail.
      * @param {number} itemIndex Zero-based lightbox index represented by the button.
      * @param {number} centerIndex Zero-based active lightbox index.
-     * @returns {HTMLButtonElement} Thumbnail button ready to append into the strip.
+     * @return {HTMLButtonElement} Thumbnail button ready to append into the strip.
      */
     function createPictureStripButton(card, itemIndex, centerIndex) {
         const button = document.createElement('button');
@@ -1725,7 +1742,7 @@ export function setupGalleryLightbox() {
         return button;
     }
 
-    /**
+        /**
      * Render or rerender the picture strip centered on the active image.
      *
      * The strip intentionally rebuilds a small fixed window rather than moving
@@ -1735,7 +1752,6 @@ export function setupGalleryLightbox() {
      *
      * @param {number} centerIndex Active zero-based lightbox index.
      * @param {boolean} animate Whether to run the short slide/fade animation.
-     * @returns {void}
      */
     function renderPictureStrip(centerIndex, animate = true) {
         if (!lightboxNeighborBrowserEnabled || cards.length <= 1) {
@@ -1809,11 +1825,10 @@ export function setupGalleryLightbox() {
         }, threeDCarouselEnabled ? 640 : 220);
     }
 
-    /**
+        /**
      * Synchronize the picture strip after the active lightbox image changes.
      *
      * @param {number} centerIndex Active zero-based lightbox index.
-     * @returns {void}
      */
     function syncPictureStrip(centerIndex) {
         if (!lightboxNeighborBrowserEnabled) {
@@ -1824,10 +1839,10 @@ export function setupGalleryLightbox() {
         preloadPictureStripNeighbors(centerIndex);
     }
 
-    /**
+        /**
      * Notify the optional anonymous telemetry module about a lightbox photo view.
+     *
      * @param {*} card Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function telemetryPhotoOpened(card) {
         if (!window.PHPGalleryTelemetryPhotoOpened || !card) {
@@ -1841,9 +1856,8 @@ export function setupGalleryLightbox() {
         );
     }
 
-    /**
+        /**
      * Notify the optional anonymous telemetry module that the active photo view ended.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function telemetryPhotoClosed() {
         if (window.PHPGalleryTelemetryPhotoClosed) {
@@ -1851,7 +1865,7 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Compare two browser-visible URLs without being sensitive to relative input.
      *
      * The lightbox opens direct photo URLs by replacing the current history entry.
@@ -1861,7 +1875,7 @@ export function setupGalleryLightbox() {
      *
      * @param {string} firstUrl First URL candidate.
      * @param {string} secondUrl Second URL candidate.
-     * @returns {boolean} True when both URLs resolve to the same browser URL.
+     * @return {boolean} True when both URLs resolve to the same browser URL.
      */
     function urlsMatch(firstUrl, secondUrl) {
         if (!firstUrl || !secondUrl) {
@@ -1874,7 +1888,7 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Show or update the initial lazy-loading progress indicator.
      *
      * The gallery can know the total image count and the requested index, but it
@@ -1884,7 +1898,6 @@ export function setupGalleryLightbox() {
      *
      * @param {number} index Zero-based requested lightbox index.
      * @param {number} progressPercent Estimated progress between 1 and 100.
-     * @returns {void}
      */
     function showInitialLightboxLoader(index, progressPercent = 12) {
         if (!(initialLoader instanceof HTMLElement)) {
@@ -1914,10 +1927,8 @@ export function setupGalleryLightbox() {
         updateLightboxViewportMode();
     }
 
-    /**
+        /**
      * Hide the initial lazy-loading progress indicator.
-     *
-     * @returns {void}
      */
     function hideInitialLightboxLoader() {
         initialLightboxLoadActive = false;
@@ -1928,11 +1939,11 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Estimate first-open progress from the metadata window requested for one index.
      *
      * @param {number} index Zero-based requested lightbox index.
-     * @returns {number} Estimated progress percentage.
+     * @return {number} Estimated progress percentage.
      */
     function estimateInitialLightboxProgress(index) {
         if (cards.length <= 0) {
@@ -1944,12 +1955,11 @@ export function setupGalleryLightbox() {
         return Math.max(12, Math.min(90, (expectedAfter / cards.length) * 100));
     }
 
-    /**
+        /**
      * Open the lightbox at a specific index.
      *
      * @param {number} index Zero-based image index.
-     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
-     * @returns {void}
+     * @param {object} options Optional behavior flags.
      */
     function openAt(index, options = {}) {
         if (cards.length === 0) {
@@ -2000,10 +2010,12 @@ export function setupGalleryLightbox() {
         if (pageUrl && window.history && window.history.replaceState) {
             window.history.replaceState({lightbox: true}, '', pageUrl);
         }
-        // previewSrc stores state or configuration for the gallery front-end flow.
-        const previewSrc = card.dataset.previewSrc || card.dataset.fullSrc || '';
-        // fullSrc stores state or configuration for the gallery front-end flow.
+        // previewSrc stores the lightweight thumbnail source used for nearby previews and fallback loading.
+        const previewSrc = card.dataset.previewSrc || '';
+        // fullSrc stores the browser-displayable media source that must drive the main lightbox stage.
         const fullSrc = card.dataset.fullSrc || previewSrc;
+        // mainSrc stores the source used for normal and fullscreen picture viewing.
+        const mainSrc = fullSrc || previewSrc;
         // altText stores state or configuration for the gallery front-end flow.
         const altText = card.dataset.title || '';
         const titleText = (card.dataset.title || '').trim();
@@ -2022,16 +2034,54 @@ export function setupGalleryLightbox() {
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
         preloadCardLightboxImages(card, true);
-        const showInitialPreview = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately, loadedImage);
-        const initialPreviewPromise = isInitialPhotoOpen && previewSrc
-            ? loadDecodedLightboxImage(previewSrc).then(showInitialPreview).catch(() => showInitialPreview(null))
-            : showInitialPreview(null);
-        initialPreviewPromise.then((wasDisplayed) => {
+        /**
+         * Handle show lightweight preview image before the full media source.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @return {*} Result value for the caller.
+         */
+        const showPreviewFirst = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        /**
+         * Handle show main media image when no separate preview is available.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @param {*} loadedImage Loaded image value.
+         * @return {*} Result value for the caller.
+         */
+        const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldShowImmediately, loadedImage);
+        /**
+         * Handle full media swap after the preview is already visible.
+         *
+         * Used by browser-side gallery behavior.
+         *
+         * @return {*} Result value for the caller.
+         */
+        const scheduleFullMediaSwap = () => {
+            if (!previewSrc || !mainSrc || previewSrc === mainSrc) {
+                return Promise.resolve(false);
+            }
+            return swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, mainSrc, altText);
+        };
+        const initialMainPromise = previewSrc && mainSrc && previewSrc !== mainSrc
+            ? showPreviewFirst().then((wasDisplayed) => {
+                if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
+                    return false;
+                }
+                scheduleFullMediaSwap();
+                return true;
+            })
+            : (mainSrc
+                ? (shouldShowImmediately
+                    ? showMainImage(null)
+                    : loadDecodedLightboxImage(mainSrc).then(showMainImage))
+                : Promise.resolve(false));
+        Promise.resolve(initialMainPromise).then((wasDisplayed) => {
             if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
                 return;
             }
             hideInitialLightboxLoader();
-            swapLightboxImageAfterDecode(normalizedIndex, imageToken, previewSrc, fullSrc, altText);
             scheduleLightboxSlideshowNext();
         });
         syncPictureStrip(normalizedIndex);
@@ -2060,11 +2110,11 @@ export function setupGalleryLightbox() {
         telemetryPhotoOpened(card);
     }
 
-    /**
+        /**
      * Handles step behavior for the gallery UI.
+     *
      * @param {number} offset Relative image offset.
-     * @param {{revealHud?: boolean}} options Optional display behavior for automatic slideshow changes.
-     * @returns {void}
+     * @param {object} options Optional behavior flags.
      */
     function step(offset, options = {}) {
         if (cards.length === 0) {
@@ -2075,11 +2125,10 @@ export function setupGalleryLightbox() {
         openAt(nextIndex, options);
     }
 
-    /**
+        /**
      * Synchronize toolbar and fullscreen map controls with the current item.
      *
      * @param {string} mapPoint Serialized EXIF marker payload for the active photo.
-     * @returns {void}
      */
     function syncLightboxMapControls(mapPoint) {
         const hasMapPoint = String(mapPoint || '').trim() !== '';
@@ -2093,10 +2142,8 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Clears any pending automatic slideshow advance.
-     *
-     * @returns {void}
      */
     function clearLightboxSlideshowTimer() {
         if (lightboxSlideshowTimer) {
@@ -2105,10 +2152,8 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Synchronize visible slideshow controls and overlay state.
-     *
-     * @returns {void}
      */
     function syncLightboxSlideshowControls() {
         overlay.classList.toggle('is-slideshow', lightboxSlideshowActive);
@@ -2121,10 +2166,8 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Schedule the next automatic slideshow step after the stable image time.
-     *
-     * @returns {void}
      */
     function scheduleLightboxSlideshowNext() {
         clearLightboxSlideshowTimer();
@@ -2141,10 +2184,8 @@ export function setupGalleryLightbox() {
         }, lightboxSlideshowVisibleDuration);
     }
 
-    /**
+        /**
      * Start fullscreen slideshow mode.
-     *
-     * @returns {Promise<void>} Resolves after fullscreen entry has been requested.
      */
     async function startLightboxSlideshow() {
         if (lightboxSlideshowActive) {
@@ -2160,11 +2201,10 @@ export function setupGalleryLightbox() {
         scheduleLightboxSlideshowNext();
     }
 
-    /**
+        /**
      * Stop slideshow mode while optionally keeping fullscreen active.
      *
      * @param {boolean} syncControls Whether button state should be refreshed immediately.
-     * @returns {void}
      */
     function stopLightboxSlideshow(syncControls = true) {
         clearLightboxSlideshowTimer();
@@ -2179,10 +2219,8 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Toggle slideshow mode from the toolbar, HUD, or S keyboard shortcut.
-     *
-     * @returns {Promise<void>} Resolves after any fullscreen state change request.
      */
     async function toggleLightboxSlideshow() {
         if (lightboxSlideshowActive) {
@@ -2194,6 +2232,9 @@ export function setupGalleryLightbox() {
     }
 
     // Function `close` executes this focused behavior.
+    /**
+     * Close close.
+     */
     function close() {
         telemetryPhotoClosed();
         stopLightboxSlideshow();
@@ -2226,11 +2267,11 @@ export function setupGalleryLightbox() {
     }
 
 
-    /**
+        /**
      * Handles preload card lightbox images behavior for the gallery UI.
+     *
      * @param {*} card Value supplied by the caller or event context.
      * @param {*} includeFullImage Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function preloadCardLightboxImages(card, includeFullImage) {
         if (!card) {
@@ -2253,10 +2294,10 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles preload adjacent images behavior for the gallery UI.
+     *
      * @param {*} index Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function preloadAdjacentImages(index) {
         if (cards.length === 0) {
@@ -2289,9 +2330,10 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles should limit lightbox preloading behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function shouldLimitLightboxPreloading() {
         // connection stores state or configuration for the gallery front-end flow.
@@ -2482,6 +2524,13 @@ export function setupGalleryLightbox() {
     }, {signal: controller.signal});
 
     // Function `submitLightboxVote` executes this focused behavior.
+    /**
+     * Submit lightbox vote.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} value Value to process.
+     */
     function submitLightboxVote(value) {
         const form = currentLightboxVoteForm(lightboxVotePanel);
         if (!(form instanceof HTMLFormElement) || form.closest('[hidden]')) {
@@ -2499,11 +2548,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Update every rendered counter copy used by desktop and mobile layouts.
      *
      * @param {string} text Position text to render.
-     * @returns {void}
      */
     function updateLightboxCounters(text) {
         counters.forEach((counterElement) => {
@@ -2513,17 +2561,17 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles is lightbox fullscreen behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function isLightboxFullscreen() {
         return overlay.classList.contains('is-fullscreen') || overlay.classList.contains('is-mobile-fullscreen');
     }
 
-    /**
+        /**
      * Handles toggle lightbox fullscreen behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function toggleLightboxFullscreen() {
         debugLightbox('toggle:before', {
@@ -2541,9 +2589,8 @@ export function setupGalleryLightbox() {
         debugLightbox('toggle:enter');
     }
 
-    /**
+        /**
      * Enter the CSS-only mobile fullscreen viewer without requesting browser fullscreen.
-     * @returns {void}
      */
     function enterMobileLightboxFullscreen() {
         prepareMobileLightboxOverlay();
@@ -2555,9 +2602,8 @@ export function setupGalleryLightbox() {
         debugLightbox('enter:mobile-auto');
     }
 
-    /**
+        /**
      * Handles enter lightbox fullscreen behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function enterLightboxFullscreen() {
         overlay.classList.add('is-fullscreen');
@@ -2581,9 +2627,8 @@ export function setupGalleryLightbox() {
         showLightboxHud();
     }
 
-    /**
+        /**
      * Handles exit lightbox fullscreen behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function exitLightboxFullscreen() {
         stopLightboxSlideshow();
@@ -2603,9 +2648,8 @@ export function setupGalleryLightbox() {
         debugLightbox('exit');
     }
 
-    /**
+        /**
      * Handles sync lightbox fullscreen state behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function syncLightboxFullscreenState() {
         if (isMobileTouchDevice) {
@@ -2632,9 +2676,8 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles clear lightbox hud timer behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearLightboxHudTimer() {
         if (fullscreenHideTimer) {
@@ -2644,19 +2687,16 @@ export function setupGalleryLightbox() {
     }
 
 
-    /**
+        /**
      * Hide the fullscreen controls immediately without stopping slideshow playback.
-     *
-     * @returns {void}
      */
     function hideLightboxHud() {
         clearLightboxHudTimer();
         overlay.classList.remove('is-ui-visible');
     }
 
-    /**
+        /**
      * Handles show lightbox hud behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function showLightboxHud() {
         clearLightboxHudTimer();
@@ -2670,11 +2710,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Keeps desktop pointer movement behavior without reopening the mobile HUD during a swipe.
      *
      * @param {PointerEvent|MouseEvent} event Browser pointer movement event.
-     * @returns {void}
      */
     function showLightboxHudFromPointerMove(event) {
         if (isActiveMobileLightbox() && isMobileLightboxStageEvent(event)) {
@@ -2683,9 +2722,8 @@ export function setupGalleryLightbox() {
         showLightboxHud();
     }
 
-    /**
+        /**
      * Toggle mobile fullscreen controls from a deliberate stage tap.
-     * @returns {void}
      */
     function toggleLightboxHud() {
         clearLightboxHudTimer();
@@ -2696,9 +2734,8 @@ export function setupGalleryLightbox() {
         showLightboxHud();
     }
 
-    /**
+        /**
      * Handles schedule hide lightbox hud behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function scheduleHideLightboxHud() {
         if (!isLightboxFullscreen()) {
@@ -2712,9 +2749,8 @@ export function setupGalleryLightbox() {
         }, 1200);
     }
 
-    /**
+        /**
      * Handles update lightbox viewport mode behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function updateLightboxViewportMode() {
         const mobileLightboxActive = overlay.classList.contains('is-mobile-fullscreen');
@@ -2725,31 +2761,30 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Reports whether the CSS-only mobile viewer is currently active.
      *
-     * @returns {boolean} True when mobile Chrome style gestures should be trapped by the lightbox.
+     * @return {boolean} True when mobile Chrome style gestures should be trapped by the lightbox.
      */
     function isActiveMobileLightbox() {
         return isMobileTouchDevice && !overlay.hidden;
     }
 
-    /**
+        /**
      * Reports whether an event belongs to the photo stage instead of the surrounding document.
      *
      * @param {Event} event Browser event to inspect.
-     * @returns {boolean} True when the event started from the image swipe surface.
+     * @return {boolean} True when the event started from the image swipe surface.
      */
     function isMobileLightboxStageEvent(event) {
         const target = event.target instanceof Element ? event.target : null;
         return Boolean(target?.closest('[data-lightbox-stage]'));
     }
 
-    /**
+        /**
      * Prevents mobile Chrome from scrolling or swiping the page behind the lightbox.
      *
      * @param {TouchEvent} event Browser touch movement event.
-     * @returns {void}
      */
     function preventMobileLightboxPageGesture(event) {
         if (!isActiveMobileLightbox()) {
@@ -2762,9 +2797,8 @@ export function setupGalleryLightbox() {
         event.preventDefault();
     }
 
-    /**
+        /**
      * Handles clear touch gesture behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function clearTouchGesture() {
         if (touchGesture && touchGesture.pointerId !== null && touchGesture.captureElement) {
@@ -2777,11 +2811,10 @@ export function setupGalleryLightbox() {
         touchGesture = null;
     }
 
-    /**
+        /**
      * Reset the CSS variables/classes used to render mobile swipe drag feedback.
      *
      * @param {boolean} animate Whether the stage should glide back to center.
-     * @returns {void}
      */
     function resetMobileSwipeVisuals(animate = true) {
         if (mobileSwipeVisualTimer) {
@@ -2802,12 +2835,11 @@ export function setupGalleryLightbox() {
         }, 190);
     }
 
-    /**
+        /**
      * Move the active mobile image under the user's finger without letting it leave the stage too far.
      *
      * @param {number} offsetX Horizontal drag distance in pixels.
      * @param {boolean} clamp Whether to cap the visual drag distance.
-     * @returns {void}
      */
     function setMobileSwipeOffset(offsetX, clamp = true) {
         const stageWidth = Math.max(1, stageLink?.clientWidth || overlay.clientWidth || window.innerWidth || 1);
@@ -2818,11 +2850,10 @@ export function setupGalleryLightbox() {
         overlay.style.setProperty('--lightbox-swipe-progress', progress.toFixed(3));
     }
 
-    /**
+        /**
      * Animate the current mobile image offscreen, then navigate to the adjacent photo.
      *
      * @param {number} dx Final horizontal movement in pixels.
-     * @returns {void}
      */
     function commitMobileSwipe(dx) {
         const direction = dx < 0 ? 1 : -1;
@@ -2839,10 +2870,10 @@ export function setupGalleryLightbox() {
         }, 150);
     }
 
-    /**
+        /**
      * Handles start touch gesture behavior for the gallery UI.
+     *
      * @param {*} event Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function startTouchGesture(event) {
         if (!isActiveMobileLightbox() || initialLightboxLoadActive || cards.length <= 1) {
@@ -2887,10 +2918,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles track touch gesture behavior for the gallery UI.
+     *
      * @param {*} event Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function trackTouchGesture(event) {
         if (!touchGesture || !touchGesture.active) {
@@ -2932,10 +2963,10 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles finish touch gesture behavior for the gallery UI.
+     *
      * @param {*} event Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function finishTouchGesture(event) {
         if (!touchGesture || !touchGesture.active) {
@@ -2979,10 +3010,11 @@ export function setupGalleryLightbox() {
         commitMobileSwipe(dx);
     }
 
-    /**
+        /**
      * Handles lightbox gesture point behavior for the gallery UI.
+     *
      * @param {*} event Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function lightboxGesturePoint(event) {
         if (event.changedTouches && event.changedTouches.length > 0) {
@@ -2997,10 +3029,11 @@ export function setupGalleryLightbox() {
         return null;
     }
 
-    /**
+        /**
      * Handles is lightbox control target behavior for the gallery UI.
+     *
      * @param {*} target Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function isLightboxControlTarget(target) {
         if (!target) {
@@ -3015,9 +3048,10 @@ export function setupGalleryLightbox() {
         return Boolean(target.closest('button, input, textarea, select, form'));
     }
 
-    /**
+        /**
      * Handles detect mobile touch device behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function detectMobileTouchDevice() {
         // hasTouch stores state or configuration for the gallery front-end flow.
@@ -3031,11 +3065,11 @@ export function setupGalleryLightbox() {
             || (/Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1);
     }
 
-    /**
+        /**
      * Handles debug lightbox behavior for the gallery UI.
+     *
      * @param {*} message Value supplied by the caller or event context.
      * @param {*} details Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function debugLightbox(message, details = {}) {
         if (!isLightboxDebugEnabled) {
@@ -3044,9 +3078,10 @@ export function setupGalleryLightbox() {
         console.debug('[lightbox]', message, details);
     }
 
-    /**
+        /**
      * Handles detect lightbox debug flag behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     *
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function detectLightboxDebugFlag() {
         if (new URLSearchParams(window.location.search).has('lightbox_debug')) {
@@ -3061,6 +3096,13 @@ export function setupGalleryLightbox() {
 
 
     // Function `setupGpsMaps` executes this focused behavior.
+    /**
+     * Handle setup gps maps.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} signal Signal value.
+     */
     function setupGpsMaps(signal) {
         document.addEventListener('click', async (event) => {
             if (signal.aborted) {
@@ -3093,6 +3135,13 @@ export function setupGalleryLightbox() {
     }
 
     // Function `openPhotoMapFromJson` executes this focused behavior.
+    /**
+     * Open photo map from json.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} json Json JSON data.
+     */
     async function openPhotoMapFromJson(json) {
         if (!json) {
             return;
@@ -3107,14 +3156,14 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Return the gallery-level map endpoint from the freshest rendered markup.
      *
      * Public gallery content can be replaced by admin-side AJAX tools. Reading the
      * current DOM avoids stale setup-time values when a gallery route was added or
      * changed without a full browser restart.
      *
-     * @returns {string} Gallery map JSON endpoint, or an empty string.
+     * @return {string} Gallery map JSON endpoint, or an empty string.
      */
     function currentLightboxGalleryMapUrl() {
         const configUrl = String(document.querySelector('[data-lightbox-config]')?.dataset.lightboxGalleryMapUrl || '').trim();
@@ -3128,11 +3177,11 @@ export function setupGalleryLightbox() {
         return String(document.querySelector('[data-gallery-map-url]')?.dataset.galleryMapUrl || lightboxGalleryMapUrl || '').trim();
     }
 
-    /**
+        /**
      * Return the gallery-level map title from the freshest rendered markup.
      *
      * @param {string} fallback Title used when no rendered title exists.
-     * @returns {string} Human-readable map title.
+     * @return {string} Human-readable map title.
      */
     function currentLightboxGalleryMapTitle(fallback = i18n('lightbox.gallery_map', 'Gallery map')) {
         const configTitle = String(document.querySelector('[data-lightbox-config]')?.dataset.lightboxGalleryMapTitle || '').trim();
@@ -3146,25 +3195,34 @@ export function setupGalleryLightbox() {
         return String(document.querySelector('[data-gallery-map-url]')?.dataset.galleryMapTitle || lightboxGalleryMapTitle || fallback).trim();
     }
 
-    /**
+        /**
      * Return whether a gallery-level route or marker map can be opened.
      *
-     * @returns {boolean} True when a gallery map endpoint is present.
+     * @return {boolean} True when a gallery map endpoint is present.
      */
     function hasLightboxGalleryMapPayload() {
         return currentLightboxGalleryMapUrl() !== '';
     }
 
-    /**
+        /**
      * Return whether the shared map UI can be opened from the current lightbox.
      *
-     * @returns {boolean} True when EXIF maps are enabled or gallery route data exist.
+     * @return {boolean} True when EXIF maps are enabled or gallery route data exist.
      */
     function sharedLightboxMapUiAvailable() {
         return lightboxMapsEnabled || hasLightboxGalleryMapPayload();
     }
 
     // Function `fetchGalleryMapPayload` executes this focused behavior.
+    /**
+     * Fetch gallery map payload.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {string} url URL used by this workflow.
+     * @param {*} title Title value.
+     * @return {*} Result value for the caller.
+     */
     async function fetchGalleryMapPayload(url = '', title = '') {
         const endpointUrl = String(url || currentLightboxGalleryMapUrl()).trim();
         if (!endpointUrl) {
@@ -3190,6 +3248,14 @@ export function setupGalleryLightbox() {
     }
 
     // Function `openGalleryMap` executes this focused behavior.
+    /**
+     * Open gallery map.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {string} url URL used by this workflow.
+     * @param {*} title Title value.
+     */
     async function openGalleryMap(url = '', title = '') {
         const payload = await fetchGalleryMapPayload(url, title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
         if (!payload || !payload.points.length) {
@@ -3199,6 +3265,13 @@ export function setupGalleryLightbox() {
     }
 
     // Function `ensureLeaflet` executes this focused behavior.
+    /**
+     * Ensure leaflet.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function ensureLeaflet() {
         if (window.L && document.querySelector('link[data-gallery-leaflet-css]')) {
             configureLeafletMarkerIcon();
@@ -3223,6 +3296,13 @@ export function setupGalleryLightbox() {
     }
 
     // Function `ensureLeafletStylesheet` executes this focused behavior.
+    /**
+     * Ensure leaflet stylesheet.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function ensureLeafletStylesheet() {
         // existingStylesheet stores state or configuration for the gallery front-end flow.
         const existingStylesheet = document.querySelector('link[data-gallery-leaflet-css]');
@@ -3245,6 +3325,11 @@ export function setupGalleryLightbox() {
     }
 
     // Function `configureLeafletMarkerIcon` executes this focused behavior.
+    /**
+     * Handle configure leaflet marker icon.
+     *
+     * Used by browser-side gallery behavior.
+     */
     function configureLeafletMarkerIcon() {
         if (!window.L || !L.Icon || !L.Icon.Default) {
             return;
@@ -3263,6 +3348,14 @@ export function setupGalleryLightbox() {
     }
 
     // Function `getGalleryMapMarkerIcon` executes this focused behavior.
+    /**
+     * Return gallery map marker icon.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} point Point value.
+     * @return {*} Result value for the caller.
+     */
     function getGalleryMapMarkerIcon(point = {}) {
         if (!window.L || !L.divIcon) {
             return undefined;
@@ -3291,13 +3384,13 @@ export function setupGalleryLightbox() {
     // Runtime-only follow-current-location preference. It starts disabled on every page load.
     const galleryLeafletFollowCurrentLocationState = {enabled: false};
 
-    /**
+        /**
      * Build a stable runtime key for one map view.
      *
      * @param {string} scope Caller scope, such as overlay or fullscreen-split.
      * @param {*} mapPayload Normalized map payload.
      * @param {Array} points Normalized fallback point list.
-     * @returns {string} Runtime-only viewport key.
+     * @return {string} Runtime-only viewport key.
      */
     function mapViewportKey(scope, mapPayload = {}, points = []) {
         const endpoint = String(mapPayload.endpointUrl || mapPayload.endpoint_url || '').trim();
@@ -3314,11 +3407,11 @@ export function setupGalleryLightbox() {
         return `${scope}:${sourceType}:${renderPath}:${coordinates}`;
     }
 
-    /**
+        /**
      * Return the saved center and zoom for a runtime map view.
      *
      * @param {string} viewKey Runtime viewport key.
-     * @returns {{center: Array, zoom: number}|null} Saved viewport, or null.
+     * @return {{center: Array, zoom: number} |null} Saved viewport, or null.
      */
     function savedMapViewport(viewKey) {
         const saved = galleryLeafletViewportState.get(viewKey);
@@ -3328,12 +3421,11 @@ export function setupGalleryLightbox() {
         return saved;
     }
 
-    /**
+        /**
      * Persist the current user-chosen Leaflet viewport in runtime memory.
      *
      * @param {*} map Leaflet map instance.
      * @param {string} viewKey Runtime viewport key.
-     * @returns {void}
      */
     function saveMapViewport(map, viewKey) {
         if (!isUsableLeafletMap(map) || map.galleryViewportSuppressSave) {
@@ -3348,12 +3440,11 @@ export function setupGalleryLightbox() {
         galleryLeafletViewportState.set(viewKey, {center: [center.lat, center.lng], zoom});
     }
 
-    /**
+        /**
      * Run a map viewport change without recording it as a user preference.
      *
      * @param {*} map Leaflet map instance.
      * @param {Function} callback Leaflet viewport operation.
-     * @returns {void}
      */
     function setMapViewportSilently(map, callback) {
         map.galleryViewportSuppressSave = true;
@@ -3368,13 +3459,12 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Fit one map to its available coordinates.
      *
      * @param {*} map Leaflet map instance.
      * @param {Array} bounds Leaflet bounds input.
      * @param {*} options fitBounds options.
-     * @returns {void}
      */
     function fitMapToBounds(map, bounds, options = {}) {
         if (bounds.length === 1) {
@@ -3384,12 +3474,12 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Return the active photo GPS point that can be kept centered on the map.
      *
      * @param {*} mapPayload Normalized map metadata.
      * @param {Array} points Normalized fallback point list.
-     * @returns {*|null} Normalized active point, or null.
+     * @return {*|null} Normalized active point, or null.
      */
     function mapCurrentLocationPoint(mapPayload = {}, points = []) {
         const payloadActivePoints = normalizeMapPoints(mapPayload.activePoint ? [mapPayload.activePoint] : []);
@@ -3406,12 +3496,11 @@ export function setupGalleryLightbox() {
         return normalizedPoints.length === 1 ? normalizedPoints[0] : null;
     }
 
-    /**
+        /**
      * Center the map on one point while preserving the current zoom level.
      *
      * @param {*} map Leaflet map instance.
      * @param {*} point Normalized point with lat/lng values.
-     * @returns {void}
      */
     function centerMapOnCurrentLocation(map, point) {
         if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) {
@@ -3421,13 +3510,12 @@ export function setupGalleryLightbox() {
         map.setView([point.lat, point.lng], zoom, {animate: false});
     }
 
-    /**
+        /**
      * Save the current viewport with a forced center point and the map's current zoom.
      *
      * @param {*} map Leaflet map instance.
      * @param {string} viewKey Runtime viewport key.
      * @param {*} point Normalized point with lat/lng values.
-     * @returns {void}
      */
     function saveMapViewportWithCurrentLocation(map, viewKey, point) {
         if (!viewKey || !point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng) || !Number.isFinite(map.getZoom())) {
@@ -3437,7 +3525,7 @@ export function setupGalleryLightbox() {
         galleryLeafletViewportState.set(viewKey, {center: [point.lat, point.lng], zoom: map.getZoom()});
     }
 
-    /**
+        /**
      * Apply the stored viewport, or the automatic map fit, with optional current-location centering.
      *
      * @param {*} map Leaflet map instance.
@@ -3445,7 +3533,6 @@ export function setupGalleryLightbox() {
      * @param {*} options fitBounds options.
      * @param {string} viewKey Runtime viewport key.
      * @param {*|null} currentLocationPoint Active photo GPS point.
-     * @returns {void}
      */
     function applyMapViewport(map, bounds, options, viewKey = '', currentLocationPoint = null) {
         const saved = viewKey ? savedMapViewport(viewKey) : null;
@@ -3466,7 +3553,7 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Add explicit reset, zoom in, zoom out, and current-location controls to one Leaflet map.
      *
      * @param {*} map Leaflet map instance.
@@ -3475,7 +3562,7 @@ export function setupGalleryLightbox() {
      * @param {Function} isCurrent Guard checking whether this map is still current.
      * @param {string} viewKey Runtime viewport key.
      * @param {*|null} currentLocationPoint Active photo GPS point.
-     * @returns {void}
+     * @return {void} Result value for the caller.
      */
     function addMapViewportControls(map, bounds, options, isCurrent, viewKey, currentLocationPoint = null) {
         const ViewportControl = L.Control.extend({
@@ -3514,13 +3601,13 @@ export function setupGalleryLightbox() {
         map.addControl(new ViewportControl());
     }
 
-    /**
+        /**
      * Create one Leaflet viewport control button.
      *
      * @param {string} label Visible button label.
      * @param {string} title Accessible button title.
      * @param {Function} onClick Click handler.
-     * @returns {HTMLButtonElement} Prepared control button.
+     * @return {HTMLButtonElement} Prepared control button.
      */
     function createMapControlButton(label, title, onClick) {
         const button = document.createElement('button');
@@ -3536,13 +3623,13 @@ export function setupGalleryLightbox() {
         return button;
     }
 
-    /**
+        /**
      * Create one Leaflet checkbox control.
      *
      * @param {string} labelText Visible label text.
      * @param {boolean} checked Whether the checkbox starts enabled.
      * @param {Function} onChange Change handler receiving the checked state.
-     * @returns {HTMLLabelElement} Prepared checkbox label.
+     * @return {HTMLLabelElement} Prepared checkbox label.
      */
     function createMapCheckboxControl(labelText, checked, onChange) {
         const label = document.createElement('label');
@@ -3563,6 +3650,13 @@ export function setupGalleryLightbox() {
     }
 
     // Function `ensureLeafletScript` executes this focused behavior.
+    /**
+     * Ensure leaflet script.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function ensureLeafletScript() {
         if (window.L) {
             return Promise.resolve();
@@ -3590,6 +3684,13 @@ export function setupGalleryLightbox() {
     }
 
     // Function `afterNextPaint` executes this focused behavior.
+    /**
+     * Handle after next paint.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @return {*} Result value for the caller.
+     */
     function afterNextPaint() {
         return new Promise((resolve) => {
             requestAnimationFrame(() => {
@@ -3599,6 +3700,15 @@ export function setupGalleryLightbox() {
     }
 
     // Function `openMapOverlay` executes this focused behavior.
+    /**
+     * Open map overlay.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} title Title value.
+     * @param {*} points Points value.
+     * @param {object} mapPayload Map payload value.
+     */
     async function openMapOverlay(title, points, mapPayload = {}) {
         if (!Array.isArray(points) || points.length === 0) {
             return;
@@ -3657,11 +3767,11 @@ export function setupGalleryLightbox() {
         stabilizeMapAfterLayout(map, bounds, {padding: [30, 30]}, () => overlay.galleryLeafletMap === map, viewKey, currentLocationPoint);
     }
 
-    /**
+        /**
      * Normalize marker arrays and route payloads into one renderer contract.
      *
      * @param {*} payload Raw JSON payload from PHP or a data attribute.
-     * @returns {{title: string, points: Array, geometry: *, sourceType: string}}
+     * @return {{title: string, points: Array, geometry: *, sourceType: string} }.
      */
     function normalizeMapPayload(payload) {
         if (Array.isArray(payload)) {
@@ -3694,11 +3804,11 @@ export function setupGalleryLightbox() {
         };
     }
 
-    /**
+        /**
      * Normalize point coordinates before passing them to Leaflet.
      *
      * @param {*} points Candidate point list.
-     * @returns {Array} Point list with numeric lat/lng values.
+     * @return {Array} Point list with numeric lat/lng values.
      */
     function normalizeMapPoints(points) {
         if (!Array.isArray(points)) {
@@ -3717,13 +3827,13 @@ export function setupGalleryLightbox() {
         }).filter(Boolean);
     }
 
-    /**
+        /**
      * Render markers and optional flight route geometry into an existing map.
      *
      * @param {*} map Leaflet map instance.
      * @param {Array} points Already normalized marker points.
      * @param {*} mapPayload Normalized map metadata.
-     * @returns {Array} Leaflet bounds input collected from valid route points.
+     * @return {Array} Leaflet bounds input collected from valid route points.
      */
     function renderLeafletMapPayload(map, points, mapPayload = {}) {
         const normalizedPoints = normalizeMapPoints(points);
@@ -3756,12 +3866,12 @@ export function setupGalleryLightbox() {
         return bounds;
     }
 
-    /**
+        /**
      * Return true when a normalized payload should be rendered as a connected path.
      *
      * @param {*} mapPayload Normalized map metadata.
      * @param {Array} normalizedPoints Already normalized marker points.
-     * @returns {boolean} True when the point list represents route geometry.
+     * @return {boolean} True when the point list represents route geometry.
      */
     function shouldRenderPathForPayload(mapPayload, normalizedPoints) {
         if (!Array.isArray(normalizedPoints) || normalizedPoints.length <= 1) {
@@ -3772,11 +3882,11 @@ export function setupGalleryLightbox() {
         return sourceType === 'flight_path' || mapPayload?.renderPath === true || mapPayload?.geometry?.type === 'polyline';
     }
 
-    /**
+        /**
      * Return the visual marker role for one map point.
      *
      * @param {*} point Normalized marker payload.
-     * @returns {string} Marker role used by CSS and icon caching.
+     * @return {string} Marker role used by CSS and icon caching.
      */
     function mapPointMarkerRole(point) {
         const pointType = String(point?.point_type || point?.type || '').trim();
@@ -3799,12 +3909,12 @@ export function setupGalleryLightbox() {
         return 'photo';
     }
 
-    /**
+        /**
      * Return whether two marker payloads represent the same photo.
      *
      * @param {*} point Candidate gallery marker.
      * @param {*} activePoint Active lightbox photo marker.
-     * @returns {boolean} True when the marker IDs match.
+     * @return {boolean} True when the marker IDs match.
      */
     function mapPointsReferToSamePhoto(point, activePoint) {
         const pointId = String(point?.id ?? '').trim();
@@ -3812,12 +3922,12 @@ export function setupGalleryLightbox() {
         return pointId !== '' && activeId !== '' && pointId === activeId;
     }
 
-    /**
+        /**
      * Layer the active photo marker onto a gallery route payload.
      *
      * @param {*} galleryPayload Normalized gallery route payload.
      * @param {*} photoPayload Normalized active photo payload.
-     * @returns {*} Combined payload used by the Leaflet renderer.
+     * @return {*} Combined payload used by the Leaflet renderer.
      */
     function mergeActivePhotoIntoGalleryRoute(galleryPayload, photoPayload) {
         if (!galleryPayload || !photoPayload?.points?.length || !shouldRenderPathForPayload(galleryPayload, galleryPayload.points || [])) {
@@ -3854,11 +3964,11 @@ export function setupGalleryLightbox() {
         };
     }
 
-    /**
+        /**
      * Combine the active photo GPS marker with a gallery route when one exists.
      *
      * @param {*} photoPayload Normalized active photo payload.
-     * @returns {Promise<*>} Photo-only payload or combined route/photo payload.
+     * @return {Promise<*>} Photo-only payload or combined route/photo payload.
      */
     async function photoMapPayloadWithGalleryRoute(photoPayload) {
         if (!photoPayload?.points?.length || !hasLightboxGalleryMapPayload()) {
@@ -3871,10 +3981,8 @@ export function setupGalleryLightbox() {
         return mergeActivePhotoIntoGalleryRoute(galleryPayload, photoPayload);
     }
 
-    /**
+        /**
      * Closes the persistent map overlay without changing the current photo viewer.
-     *
-     * @returns {void}
      */
     function closeMapOverlay() {
         // mapOverlay stores state or configuration for the gallery front-end flow.
@@ -3885,11 +3993,10 @@ export function setupGalleryLightbox() {
         document.body.classList.remove('has-map-overlay');
     }
 
-    /**
+        /**
      * Ensures the persistent map overlay has exactly one close listener for the active viewer lifecycle.
      *
      * @param {HTMLElement} mapOverlay Persistent map overlay element.
-     * @returns {void}
      */
     function bindMapOverlayClose(mapOverlay) {
         if (mapOverlay.galleryMapOverlayCloseController) {
@@ -3908,11 +4015,11 @@ export function setupGalleryLightbox() {
         }, {signal: closeController.signal});
     }
 
-    /**
+        /**
      * Return the current photo map payload only when the gallery allows GPS maps.
      *
      * @param {HTMLElement|null} card Active lightbox source element.
-     * @returns {string} JSON marker payload, or an empty string when unavailable.
+     * @return {string} JSON marker payload, or an empty string when unavailable.
      */
     function lightboxMapPointForCard(card) {
         if (!lightboxMapsEnabled || !(card instanceof HTMLElement)) {
@@ -3921,10 +4028,8 @@ export function setupGalleryLightbox() {
         return (card.dataset.mapPoint || '').trim();
     }
 
-    /**
+        /**
      * Remove any live Leaflet instance and leave the split-map panel ready for new content.
-     *
-     * @returns {void}
      */
     function clearLightboxSplitMapRuntime() {
         if (overlay.galleryLeafletSplitResizeObserver) {
@@ -3937,7 +4042,7 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Center and scale the fullscreen split image inside its current pane.
      *
      * Browser object-fit should handle this alone, but setting exact fit values
@@ -3945,7 +4050,6 @@ export function setupGalleryLightbox() {
      * panel changes the available width.
      *
      * @param {HTMLElement|null} card Active lightbox source element.
-     * @returns {void}
      */
     function updateFullscreenMapImageFit(card) {
         if (!stageLink || !(card instanceof HTMLElement) || !isLightboxFullscreen() || overlay.classList.contains('is-mobile-fullscreen') || !lightboxMapSplit || lightboxMapSplit.hidden) {
@@ -3974,10 +4078,8 @@ export function setupGalleryLightbox() {
         stageLink.style.setProperty('--lightbox-map-fit-height', `${Math.round(fitHeight)}px`);
     }
 
-    /**
+        /**
      * Clear split-map image fit values when the viewer leaves split-map layout.
-     *
-     * @returns {void}
      */
     function clearFullscreenMapImageFit() {
         if (!stageLink) {
@@ -3987,11 +4089,10 @@ export function setupGalleryLightbox() {
         stageLink.style.removeProperty('--lightbox-map-fit-height');
     }
 
-    /**
+        /**
      * Show the fullscreen map pane as unavailable for a photo without GPS EXIF.
      *
      * @param {string} title Current photo title.
-     * @returns {void}
      */
     function openLightboxMapUnavailable(title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !lightboxMapSplit || !lightboxMapSplitCanvas) {
@@ -4009,10 +4110,10 @@ export function setupGalleryLightbox() {
         requestAnimationFrame(() => updateFullscreenMapImageFit(cards[currentIndex] || null));
     }
 
-    /**
+        /**
      * Handles toggle current lightbox map behavior for the gallery UI.
+     *
      * @param {*} json Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function toggleCurrentLightboxMap(json = '') {
         if (!sharedLightboxMapUiAvailable()) {
@@ -4050,11 +4151,11 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles toggle lightbox map split behavior for the gallery UI.
+     *
      * @param {*} json Value supplied by the caller or event context.
      * @param {*} title Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function toggleLightboxMapSplit(json, title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
@@ -4071,12 +4172,11 @@ export function setupGalleryLightbox() {
         openLightboxMapUnavailable(title);
     }
 
-    /**
+        /**
      * Toggle the active photo map, merged with the gallery route when available.
      *
      * @param {string} json Serialized active photo map point.
      * @param {string} title Current photo title.
-     * @returns {Promise<void>}
      */
     async function toggleLightboxPhotoMapSplit(json, title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
@@ -4089,12 +4189,11 @@ export function setupGalleryLightbox() {
         await openLightboxPhotoMapSplit(json, title);
     }
 
-    /**
+        /**
      * Open the active photo map, merged with the gallery route when available.
      *
      * @param {string} json Serialized active photo map point.
      * @param {string} title Current photo title.
-     * @returns {Promise<void>}
      */
     async function openLightboxPhotoMapSplit(json, title) {
         if (!json || !json.trim()) {
@@ -4105,11 +4204,10 @@ export function setupGalleryLightbox() {
         await openLightboxMapSplit(JSON.stringify(mapPayload), title);
     }
 
-    /**
+        /**
      * Toggle the gallery-level route or map payload inside fullscreen split mode.
      *
      * @param {string} title Current viewer title fallback.
-     * @returns {Promise<void>}
      */
     async function toggleLightboxGalleryMapSplit(title) {
         if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen() || !hasLightboxGalleryMapPayload()) {
@@ -4122,11 +4220,10 @@ export function setupGalleryLightbox() {
         await openLightboxGalleryMapSplit(title);
     }
 
-    /**
+        /**
      * Open the gallery-level route or map payload inside fullscreen split mode.
      *
      * @param {string} title Current viewer title fallback.
-     * @returns {Promise<void>}
      */
     async function openLightboxGalleryMapSplit(title) {
         const payload = await fetchGalleryMapPayload(currentLightboxGalleryMapUrl(), currentLightboxGalleryMapTitle(title || i18n('lightbox.gallery_map', 'Gallery map')));
@@ -4137,11 +4234,11 @@ export function setupGalleryLightbox() {
         await openLightboxMapSplit(JSON.stringify(payload), payload.title || title || currentLightboxGalleryMapTitle(i18n('lightbox.gallery_map', 'Gallery map')));
     }
 
-    /**
+        /**
      * Handles open lightbox map split behavior for the gallery UI.
+     *
      * @param {*} json Value supplied by the caller or event context.
      * @param {*} title Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function openLightboxMapSplit(json, title) {
         if (!sharedLightboxMapUiAvailable()) {
@@ -4204,11 +4301,12 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles is usable leaflet map behavior for the gallery UI.
+     *
      * @param {*} map Value supplied by the caller or event context.
      * @param {*} isCurrent Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
+     * @return {*} Result of the UI operation, when a value is produced.
      */
     function isUsableLeafletMap(map, isCurrent = () => true) {
         return Boolean(
@@ -4221,6 +4319,18 @@ export function setupGalleryLightbox() {
     }
 
     // Function `setInitialMapViewport` executes this focused behavior.
+    /**
+     * Set initial map viewport.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} map Map value.
+     * @param {*} bounds Bounds value.
+     * @param {object} options Optional behavior flags.
+     * @param {boolean} isCurrent Is current flag.
+     * @param {string} viewKey View key value.
+     * @param {*} currentLocationPoint Current location point value.
+     */
     function setInitialMapViewport(map, bounds, options, isCurrent = () => true, viewKey = '', currentLocationPoint = null) {
         requestAnimationFrame(() => {
             if (!isUsableLeafletMap(map, isCurrent) || bounds.length === 0) {
@@ -4237,6 +4347,18 @@ export function setupGalleryLightbox() {
     }
 
     // Function `stabilizeMapAfterLayout` executes this focused behavior.
+    /**
+     * Handle stabilize map after layout.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} map Map value.
+     * @param {*} bounds Bounds value.
+     * @param {object} options Optional behavior flags.
+     * @param {boolean} isCurrent Is current flag.
+     * @param {string} viewKey View key value.
+     * @param {*} currentLocationPoint Current location point value.
+     */
     function stabilizeMapAfterLayout(map, bounds, options, isCurrent = () => true, viewKey = '', currentLocationPoint = null) {
         // refreshDelays stores state or configuration for the gallery front-end flow.
         const refreshDelays = [0, 60, 150, 350];
@@ -4254,10 +4376,10 @@ export function setupGalleryLightbox() {
         });
     }
 
-    /**
+        /**
      * Handles wait for element size behavior for the gallery UI.
+     *
      * @param {*} element Value supplied by the caller or event context.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     async function waitForElementSize(element) {
         for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -4272,9 +4394,8 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Handles close lightbox map split behavior for the gallery UI.
-     * @returns {*} Result of the UI operation, when a value is produced.
      */
     function closeLightboxMapSplit() {
         clearLightboxSplitMapRuntime();
@@ -4290,11 +4411,11 @@ export function setupGalleryLightbox() {
         }
     }
 
-    /**
+        /**
      * Parse a serialized map marker or route payload.
      *
      * @param {*} json Value supplied by the caller or event context.
-     * @returns {{title: string, points: Array, geometry: *, sourceType: string}}
+     * @return {{title: string, points: Array, geometry: *, sourceType: string} }.
      */
     function parseMapPayload(json) {
         try {
@@ -4307,6 +4428,14 @@ export function setupGalleryLightbox() {
     }
 
     // Function `mapPopupHtml` executes this focused behavior.
+    /**
+     * Handle map popup html.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} point Point value.
+     * @return {string} Text result for the caller.
+     */
     function mapPopupHtml(point) {
         // Variable `title` stores this steps working value.
         const title = escapeHtml(point.title || point.name || i18n('lightbox.map_point', 'Map point'));
@@ -4320,11 +4449,27 @@ export function setupGalleryLightbox() {
     }
 
     // Function `escapeHtml` executes this focused behavior.
+    /**
+     * Escape html.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} value Value to process.
+     * @return {*} Result value for the caller.
+     */
     function escapeHtml(value) {
         return String(value).replace(/[&<>"]/g, (character) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[character]));
     }
 
     // Function `escapeAttribute` executes this focused behavior.
+    /**
+     * Escape attribute.
+     *
+     * Used by browser-side gallery behavior.
+     *
+     * @param {*} value Value to process.
+     * @return {object} Object result for the caller.
+     */
     function escapeAttribute(value) {
         return escapeHtml(value).replace(/'/g, '&#039;');
     }

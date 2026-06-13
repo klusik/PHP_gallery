@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use Throwable;
+use function Gallery\Core\db;
+
 /**
  * Database schema helper service.
  *
@@ -44,6 +49,10 @@ declare(strict_types=1);
 
 /**
  * Check whether one database table contains a column.
+ *
+ * @param string $table Table value.
+ * @param string $column Column value.
+ * @return bool True when the condition matches.
  */
 function db_column_exists(string $table, string $column): bool
 {
@@ -62,6 +71,9 @@ function db_column_exists(string $table, string $column): bool
 
 /**
  * Check whether a database table exists.
+ *
+ * @param string $table Table value.
+ * @return bool True when the condition matches.
  */
 function db_table_exists(string $table): bool
 {

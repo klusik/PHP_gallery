@@ -35,6 +35,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+
 const FEATURE_FLAG_SETTING_PREFIX = 'feature_flag.';
 const FEATURE_FLAG_SETTING_SUFFIX = '.enabled';
 
@@ -45,7 +53,7 @@ const FEATURE_FLAG_SETTING_SUFFIX = '.enabled';
  * installations unchanged after deployment and lets administrators opt out from
  * specific tools later.
  *
- * @return array<string, array<string, string>>
+ * @return array<string array<string, string>>.
  */
 function feature_flag_definitions(): array
 {
@@ -141,7 +149,7 @@ function feature_flag_definitions(): array
 /**
  * Return user-facing feature groups in display order.
  *
- * @return array<string, array<string, string>>
+ * @return array<string array<string, string>>.
  */
 function feature_flag_groups(): array
 {
@@ -167,6 +175,9 @@ function feature_flag_groups(): array
 
 /**
  * Normalize an incoming feature key to the registry key format.
+ *
+ * @param string $key Lookup key.
+ * @return string Text result for the caller.
  */
 function feature_flag_normalize_key(string $key): string
 {
@@ -175,6 +186,9 @@ function feature_flag_normalize_key(string $key): string
 
 /**
  * Return the app_settings key used to store one feature toggle.
+ *
+ * @param string $key Lookup key.
+ * @return string Text result for the caller.
  */
 function feature_flag_setting_key(string $key): string
 {
@@ -183,6 +197,9 @@ function feature_flag_setting_key(string $key): string
 
 /**
  * Return true when the requested feature exists in the registry.
+ *
+ * @param string $key Lookup key.
+ * @return bool True when the condition matches.
  */
 function feature_flag_exists(string $key): bool
 {
@@ -194,6 +211,9 @@ function feature_flag_exists(string $key): bool
  *
  * Unknown feature keys deliberately return true so optional checks cannot break
  * older extension code or partially deployed files.
+ *
+ * @param string $key Lookup key.
+ * @return bool True when the condition matches.
  */
 function feature_flag_enabled(string $key): bool
 {
@@ -206,6 +226,9 @@ function feature_flag_enabled(string $key): bool
 
 /**
  * Persist one feature switch.
+ *
+ * @param string $key Lookup key.
+ * @param bool $enabled Enabled flag.
  */
 function set_feature_flag_enabled(string $key, bool $enabled): void
 {
@@ -219,7 +242,7 @@ function set_feature_flag_enabled(string $key, bool $enabled): void
 /**
  * Return enabled and disabled counts for the feature registry.
  *
- * @return array{enabled:int,disabled:int,total:int}
+ * @return array{enabled:int,disabled:int,total:int} Structured result data for the caller.
  */
 function feature_flag_summary_counts(): array
 {
@@ -242,7 +265,8 @@ function feature_flag_summary_counts(): array
 /**
  * Save all feature switches from the Admin form payload.
  *
- * @return array{enabled:int,disabled:int,total:int}
+ * @param array $post Post value.
+ * @return array{enabled:int,disabled:int,total:int} Structured result data for the caller.
  */
 function save_feature_flags_from_post(array $post): array
 {
@@ -264,7 +288,7 @@ function save_feature_flags_from_post(array $post): array
 /**
  * Return feature definitions grouped for the Admin feature settings page.
  *
- * @return array<string, array{group:array<string,string>,features:array<string,array<string,string>>}>
+ * @return array<string array{group:array<string,string>,features:array<string,array<string,string>>}>.
  */
 function grouped_feature_flag_definitions(): array
 {
@@ -296,7 +320,7 @@ function grouped_feature_flag_definitions(): array
 /**
  * Return the route-to-feature map used by the central dispatcher.
  *
- * @return array<string,string>
+ * @return array<string,string> Structured result data for the caller.
  */
 function feature_flag_route_map(): array
 {
@@ -340,6 +364,9 @@ function feature_flag_route_map(): array
 
 /**
  * Return the feature key that owns one route, or null for core routes.
+ *
+ * @param string $page Page number or page data.
+ * @return ?string Text result for the caller.
  */
 function feature_flag_for_route(string $page): ?string
 {
@@ -349,6 +376,9 @@ function feature_flag_for_route(string $page): ?string
 
 /**
  * Return true when the current route can be dispatched.
+ *
+ * @param string $page Page number or page data.
+ * @return bool True when the condition matches.
  */
 function feature_flag_route_enabled(string $page): bool
 {
@@ -361,6 +391,8 @@ function feature_flag_route_enabled(string $page): bool
 
 /**
  * Return true when the current request expects a JSON response.
+ *
+ * @return bool True when the condition matches.
  */
 function feature_flag_request_wants_json(): bool
 {
@@ -373,6 +405,8 @@ function feature_flag_request_wants_json(): bool
 
 /**
  * Render a consistent disabled-feature response and stop route dispatch.
+ *
+ * @param string $page Page number or page data.
  */
 function feature_flag_render_disabled_route(string $page): void
 {

@@ -35,6 +35,16 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * Upload automation service model.
  *
@@ -44,6 +54,8 @@ declare(strict_types=1);
 
 /**
  * Return whether the upload automation token table is available.
+ *
+ * @return bool True when the condition matches.
  */
 function upload_automation_schema_ready(): bool
 {
@@ -76,6 +88,8 @@ function upload_automation_schema_ready(): bool
 
 /**
  * Return the visible prefix used for newly generated upload API keys.
+ *
+ * @return string Text result for the caller.
  */
 function upload_automation_token_prefix(): string
 {
@@ -84,6 +98,8 @@ function upload_automation_token_prefix(): string
 
 /**
  * Generate a new raw API key for one gallery upload automation configuration.
+ *
+ * @return string Text result for the caller.
  */
 function upload_automation_generate_token_value(): string
 {
@@ -92,6 +108,9 @@ function upload_automation_generate_token_value(): string
 
 /**
  * Return the stable database hash for one raw API key.
+ *
+ * @param string $token Token value.
+ * @return string Text result for the caller.
  */
 function upload_automation_token_hash(string $token): string
 {
@@ -100,6 +119,9 @@ function upload_automation_token_hash(string $token): string
 
 /**
  * Normalize the optional human label stored with an API key.
+ *
+ * @param string $label Label value.
+ * @return string Text result for the caller.
  */
 function upload_automation_normalize_label(string $label): string
 {
@@ -117,7 +139,10 @@ function upload_automation_normalize_label(string $label): string
 /**
  * Create a new active API key for one gallery and return the raw value once.
  *
- * @return array{token:string,id:int,label:string}
+ * @param int $galleryId Gallery identifier.
+ * @param ?int $createdByUserId Created by user id identifier.
+ * @param string $label Label value.
+ * @return array{token:string,id:int,label:string} Structured result data for the caller.
  */
 function create_gallery_upload_automation_token(int $galleryId, ?int $createdByUserId, string $label = ''): array
 {
@@ -155,7 +180,8 @@ function create_gallery_upload_automation_token(int $galleryId, ?int $createdByU
 /**
  * Return active upload automation API keys for one gallery.
  *
- * @return array<int, array<string, mixed>>
+ * @param int $galleryId Gallery identifier.
+ * @return array<int array<string, mixed>>.
  */
 function gallery_upload_automation_tokens(int $galleryId): array
 {
@@ -172,7 +198,7 @@ function gallery_upload_automation_tokens(int $galleryId): array
 /**
  * Return active upload automation API keys across all galleries.
  *
- * @return array<int, array<string, mixed>>
+ * @return array<int array<string, mixed>>.
  */
 function upload_automation_tokens_for_manager(): array
 {
@@ -195,6 +221,10 @@ function upload_automation_tokens_for_manager(): array
 
 /**
  * Revoke one upload automation API key for a gallery.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $tokenId Token id identifier.
+ * @return bool True when the condition matches.
  */
 function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): bool
 {
@@ -210,6 +240,9 @@ function revoke_gallery_upload_automation_token(int $galleryId, int $tokenId): b
 
 /**
  * Resolve a raw API key into the active token row that authorizes an upload.
+ *
+ * @param string $token Token value.
+ * @return ?array Structured result data for the caller.
  */
 function find_upload_automation_token(string $token): ?array
 {
@@ -233,6 +266,8 @@ function find_upload_automation_token(string $token): ?array
 
 /**
  * Record the most recent successful use of one upload automation API key.
+ *
+ * @param int $tokenId Token id identifier.
  */
 function mark_upload_automation_token_used(int $tokenId): void
 {
@@ -498,6 +533,8 @@ function upload_automation_gallery_inventory_response(int $galleryId, array $gal
 
 /**
  * Extract an upload automation API key from common HTTP locations.
+ *
+ * @return string Text result for the caller.
  */
 function upload_automation_request_token(): string
 {
@@ -518,6 +555,8 @@ function upload_automation_request_token(): string
 
 /**
  * Convert uploaded files from either images[] or image into the existing upload service shape.
+ *
+ * @return ?array Structured result data for the caller.
  */
 function upload_automation_uploaded_files(): ?array
 {
@@ -546,6 +585,9 @@ function upload_automation_uploaded_files(): ?array
  * The identifier is not trusted for authorization. It is only a request-local
  * correlation value used to connect one original image with the thumbnail files
  * generated for it by the Windows companion app.
+ *
+ * @param string $clientId Client id identifier.
+ * @return string Text result for the caller.
  */
 function upload_automation_normalize_client_id(string $clientId): string
 {
@@ -561,7 +603,7 @@ function upload_automation_normalize_client_id(string $clientId): string
 /**
  * Return request-local image IDs submitted beside images[].
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function upload_automation_image_client_ids(): array
 {
@@ -583,7 +625,7 @@ function upload_automation_image_client_ids(): array
 /**
  * Parse optional Flight Simulator camera metadata from the upload request.
  *
- * @return array{lat:float,lng:float,altitude:float|null,source:string}|null
+ * @return array{lat:float,lng:float,altitude:float|null,source:string}|null Structured result data for the caller.
  */
 function upload_automation_sim_camera_metadata(): ?array
 {
@@ -617,6 +659,9 @@ function upload_automation_sim_camera_metadata(): ?array
 
 /**
  * Parse one finite floating-point POST field.
+ *
+ * @param string $name Name value.
+ * @return ?float Numeric result for the caller.
  */
 function upload_automation_float_field(string $name): ?float
 {
@@ -638,9 +683,9 @@ function upload_automation_float_field(string $name): ?float
  * Attach parsed Flight Simulator camera metadata to stored image rows.
  *
  * @param int $galleryId Target gallery authorized by the API key.
- * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
+ * @param array $stored Stored value.
  * @param array{lat:float,lng:float,altitude:float|null,source:string}|null $metadata Parsed metadata.
- * @return array{attached:int,skipped:int,error:string}
+ * @return array{attached:int,skipped:int,error:string} Structured result data for the caller.
  */
 function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stored, ?array $metadata): array
 {
@@ -690,7 +735,7 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
  * getimagesize(). Unknown, missing, or mismatched metadata causes the single
  * submitted thumbnail to be rejected before it can be written into a gallery.
  *
- * @return array<int, array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}>
+ * @return array<int array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}>.
  */
 function upload_automation_client_thumbnail_entries(): array
 {
@@ -791,9 +836,9 @@ function upload_automation_client_thumbnail_entries(): array
  * Build a map from client upload IDs to stored gallery image records.
  *
  * @param int $galleryId Gallery that received the originals.
- * @param array<int, string> $clientIds Request-local image IDs aligned with images[].
- * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
- * @return array<string, array<string, mixed>>
+ * @param array $clientIds Client ids value.
+ * @param array $stored Stored value.
+ * @return array<string array<string, mixed>>.
  */
 function upload_automation_client_image_map(int $galleryId, array $clientIds, array $stored): array
 {
@@ -833,7 +878,7 @@ function upload_automation_client_image_map(int $galleryId, array $clientIds, ar
  *
  * @param int $galleryId Gallery that should contain the image.
  * @param string $relativePath Normalized image path inside the gallery folder.
- * @return array<string, mixed>|null Fresh image row, or null when not found.
+ * @return array<string mixed>|null Fresh image row, or null when not found.
  */
 function upload_automation_find_image_by_path_uncached(int $galleryId, string $relativePath): ?array
 {
@@ -896,11 +941,11 @@ function upload_automation_with_gallery_lock(int $galleryId, callable $callback)
  * decide the target gallery independently from the API key.
  *
  * @param int $galleryId Target gallery authorized by the API key.
- * @param array<string, mixed> $gallery Target gallery row.
- * @param array<int, array<string, mixed>> $thumbnailEntries Validated client thumbnail uploads.
- * @param array<int, string> $imageClientIds Request-local IDs aligned with images[].
- * @param array<string, mixed> $stored Result returned by store_uploaded_gallery_images().
- * @return array{installed:int,skipped:int,failed:int,errors:array<int,string>}
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $thumbnailEntries Thumbnail entries value.
+ * @param array $imageClientIds Image client ids value.
+ * @param array $stored Stored value.
+ * @return array{installed:int,skipped:int,failed:int,errors:array<int,string>} Structured result data for the caller.
  */
 function upload_automation_install_client_thumbnails(int $galleryId, array $gallery, array $thumbnailEntries, array $imageClientIds, array $stored): array
 {
@@ -937,7 +982,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
                 throw new RuntimeException(t('upload_automation.error.thumbnail_store_failed', 'Could not store a client-generated thumbnail.'));
             }
             @touch($targetPath, time());
-            if (function_exists('thumbnail_metadata_record_file')) {
+            if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                 // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
                 $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], (string) $entry['format'], $targetPath, image_abs_path($image, $gallery), true);
                 if (empty($metadataResult['valid'])) {
@@ -954,7 +999,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
     }
 
     $result['errors'] = array_values(array_unique(array_filter(array_map('strval', $result['errors']))));
-    if ($result['installed'] > 0 && function_exists('thumbnail_maintenance_summary_cache_clear')) {
+    if ($result['installed'] > 0 && function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
 
@@ -963,6 +1008,10 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
 
 /**
  * Convert common submitted truthy values into a boolean flag.
+ *
+ * @param mixed $value Value to process.
+ * @param bool $default Default value when no explicit value is available.
+ * @return bool True when the condition matches.
  */
 function upload_automation_bool(mixed $value, bool $default = false): bool
 {

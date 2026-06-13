@@ -36,6 +36,14 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\url_for;
+
 const EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES = 512 * 1024 * 1024;
 const EXPERIMENTAL_THUMBNAIL_SOURCE_MIN_CHUNK_BYTES = 16 * 1024 * 1024;
 const EXPERIMENTAL_THUMBNAIL_SOURCE_HARD_CHUNK_BYTES = 3 * 1024 * 1024 * 1024;
@@ -45,6 +53,10 @@ const EXPERIMENTAL_THUMBNAIL_SOURCE_HARD_MAX_ITEMS_PER_CHUNK = 512;
 
 /**
  * Clamp a large byte setting used for browser source-download chunks.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallback Fallback value.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value, int $fallback = EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES): int
 {
@@ -61,6 +73,10 @@ function experimental_thumbnail_rebuild_clamped_source_chunk_bytes(mixed $value,
 
 /**
  * Convert an administrator-entered megabyte value into a source chunk byte cap.
+ *
+ * @param mixed $value Value to process.
+ * @param int $fallbackBytes Fallback bytes value.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_megabytes_to_bytes(mixed $value, int $fallbackBytes = EXPERIMENTAL_THUMBNAIL_SOURCE_DEFAULT_CHUNK_BYTES): int
 {
@@ -79,6 +95,8 @@ function experimental_thumbnail_rebuild_megabytes_to_bytes(mixed $value, int $fa
 
 /**
  * Return the configured maximum source ZIP chunk size for browser thumbnail rebuilds.
+ *
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_source_chunk_bytes(): int
 {
@@ -90,7 +108,8 @@ function experimental_thumbnail_rebuild_source_chunk_bytes(): int
 /**
  * Persist the source-download chunk setting from the upload settings form.
  *
- * @param array<string, mixed> $input Submitted admin settings.
+ * @param array $input Input value.
+ * @return int Integer result for the caller.
  */
 function set_experimental_thumbnail_rebuild_settings(array $input): int
 {
@@ -108,6 +127,8 @@ function set_experimental_thumbnail_rebuild_settings(array $input): int
  * versions could complete with random per-image holes when many workers finished
  * while upload batches were being finalized. Keeping source chunks bounded by
  * item count makes the rebuild deterministic and easier to verify.
+ *
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_source_chunk_item_cap(): int
 {
@@ -124,8 +145,9 @@ function experimental_thumbnail_rebuild_source_chunk_item_cap(): int
 /**
  * Normalize thumbnail format names for the browser rebuild pipeline.
  *
- * @param array<int|string, mixed> $formats Requested format names.
- * @return array<int, string>
+ * @param array $formats Formats value.
+ * @param bool $fallbackToWebp Fallback to webp value.
+ * @return array<int string>.
  */
 function experimental_thumbnail_rebuild_normalized_formats(array $formats, bool $fallbackToWebp = true): array
 {
@@ -154,40 +176,42 @@ function experimental_thumbnail_rebuild_normalized_formats(array $formats, bool 
  * page-rendered global default. This keeps WebP-only and JPG plus WebP modes in
  * sync with the maintenance checker.
  *
- * @param array<string, mixed> $image Image database row.
- * @return array<int, string>
+ * @param string $sourcePath Source filesystem path.
+ * @param array $image Image row or image data.
+ * @return array<int string>.
  */
 function experimental_thumbnail_rebuild_target_formats_for_image(string $sourcePath, array $image): array
 {
-    $mime = function_exists('image_source_mime_for_derivatives') ? image_source_mime_for_derivatives($sourcePath, $image) : '';
-    if ($mime !== '' && function_exists('thumbnail_target_formats_for_source')) {
+    $mime = function_exists('Gallery\\Services\\image_source_mime_for_derivatives') ? image_source_mime_for_derivatives($sourcePath, $image) : '';
+    if ($mime !== '' && function_exists('Gallery\\Services\\thumbnail_target_formats_for_source')) {
         return experimental_thumbnail_rebuild_normalized_formats(thumbnail_target_formats_for_source($sourcePath, $mime), false);
     }
 
-    return experimental_thumbnail_rebuild_normalized_formats(function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    return experimental_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
 }
 
 /**
  * Return the number of variants required for one thumbnail rebuild item.
  *
- * @param array<int, string> $formats Target thumbnail formats.
+ * @param array $formats Formats value.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_expected_variant_count(array $formats): int
 {
-    $sizes = function_exists('thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
+    $sizes = function_exists('Gallery\\Services\\thumbnail_sizes') ? thumbnail_sizes() : [300, 600, 800, 960, 1280, 1600];
     return count($sizes) * count(experimental_thumbnail_rebuild_normalized_formats($formats, false));
 }
 
 /**
  * Return browser-facing endpoint and limit configuration for thumbnail rebuilds.
  *
- * @return array<string, mixed>
+ * @return array<string mixed>.
  */
 function experimental_thumbnail_rebuild_browser_config(): array
 {
-    $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
-    $uploadLimit = function_exists('experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
-    $formats = experimental_thumbnail_rebuild_normalized_formats(function_exists('thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
+    $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+    $uploadLimit = function_exists('Gallery\\Services\\experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 8 * 1024 * 1024;
+    $formats = experimental_thumbnail_rebuild_normalized_formats(function_exists('Gallery\\Services\\thumbnail_policy_requested_formats') ? thumbnail_policy_requested_formats() : ['jpg', 'webp']);
 
     return [
         'enabled' => (bool) ($settings['enabled'] ?? false),
@@ -197,20 +221,23 @@ function experimental_thumbnail_rebuild_browser_config(): array
         'max_worker_count' => (int) ($settings['max_worker_count'] ?? EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP),
         'hard_worker_cap' => (int) ($settings['hard_worker_cap'] ?? EXPERIMENTAL_UPLOAD_HARD_WORKER_CAP),
         'upload_limit_bytes' => $uploadLimit,
-        'batch_target_bytes' => function_exists('experimental_upload_effective_batch_target_bytes') ? experimental_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO), (int) ($settings['max_zip_batch_bytes'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES)) : (int) floor($uploadLimit * 0.8),
+        'batch_target_bytes' => function_exists('Gallery\\Services\\experimental_upload_effective_batch_target_bytes') ? experimental_upload_effective_batch_target_bytes($uploadLimit, (float) ($settings['zip_size_threshold_ratio'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_ZIP_RATIO), (int) ($settings['max_zip_batch_bytes'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ZIP_BATCH_BYTES)) : (int) floor($uploadLimit * 0.8),
         'max_items_per_batch' => (int) ($settings['max_items_per_batch'] ?? EXPERIMENTAL_UPLOAD_DEFAULT_MAX_ITEMS_PER_BATCH),
         'source_chunk_bytes' => experimental_thumbnail_rebuild_source_chunk_bytes(),
         'source_chunk_item_cap' => experimental_thumbnail_rebuild_source_chunk_item_cap(),
-        'thumbnail_sizes' => function_exists('thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
+        'thumbnail_sizes' => function_exists('Gallery\\Services\\thumbnail_sizes') ? array_values(array_map('intval', thumbnail_sizes())) : [300, 600, 800, 960, 1280, 1600],
         'thumbnail_formats' => $formats,
-        'jpeg_quality' => function_exists('thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
-        'webp_quality' => function_exists('thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
+        'jpeg_quality' => function_exists('Gallery\\Services\\thumbnail_jpeg_quality') ? thumbnail_jpeg_quality() : 82,
+        'webp_quality' => function_exists('Gallery\\Services\\thumbnail_webp_quality') ? thumbnail_webp_quality() : 82,
         'supported_mime_types' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
     ];
 }
 
 /**
  * Return a safe source chunk size requested by the browser for one rebuild request.
+ *
+ * @param mixed $value Value to process.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_requested_chunk_bytes(mixed $value): int
 {
@@ -222,29 +249,29 @@ function experimental_thumbnail_rebuild_requested_chunk_bytes(mixed $value): int
 /**
  * Return all source image identifiers for a thumbnail rebuild request.
  *
- * @param array<string, mixed> $input Request fields.
- * @return array<int, int>
+ * @param array $input Input value.
+ * @return array<int int>.
  */
 function experimental_thumbnail_rebuild_request_image_ids(array $input): array
 {
     $scope = trim((string) ($input['scope'] ?? 'all'));
     if ($scope === 'missing') {
-        return function_exists('thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
+        return function_exists('Gallery\\Services\\thumbnail_maintenance_image_ids') ? thumbnail_maintenance_image_ids(null, 0) : [];
     }
     if (!empty($input['image_ids']) && is_array($input['image_ids'])) {
         return array_values(array_unique(array_filter(array_map('intval', $input['image_ids']), static fn (int $id): bool => $id > 0)));
     }
-    if (!empty($input['gallery_ids']) && is_array($input['gallery_ids']) && function_exists('image_ids_for_galleries')) {
+    if (!empty($input['gallery_ids']) && is_array($input['gallery_ids']) && function_exists('Gallery\\Services\\image_ids_for_galleries')) {
         return image_ids_for_galleries($input['gallery_ids']);
     }
-    return function_exists('all_image_ids') ? all_image_ids() : [];
+    return function_exists('Gallery\\Services\\all_image_ids') ? all_image_ids() : [];
 }
 
 /**
  * Build a source ZIP chunk plan for a browser thumbnail rebuild.
  *
- * @param array<string, mixed> $input Request fields.
- * @return array<string, mixed>
+ * @param array $input Input value.
+ * @return array<string mixed>.
  */
 function experimental_thumbnail_rebuild_source_chunk_plan(array $input): array
 {
@@ -342,6 +369,9 @@ function experimental_thumbnail_rebuild_source_chunk_plan(array $input): array
 
 /**
  * Return a little-endian 16-bit binary value for a ZIP header.
+ *
+ * @param int $value Value to process.
+ * @return string Text result for the caller.
  */
 function experimental_thumbnail_rebuild_pack_uint16(int $value): string
 {
@@ -350,6 +380,9 @@ function experimental_thumbnail_rebuild_pack_uint16(int $value): string
 
 /**
  * Return a little-endian 32-bit binary value for a ZIP header.
+ *
+ * @param int $value Value to process.
+ * @return string Text result for the caller.
  */
 function experimental_thumbnail_rebuild_pack_uint32(int $value): string
 {
@@ -361,6 +394,9 @@ function experimental_thumbnail_rebuild_pack_uint32(int $value): string
 
 /**
  * Return DOS time for ZIP headers.
+ *
+ * @param int $timestamp Timestamp value.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_zip_dos_time(int $timestamp): int
 {
@@ -369,6 +405,9 @@ function experimental_thumbnail_rebuild_zip_dos_time(int $timestamp): int
 
 /**
  * Return DOS date for ZIP headers.
+ *
+ * @param int $timestamp Timestamp value.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_zip_dos_date(int $timestamp): int
 {
@@ -378,6 +417,9 @@ function experimental_thumbnail_rebuild_zip_dos_date(int $timestamp): int
 
 /**
  * Return a CRC32 integer for bytes using the ZIP unsigned representation.
+ *
+ * @param string $data Input data.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_crc32_data(string $data): int
 {
@@ -386,6 +428,9 @@ function experimental_thumbnail_rebuild_crc32_data(string $data): int
 
 /**
  * Return a CRC32 integer for a file using the ZIP unsigned representation.
+ *
+ * @param string $path Filesystem path.
+ * @return int Integer result for the caller.
  */
 function experimental_thumbnail_rebuild_crc32_file(string $path): int
 {
@@ -394,6 +439,12 @@ function experimental_thumbnail_rebuild_crc32_file(string $path): int
 
 /**
  * Build one ZIP local file header.
+ *
+ * @param string $entryName Entry name value.
+ * @param int $crc Crc value.
+ * @param int $size Size value.
+ * @param int $timestamp Timestamp value.
+ * @return string Text result for the caller.
  */
 function experimental_thumbnail_rebuild_zip_local_header(string $entryName, int $crc, int $size, int $timestamp): string
 {
@@ -414,6 +465,13 @@ function experimental_thumbnail_rebuild_zip_local_header(string $entryName, int 
 
 /**
  * Build one ZIP central directory header.
+ *
+ * @param string $entryName Entry name value.
+ * @param int $crc Crc value.
+ * @param int $size Size value.
+ * @param int $timestamp Timestamp value.
+ * @param int $offset Starting offset.
+ * @return string Text result for the caller.
  */
 function experimental_thumbnail_rebuild_zip_central_header(string $entryName, int $crc, int $size, int $timestamp, int $offset): string
 {
@@ -440,6 +498,8 @@ function experimental_thumbnail_rebuild_zip_central_header(string $entryName, in
 
 /**
  * Stream one file payload into the response body.
+ *
+ * @param string $path Filesystem path.
  */
 function experimental_thumbnail_rebuild_stream_file_payload(string $path): void
 {
@@ -466,7 +526,7 @@ function experimental_thumbnail_rebuild_stream_file_payload(string $path): void
 /**
  * Stream a source chunk plan as a store-only ZIP file.
  *
- * @param array<string, mixed> $plan Source chunk plan.
+ * @param array $plan Plan value.
  */
 function experimental_thumbnail_rebuild_stream_source_zip(array $plan): void
 {
@@ -550,8 +610,8 @@ function experimental_thumbnail_rebuild_stream_source_zip(array $plan): void
 /**
  * Decode and validate a browser-prepared thumbnail rebuild manifest.
  *
- * @param array<string, string> $entries ZIP entries.
- * @return array<string, mixed>
+ * @param array $entries Entries value.
+ * @return array<string mixed>.
  */
 function experimental_thumbnail_rebuild_manifest_from_entries(array $entries): array
 {
@@ -569,8 +629,10 @@ function experimental_thumbnail_rebuild_manifest_from_entries(array $entries): a
 /**
  * Store one browser-prepared thumbnail ZIP batch.
  *
- * @param array<string, mixed> $uploadedZip Uploaded ZIP file entry from $_FILES.
- * @return array<string, mixed>
+ * @param array $uploadedZip Uploaded zip value.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return array<string mixed>.
  */
 function experimental_thumbnail_rebuild_store_prepared_zip_batch(array $uploadedZip, string $sessionId, int $batchIndex): array
 {
@@ -666,10 +728,10 @@ function experimental_thumbnail_rebuild_store_prepared_zip_batch(array $uploaded
                 if (@file_put_contents($targetPath, $entries[$zipPath], LOCK_EX) === false) {
                     throw new RuntimeException(t('experimental_thumbnail_rebuild.error_thumbnail_store_failed', 'Could not store a browser-prepared thumbnail.'));
                 }
-                if (function_exists('thumbnail_touch_generated_file_for_source')) {
+                if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
                     thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
                 }
-                if (function_exists('thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
                     $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
                     if (empty($metadata['valid'])) {
                         $failed++;

@@ -69,7 +69,7 @@ import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-galler
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
-import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260608-lightbox-letterbox-v1';
+import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260613-lightbox-preview-then-media-v4';
 import {
     setupAdminGalleryFilters,
     setupAdminGalleryTree,
@@ -87,7 +87,7 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260608-admin-cinematic-v1';
+} from './gallery-modules/admin-operations.js?v=20260611-admin-discovery-ajax-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -97,7 +97,6 @@ import {
  * pointer handlers to late-rendered admin tables.
  *
  * @param {() => void} callback Feature setup function that expects parsed DOM nodes.
- * @returns {void}
  */
 function runWhenDomReady(callback) {
     if (document.readyState === 'loading') {
@@ -113,8 +112,6 @@ function runWhenDomReady(callback) {
  * Each setup function is null-safe. Pages that do not contain the corresponding
  * controls simply return from that module, so the same entrypoint can be loaded
  * on public gallery pages, admin pages, setup pages, and utility screens.
- *
- * @returns {void}
  */
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();

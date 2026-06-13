@@ -35,8 +35,43 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\GALLERY_MIGRATION_PROTOCOL_VERSION;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_upload_automation_token;
+use function Gallery\Services\gallery_migration_asset_ref_from_input;
+use function Gallery\Services\gallery_migration_build_manifest;
+use function Gallery\Services\gallery_migration_complete_job;
+use function Gallery\Services\gallery_migration_current_version;
+use function Gallery\Services\gallery_migration_endpoint_url;
+use function Gallery\Services\gallery_migration_http_get_json;
+use function Gallery\Services\gallery_migration_http_get_to_file;
+use function Gallery\Services\gallery_migration_http_post_file_json;
+use function Gallery\Services\gallery_migration_http_post_form_json;
+use function Gallery\Services\gallery_migration_install_asset_file;
+use function Gallery\Services\gallery_migration_job_status_response;
+use function Gallery\Services\gallery_migration_manifest_asset_refs;
+use function Gallery\Services\gallery_migration_manifest_asset_refs_with_keys;
+use function Gallery\Services\gallery_migration_prepare_target_job;
+use function Gallery\Services\gallery_migration_request_timeout_seconds;
+use function Gallery\Services\gallery_migration_source_asset_descriptor;
+use function Gallery\Services\gallery_migration_t;
+use function Gallery\Services\mark_upload_automation_token_used;
+use function Gallery\Services\t;
+use function Gallery\Services\upload_automation_request_token;
+use function Gallery\Services\upload_automation_schema_ready;
+use function Gallery\Views\view_render_admin_gallery_migration_panel;
+
 /**
  * Emit one JSON response for migration routes.
+ *
+ * @param array $payload Payload value.
+ * @param int $status Status value.
  */
 function gallery_migration_json(array $payload, int $status = 200): void
 {
@@ -48,7 +83,7 @@ function gallery_migration_json(array $payload, int $status = 200): void
 /**
  * Resolve the existing gallery-scoped API key for a migration API request.
  *
- * @return array{token_row:array<string,mixed>,gallery:array<string,mixed>}
+ * @return array{token_row:array<string,mixed>,gallery:array<string,mixed>} Structured result data for the caller.
  */
 function gallery_migration_api_gallery(): array
 {
@@ -296,6 +331,9 @@ function cms_admin_gallery_migration(): void
 
 /**
  * Fetch a remote source manifest and prepare the local target gallery.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
 {
@@ -326,6 +364,9 @@ function gallery_migration_admin_pull_manifest(int $targetGalleryId): array
 
 /**
  * Pull one source asset into the local target gallery.
+ *
+ * @param int $targetGalleryId Target gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_pull_asset(int $targetGalleryId): array
 {
@@ -353,6 +394,9 @@ function gallery_migration_admin_pull_asset(int $targetGalleryId): array
 
 /**
  * Send the local source manifest to a remote target gallery.
+ *
+ * @param int $sourceGalleryId Source gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
 {
@@ -382,6 +426,9 @@ function gallery_migration_admin_push_manifest(int $sourceGalleryId): array
 
 /**
  * Push one local source asset to the remote target gallery.
+ *
+ * @param int $sourceGalleryId Source gallery id identifier.
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_asset(int $sourceGalleryId): array
 {
@@ -406,6 +453,8 @@ function gallery_migration_admin_push_asset(int $sourceGalleryId): array
 
 /**
  * Ask the remote target gallery which migration assets it already received.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_status(): array
 {
@@ -429,6 +478,8 @@ function gallery_migration_admin_push_status(): array
 
 /**
  * Ask the remote target gallery to finalize a pushed migration.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_migration_admin_push_complete(): array
 {
@@ -444,10 +495,12 @@ function gallery_migration_admin_push_complete(): array
 
 /**
  * Render the gallery migration controls for the API tab.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function render_admin_gallery_migration_panel(array $gallery): void
 {
-    if (function_exists('view_render_admin_gallery_migration_panel')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_gallery_migration_panel')) {
         view_render_admin_gallery_migration_panel($gallery);
     }
 }

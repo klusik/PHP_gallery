@@ -34,11 +34,119 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use PDO;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_dng_image_path;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+
 /**
  * Image scanning model.
  * 
  * This module discovers image files on disk and reconciles them into database rows. It does not render public pages and does not modify theme or visual settings.
  */
+
+/**
+ * Return a JPEG EXIF orientation value for scanner-owned source metadata.
+ *
+ * @param string $path Filesystem path.
+ * @param string $mime MIME value.
+ * @return int Integer result for the caller.
+ */
+function scan_image_exif_orientation(string $path, string $mime): int
+{
+    if ($mime !== 'image/jpeg' || !function_exists('exif_read_data') || !is_file($path)) {
+        return 1;
+    }
+
+    try {
+        // $exif stores only the EXIF section needed for display orientation.
+        $exif = @exif_read_data($path, 'IFD0', true, false);
+    } catch (Throwable) {
+        return 1;
+    }
+
+    if (!is_array($exif)) {
+        return 1;
+    }
+
+    $orientation = (int) ($exif['IFD0']['Orientation'] ?? $exif['Orientation'] ?? 1);
+    return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
+}
+
+/**
+ * Return true when EXIF orientation swaps the displayed image axes.
+ *
+ * @param int $orientation Orientation value.
+ * @return bool True when the orientation swaps width and height.
+ */
+function scan_image_orientation_swaps_axes(int $orientation): bool
+{
+    return in_array($orientation, [5, 6, 7, 8], true);
+}
+
+/**
+ * Persist master display geometry used by compact thumbnail metadata.
+ *
+ * @param int $imageId Image identifier.
+ * @param array $metadata Metadata returned by scan_image_file_metadata().
+ */
+function scan_image_sync_master_display_metadata(int $imageId, array $metadata): void
+{
+    if ($imageId <= 0 || !function_exists('Gallery\\Services\\db_column_exists') || !db_column_exists('images', 'display_width')) {
+        return;
+    }
+
+    $fields = [
+        'display_width' => (int) ($metadata['display_width'] ?? $metadata['width'] ?? 0),
+        'display_height' => (int) ($metadata['display_height'] ?? $metadata['height'] ?? 0),
+        'exif_orientation' => (int) ($metadata['exif_orientation'] ?? 1),
+        'thumbnail_metadata_refreshed_at' => now_sql(),
+    ];
+
+    $assignments = [];
+    $params = [];
+    foreach ($fields as $column => $value) {
+        if (!db_column_exists('images', $column)) {
+            continue;
+        }
+        $assignments[] = '`' . $column . '` = ?';
+        $params[] = $value;
+    }
+    if (!$assignments) {
+        return;
+    }
+
+    $params[] = $imageId;
+    db()->prepare('UPDATE images SET ' . implode(', ', $assignments) . ' WHERE id = ?')->execute($params);
+}
+
+/**
+ * Mark compact thumbnail metadata stale after a source file changed.
+ *
+ * @param int $imageId Image identifier.
+ */
+function scan_image_invalidate_thumbnail_derivatives(int $imageId): void
+{
+    if ($imageId <= 0) {
+        return;
+    }
+
+    if (function_exists('Gallery\\Services\\db_column_exists') && db_column_exists('images', 'thumbnail_derivative_version')) {
+        db()->prepare('UPDATE images SET thumbnail_derivative_version = thumbnail_derivative_version + 1 WHERE id = ?')->execute([$imageId]);
+    }
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_delete_image_variants')) {
+        thumbnail_metadata_delete_image_variants($imageId);
+    } elseif (function_exists('Gallery\\Services\\db_table_exists') && db_table_exists('image_thumbnail_variants')) {
+        db()->prepare('DELETE FROM image_thumbnail_variants WHERE image_id = ?')->execute([$imageId]);
+    }
+}
+
 
 /**
  * Read scan-safe metadata for one supported image file.
@@ -47,14 +155,19 @@ declare(strict_types=1);
  * reliable DNG decoder. The scanner records DNG dimensions through Imagick and
  * stores an explicit DNG MIME value while leaving the original file untouched.
  *
- * @return array{width:int,height:int,mime:string}|null
+ * @param string $path Filesystem path.
+ * @param string $filename Filename value.
+ * @return array{width:int,height:int,mime:string,display_width:int,display_height:int,exif_orientation:int}|null Structured result data for the caller.
  */
 function scan_image_file_metadata(string $path, string $filename): ?array
 {
     if (is_dng_image_path($filename)) {
         // $metadata stores dimensions reported by the configured RAW decoder when available.
-        $metadata = function_exists('dng_image_metadata') ? dng_image_metadata($path) : null;
+        $metadata = function_exists('Gallery\\Services\\dng_image_metadata') ? dng_image_metadata($path) : null;
         if (is_array($metadata)) {
+            $metadata['display_width'] = (int) ($metadata['display_width'] ?? $metadata['width'] ?? 0);
+            $metadata['display_height'] = (int) ($metadata['display_height'] ?? $metadata['height'] ?? 0);
+            $metadata['exif_orientation'] = (int) ($metadata['exif_orientation'] ?? 1);
             return $metadata;
         }
 
@@ -72,6 +185,9 @@ function scan_image_file_metadata(string $path, string $filename): ?array
             'width' => 1,
             'height' => 1,
             'mime' => 'image/x-adobe-dng',
+            'display_width' => 1,
+            'display_height' => 1,
+            'exif_orientation' => 1,
         ];
     }
 
@@ -81,13 +197,29 @@ function scan_image_file_metadata(string $path, string $filename): ?array
         return null;
     }
 
+    $width = (int) $info[0];
+    $height = (int) $info[1];
+    $mime = (string) $info['mime'];
+    $orientation = scan_image_exif_orientation($path, $mime);
+
     return [
-        'width' => (int) $info[0],
-        'height' => (int) $info[1],
-        'mime' => (string) $info['mime'],
+        'width' => $width,
+        'height' => $height,
+        'mime' => $mime,
+        'display_width' => scan_image_orientation_swaps_axes($orientation) ? $height : $width,
+        'display_height' => scan_image_orientation_swaps_axes($orientation) ? $width : $height,
+        'exif_orientation' => $orientation,
     ];
 }
 
+/**
+ * Handle scan gallery images.
+ *
+ * Part of the related application service.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return int Integer result for the caller.
+ */
 function scan_gallery_images(int $galleryId): int
 {
     // Variable $gallery stores this steps working value.
@@ -161,6 +293,7 @@ function scan_gallery_images(int $galleryId): int
                     now_sql(),
                     now_sql(),
                 ]);
+                scan_image_sync_master_display_metadata((int) $pdo->lastInsertId(), $info);
                 // $nextSortOrder advances in visible ordering increments for any later new image in this scan.
                 $nextSortOrder += 10;
             } else {
@@ -182,13 +315,15 @@ function scan_gallery_images(int $galleryId): int
                     now_sql(),
                     now_sql(),
                 ]);
+                scan_image_sync_master_display_metadata((int) $pdo->lastInsertId(), $info);
                 // $nextSortOrder advances in visible ordering increments for any later new image in this scan.
                 $nextSortOrder += 10;
             }
             $count++;
             continue;
         }
-        if ((int) $existing['file_size'] !== $file->getSize() || (string) $existing['modified_at'] !== $modifiedAt || ($exifSchemaReady && ($existing['gps_extracted_at'] ?? null) === null)) {
+        $sourceChanged = (int) $existing['file_size'] !== $file->getSize() || (string) $existing['modified_at'] !== $modifiedAt;
+        if ($sourceChanged || ($exifSchemaReady && ($existing['gps_extracted_at'] ?? null) === null)) {
             if ($exifSchemaReady) {
                 // Variable $stmt stores this steps working value.
                 $stmt = $pdo->prepare('UPDATE images SET filename = ?, width = ?, height = ?, mime_type = ?, file_size = ?, modified_at = ?, exif_taken_at = ?, exif_camera_make = ?, exif_camera_model = ?, exif_lens_model = ?, exif_focal_length = ?, exif_aperture = ?, exif_exposure_time = ?, exif_iso = ?, gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, checksum_sha256 = ?, updated_at = ? WHERE id = ?');
@@ -230,6 +365,10 @@ function scan_gallery_images(int $galleryId): int
                     (int) $existing['id'],
                 ]);
             }
+            scan_image_sync_master_display_metadata((int) $existing['id'], $info);
+            if ($sourceChanged) {
+                scan_image_invalidate_thumbnail_derivatives((int) $existing['id']);
+            }
             $count++;
         }
     }
@@ -267,6 +406,13 @@ function next_gallery_image_sort_order(int $galleryId): int
     return $maxSortOrder + 10;
 }
 
+/**
+ * Handle scan all imported gallery images.
+ *
+ * Part of the related application service.
+ *
+ * @return array Structured result data for the caller.
+ */
 function scan_all_imported_gallery_images(): array
 {
     // $scanned stores an intermediate value used by the surrounding gallery workflow.

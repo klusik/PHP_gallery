@@ -34,6 +34,23 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use DirectoryIterator;
+use FilesystemIterator;
+use PDO;
+use RecursiveCallbackFilterIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use RuntimeException;
+use SplFileInfo;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\is_supported_image_path;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\unique_slug;
+
 /**
 Gallery discovery and sidecar metadata helpers.
  *
@@ -44,6 +61,10 @@ Gallery discovery and sidecar metadata helpers.
 
 /**
  * Write gallery metadata into a sidecar before or after a DB row exists.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @param array $data Input data.
+ * @return bool True when the condition matches.
  */
 function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
 {
@@ -64,6 +85,8 @@ function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
  * A folder is a candidate when it contains direct images, descendant images, or
  * a gallery.json sidecar. Descendant images allow empty parent folders to become
  * top-level galleries that contain subgalleries.
+ *
+ * @return array Structured result data for the caller.
  */
 function discover_gallery_candidates(): array
 {
@@ -159,7 +182,7 @@ function discover_gallery_candidates(): array
  */
 function normalize_gallery_sidecar_tags_recursive(): void
 {
-    if (!function_exists('galleries_root') || !function_exists('normalize_tag_name')) {
+    if (!function_exists('Gallery\\Services\\galleries_root') || !function_exists('normalize_tag_name')) {
         return;
     }
     // Variable $root stores this steps working value.
@@ -219,6 +242,9 @@ function normalize_gallery_sidecar_tags_recursive(): void
 
 /**
  * Read optional gallery metadata from gallery.json.
+ *
+ * @param string $path Filesystem path.
+ * @return array Structured result data for the caller.
  */
 function read_gallery_sidecar(string $path): array
 {
@@ -232,6 +258,9 @@ function read_gallery_sidecar(string $path): array
 
 /**
  * Return public SEO metadata for one gallery, combining gallery.json and DB values.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function public_gallery_metadata(array $gallery): array
 {
@@ -292,6 +321,8 @@ function public_gallery_metadata(array $gallery): array
 
 /**
  * Persist editable gallery metadata back into gallery.json.
+ *
+ * @param array $gallery Gallery row or gallery data.
  */
 function write_gallery_sidecar(array $gallery): void
 {
@@ -359,7 +390,7 @@ function write_gallery_sidecar(array $gallery): void
     if (!empty($gallery['cover_image_path'])) {
         $data['cover_image_path'] = (string) $gallery['cover_image_path'];
     }
-    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
@@ -378,6 +409,9 @@ function write_gallery_sidecar(array $gallery): void
  * the importer and the parent-sync repair path. Empty parent folders can still
  * become real gallery rows when they are needed to preserve a nested gallery
  * hierarchy, even when those parent folders contain no direct photos.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return array Structured result data for the caller.
  */
 function gallery_folder_candidate_metadata(string $folderPath): array
 {
@@ -423,6 +457,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
  *
  * The created row is deliberately conservative: visibility defaults to unpublished
  * unless gallery.json says otherwise, and images are scanned only by the caller.
+ *
+ * @param string $folderPath Folder path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function create_gallery_row_for_folder(string $folderPath): ?array
 {
@@ -528,7 +565,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
         $values[] = $accessMode;
         $values[] = $accessMode === 'password' ? $accessListing : 'listed';
     }
-    if (function_exists('gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
+    if (function_exists('Gallery\\Services\\gallery_branding_schema_ready') && gallery_branding_schema_ready()) {
         foreach (gallery_branding_asset_types() as $kind => $definition) {
             // $column stores an intermediate value used by the surrounding gallery workflow.
             $column = (string) $definition['column'];
@@ -561,6 +598,9 @@ function create_gallery_row_for_folder(string $folderPath): ?array
  * Existing reorder behavior still uses explicit sort_order values. This helper is
  * only used when the creation flow did not provide a manual order value, so the
  * most recently added child appears first after the next server render.
+ *
+ * @param int $parentId Parent id identifier.
+ * @return int Integer result for the caller.
  */
 function next_gallery_prepend_sort_order(int $parentId): int
 {
@@ -577,6 +617,14 @@ function next_gallery_prepend_sort_order(int $parentId): int
     return $minimumSortOrder - 10;
 }
 
+/**
+ * Create empty gallery.
+ *
+ * Part of the related application service.
+ *
+ * @param array $input Input value.
+ * @return array Structured result data for the caller.
+ */
 function create_empty_gallery(array $input): array
 {
     // $title stores an intermediate value used by the surrounding gallery workflow.

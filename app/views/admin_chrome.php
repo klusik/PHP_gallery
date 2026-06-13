@@ -34,10 +34,28 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Controllers\thumbnail_maintenance_notice_is_dismissed;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\application_update_nav_label;
+use function Gallery\Services\application_update_pending;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\t;
+
+/**
+ * Handle view admin menu structure.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @return array Structured result data for the caller.
+ */
 function view_admin_menu_structure(): array
 {
-    $updatePending = function_exists('application_update_pending') ? application_update_pending() : false;
-    $updateLabel = function_exists('application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
+    $updatePending = function_exists('Gallery\\Services\\application_update_pending') ? application_update_pending() : false;
+    $updateLabel = function_exists('Gallery\\Services\\application_update_nav_label') ? application_update_nav_label($updatePending) : t('admin.menu.updates', 'Updates');
     return [
         [
             'label' => t('admin.menu.dashboard', 'Dashboard'),
@@ -85,6 +103,15 @@ function view_admin_menu_structure(): array
     ];
 }
 
+/**
+ * Handle view admin menu item is active.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $item Item value.
+ * @param string $currentPage Current page value.
+ * @return bool True when the condition matches.
+ */
 function view_admin_menu_item_is_active(array $item, string $currentPage): bool
 {
     $itemPage = (string) ($item['page'] ?? '');
@@ -103,6 +130,14 @@ function view_admin_menu_item_is_active(array $item, string $currentPage): bool
     return false;
 }
 
+/**
+ * Handle view render admin tabs.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $tabs Tabs value.
+ * @param string $activeId Active id identifier.
+ */
 function view_render_admin_tabs(array $tabs, string $activeId = ''): void
 {
     $resolvedActiveId = $activeId;
@@ -139,6 +174,15 @@ function view_render_admin_tabs(array $tabs, string $activeId = ''): void
     echo '</div></nav>';
 }
 
+/**
+ * Handle view render admin tab panel.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $id Identifier value.
+ * @param string $contentHtml Content html HTML markup.
+ * @param bool $active Active value.
+ */
 function view_render_admin_tab_panel(string $id, string $contentHtml, bool $active = false): void
 {
     $controlId = $id . '-control';
@@ -157,10 +201,9 @@ function view_render_admin_tab_panel(string $id, string $contentHtml, bool $acti
  * without fighting the parent tab state. Callers should keep ids unique inside
  * the page and render matching panels with view_render_admin_subtab_panel().
  *
- * @param array<int, array<string, mixed>> $tabs Subtab definitions.
+ * @param array $tabs Tabs value.
  * @param string $activeId Preferred active subtab id. The first subtab is used when empty.
  * @param string $ariaLabel Accessible label for this subtab group.
- * @return void
  */
 function view_render_admin_subtabs(array $tabs, string $activeId = '', string $ariaLabel = ''): void
 {
@@ -208,7 +251,6 @@ function view_render_admin_subtabs(array $tabs, string $activeId = '', string $a
  * @param string $id Panel id referenced by the matching subtab.
  * @param string $contentHtml Trusted admin HTML rendered by the caller.
  * @param bool $active Whether the panel should start selected.
- * @return void
  */
 function view_render_admin_subtab_panel(string $id, string $contentHtml, bool $active = false): void
 {
@@ -218,6 +260,16 @@ function view_render_admin_subtab_panel(string $id, string $contentHtml, bool $a
     echo '</section>';
 }
 
+/**
+ * Handle view render admin feature flag.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param bool $enabled Enabled flag.
+ * @param string $symbolHtml Symbol html HTML markup.
+ * @param string $label Label value.
+ * @return string Text result for the caller.
+ */
 function view_render_admin_feature_flag(bool $enabled, string $symbolHtml, string $label): string
 {
     if (!$enabled) {
@@ -226,6 +278,13 @@ function view_render_admin_feature_flag(bool $enabled, string $symbolHtml, strin
     return '<span class="admin-flag is-enabled" title="' . e($label) . '" aria-label="' . e($label) . '">' . $symbolHtml . '</span>';
 }
 
+/**
+ * Handle view render admin thumbnail maintenance notice.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param array $summary Summary value.
+ */
 function view_render_admin_thumbnail_maintenance_notice(array $summary): void
 {
     if (($summary['images_with_missing'] ?? 0) <= 0) {
@@ -261,6 +320,13 @@ function view_render_admin_thumbnail_maintenance_notice(array $summary): void
     echo '</div>';
 }
 
+/**
+ * Handle view render admin sidebar.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param string $currentPage Current page value.
+ */
 function view_render_admin_sidebar(string $currentPage): void
 {
     echo '<aside class="admin-sidebar" aria-label="' . e(t('admin.menu.aria_navigation', 'Admin navigation')) . '">';
@@ -271,7 +337,7 @@ function view_render_admin_sidebar(string $currentPage): void
         echo '<nav class="admin-menu-links">';
         foreach ((array) $group['items'] as $item) {
             $featureKey = (string) ($item['feature'] ?? '');
-            if ($featureKey !== '' && function_exists('feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
+            if ($featureKey !== '' && function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled($featureKey)) {
                 continue;
             }
             $activeClass = view_admin_menu_item_is_active($item, $currentPage) ? ' is-active' : '';
@@ -283,6 +349,14 @@ function view_render_admin_sidebar(string $currentPage): void
     echo '</aside>';
 }
 
+/**
+ * Handle view render missing admin email notice.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param ?array $user User value.
+ * @param string $currentPage Current page value.
+ */
 function view_render_missing_admin_email_notice(?array $user, string $currentPage): void
 {
     if (!$user || $currentPage === 'admin_login' || $currentPage === 'admin_logout' || $currentPage === 'setup') {

@@ -35,6 +35,24 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\feature_flag_enabled;
+use function Gallery\Services\feature_flag_summary_counts;
+use function Gallery\Services\grouped_feature_flag_definitions;
+use function Gallery\Services\save_feature_flags_from_post;
+use function Gallery\Services\t;
+
 /**
  * Render the Admin feature settings page.
  */

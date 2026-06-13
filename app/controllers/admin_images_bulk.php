@@ -34,11 +34,33 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\create_image_thumbnails;
+use function Gallery\Services\delete_gallery_images;
+use function Gallery\Services\delete_gallery_subtrees;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_shows_filenames;
+use function Gallery\Services\gallery_visibility_storage_value;
+use function Gallery\Services\move_gallery_images;
+use function Gallery\Services\nsfw_guard_schema_ready;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
+
 /**
  * Handles cms admin bulk images logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
-
 function cms_admin_bulk_images(): void
 {
     require_admin();

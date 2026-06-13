@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDOException;
+use RuntimeException;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\visitor_hash;
+
 /**
  * Picture game and gallery-voting service layer.
  *
@@ -45,6 +56,8 @@ declare(strict_types=1);
 
 /**
  * Return whether the current database has the picture-game migration applied.
+ *
+ * @return bool True when the condition matches.
  */
 function picture_game_schema_ready(): bool
 {
@@ -64,6 +77,8 @@ function picture_game_schema_ready(): bool
 
 /**
  * Return whether gallery voting columns are available.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_voting_schema_ready(): bool
 {
@@ -78,10 +93,13 @@ function gallery_voting_schema_ready(): bool
 
 /**
  * Return true when a gallery allows public voting controls.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function gallery_voting_allowed(array $gallery): bool
 {
-    if (function_exists('feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
+    if (function_exists('Gallery\\Services\\feature_flag_enabled') && !feature_flag_enabled('image_voting')) {
         return false;
     }
     return gallery_voting_schema_ready() && (int) ($gallery['voting_enabled'] ?? 0) === 1;
@@ -89,6 +107,8 @@ function gallery_voting_allowed(array $gallery): bool
 
 /**
  * Repair gallery voting/game inconsistencies when the admin dashboard is loaded.
+ *
+ * @return int Integer result for the caller.
  */
 function sync_gallery_voting_game_state(): int
 {
@@ -106,6 +126,9 @@ function sync_gallery_voting_game_state(): int
  *
  * Enabling a parent gallery makes its public descendants available for that
  * gallery's game, so meta-galleries can opt in their whole visible branch.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function picture_game_gallery_ids(array $gallery): array
 {
@@ -113,7 +136,7 @@ function picture_game_gallery_ids(array $gallery): array
     $folderPath = normalize_relative_path((string) $gallery['folder_path']);
     try {
         // Variable $stmt stores this steps working value.
-        $listingCondition = public_gallery_listing_condition('g');
+        $listingCondition = public_gallery_listing_sql_fragment('g');
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->prepare("SELECT g.* FROM galleries g WHERE $listingCondition AND (g.folder_path = ? OR g.folder_path LIKE ?) ORDER BY g.folder_path");
         $stmt->execute([$folderPath, $folderPath . '/%']);
@@ -145,6 +168,9 @@ function picture_game_gallery_ids(array $gallery): array
 
 /**
  * Return public direct images that may participate in one gallery's game.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function picture_game_images(array $gallery): array
 {
@@ -182,16 +208,83 @@ function picture_game_images(array $gallery): array
 }
 
 /**
+ * Count visible public images until the picture game availability threshold is known.
+ *
+ * Public gallery pages only need to know whether the game button should be
+ * visible. Loading every eligible image from a large gallery branch is reserved
+ * for the game route itself, where the full candidate set is actually needed.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $minimum Minimum number of visible images required.
+ * @return int Integer result for the caller.
+ */
+function picture_game_available_image_count(array $gallery, int $minimum = 2): int
+{
+    // $minimum stores the smallest useful threshold for this availability check.
+    $minimum = max(1, $minimum);
+    // Variable $galleryIds stores this steps working value.
+    $galleryIds = picture_game_gallery_ids($gallery);
+    if (!$galleryIds) {
+        return 0;
+    }
+
+    // Variable $placeholders stores this steps working value.
+    $placeholders = implode(',', array_fill(0, count($galleryIds), '?'));
+    // Variable $filenameSelect stores this steps working value.
+    $filenameSelect = gallery_filename_display_schema_ready() ? 'g.show_filenames AS gallery_show_filenames' : '0 AS gallery_show_filenames';
+    // Variable $sql stores this steps working value.
+    $sql = "SELECT i.*, g.title AS gallery_title, g.folder_path AS gallery_folder_path, $filenameSelect FROM images i JOIN galleries g ON g.id = i.gallery_id WHERE i.gallery_id IN ($placeholders) AND i.visibility = 'public' AND i.relative_path NOT LIKE '%/%'";
+    // Variable $params stores this steps working value.
+    $params = $galleryIds;
+    if (nsfw_guard_schema_ready() && !visitor_can_access_nsfw_content()) {
+        $sql .= ' AND COALESCE(i.nsfw_enabled, 0) = 0';
+    }
+    $sql .= ' ORDER BY g.folder_path, i.sort_order, i.filename LIMIT ' . $minimum;
+
+    // Variable $stmt stores this steps working value.
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    // $galleryCache stores gallery rows reused for final visitor-specific checks.
+    $galleryCache = [(int) $gallery['id'] => $gallery];
+    // $visibleCount stores how many visible candidates have been found.
+    $visibleCount = 0;
+    foreach ($stmt->fetchAll() as $image) {
+        // $imageGalleryId stores the owning gallery id for this candidate image.
+        $imageGalleryId = (int) $image['gallery_id'];
+        if (!array_key_exists($imageGalleryId, $galleryCache)) {
+            $galleryCache[$imageGalleryId] = find_gallery($imageGalleryId) ?: $gallery;
+        }
+        if (public_image_visible_to_current_visitor($image, $galleryCache[$imageGalleryId])) {
+            $visibleCount++;
+        }
+        if ($visibleCount >= $minimum) {
+            break;
+        }
+    }
+
+    return $visibleCount;
+}
+
+/**
  * Return whether one gallery has enough opted-in public images for a game.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $images Images value.
+ * @return bool True when the condition matches.
  */
 function picture_game_available(array $gallery, ?array $images = null): bool
 {
-    $images ??= picture_game_images($gallery);
-    return count($images) >= 2;
+    if ($images !== null) {
+        return count($images) >= 2;
+    }
+    return picture_game_available_image_count($gallery, 2) >= 2;
 }
 
 /**
  * Stable voter key for picture-game pair history.
+ *
+ * @return string Text result for the caller.
  */
 function picture_game_voter_hash(): string
 {
@@ -205,6 +298,10 @@ function picture_game_voter_hash(): string
 
 /**
  * Normalize a pair of image IDs so A/B order cannot create duplicate pairs.
+ *
+ * @param int $firstImageId First image id identifier.
+ * @param int $secondImageId Second image id identifier.
+ * @return array Structured result data for the caller.
  */
 function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 {
@@ -213,6 +310,10 @@ function picture_game_pair_key(int $firstImageId, int $secondImageId): array
 
 /**
  * Return the next unplayed image pair for this voter in one gallery context.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param ?array $images Images value.
+ * @return ?array Structured result data for the caller.
  */
 function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 {
@@ -273,6 +374,12 @@ function next_picture_game_pair(array $gallery, ?array $images = null): ?array
 
 /**
  * Record one picture-game selection and upvote only the chosen image.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $leftImageId Left image id identifier.
+ * @param int $rightImageId Right image id identifier.
+ * @param int $winnerImageId Winner image id identifier.
+ * @param ?array $images Images value.
  */
 function record_picture_game_vote(array $gallery, int $leftImageId, int $rightImageId, int $winnerImageId, ?array $images = null): void
 {
@@ -315,6 +422,11 @@ function record_picture_game_vote(array $gallery, int $leftImageId, int $rightIm
 
 /**
  * Return top global picture-game winners for one gallery context.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $limit Maximum number of items.
+ * @param ?array $images Images value.
+ * @return array Structured result data for the caller.
  */
 function picture_game_top_images(array $gallery, int $limit = 3, ?array $images = null): array
 {

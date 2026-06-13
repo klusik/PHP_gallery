@@ -34,6 +34,17 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\path_inside;
+use function Gallery\Core\url_for;
+
 /**
  * Gallery branding asset helpers.
  *
@@ -45,6 +56,8 @@ declare(strict_types=1);
 
 /**
  * Return the supported gallery branding asset definitions.
+ *
+ * @return array Structured result data for the caller.
  */
 function gallery_branding_asset_types(): array
 {
@@ -72,6 +85,9 @@ function gallery_branding_asset_types(): array
 
 /**
  * Normalize and validate a gallery branding asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function gallery_branding_asset_kind(string $kind): string
 {
@@ -85,6 +101,9 @@ function gallery_branding_asset_kind(string $kind): string
 
 /**
  * Return the database column name for one branding asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function gallery_branding_asset_column(string $kind): string
 {
@@ -97,6 +116,9 @@ function gallery_branding_asset_column(string $kind): string
 
 /**
  * Return the storage filename stem for one branding asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function gallery_branding_asset_filename_stem(string $kind): string
 {
@@ -109,6 +131,8 @@ function gallery_branding_asset_filename_stem(string $kind): string
 
 /**
  * Return the largest accepted upload size for gallery branding assets.
+ *
+ * @return int Integer result for the caller.
  */
 function gallery_branding_uploaded_asset_max_bytes(): int
 {
@@ -117,6 +141,9 @@ function gallery_branding_uploaded_asset_max_bytes(): int
 
 /**
  * Return true when the MIME type is a browser-safe gallery branding image.
+ *
+ * @param string $mime Mime value.
+ * @return ?string Text result for the caller.
  */
 function gallery_branding_mime_extension(string $mime): ?string
 {
@@ -131,6 +158,9 @@ function gallery_branding_mime_extension(string $mime): ?string
 
 /**
  * Return true when the submitted filename has a browser-safe image extension.
+ *
+ * @param string $filename Filename value.
+ * @return bool True when the condition matches.
  */
 function gallery_branding_upload_extension_allowed(string $filename): bool
 {
@@ -139,6 +169,8 @@ function gallery_branding_upload_extension_allowed(string $filename): bool
 
 /**
  * Return true when all gallery branding columns are available.
+ *
+ * @return bool True when the condition matches.
  */
 function gallery_branding_schema_ready(): bool
 {
@@ -161,6 +193,10 @@ function gallery_branding_schema_ready(): bool
 
 /**
  * Return the stored relative path for one branding asset, if configured.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $kind Kind value.
+ * @return ?string Text result for the caller.
  */
 function gallery_branding_asset_path(array $gallery, string $kind): ?string
 {
@@ -182,6 +218,9 @@ function gallery_branding_asset_path(array $gallery, string $kind): ?string
 
 /**
  * Return every configured gallery branding asset path keyed by asset kind.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function gallery_branding_asset_paths(array $gallery): array
 {
@@ -195,6 +234,10 @@ function gallery_branding_asset_paths(array $gallery): array
 
 /**
  * Update one gallery branding asset path in the database.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $kind Kind value.
+ * @param ?string $relativePath Relative path filesystem path.
  */
 function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $relativePath): void
 {
@@ -212,6 +255,11 @@ function set_gallery_branding_asset_path(int $galleryId, string $kind, ?string $
 
 /**
  * Return the public route for one configured gallery branding asset.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $kind Kind value.
+ * @param bool $publicOnly Public only value.
+ * @return string Text result for the caller.
  */
 function gallery_branding_asset_url(array $gallery, string $kind, bool $publicOnly): string
 {
@@ -229,6 +277,10 @@ function gallery_branding_asset_url(array $gallery, string $kind, bool $publicOn
 
 /**
  * Return the absolute path for one stored branding asset, if it is safe and present.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $kind Kind value.
+ * @return ?string Text result for the caller.
  */
 function gallery_branding_asset_abs_path(array $gallery, string $kind): ?string
 {
@@ -249,6 +301,9 @@ function gallery_branding_asset_abs_path(array $gallery, string $kind): ?string
 
 /**
  * Delete one stored gallery branding asset and clear its database field.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $kind Kind value.
  */
 function delete_gallery_branding_asset(int $galleryId, string $kind): void
 {
@@ -267,6 +322,8 @@ function delete_gallery_branding_asset(int $galleryId, string $kind): void
 
 /**
  * Return the supported global theme branding fallback definitions.
+ *
+ * @return array Structured result data for the caller.
  */
 function theme_branding_asset_types(): array
 {
@@ -288,6 +345,9 @@ function theme_branding_asset_types(): array
 
 /**
  * Normalize and validate a global theme branding fallback asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function theme_branding_asset_kind(string $kind): string
 {
@@ -301,6 +361,9 @@ function theme_branding_asset_kind(string $kind): string
 
 /**
  * Return the app setting key for one global theme branding fallback asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function theme_branding_asset_setting(string $kind): string
 {
@@ -313,6 +376,9 @@ function theme_branding_asset_setting(string $kind): string
 
 /**
  * Return the storage filename stem for one global theme branding fallback asset kind.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function theme_branding_asset_filename_stem(string $kind): string
 {
@@ -325,6 +391,9 @@ function theme_branding_asset_filename_stem(string $kind): string
 
 /**
  * Return the stored relative path for one global theme branding fallback asset, if present.
+ *
+ * @param string $kind Kind value.
+ * @return ?string Text result for the caller.
  */
 function theme_branding_asset_path(string $kind): ?string
 {
@@ -340,6 +409,9 @@ function theme_branding_asset_path(string $kind): ?string
 
 /**
  * Return the absolute path for one global theme branding fallback asset, if present.
+ *
+ * @param string $kind Kind value.
+ * @return ?string Text result for the caller.
  */
 function theme_branding_asset_abs_path(string $kind): ?string
 {
@@ -355,6 +427,9 @@ function theme_branding_asset_abs_path(string $kind): ?string
 
 /**
  * Return the public route for one global theme branding fallback asset.
+ *
+ * @param string $kind Kind value.
+ * @return string Text result for the caller.
  */
 function theme_branding_asset_url(string $kind): string
 {
@@ -363,6 +438,11 @@ function theme_branding_asset_url(string $kind): string
 
 /**
  * Return the configured gallery asset URL, falling back to the matching Theme asset when allowed.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $kind Kind value.
+ * @param bool $publicOnly Public only value.
+ * @return string Text result for the caller.
  */
 function effective_gallery_branding_asset_url(array $gallery, string $kind, bool $publicOnly): string
 {
@@ -381,6 +461,8 @@ function effective_gallery_branding_asset_url(array $gallery, string $kind, bool
 
 /**
  * Return the storage directory for global theme branding fallback assets.
+ *
+ * @return string Text result for the caller.
  */
 function theme_branding_storage_dir(): string
 {
@@ -394,6 +476,10 @@ function theme_branding_storage_dir(): string
 
 /**
  * Store one uploaded global theme branding fallback image.
+ *
+ * @param string $kind Kind value.
+ * @param array $file File value.
+ * @return string Text result for the caller.
  */
 function store_uploaded_theme_branding_asset(string $kind, array $file): string
 {
@@ -460,6 +546,8 @@ function store_uploaded_theme_branding_asset(string $kind, array $file): string
 
 /**
  * Delete one global theme branding fallback asset and clear its app setting.
+ *
+ * @param string $kind Kind value.
  */
 function delete_theme_branding_asset(string $kind): void
 {

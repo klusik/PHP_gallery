@@ -40,6 +40,10 @@ declare(strict_types=1);
 
 /**
  * Throw when a visibility expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_same_value(mixed $expected, mixed $actual, string $label): void
 {
@@ -50,6 +54,9 @@ function assert_same_value(mixed $expected, mixed $actual, string $label): void
 
 /**
  * Normalize one visibility value exactly like the application helper.
+ *
+ * @param string $visibility Visibility value.
+ * @return string Text result for the caller.
  */
 function test_normalize_gallery_visibility(string $visibility): string
 {
@@ -62,6 +69,9 @@ function test_normalize_gallery_visibility(string $visibility): string
 
 /**
  * Return one gallery's effective visibility, including legacy access_listing rows.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function test_gallery_effective_visibility(array $gallery): string
 {
@@ -74,6 +84,9 @@ function test_gallery_effective_visibility(array $gallery): string
 
 /**
  * Return whether a gallery appears in normal listing pages.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function test_gallery_is_listed(array $gallery): bool
 {
@@ -82,6 +95,9 @@ function test_gallery_is_listed(array $gallery): bool
 
 /**
  * Return whether a gallery opens by normal public URL for anonymous visitors.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function test_gallery_allows_direct_url(array $gallery): bool
 {
@@ -90,6 +106,9 @@ function test_gallery_allows_direct_url(array $gallery): bool
 
 /**
  * Return whether a listing card must hide the real cover thumbnail.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the condition matches.
  */
 function test_gallery_card_uses_locked_cover(array $gallery): bool
 {

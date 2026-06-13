@@ -34,8 +34,28 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use FilesystemIterator;
+use PDO;
+use PDOException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+use Throwable;
+use function Gallery\Core\cms_config;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\slugify;
+use function Gallery\Core\url_for;
+
 /**
  * Parse admin-entered comma/semicolon/newline tag text into unique names.
+ *
+ * @param string $tags Tags value.
+ * @return array Structured result data for the caller.
  */
 function split_tag_names(string $tags): array
 {
@@ -53,6 +73,9 @@ function split_tag_names(string $tags): array
 
 /**
  * Convert user-entered tag text into the canonical safe lowercase tag name.
+ *
+ * @param string $name Name value.
+ * @return string Text result for the caller.
  */
 function sanitize_tag_name(string $name): string
 {
@@ -65,6 +88,9 @@ function sanitize_tag_name(string $name): string
 
 /**
  * Function `tag_slug` handles this scoped operation.
+ *
+ * @param string $name Name value.
+ * @return string Text result for the caller.
  */
 function tag_slug(string $name): string
 {
@@ -75,6 +101,9 @@ function tag_slug(string $name): string
 
 /**
  * Return an existing tag ID or create a new tag row.
+ *
+ * @param string $name Name value.
+ * @return int Integer result for the caller.
  */
 function find_or_create_tag(string $name): int
 {
@@ -101,6 +130,10 @@ function find_or_create_tag(string $name): int
 
 /**
  * Replace all tags for one gallery or image with the submitted tag list.
+ *
+ * @param string $type Type value.
+ * @param int $id Identifier value.
+ * @param string $tagText Tag text value.
  */
 function sync_entity_tags(string $type, int $id, string $tagText): void
 {
@@ -123,6 +156,10 @@ function sync_entity_tags(string $type, int $id, string $tagText): void
 
 /**
  * Function `tags_for_entity` handles this scoped operation.
+ *
+ * @param string $type Type value.
+ * @param int $id Identifier value.
+ * @return array Structured result data for the caller.
  */
 function tags_for_entity(string $type, int $id): array
 {
@@ -148,6 +185,10 @@ function tags_for_entity(string $type, int $id): array
 
 /**
  * Return all tags for many entities in one query, grouped by entity ID.
+ *
+ * @param string $type Type value.
+ * @param array $ids Ids value.
+ * @return array Structured result data for the caller.
  */
 function tags_for_entities(string $type, array $ids): array
 {
@@ -191,6 +232,10 @@ function tags_for_entities(string $type, array $ids): array
 
 /**
  * Function `tag_names_for_entity` handles this scoped operation.
+ *
+ * @param string $type Type value.
+ * @param int $id Identifier value.
+ * @return string Text result for the caller.
  */
 function tag_names_for_entity(string $type, int $id): string
 {
@@ -199,6 +244,8 @@ function tag_names_for_entity(string $type, int $id): string
 
 /**
  * Return all tag names for datalist suggestions in admin forms.
+ *
+ * @return array Structured result data for the caller.
  */
 function all_tag_names(): array
 {
@@ -216,6 +263,10 @@ function all_tag_names(): array
  * The score intentionally favors nearby galleries over global popularity:
  * current gallery images, siblings, descendants, ancestors, and finally all-site
  * usage. This keeps tag advice local to the folder where the admin is working.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): array
 {
@@ -347,6 +398,9 @@ function weighted_tag_suggestions_for_gallery(int $galleryId, int $limit = 80): 
 
 /**
  * Return weighted tag suggestions when no specific gallery context is available.
+ *
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function weighted_global_tag_suggestions(int $limit = 80): array
 {
@@ -378,6 +432,8 @@ function weighted_global_tag_suggestions(int $limit = 80): array
 
 /**
  * Return true when the optional tag description column is available.
+ *
+ * @return bool True when the condition matches.
  */
 function tag_description_schema_ready(): bool
 {
@@ -398,6 +454,7 @@ function tag_description_schema_ready(): bool
  *
  * @param string $sortField Sorting key, either name or usage.
  * @param string $sortDirection Sort direction, asc or desc.
+ * @return array Structured result data for the caller.
  */
 function admin_tag_rows(string $sortField = 'usage', string $sortDirection = 'desc'): array
 {
@@ -430,6 +487,9 @@ function admin_tag_rows(string $sortField = 'usage', string $sortDirection = 'de
 
 /**
  * Return the gallery and image records that use one tag.
+ *
+ * @param int $tagId Tag id identifier.
+ * @return array Structured result data for the caller.
  */
 function admin_tag_usage_rows(int $tagId): array
 {
@@ -483,6 +543,9 @@ function admin_tag_usage_rows(int $tagId): array
 
 /**
  * Fetch one tag by numeric ID for admin editing.
+ *
+ * @param int $id Identifier value.
+ * @return ?array Structured result data for the caller.
  */
 function find_tag_by_id(int $id): ?array
 {
@@ -496,6 +559,12 @@ function find_tag_by_id(int $id): ?array
 
 /**
  * Update one tag row while keeping names and slugs canonical and unique.
+ *
+ * @param int $id Identifier value.
+ * @param string $name Name value.
+ * @param string $slug Slug value.
+ * @param string $description Description value.
+ * @return array Structured result data for the caller.
  */
 function update_tag_metadata(int $id, string $name, string $slug, string $description): array
 {
@@ -538,6 +607,9 @@ function update_tag_metadata(int $id, string $name, string $slug, string $descri
 
 /**
  * Delete one tag and detach it from galleries and images.
+ *
+ * @param int $id Identifier value.
+ * @return array Structured result data for the caller.
  */
 function delete_tag_by_id(int $id): array
 {
@@ -565,6 +637,8 @@ function delete_tag_by_id(int $id): array
 
 /**
  * Normalize existing tags to safe lowercase values and merge duplicates.
+ *
+ * @return int Integer result for the caller.
  */
 function normalize_existing_tags(): int
 {
@@ -616,6 +690,8 @@ function normalize_existing_tags(): int
 
 /**
  * Normalize gallery sidecar tag text recursively so filesystem metadata matches the database convention.
+ *
+ * @return int Integer result for the caller.
  */
 function normalize_gallery_sidecar_tags_recursively(): int
 {
@@ -656,6 +732,9 @@ function normalize_gallery_sidecar_tags_recursively(): int
 
 /**
  * Fetch one tag by slug for public tag-filter pages.
+ *
+ * @param string $slug Slug value.
+ * @return ?array Structured result data for the caller.
  */
 function find_tag_by_slug(string $slug): ?array
 {
@@ -669,11 +748,14 @@ function find_tag_by_slug(string $slug): ?array
 
 /**
  * Return public galleries that directly or indirectly contain a tag.
+ *
+ * @param int $tagId Tag id identifier.
+ * @return array Structured result data for the caller.
  */
 function public_galleries_for_tag(int $tagId): array
 {
     // Variable $stmt stores this steps working value.
-    $listingCondition = public_gallery_listing_condition('g');
+    $listingCondition = public_gallery_listing_sql_fragment('g');
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare("SELECT g.*, COUNT(i.id) AS image_count
         FROM galleries g
@@ -690,6 +772,10 @@ function public_galleries_for_tag(int $tagId): array
 
 /**
  * Aggregate tags from descendant galleries and descendant images.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
 {
@@ -699,7 +785,7 @@ function contained_tags_for_gallery(array $gallery, bool $publicOnly): array
         return [];
     }
     // Variable $visibilitySql stores this steps working value.
-    $visibilitySql = $publicOnly ? ' AND ' . public_gallery_listing_condition('g') : '';
+    $visibilitySql = $publicOnly ? ' AND ' . public_gallery_listing_sql_fragment('g') : '';
     // Variable $imageVisibilitySql stores this steps working value.
     $imageVisibilitySql = $publicOnly ? " AND tagged_image.visibility = 'public'" : '';
     // Variable $sql stores this steps working value.

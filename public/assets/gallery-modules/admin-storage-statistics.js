@@ -34,8 +34,6 @@ import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
 /**
  * Attach manual storage statistics update behavior.
- *
- * @returns {void}
  */
 export function setupAdminStorageStatistics() {
     document.querySelectorAll('[data-admin-storage-statistics]').forEach((panel) => {
@@ -57,7 +55,6 @@ export function setupAdminStorageStatistics() {
  *
  * @param {HTMLElement} panel Storage statistics control panel.
  * @param {HTMLButtonElement} button Button that started the job.
- * @returns {Promise<void>}
  */
 async function runStorageStatisticsUpdate(panel, button) {
     const endpoint = panel.dataset.updateUrl || '';
@@ -109,7 +106,7 @@ async function runStorageStatisticsUpdate(panel, button) {
  * @param {string} endpoint Ajax endpoint URL.
  * @param {string} csrfToken CSRF token emitted by the server.
  * @param {string} action Action name.
- * @returns {Promise<Object<string, *> | null>} Parsed JSON payload.
+ * @return {Promise<Object<string, *> | null>} Parsed JSON payload.
  */
 async function postStorageStatisticsAction(endpoint, csrfToken, action) {
     const body = new FormData();
@@ -139,7 +136,6 @@ async function postStorageStatisticsAction(endpoint, csrfToken, action) {
  * @param {HTMLElement} panel Storage statistics control panel.
  * @param {Object<string, *> | null} payload Parsed JSON payload.
  * @param {string} fallbackLabel Fallback label.
- * @returns {void}
  */
 function setStorageProgressFromPayload(panel, payload, fallbackLabel) {
     const processed = Number(payload?.processed || 0);
@@ -157,7 +153,6 @@ function setStorageProgressFromPayload(panel, payload, fallbackLabel) {
  * @param {number} processed Number of processed images.
  * @param {number} total Total image count.
  * @param {string} label Human-readable state.
- * @returns {void}
  */
 function setStorageProgress(panel, percent, processed, total, label) {
     const progress = panel.querySelector('[data-admin-storage-progress]');
@@ -187,7 +182,6 @@ function setStorageProgress(panel, percent, processed, total, label) {
  *
  * @param {HTMLElement} panel Storage statistics control panel.
  * @param {string} label Human-readable state.
- * @returns {void}
  */
 function updateStorageStatus(panel, label) {
     const status = panel.querySelector('[data-admin-storage-status]');

@@ -35,10 +35,18 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\site_maintenance_run;
+use function Gallery\Services\site_maintenance_time_budget_seconds;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 /**
  * Return a CLI option value from --name=value arguments.
+ *
+ * @param array $arguments Arguments value.
+ * @param string $name Name value.
+ * @param ?string $default Default value when no explicit value is available.
+ * @return ?string Text result for the caller.
  */
 function site_maintenance_cli_option(array $arguments, string $name, ?string $default = null): ?string
 {

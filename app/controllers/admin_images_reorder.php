@@ -34,6 +34,18 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use Throwable;
+use function Gallery\Core\db;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_images;
+
 /**
  * Handles cms admin image reorder logic for the gallery application.
  *
@@ -41,8 +53,6 @@ declare(strict_types=1);
  * drag-and-drop operation. This endpoint validates that every submitted image
  * belongs to the selected gallery before it touches sort_order values, so a
  * forged request cannot reorder images in another gallery.
- *
- * @return mixed Result produced by this operation.
  */
 function cms_admin_reorder_images(): void
 {
@@ -124,7 +134,6 @@ function cms_admin_reorder_images(): void
  * @param string $eventKey Admin log event key.
  * @param string $eventMessage Admin log event message.
  * @param array<string,mixed> $context Additional event context.
- * @return void
  */
 function admin_save_image_order(int $galleryId, array $orderedIds, string $eventKey, string $eventMessage, array $context = []): void
 {
@@ -166,7 +175,6 @@ function admin_save_image_order(int $galleryId, array $orderedIds, string $event
  * @param bool $ok Whether the reorder operation completed successfully.
  * @param string $message Human-readable status message for the admin UI.
  * @param int $galleryId Gallery id used to build the redirect fallback.
- * @return mixed Result produced by this operation.
  */
 function admin_reorder_images_response(bool $ok, string $message, int $galleryId): void
 {

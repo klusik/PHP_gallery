@@ -34,15 +34,68 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\THUMBNAIL_COMPATIBILITY_MODERN;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\all_image_ids;
+use function Gallery\Services\app_setting;
+use function Gallery\Services\create_all_thumbnails;
+use function Gallery\Services\create_gallery_thumbnails;
+use function Gallery\Services\create_image_thumbnails;
+use function Gallery\Services\create_image_thumbnails_result;
+use function Gallery\Services\delete_all_thumbnail_files;
+use function Gallery\Services\delete_app_settings;
+use function Gallery\Services\delete_legacy_jpg_thumbnails_for_image_ids;
+use function Gallery\Services\experimental_thumbnail_rebuild_source_chunk_plan;
+use function Gallery\Services\experimental_thumbnail_rebuild_store_prepared_zip_batch;
+use function Gallery\Services\experimental_thumbnail_rebuild_stream_source_zip;
+use function Gallery\Services\experimental_upload_settings;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\find_image;
+use function Gallery\Services\image_ids_for_galleries;
+use function Gallery\Services\set_app_setting;
+use function Gallery\Services\set_thumbnail_compatibility_mode;
+use function Gallery\Services\t;
+use function Gallery\Services\thumbnail_compatibility_format_bytes;
+use function Gallery\Services\thumbnail_compatibility_mode_label;
+use function Gallery\Services\thumbnail_compatibility_mode_normalize;
+use function Gallery\Services\thumbnail_inventory_fingerprint;
+use function Gallery\Services\thumbnail_maintenance_check_batch;
+use function Gallery\Services\thumbnail_maintenance_check_report;
+use function Gallery\Services\thumbnail_maintenance_check_report_for_image_ids;
+use function Gallery\Services\thumbnail_maintenance_debug_image_statuses;
+use function Gallery\Services\thumbnail_maintenance_empty_check_report;
+use function Gallery\Services\thumbnail_maintenance_finalize_check_report;
+use function Gallery\Services\thumbnail_maintenance_image_ids;
+use function Gallery\Services\thumbnail_maintenance_last_check;
+use function Gallery\Services\thumbnail_maintenance_last_check_image_ids;
+use function Gallery\Services\thumbnail_maintenance_merge_check_reports;
+use function Gallery\Services\thumbnail_maintenance_store_last_check;
+use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
+use function Gallery\Services\thumbnail_metadata_refresh_image;
+use function Gallery\Views\view_render_admin_thumbnail_maintenance_notice;
+
 /**
  * Admin thumbnail controller model.
- * 
+ *
  * This module renders thumbnail maintenance notices and handles manual or batched thumbnail generation requests.
+ *
+ * @param array $summary Summary value.
  */
-
 function render_admin_thumbnail_maintenance_notice(array $summary): void
 {
-    if (function_exists('view_render_admin_thumbnail_maintenance_notice')) {
+    if (function_exists('Gallery\\Views\\view_render_admin_thumbnail_maintenance_notice')) {
         view_render_admin_thumbnail_maintenance_notice($summary);
         return;
     }
@@ -86,8 +139,6 @@ function render_admin_thumbnail_maintenance_notice(array $summary): void
  * The dismissal is intentionally bound to a lightweight image inventory
  * fingerprint. Adding or importing a new image changes that fingerprint, which
  * makes the old dismissal invalid before its seven-day expiry.
- *
- * @return void
  */
 function cms_admin_dismiss_thumbnail_notice(): void
 {
@@ -132,6 +183,7 @@ function cms_admin_check_thumbnail_maintenance(): void
     // $report stores a full dry-run inventory grouped by gallery.
     $report = thumbnail_maintenance_check_report(null, 0);
     thumbnail_maintenance_store_last_check($report);
+    cms_admin_thumbnail_repair_queue_store($report);
 
     cms_admin_record_thumbnail_check_completion($report);
 
@@ -176,10 +228,13 @@ function cms_admin_check_thumbnail_maintenance_batch(): void
         $_SESSION['thumbnail_maintenance_check_jobs'][$jobToken] = $aggregate;
 
         $done = !empty($batchReport['done']);
+        // $repairToken stores the session key for the server-side targeted repair queue.
+        $repairToken = '';
         if ($done) {
             $aggregate['checked_at'] = now_sql();
             $aggregate = thumbnail_maintenance_finalize_check_report($aggregate);
             thumbnail_maintenance_store_last_check($aggregate);
+            $repairToken = cms_admin_thumbnail_repair_queue_store($aggregate);
             cms_admin_record_thumbnail_check_completion($aggregate);
             flash_message('admin_notice', cms_admin_thumbnail_check_message($aggregate));
             unset($_SESSION['thumbnail_maintenance_check_jobs'][$jobToken]);
@@ -195,6 +250,7 @@ function cms_admin_check_thumbnail_maintenance_batch(): void
             'images_with_missing' => (int) ($aggregate['images_with_missing'] ?? 0),
             'missing_variants' => (int) ($aggregate['missing_variants'] ?? 0),
             'affected_gallery_count' => (int) ($aggregate['affected_gallery_count'] ?? 0),
+            'repair_token' => $repairToken,
             'redirect_url' => url_for('admin') . '#admin-tab-maintenance',
         ];
 
@@ -232,7 +288,8 @@ function cms_admin_check_thumbnail_maintenance_batch(): void
 /**
  * Return the flash message for one completed dry thumbnail check.
  *
- * @param array<string, mixed> $report
+ * @param array $report Report value.
+ * @return string Text result for the caller.
  */
 function cms_admin_thumbnail_check_message(array $report): string
 {
@@ -254,7 +311,7 @@ function cms_admin_thumbnail_check_message(array $report): string
 /**
  * Write the admin log entry for one completed dry thumbnail check.
  *
- * @param array<string, mixed> $report
+ * @param array $report Report value.
  */
 function cms_admin_record_thumbnail_check_completion(array $report): void
 {
@@ -271,12 +328,124 @@ function cms_admin_record_thumbnail_check_completion(array $report): void
 }
 
 /**
+ * Remove expired server-side thumbnail repair queues from the session.
+ *
+ * @param int $ttlSeconds Queue lifetime in seconds.
+ */
+function cms_admin_thumbnail_repair_queue_prune(int $ttlSeconds = 3600): void
+{
+    if (!isset($_SESSION['thumbnail_maintenance_repair_jobs']) || !is_array($_SESSION['thumbnail_maintenance_repair_jobs'])) {
+        $_SESSION['thumbnail_maintenance_repair_jobs'] = [];
+        return;
+    }
+
+    $now = time();
+    foreach ($_SESSION['thumbnail_maintenance_repair_jobs'] as $token => $job) {
+        if (!is_array($job) || $now - (int) ($job['created_at'] ?? 0) > max(300, $ttlSeconds)) {
+            unset($_SESSION['thumbnail_maintenance_repair_jobs'][$token]);
+        }
+    }
+}
+
+/**
+ * Store a targeted server-side repair queue from a completed dry thumbnail check.
+ *
+ * The queue is stored in the admin session so the follow-up Create missing
+ * thumbnails action can process the exact image IDs that the dry check found,
+ * without rescanning the whole library before the first progress response.
+ *
+ * @param array $report Completed dry thumbnail check report.
+ * @return string Session repair token, or an empty string when no exact queue exists.
+ */
+function cms_admin_thumbnail_repair_queue_store(array $report): string
+{
+    cms_admin_thumbnail_repair_queue_prune();
+    if (!empty($report['affected_image_ids_truncated'])) {
+        return '';
+    }
+
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', (array) ($report['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        return '';
+    }
+
+    $token = bin2hex(random_bytes(12));
+    $_SESSION['thumbnail_maintenance_repair_jobs'][$token] = [
+        'created_at' => time(),
+        'inventory_fingerprint' => (string) ($report['inventory_fingerprint'] ?? thumbnail_inventory_fingerprint(null)),
+        'image_ids' => $imageIds,
+    ];
+
+    return $token;
+}
+
+/**
+ * Return image IDs for a stored server-side thumbnail repair queue.
+ *
+ * @param string $token Repair queue token posted by the admin browser.
+ * @return array<int int> Image IDs from the matching session queue.
+ */
+function cms_admin_thumbnail_repair_queue_read(string $token): array
+{
+    cms_admin_thumbnail_repair_queue_prune();
+    $token = preg_replace('/[^A-Fa-f0-9]/', '', $token) ?: '';
+    if ($token === '' || empty($_SESSION['thumbnail_maintenance_repair_jobs'][$token]) || !is_array($_SESSION['thumbnail_maintenance_repair_jobs'][$token])) {
+        return [];
+    }
+
+    $job = $_SESSION['thumbnail_maintenance_repair_jobs'][$token];
+    $fingerprint = (string) ($job['inventory_fingerprint'] ?? '');
+    if ($fingerprint === '' || !hash_equals(thumbnail_inventory_fingerprint(null), $fingerprint)) {
+        unset($_SESSION['thumbnail_maintenance_repair_jobs'][$token]);
+        return [];
+    }
+
+    return array_values(array_unique(array_filter(array_map('intval', (array) ($job['image_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
+}
+
+/**
+ * Filter selected thumbnail repair IDs by an optional gallery scope.
+ *
+ * @param array $imageIds Candidate image IDs.
+ * @param ?array $galleryIds Optional gallery IDs supplied by the request.
+ * @return array<int int> Image IDs that still match the gallery scope.
+ */
+function cms_admin_thumbnail_repair_filter_image_ids(array $imageIds, ?array $galleryIds): array
+{
+    $imageIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $id): bool => $id > 0)));
+    if (!$imageIds) {
+        return [];
+    }
+    if ($galleryIds === null) {
+        return $imageIds;
+    }
+
+    $galleryIds = array_values(array_unique(array_filter(array_map('intval', $galleryIds), static fn (int $id): bool => $id > 0)));
+    if (!$galleryIds) {
+        return [];
+    }
+
+    $filteredIds = [];
+    foreach ($imageIds as $imageId) {
+        $image = find_image($imageId);
+        if ($image && in_array((int) ($image['gallery_id'] ?? 0), $galleryIds, true)) {
+            $filteredIds[] = $imageId;
+        }
+    }
+
+    return $filteredIds;
+}
+
+/**
  * Return true when the current thumbnail maintenance warning is temporarily hidden.
  *
  * Both conditions must match: the dismissal timestamp must still be in the
  * future, and the image inventory fingerprint must match the current summary.
  * If either value is stale, the dismissal settings are removed so later checks
  * start from a clean state.
+ *
+ * @param array $summary Summary value.
+ * @return bool True when the condition matches.
  */
 function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
 {
@@ -303,7 +472,6 @@ function thumbnail_maintenance_notice_is_dismissed(array $summary): bool
 
 /**
  * Handles cms admin create thumbnails logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_create_thumbnails(): void
 {
@@ -407,7 +575,6 @@ function cms_admin_create_thumbnails(): void
 
 /**
  * Handles cms admin create thumbnails batch logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_create_thumbnails_batch(): void
 {
@@ -417,139 +584,150 @@ function cms_admin_create_thumbnails_batch(): void
     try {
         // $scope stores the requested batch type so targeted repair can be logged separately.
         $scope = (string) ($_POST['scope'] ?? '');
-    // Variable $imageIds stores this steps working value.
-    $imageIds = thumbnail_request_image_ids($_POST);
-    // Variable $total stores this steps working value.
-    $total = count($imageIds);
-    // Variable $offset stores this steps working value.
-    $offset = max(0, (int) ($_POST['offset'] ?? 0));
-    // $maintenanceBefore stores the warning state before the first targeted repair batch mutates files.
-    $maintenanceBefore = null;
-    if ($scope === 'missing' && $offset === 0) {
-        $maintenanceBefore = thumbnail_maintenance_summary(null, 0);
-        admin_log_event('info', 'thumbnail.missing_repair_started', 'Targeted thumbnail repair started.', [
-            'scope' => $scope,
-            'selected_image_count' => $total,
-            'selected_image_ids' => array_slice($imageIds, 0, 50),
-            'selected_image_ids_truncated' => count($imageIds) > 50,
-            'maintenance_before' => $maintenanceBefore,
-            'selected_image_debug' => thumbnail_maintenance_debug_image_statuses($imageIds),
-        ]);
-    }
-    // Variable $batchSize stores this steps working value.
-    $batchSize = max(1, min(12, (int) ($_POST['batch_size'] ?? 6)));
-    // Variable $batch stores this steps working value.
-    $batch = array_slice($imageIds, $offset, $batchSize);
-    // Variable $created stores this steps working value.
-    $created = 0;
-    // Variable $skipped stores this steps working value.
-    $skipped = 0;
-    // Variable $webpSkipped stores this steps working value.
-    $webpSkipped = 0;
-    // $failed stores required thumbnail or DNG display derivatives that could not be generated.
-    $failed = 0;
-    // $invalidGeometryDeleted stores wrong-ratio derivative files removed by metadata refresh.
-    $invalidGeometryDeleted = 0;
-    // $invalidGeometryFiles stores a small diagnostic sample of deleted invalid derivatives.
-    $invalidGeometryFiles = [];
-    // $errors stores concise thumbnail generation diagnostics for the JSON response.
-    $errors = [];
-    // Variable $galleryCache stores this steps working value.
-    $galleryCache = [];
-    foreach ($batch as $imageId) {
-        // Variable $image stores this steps working value.
-        $image = find_image((int) $imageId);
-        if (!$image) {
-            continue;
+        // $imageIds stores the exact server-side image queue for this thumbnail job.
+        $imageIds = thumbnail_request_image_ids($_POST);
+        // $total stores the number of images selected before the current batch slice.
+        $total = count($imageIds);
+        // $offset stores the current browser-driven batch offset.
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        // $maintenanceBefore stores the saved dry check report without rescanning the library.
+        $maintenanceBefore = null;
+        if ($scope === 'missing' && $offset === 0) {
+            $maintenanceBefore = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check') ? thumbnail_maintenance_last_check() : null;
+            admin_log_event('info', 'thumbnail.missing_repair_started', 'Targeted server-side thumbnail repair started.', [
+                'scope' => $scope,
+                'selected_image_count' => $total,
+                'selected_image_ids' => array_slice($imageIds, 0, 50),
+                'selected_image_ids_truncated' => count($imageIds) > 50,
+                'selection_source' => (string) ($_POST['thumbnail_repair_token'] ?? '') !== '' ? 'session_repair_queue' : 'stored_dry_check_or_fallback',
+                'maintenance_before' => $maintenanceBefore,
+                'selected_image_debug' => thumbnail_maintenance_debug_image_statuses($imageIds),
+            ]);
         }
-        // Variable $galleryId stores this steps working value.
-        $galleryId = (int) $image['gallery_id'];
-        if (!array_key_exists($galleryId, $galleryCache)) {
-            $galleryCache[$galleryId] = find_gallery($galleryId);
-        }
-        if (!$galleryCache[$galleryId]) {
-            continue;
-        }
-        if ($scope === 'metadata') {
-            // $result stores refreshed thumbnail metadata counters for this image.
-            $result = thumbnail_metadata_refresh_image($image, $galleryCache[$galleryId], null, true);
-            $created += (int) ($result['valid'] ?? 0);
-            $skipped += (int) ($result['missing'] ?? 0) + (int) ($result['invalid_deleted'] ?? 0);
-            $invalidGeometryDeleted += (int) ($result['invalid_deleted'] ?? 0);
-            foreach ((array) ($result['invalid_files'] ?? []) as $invalidFile) {
-                $invalidGeometryFiles[] = (string) $invalidFile;
+
+        // $batchSize stores the maximum number of image rows processed by this request.
+        $batchSize = max(1, min(12, (int) ($_POST['batch_size'] ?? 6)));
+        // $batch stores this request's image ID slice.
+        $batch = array_slice($imageIds, $offset, $batchSize);
+        // $created stores newly written thumbnail files for this batch.
+        $created = 0;
+        // $skipped stores already current thumbnail files for this batch.
+        $skipped = 0;
+        // $webpSkipped stores intentionally skipped WebP variants for this batch.
+        $webpSkipped = 0;
+        // $failed stores required thumbnail or DNG display derivatives that could not be generated.
+        $failed = 0;
+        // $invalidGeometryDeleted stores wrong-ratio derivative files removed by metadata refresh.
+        $invalidGeometryDeleted = 0;
+        // $invalidGeometryFiles stores a small diagnostic sample of deleted invalid derivatives.
+        $invalidGeometryFiles = [];
+        // $errors stores concise thumbnail generation diagnostics for the JSON response.
+        $errors = [];
+        // $galleryCache stores parent galleries loaded once per batch.
+        $galleryCache = [];
+
+        foreach ($batch as $imageId) {
+            // $image stores the current image row loaded from the database.
+            $image = find_image((int) $imageId);
+            if (!$image) {
+                continue;
             }
-            continue;
+            // $galleryId stores the parent gallery identifier used for path resolution.
+            $galleryId = (int) $image['gallery_id'];
+            if (!array_key_exists($galleryId, $galleryCache)) {
+                $galleryCache[$galleryId] = find_gallery($galleryId);
+            }
+            if (!$galleryCache[$galleryId]) {
+                continue;
+            }
+            if ($scope === 'metadata') {
+                // $result stores refreshed thumbnail metadata counters for this image.
+                $result = thumbnail_metadata_refresh_image($image, $galleryCache[$galleryId], null, true);
+                $created += (int) ($result['valid'] ?? 0);
+                $skipped += (int) ($result['missing'] ?? 0) + (int) ($result['invalid_deleted'] ?? 0);
+                $invalidGeometryDeleted += (int) ($result['invalid_deleted'] ?? 0);
+                foreach ((array) ($result['invalid_files'] ?? []) as $invalidFile) {
+                    $invalidGeometryFiles[] = (string) $invalidFile;
+                }
+                continue;
+            }
+
+            // $result stores generation counters for the current source image.
+            $result = create_image_thumbnails_result($image, $galleryCache[$galleryId]);
+            $created += (int) $result['created'];
+            $skipped += (int) $result['skipped'];
+            $webpSkipped += (int) ($result['webp_skipped'] ?? 0);
+            $failed += (int) ($result['failed'] ?? 0);
+            foreach ((array) ($result['errors'] ?? []) as $error) {
+                $errors[] = (string) $error;
+            }
         }
-        // Variable $result stores this steps working value.
-        $result = create_image_thumbnails_result($image, $galleryCache[$galleryId]);
-        $created += (int) $result['created'];
-        $skipped += (int) $result['skipped'];
-        $webpSkipped += (int) ($result['webp_skipped'] ?? 0);
-        $failed += (int) ($result['failed'] ?? 0);
-        foreach ((array) ($result['errors'] ?? []) as $error) {
-            $errors[] = (string) $error;
+
+        if ($created > 0 || $scope === 'missing' || $scope === 'metadata' || $invalidGeometryDeleted > 0) {
+            thumbnail_maintenance_summary_cache_clear();
         }
-    }
-    if ($created > 0 || $scope === 'missing' || $scope === 'metadata' || $invalidGeometryDeleted > 0) {
-        thumbnail_maintenance_summary_cache_clear();
-    }
-    if ($failed > 0) {
-        admin_log_event('warning', 'thumbnail.generation_failed', 'One or more thumbnail or DNG display derivatives could not be generated.', [
-            'scope' => $scope,
-            'selected_image_count' => $total,
-            'selected_image_ids' => array_slice($imageIds, 0, 50),
-            'selected_image_ids_truncated' => count($imageIds) > 50,
-            'failed' => $failed,
-            'created' => $created,
-            'existing_skipped' => $skipped,
-            'webp_skipped' => $webpSkipped,
-            'errors' => array_values(array_unique(array_filter($errors))),
-        ], ['category' => 'other', 'severity' => 'warning']);
-    }
-    // Variable $processed stores this steps working value.
-    $processed = min($total, $offset + count($batch));
-    // $done stores whether this response finishes the requested thumbnail job.
-    $done = $processed >= $total;
-    // $maintenanceAfter stores a fresh warning state after a targeted repair finishes.
-    $maintenanceAfter = null;
-    // $remainingImageIds stores any images still considered affected after a targeted repair finishes.
-    $remainingImageIds = [];
-    if ($scope === 'metadata' && $done) {
-        admin_log_event('info', 'thumbnail.metadata_refreshed', 'Thumbnail database metadata refresh completed.', [
-            'scope' => $scope,
-            'selected_image_count' => $total,
-            'selected_image_ids' => array_slice($imageIds, 0, 50),
-            'selected_image_ids_truncated' => count($imageIds) > 50,
-            'processed' => $processed,
-            'valid_variants' => $created,
-            'missing_or_invalid_variants' => $skipped,
-            'invalid_geometry_deleted' => $invalidGeometryDeleted,
-            'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter($invalidGeometryFiles))), 0, 50),
-        ]);
-    }
-    if ($scope === 'missing' && $done) {
-        $maintenanceAfter = thumbnail_maintenance_summary(null, 0);
-        $remainingImageIds = thumbnail_maintenance_image_ids(null, 0);
-        admin_log_event($remainingImageIds ? 'warning' : 'info', 'thumbnail.missing_repair_completed', 'Targeted thumbnail repair completed.', [
-            'scope' => $scope,
-            'selected_image_count' => $total,
-            'selected_image_ids' => array_slice($imageIds, 0, 50),
-            'selected_image_ids_truncated' => count($imageIds) > 50,
-            'processed' => $processed,
-            'created' => $created,
-            'existing_skipped' => $skipped,
-            'webp_skipped' => $webpSkipped,
-            'failed' => $failed,
-            'errors' => array_values(array_unique(array_filter($errors))),
-            'maintenance_before' => $maintenanceBefore,
-            'maintenance_after' => $maintenanceAfter,
-            'remaining_image_count' => count($remainingImageIds),
-            'remaining_image_ids' => array_slice($remainingImageIds, 0, 50),
-            'remaining_image_ids_truncated' => count($remainingImageIds) > 50,
-            'remaining_image_debug' => thumbnail_maintenance_debug_image_statuses($remainingImageIds),
-        ]);
-    }
+        if ($failed > 0) {
+            admin_log_event('warning', 'thumbnail.generation_failed', 'One or more thumbnail or DNG display derivatives could not be generated.', [
+                'scope' => $scope,
+                'selected_image_count' => $total,
+                'selected_image_ids' => array_slice($imageIds, 0, 50),
+                'selected_image_ids_truncated' => count($imageIds) > 50,
+                'failed' => $failed,
+                'created' => $created,
+                'existing_skipped' => $skipped,
+                'webp_skipped' => $webpSkipped,
+                'errors' => array_values(array_unique(array_filter($errors))),
+            ], ['category' => 'other', 'severity' => 'warning']);
+        }
+
+        // $processed stores the image count completed after this batch.
+        $processed = min($total, $offset + count($batch));
+        // $done stores whether this response finishes the requested thumbnail job.
+        $done = $processed >= $total;
+        // $maintenanceAfter stores a targeted post-check for selected images only.
+        $maintenanceAfter = null;
+        // $remainingImageIds stores selected images still considered affected after repair.
+        $remainingImageIds = [];
+
+        if ($scope === 'metadata' && $done) {
+            admin_log_event('info', 'thumbnail.metadata_refreshed', 'Thumbnail database metadata refresh completed.', [
+                'scope' => $scope,
+                'selected_image_count' => $total,
+                'selected_image_ids' => array_slice($imageIds, 0, 50),
+                'selected_image_ids_truncated' => count($imageIds) > 50,
+                'processed' => $processed,
+                'valid_variants' => $created,
+                'missing_or_invalid_variants' => $skipped,
+                'invalid_geometry_deleted' => $invalidGeometryDeleted,
+                'invalid_geometry_files' => array_slice(array_values(array_unique(array_filter($invalidGeometryFiles))), 0, 50),
+            ]);
+        }
+        if ($scope === 'missing' && $done) {
+            $maintenanceAfter = function_exists('Gallery\\Services\\thumbnail_maintenance_check_report_for_image_ids')
+                ? thumbnail_maintenance_check_report_for_image_ids($imageIds)
+                : null;
+            $remainingImageIds = is_array($maintenanceAfter)
+                ? array_values(array_unique(array_filter(array_map('intval', (array) ($maintenanceAfter['affected_image_ids'] ?? [])), static fn (int $id): bool => $id > 0)))
+                : [];
+            admin_log_event($remainingImageIds ? 'warning' : 'info', 'thumbnail.missing_repair_completed', 'Targeted server-side thumbnail repair completed.', [
+                'scope' => $scope,
+                'selected_image_count' => $total,
+                'selected_image_ids' => array_slice($imageIds, 0, 50),
+                'selected_image_ids_truncated' => count($imageIds) > 50,
+                'processed' => $processed,
+                'created' => $created,
+                'existing_skipped' => $skipped,
+                'webp_skipped' => $webpSkipped,
+                'failed' => $failed,
+                'errors' => array_values(array_unique(array_filter($errors))),
+                'maintenance_before' => $maintenanceBefore,
+                'maintenance_after' => $maintenanceAfter,
+                'remaining_image_count' => count($remainingImageIds),
+                'remaining_image_ids' => array_slice($remainingImageIds, 0, 50),
+                'remaining_image_ids_truncated' => count($remainingImageIds) > 50,
+                'remaining_image_debug' => thumbnail_maintenance_debug_image_statuses($remainingImageIds),
+            ]);
+        }
 
         // $response stores the JSON batch result returned to the browser.
         $response = [
@@ -609,11 +787,12 @@ function cms_admin_create_thumbnails_batch(): void
 /**
  * Return a JSON response for experimental thumbnail rebuild endpoints.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
+ * @param int $statusCode Status code value.
  */
 function cms_admin_thumbnail_experimental_json_response(array $payload, int $statusCode = 200): void
 {
-    if (function_exists('admin_upload_experimental_json_response')) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_json_response')) {
         admin_upload_experimental_json_response($payload, $statusCode);
         return;
     }
@@ -627,7 +806,7 @@ function cms_admin_thumbnail_experimental_json_response(array $payload, int $sta
  */
 function cms_admin_thumbnail_experimental_verify_csrf(): void
 {
-    if (function_exists('admin_upload_experimental_verify_csrf')) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_verify_csrf')) {
         admin_upload_experimental_verify_csrf();
         return;
     }
@@ -650,11 +829,11 @@ function cms_admin_thumbnail_experimental_source_chunk(): void
 
     try {
         cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('experimental_thumbnail_rebuild_stream_source_zip')) {
+        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_stream_source_zip')) {
             throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
         }
 
@@ -687,17 +866,17 @@ function cms_admin_thumbnail_experimental_upload_batch(): void
         cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
         return;
     }
-    if (function_exists('admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
         return;
     }
 
     try {
         cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
             throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
+        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
             throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
         }
         $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['upload_session_id'] ?? '')) ?: bin2hex(random_bytes(8));
@@ -721,8 +900,6 @@ function cms_admin_thumbnail_experimental_upload_batch(): void
  * destructive path can have its own CSRF check, explicit confirmation token,
  * admin flash message, and operational log entry. The confirmation word is not
  * a security mechanism. It is a human safety rail against accidental clicks.
- *
- * @return void
  */
 function cms_admin_delete_thumbnails(): void
 {
@@ -768,7 +945,7 @@ function cms_admin_delete_thumbnails(): void
  * confirming the destructive action. The JavaScript button uses the same words
  * from its data attribute and picks one randomly for the prompt.
  *
- * @return array<int, string>
+ * @return array<int string>.
  */
 function thumbnail_delete_confirmation_words(): array
 {
@@ -778,13 +955,12 @@ function thumbnail_delete_confirmation_words(): array
 /**
  * Return image IDs for a targeted missing-thumbnail repair request.
  *
- * The dashboard warning is based on thumbnail_maintenance_summary(), so this
- * selector deliberately uses thumbnail_maintenance_image_ids() instead of the
- * broader gallery/all-image selectors used by normal thumbnail jobs. This keeps
- * the AJAX batch path and the non-AJAX fallback on the same maintenance scope.
+ * The dashboard warning is based on the dry maintenance check. This selector
+ * first reuses the session repair queue or saved dry-check image list. AJAX
+ * requests do not run a full live scan because that would stall progress at 0/0.
  *
- * @param array<string, mixed> $post Submitted thumbnail request fields.
- * @return array<int, int>
+ * @param array $post Post value.
+ * @return array<int int>.
  */
 function thumbnail_maintenance_request_image_ids(array $post): array
 {
@@ -798,13 +974,34 @@ function thumbnail_maintenance_request_image_ids(array $post): array
         $galleryIds = [(int) $post['gallery_id']];
     }
 
+    // $repairToken stores the dry-check queue selected by the browser progress flow.
+    $repairToken = preg_replace('/[^A-Fa-f0-9]/', '', (string) ($post['thumbnail_repair_token'] ?? '')) ?: '';
+    if ($repairToken !== '') {
+        // $queuedImageIds stores exact image IDs from the current admin session.
+        $queuedImageIds = cms_admin_thumbnail_repair_queue_read($repairToken);
+        if ($queuedImageIds !== []) {
+            return cms_admin_thumbnail_repair_filter_image_ids($queuedImageIds, $galleryIds);
+        }
+    }
+
+    // $lastCheckImageIds stores the exact dry-check findings when the saved report is still current.
+    $lastCheckImageIds = function_exists('Gallery\\Services\\thumbnail_maintenance_last_check_image_ids') ? thumbnail_maintenance_last_check_image_ids($galleryIds) : [];
+    if ($lastCheckImageIds !== []) {
+        return $lastCheckImageIds;
+    }
+
+    if ((string) ($post['ajax'] ?? '') === '1') {
+        return [];
+    }
+
     return thumbnail_maintenance_image_ids($galleryIds, 0);
 }
 
 /**
- * Handles thumbnail request image ids logic for the gallery application.
- * @param mixed $post Input used by this operation.
- * @return mixed Result produced by this operation.
+ * Return image IDs selected by one thumbnail generation request.
+ *
+ * @param array $post Submitted thumbnail request data.
+ * @return array<int int> Image IDs selected for generation.
  */
 function thumbnail_request_image_ids(array $post): array
 {

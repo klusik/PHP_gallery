@@ -34,6 +34,11 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use function Gallery\Core\db;
+
 /**
  * Return true when the current public lightbox request must hide NSFW image rows.
  *

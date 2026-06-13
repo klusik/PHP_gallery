@@ -34,12 +34,27 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\integrity_status;
+use function Gallery\Core\integrity_status_label;
+use function Gallery\Core\redirect_to;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\url_for;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\t;
+
 /**
  * Admin integrity controller model.
- * 
+ *
  * This module renders integrity summaries and path lists, and handles the admin integrity screen. It is separated from visual theme customization.
+ *
+ * @param array $integrityStatus Integrity status value.
  */
-
 function render_admin_integrity_summary(array $integrityStatus): void
 {
     // $status stores an intermediate value used by the surrounding gallery workflow.
@@ -75,9 +90,9 @@ function render_admin_integrity_summary(array $integrityStatus): void
 
 /**
  * Handles render admin integrity path list logic for the gallery application.
+ *
  * @param mixed $title Input used by this operation.
  * @param mixed $paths Input used by this operation.
- * @return mixed Result produced by this operation.
  */
 function render_admin_integrity_path_list(string $title, array $paths): void
 {
@@ -96,7 +111,6 @@ function render_admin_integrity_path_list(string $title, array $paths): void
 
 /**
  * Handles cms admin integrity logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_admin_integrity(): void
 {

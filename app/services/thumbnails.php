@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
 require_once __DIR__ . '/thumbnail_sources.php';
 require_once __DIR__ . '/thumbnail_metadata.php';
 require_once __DIR__ . '/thumbnail_bundles.php';

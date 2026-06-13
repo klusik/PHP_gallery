@@ -34,14 +34,24 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Services\t;
+
 /**
  * HTTP controller helper model.
- * 
+ *
  * This module contains small response helpers shared by public and admin controllers, such as conditional file headers and the public back-to-top control renderer.
+ *
+ * @param string $path Filesystem path.
+ * @param string $cacheControl Cache control value.
  */
-
 function send_conditional_file_headers(string $path, string $cacheControl): void
 {
+    clear_response_cache_headers();
     // $mtime stores an intermediate value used by the surrounding gallery workflow.
     $mtime = (int) filemtime($path);
     // $size stores an intermediate value used by the surrounding gallery workflow.
@@ -62,9 +72,30 @@ function send_conditional_file_headers(string $path, string $cacheControl): void
     }
 }
 
+
+/**
+ * Remove inherited PHP/session cache headers before an asset route sets its own policy.
+ */
+function clear_response_cache_headers(): void
+{
+    header_remove('Cache-Control');
+    header_remove('Pragma');
+    header_remove('Expires');
+}
+
+/**
+ * Send a cache policy after removing inherited PHP/session cache headers.
+ *
+ * @param string $cacheControl Cache control value.
+ */
+function send_asset_cache_control(string $cacheControl): void
+{
+    clear_response_cache_headers();
+    header('Cache-Control: ' . $cacheControl);
+}
+
 /**
  * Handles render back to top button logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function render_back_to_top_button(): void
 {
@@ -73,7 +104,6 @@ function render_back_to_top_button(): void
 
 /**
  * Handles cms not found logic for the gallery application.
- * @return mixed Result produced by this operation.
  */
 function cms_not_found(): void
 {

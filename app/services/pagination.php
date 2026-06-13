@@ -34,6 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\e;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\url_for;
+
 /**
  * Unified public-list pagination helpers.
  *
@@ -50,6 +57,11 @@ const CMS_PAGINATION_MAX_ROWS = 50;
 
 /**
  * Clamp one pagination dimension to a safe positive integer range.
+ *
+ * @param mixed $value Value to process.
+ * @param int $default Default value when no explicit value is available.
+ * @param int $maximum Maximum value.
+ * @return int Integer result for the caller.
  */
 function pagination_dimension_value(mixed $value, int $default, int $maximum): int
 {
@@ -63,6 +75,9 @@ function pagination_dimension_value(mixed $value, int $default, int $maximum): i
 
 /**
  * Return sanitized global pagination settings for public gallery lists.
+ *
+ * @param ?array $context Context value.
+ * @return array Structured result data for the caller.
  */
 function pagination_global_settings(?array $context = null): array
 {
@@ -87,6 +102,9 @@ function pagination_global_settings(?array $context = null): array
 
 /**
  * Return a safe current page number from one GET parameter.
+ *
+ * @param string $parameterName Parameter name value.
+ * @return int Integer result for the caller.
  */
 function pagination_current_page(string $parameterName = CMS_PAGINATION_PARAM): int
 {
@@ -99,6 +117,15 @@ function pagination_current_page(string $parameterName = CMS_PAGINATION_PARAM): 
 
 /**
  * Build a pagination model for one listing.
+ *
+ * @param int $totalItems Total items value.
+ * @param int $currentPage Current page value.
+ * @param int $columns Columns value.
+ * @param int $rows Rows to process.
+ * @param string $parameterName Parameter name value.
+ * @param ?array $baseQuery Base query value.
+ * @param ?callable $urlBuilder Url builder URL.
+ * @return array Structured result data for the caller.
  */
 function pagination_model(int $totalItems, int $currentPage, int $columns, int $rows, string $parameterName = CMS_PAGINATION_PARAM, ?array $baseQuery = null, ?callable $urlBuilder = null): array
 {
@@ -134,6 +161,10 @@ function pagination_model(int $totalItems, int $currentPage, int $columns, int $
 
 /**
  * Return the current list sliced only when pagination is enabled and useful.
+ *
+ * @param array $items Items value.
+ * @param array $pagination Pagination value.
+ * @return array Structured result data for the caller.
  */
 function pagination_slice_items(array $items, array $pagination): array
 {
@@ -145,6 +176,12 @@ function pagination_slice_items(array $items, array $pagination): array
 
 /**
  * Build a URL for one pagination page while preserving the active route query.
+ *
+ * @param string $parameterName Parameter name value.
+ * @param int $pageNumber Page number value.
+ * @param ?array $baseQuery Base query value.
+ * @param ?callable $urlBuilder Url builder URL.
+ * @return string Text result for the caller.
  */
 function pagination_page_url(string $parameterName, int $pageNumber, ?array $baseQuery = null, ?callable $urlBuilder = null): string
 {
@@ -167,6 +204,13 @@ function pagination_page_url(string $parameterName, int $pageNumber, ?array $bas
 
 /**
  * Return compact page-number URLs for the control bar.
+ *
+ * @param string $parameterName Parameter name value.
+ * @param int $currentPage Current page value.
+ * @param int $totalPages Total pages value.
+ * @param ?array $baseQuery Base query value.
+ * @param ?callable $urlBuilder Url builder URL.
+ * @return array Structured result data for the caller.
  */
 function pagination_page_urls(string $parameterName, int $currentPage, int $totalPages, ?array $baseQuery = null, ?callable $urlBuilder = null): array
 {
@@ -190,6 +234,9 @@ function pagination_page_urls(string $parameterName, int $currentPage, int $tota
 
 /**
  * Return a grid column class matching the active pagination column setting.
+ *
+ * @param array $settings Settings used by this workflow.
+ * @return string Text result for the caller.
  */
 function pagination_grid_columns_class(array $settings): string
 {
@@ -210,6 +257,9 @@ function pagination_grid_columns_class(array $settings): string
  * width. JavaScript then replaces it with the exact rendered pixel width, but
  * this conservative viewport-based value already prevents wide grids from
  * eagerly selecting 800 px thumbnails on first parse.
+ *
+ * @param array $settings Settings used by this workflow.
+ * @return string Text result for the caller.
  */
 function pagination_photo_thumbnail_sizes_attribute(array $settings): string
 {
@@ -228,6 +278,9 @@ function pagination_photo_thumbnail_sizes_attribute(array $settings): string
 
 /**
  * Return a query suffix for clean pagination links while removing route state.
+ *
+ * @param array $removeNames Remove names value.
+ * @return string Text result for the caller.
  */
 function pagination_clean_query_suffix(array $removeNames = []): string
 {
@@ -246,6 +299,11 @@ function pagination_clean_query_suffix(array $removeNames = []): string
 
 /**
  * Build a clean public gallery pagination URL.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $pageNumber Page number value.
+ * @param string $listing Listing value.
+ * @return string Text result for the caller.
  */
 function pagination_gallery_clean_url(array $gallery, int $pageNumber, string $listing = 'photos'): string
 {
@@ -267,6 +325,9 @@ function pagination_gallery_clean_url(array $gallery, int $pageNumber, string $l
 
 /**
  * Build a clean home gallery-list pagination URL.
+ *
+ * @param int $pageNumber Page number value.
+ * @return string Text result for the caller.
  */
 function pagination_home_gallery_clean_url(int $pageNumber): string
 {
@@ -280,6 +341,9 @@ function pagination_home_gallery_clean_url(int $pageNumber): string
 
 /**
  * Render accessible public pagination controls for one listing.
+ *
+ * @param array $pagination Pagination value.
+ * @param string $label Label value.
  */
 function render_pagination_controls(array $pagination, string $label = ''): void
 {

@@ -34,12 +34,35 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\current_user;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\url_for;
+use function Gallery\Services\current_user_is_known_under_18;
+use function Gallery\Services\current_votes_for_images;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_allows_gps_maps;
+use function Gallery\Services\gallery_lightbox_fetch_images;
+use function Gallery\Services\gallery_lightbox_total_count;
+use function Gallery\Services\gallery_voting_allowed;
+use function Gallery\Services\image_has_gps;
+use function Gallery\Services\image_map_point;
+use function Gallery\Services\image_nsfw_restricted;
+use function Gallery\Services\public_image_display_title;
+use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\thumbnail_bundle;
+use function Gallery\Services\thumbnail_bundle_url;
+use function Gallery\Services\visitor_can_access_gallery;
+use function Gallery\Services\visitor_can_access_nsfw_content;
+
 /**
  * Send a JSON response for the lazy lightbox endpoint.
  *
  * @param array $payload JSON-serializable response payload.
  * @param int $status HTTP status code.
- * @return void
  */
 function gallery_lightbox_json_response(array $payload, int $status = 200): void
 {
@@ -63,7 +86,7 @@ function gallery_lightbox_json_response(array $payload, int $status = 200): void
 function gallery_lightbox_json_item(array $image, array $gallery, int $index, bool $mapsAllowed, bool $votingAllowed, array $votesById): array
 {
     $thumbnailBundle = public_render_profile_with_thumbnail_purpose('lazy lightbox bundle discovery', static fn (): array => thumbnail_bundle($image));
-    $mediaUrl = public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+    $mediaUrl = url_for('media', ['id' => $image['id']]);
     $previewUrl = public_render_profile_with_thumbnail_purpose('lazy lightbox preview 1600', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
     $mapPoint = $mapsAllowed && image_has_gps($image)
         ? public_render_profile_with_thumbnail_purpose('lazy lightbox map preview 300', static fn (): array => image_map_point($image, $gallery, true, $thumbnailBundle))
@@ -94,8 +117,6 @@ function gallery_lightbox_json_item(array $image, array $gallery, int $index, bo
 
 /**
  * Return an asynchronous ordered metadata window for the public gallery lightbox.
- *
- * @return void
  */
 function cms_gallery_lightbox_data(): void
 {

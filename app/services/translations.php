@@ -35,12 +35,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use function Gallery\Core\cms_config;
+use function Gallery\Core\current_user;
+use function Gallery\Core\request_is_https;
+
 const CMS_LANGUAGE_COOKIE = 'cms_language';
 const CMS_ADMIN_LANGUAGE_COOKIE = 'cms_admin_language';
 const CMS_PUBLIC_LANGUAGE_COOKIE = 'cms_public_language';
 
 /**
  * Return the directory where application language files are stored.
+ *
+ * @return string Text result for the caller.
  */
 function translation_language_dir(): string
 {
@@ -49,6 +57,9 @@ function translation_language_dir(): string
 
 /**
  * Normalize a language code into the conservative format used for file lookup.
+ *
+ * @param string $language Language value.
+ * @return string Text result for the caller.
  */
 function translation_normalize_language_code(string $language): string
 {
@@ -61,6 +72,8 @@ function translation_normalize_language_code(string $language): string
 
 /**
  * Return the configured default language, falling back to English.
+ *
+ * @return string Text result for the caller.
  */
 function translation_default_language(): string
 {
@@ -82,6 +95,9 @@ function translation_default_language(): string
 
 /**
  * Return the JSON language-pack path for one normalized language code.
+ *
+ * @param string $language Language value.
+ * @return string Text result for the caller.
  */
 function translation_language_json_path(string $language): string
 {
@@ -100,6 +116,13 @@ function translation_clear_runtime_cache(): void
     $GLOBALS['cms_translation_cache_version'] = (int) ($GLOBALS['cms_translation_cache_version'] ?? 0) + 1;
 }
 
+/**
+ * Handle translation detected language packs.
+ *
+ * Part of the related application service.
+ *
+ * @return array Structured result data for the caller.
+ */
 function translation_detected_language_packs(): array
 {
     static $cache = null;
@@ -156,6 +179,8 @@ function translation_detected_language_packs(): array
 
 /**
  * Return the configured and detected list of languages that may be selected.
+ *
+ * @return array Structured result data for the caller.
  */
 function translation_supported_languages(): array
 {
@@ -189,6 +214,9 @@ function translation_supported_languages(): array
 
 /**
  * Return true when a language code may be used for the current installation.
+ *
+ * @param string $language Language value.
+ * @return bool True when the condition matches.
  */
 function translation_language_allowed(string $language): bool
 {
@@ -201,6 +229,9 @@ function translation_language_allowed(string $language): bool
 
 /**
  * Return true when a route belongs to the administration interface.
+ *
+ * @param string $route Route value.
+ * @return bool True when the condition matches.
  */
 function translation_route_is_admin(string $route): bool
 {
@@ -209,11 +240,13 @@ function translation_route_is_admin(string $route): bool
 
 /**
  * Resolve the persisted public visitor language.
+ *
+ * @return string Text result for the caller.
  */
 function translation_public_language(): string
 {
     $candidate = '';
-    if (function_exists('app_setting')) {
+    if (function_exists('Gallery\\Services\\app_setting')) {
         $candidate = translation_normalize_language_code((string) app_setting('public_language', ''));
     }
     if ($candidate !== '' && translation_language_allowed($candidate)) {
@@ -232,6 +265,8 @@ function translation_public_language(): string
 
 /**
  * Resolve the current admin interface language.
+ *
+ * @return string Text result for the caller.
  */
 function translation_admin_language(): string
 {
@@ -255,6 +290,8 @@ function translation_admin_language(): string
  * site-wide public language setting, with an optional visitor override through
  * ?lang= and a visitor cookie. This lets the administrator keep the backend in
  * one language while anonymous users see another language.
+ *
+ * @param ?string $route Route value.
  */
 function translation_bootstrap_request(?string $route = null): void
 {
@@ -311,6 +348,8 @@ function translation_bootstrap_request(?string $route = null): void
 
 /**
  * Return the currently active language for translation lookup.
+ *
+ * @return string Text result for the caller.
  */
 function translation_active_language(): string
 {
@@ -328,6 +367,9 @@ function translation_active_language(): string
 
 /**
  * Load one language file. Invalid or missing files produce an empty dictionary.
+ *
+ * @param string $language Language value.
+ * @return array Structured result data for the caller.
  */
 function translation_load_language(string $language): array
 {
@@ -372,6 +414,9 @@ function translation_load_language(string $language): array
 
 /**
  * Return a pretty JSON representation of the editable language pack.
+ *
+ * @param string $language Language value.
+ * @return string Text result for the caller.
  */
 function translation_language_pack_json_text(string $language): string
 {
@@ -399,6 +444,9 @@ function translation_language_pack_json_text(string $language): string
 
 /**
  * Encode a language dictionary in the maintained JSON format.
+ *
+ * @param array $strings Strings value.
+ * @return string Text result for the caller.
  */
 function translation_encode_language_json(array $strings): string
 {
@@ -411,6 +459,9 @@ function translation_encode_language_json(array $strings): string
 
 /**
  * Validate editable language-pack JSON and return normalized strings or errors.
+ *
+ * @param string $json Json JSON data.
+ * @return array Structured result data for the caller.
  */
 function translation_validate_language_json(string $json): array
 {
@@ -447,6 +498,10 @@ function translation_validate_language_json(string $json): array
 
 /**
  * Save one editable JSON language pack after validation.
+ *
+ * @param string $language Language value.
+ * @param string $json Json JSON data.
+ * @return array Structured result data for the caller.
  */
 function translation_save_language_json(string $language, string $json): array
 {
@@ -488,6 +543,9 @@ function translation_save_language_json(string $language, string $json): array
 
 /**
  * Compare a language pack against the default English dictionary.
+ *
+ * @param string $language Language value.
+ * @return array Structured result data for the caller.
  */
 function translation_language_coverage(string $language): array
 {
@@ -515,6 +573,10 @@ function translation_language_coverage(string $language): array
 
 /**
  * Replace simple {placeholder} values in a translated string.
+ *
+ * @param string $text Text value.
+ * @param array $parameters Parameters value.
+ * @return string Text result for the caller.
  */
 function translation_interpolate(string $text, array $parameters): string
 {
@@ -531,6 +593,9 @@ function translation_interpolate(string $text, array $parameters): string
 
 /**
  * Persist the selected language for the current admin/browser session.
+ *
+ * @param string $language Language value.
+ * @return bool True when the condition matches.
  */
 function translation_set_active_language(string $language): bool
 {
@@ -562,6 +627,9 @@ function translation_set_active_language(string $language): bool
 
 /**
  * Persist the site-wide language shown to anonymous/public visitors by default.
+ *
+ * @param string $language Language value.
+ * @return bool True when the condition matches.
  */
 function translation_set_public_language(string $language): bool
 {
@@ -570,7 +638,7 @@ function translation_set_public_language(string $language): bool
         return false;
     }
 
-    if (function_exists('set_app_setting')) {
+    if (function_exists('Gallery\\Services\\set_app_setting')) {
         set_app_setting('public_language', $language);
     }
     return true;
@@ -578,13 +646,15 @@ function translation_set_public_language(string $language): bool
 
 /**
  * Return whether the current request may collect admin translation diagnostics.
+ *
+ * @return bool True when the condition matches.
  */
 function translation_diagnostics_enabled(): bool
 {
     if (PHP_SAPI === 'cli') {
         return false;
     }
-    if (!function_exists('current_user')) {
+    if (!function_exists('Gallery\\Core\\current_user')) {
         return false;
     }
     // $user stores the authenticated account when one exists.
@@ -594,6 +664,10 @@ function translation_diagnostics_enabled(): bool
 
 /**
  * Store one missing translation detail for display in the admin language tab.
+ *
+ * @param string $key Lookup key.
+ * @param string $active Active value.
+ * @param string $fallbackUsed Fallback used value.
  */
 function translation_record_missing_key(string $key, string $active, string $fallbackUsed): void
 {
@@ -616,6 +690,8 @@ function translation_record_missing_key(string $key, string $active, string $fal
 
 /**
  * Return collected missing translation diagnostics for the current admin session.
+ *
+ * @return array Structured result data for the caller.
  */
 function translation_missing_diagnostics(): array
 {
@@ -637,6 +713,8 @@ function translation_clear_missing_diagnostics(): void
 
 /**
  * Return whether admin-visible missing key markers should be appended.
+ *
+ * @return bool True when the condition matches.
  */
 function translation_missing_key_markers_enabled(): bool
 {
@@ -654,6 +732,10 @@ function translation_missing_key_markers_enabled(): bool
 
 /**
  * Mark fallback text for admins when the active language is missing a key.
+ *
+ * @param string $text Text value.
+ * @param string $key Lookup key.
+ * @return string Text result for the caller.
  */
 function translation_admin_missing_key_text(string $text, string $key): string
 {
@@ -665,6 +747,11 @@ function translation_admin_missing_key_text(string $text, string $key): string
 
 /**
  * Translate a string key using the active language with safe fallbacks.
+ *
+ * @param string $key Lookup key.
+ * @param string|array|null $fallback Fallback value.
+ * @param array $parameters Parameters value.
+ * @return string Text result for the caller.
  */
 function t(string $key, string|array|null $fallback = null, array $parameters = []): string
 {

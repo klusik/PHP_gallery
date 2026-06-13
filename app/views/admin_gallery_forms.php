@@ -34,6 +34,35 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Controllers\gallery_parent_options_for_new;
+use function Gallery\Controllers\visibility_options;
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\csrf_token;
+use function Gallery\Core\current_user;
+use function Gallery\Core\e;
+use function Gallery\Core\url_for;
+use function Gallery\Services\gallery_count_badge_override_label;
+use function Gallery\Services\gallery_count_badge_override_values;
+use function Gallery\Services\gallery_count_badge_schema_ready;
+use function Gallery\Services\gallery_date_exif_suggestion_for_gallery;
+use function Gallery\Services\gallery_date_exif_suggestions_schema_ready;
+use function Gallery\Services\gallery_date_input_value;
+use function Gallery\Services\gallery_date_range_schema_ready;
+use function Gallery\Services\gallery_date_range_storage_label;
+use function Gallery\Services\gallery_date_schema_ready;
+use function Gallery\Services\openai_text_assist_available;
+use function Gallery\Services\openai_text_assist_default_language;
+use function Gallery\Services\openai_text_assist_image_input_allowed;
+use function Gallery\Services\openai_text_assist_language_catalog;
+use function Gallery\Services\t;
+
+/**
+ * Handle view render gallery description formatting hint.
+ *
+ * Used by server-rendered view helpers.
+ */
 function view_render_gallery_description_formatting_hint(): void
 {
     echo '<details class="gallery-description-format-help"><summary><span aria-hidden="true">&#128161;</span><span>' . e(t('admin.gallery_editor.description_format_hints', 'Formatting hints')) . '</span></summary><div class="gallery-description-format-help-popover">';
@@ -50,7 +79,7 @@ function view_render_gallery_description_formatting_hint(): void
 /**
  * Render the EXIF-derived date suggestion controls for one existing gallery.
  *
- * @param array<string, mixed> $gallery Existing gallery row.
+ * @param array $gallery Gallery row or gallery data.
  */
 function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
 {
@@ -92,7 +121,8 @@ function view_render_admin_gallery_date_exif_suggestion(array $gallery): void
 /**
  * Render gallery date or date-range fields for admin forms.
  *
- * @param array<string, mixed> $gallery Existing gallery row or empty array for new galleries.
+ * @param array $gallery Gallery row or gallery data.
+ * @param bool $panelMode Panel mode value.
  */
 function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $panelMode = false): void
 {
@@ -134,6 +164,15 @@ function view_render_admin_gallery_date_range_fields(array $gallery = [], bool $
     view_render_admin_gallery_date_exif_suggestion($gallery);
 }
 
+/**
+ * Handle view render admin new gallery fields.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param bool $panelMode Panel mode value.
+ * @param string $workflow Workflow value.
+ */
 function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelMode, string $workflow = 'create'): void
 {
     if ($panelMode) {
@@ -181,6 +220,15 @@ function view_render_admin_new_gallery_fields(int $prefillParentId, bool $panelM
     view_render_gallery_description_formatting_hint();
 }
 
+/**
+ * Handle view render admin new gallery side panel.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $prefillParentId Prefill parent id identifier.
+ * @param ?array $prefillParentGallery Prefill parent gallery value.
+ * @param string $error Error value.
+ */
 function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $prefillParentGallery, string $error): void
 {
     echo '<div class="admin-side-panel-stack" data-gallery-create-panel>';
@@ -199,6 +247,13 @@ function view_render_admin_new_gallery_side_panel(int $prefillParentId, ?array $
     echo '</div>';
 }
 
+/**
+ * Handle view render admin simbrief description tool.
+ *
+ * Used by server-rendered view helpers.
+ *
+ * @param int $galleryId Gallery identifier.
+ */
 function view_render_admin_simbrief_description_tool(int $galleryId): void
 {
     echo '<div class="admin-simbrief-description" data-simbrief-description-tool data-simbrief-endpoint="' . e(url_for('admin_simbrief_description')) . '" data-gallery-id="' . (int) $galleryId . '">';
@@ -217,13 +272,12 @@ function view_render_admin_simbrief_description_tool(int $galleryId): void
  * @param int $galleryId Gallery id used for gallery-level prompt context, or zero for photo-only editors.
  * @param int $imageId Image id used for photo-level prompt context, or zero for gallery editors.
  * @param string $mode UI mode, either gallery or image.
- * @return void
  */
 function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId = 0, string $mode = 'gallery'): void
 {
-    $user = function_exists('current_user') ? current_user() : null;
+    $user = function_exists('Gallery\\Core\\current_user') ? current_user() : null;
     $userId = is_array($user) ? (int) ($user['id'] ?? 0) : 0;
-    if ($userId <= 0 || !function_exists('openai_text_assist_available') || !openai_text_assist_available($userId)) {
+    if ($userId <= 0 || !function_exists('Gallery\\Services\\openai_text_assist_available') || !openai_text_assist_available($userId)) {
         return;
     }
 
@@ -238,9 +292,9 @@ function view_render_admin_openai_text_assist_tool(int $galleryId, int $imageId 
     $button = $mode === 'image'
         ? t('admin.openai.generate_image_button', 'Generate photo description')
         : t('admin.openai.generate_gallery_button', 'Generate gallery description');
-    $allowImageInput = function_exists('openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
-    $languageCatalog = function_exists('openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
-    $defaultLanguage = function_exists('openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
+    $allowImageInput = function_exists('Gallery\\Services\\openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
+    $languageCatalog = function_exists('Gallery\\Services\\openai_text_assist_language_catalog') ? openai_text_assist_language_catalog() : [];
+    $defaultLanguage = function_exists('Gallery\\Services\\openai_text_assist_default_language') ? openai_text_assist_default_language() : 'en';
 
     echo '<div class="admin-openai-text-assist" data-openai-text-assist data-openai-endpoint="' . e(url_for('admin_openai_text_assist')) . '" data-gallery-id="' . (int) $galleryId . '" data-image-id="' . (int) $imageId . '" data-openai-target-selector="[data-openai-description-textarea]">';
     echo '<div class="admin-openai-text-assist-heading"><div><h3>' . e($title) . '</h3><p class="muted">' . e($help) . '</p></div></div>';

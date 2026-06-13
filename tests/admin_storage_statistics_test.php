@@ -39,6 +39,10 @@ require_once __DIR__ . '/../app/services/admin_storage_statistics.php';
 
 /**
  * Throw when a storage-statistics expectation fails.
+ *
+ * @param mixed $expected Expected value.
+ * @param mixed $actual Actual value.
+ * @param string $label Label value.
  */
 function assert_admin_storage_same(mixed $expected, mixed $actual, string $label): void
 {

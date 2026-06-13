@@ -29,6 +29,10 @@ button.danger {
     text-decoration: underline;
 }
 
+.admin-log-pagination {
+    margin: 0.75rem 0;
+}
+
 [data-admin-log-live-state] {
     min-width: 7rem;
 }

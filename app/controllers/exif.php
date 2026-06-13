@@ -34,6 +34,13 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use function Gallery\Core\current_user;
+use function Gallery\Services\find_gallery;
+use function Gallery\Services\gallery_map_payload;
+use function Gallery\Services\visitor_can_access_gallery;
+
 /**
  * EXIF and GPS endpoint controller module.
  *

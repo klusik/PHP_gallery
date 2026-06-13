@@ -35,10 +35,20 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Views;
+
+use function Gallery\Core\csrf_field;
+use function Gallery\Core\e;
+use function Gallery\Core\render_footer;
+use function Gallery\Core\render_header;
+use function Gallery\Core\url_for;
+use function Gallery\Services\media_renamer_default_pattern;
+use function Gallery\Services\t;
+
 /**
  * Render the reusable upload format support matrix.
  *
- * @param array<string, bool> $support Browser and server capability flags.
+ * @param array $support Support value.
  */
 function view_render_admin_upload_support_matrix(array $support): void
 {
@@ -59,7 +69,7 @@ function view_render_admin_upload_support_matrix(array $support): void
 /**
  * Render a compact upload support panel for the normal upload page.
  *
- * @param array<string, bool> $support Browser and server capability flags.
+ * @param array $support Support value.
  */
 function view_render_admin_upload_support_panel(array $support): void
 {
@@ -71,7 +81,7 @@ function view_render_admin_upload_support_panel(array $support): void
 /**
  * Render the dedicated Admin upload settings page.
  *
- * @param array<string, mixed> $model Settings page view model.
+ * @param array $model Model value.
  */
 function view_render_admin_upload_settings_page(array $model): void
 {
@@ -127,6 +137,9 @@ function view_render_admin_upload_settings_page(array $model): void
 
 /**
  * Normalize the upload settings tab name used by controllers and views.
+ *
+ * @param string $tab Tab value.
+ * @return string Text result for the caller.
  */
 function view_admin_upload_settings_normalize_tab(string $tab): string
 {
@@ -136,7 +149,7 @@ function view_admin_upload_settings_normalize_tab(string $tab): string
 /**
  * Render the general upload preferences form.
  *
- * @param array<string, mixed> $model Settings page view model.
+ * @param array $model Model value.
  */
 function view_render_admin_upload_general_settings_form(array $model): void
 {
@@ -160,7 +173,7 @@ function view_render_admin_upload_general_settings_form(array $model): void
 /**
  * Render the experimental browser pipeline settings form.
  *
- * @param array<string, mixed> $settings Normalized experimental settings.
+ * @param array $settings Settings used by this workflow.
  */
 function view_render_admin_upload_experimental_settings_form(array $settings): void
 {

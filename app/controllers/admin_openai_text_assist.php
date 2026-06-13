@@ -35,12 +35,37 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Controllers;
+
+use RuntimeException;
+use Throwable;
+use const Gallery\Services\OPENAI_TEXT_ASSIST_VISUAL_GALLERY_LIMIT;
+use function Gallery\Core\current_user;
+use function Gallery\Core\request_method;
+use function Gallery\Core\require_admin;
+use function Gallery\Core\verify_csrf;
+use function Gallery\Services\find_image;
+use function Gallery\Services\openai_text_assist_available;
+use function Gallery\Services\openai_text_assist_gallery_bulk_image_candidates;
+use function Gallery\Services\openai_text_assist_gallery_context;
+use function Gallery\Services\openai_text_assist_gallery_thumbnail_references;
+use function Gallery\Services\openai_text_assist_generate;
+use function Gallery\Services\openai_text_assist_image_context;
+use function Gallery\Services\openai_text_assist_image_input_allowed;
+use function Gallery\Services\openai_text_assist_normalize_language;
+use function Gallery\Services\openai_text_assist_normalize_task;
+use function Gallery\Services\openai_text_assist_save_image_description;
+use function Gallery\Services\openai_text_assist_task_uses_images;
+use function Gallery\Services\openai_text_assist_text_limit;
+use function Gallery\Services\openai_text_assist_thumbnail_reference_for_image;
+use function Gallery\Services\openai_text_assist_thumbnail_reference_for_image_id;
+use function Gallery\Services\t;
+
 /**
  * Send an OpenAI text-assistance JSON response and stop the request.
  *
- * @param array<string, mixed> $payload Response payload.
+ * @param array $payload Payload value.
  * @param int $statusCode HTTP status code.
- * @return void
  */
 function admin_openai_text_assist_json_response(array $payload, int $statusCode = 200): void
 {
@@ -52,20 +77,25 @@ function admin_openai_text_assist_json_response(array $payload, int $statusCode 
 
 /**
  * Return true when the current user may run thumbnail-based OpenAI actions.
+ *
+ * @param int $userId User id identifier.
+ * @return bool True when the condition matches.
  */
 function admin_openai_text_assist_user_allows_image_input(int $userId): bool
 {
-    return function_exists('openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
+    return function_exists('Gallery\\Services\\openai_text_assist_image_input_allowed') && openai_text_assist_image_input_allowed($userId);
 }
 
 /**
  * Return a validated image row that belongs to the requested gallery.
  *
- * @return array<string,mixed>
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageId Image identifier.
+ * @return array<string,mixed> Structured result data for the caller.
  */
 function admin_openai_text_assist_owned_image(int $galleryId, int $imageId): array
 {
-    $image = function_exists('find_image') ? find_image($imageId) : null;
+    $image = function_exists('Gallery\\Services\\find_image') ? find_image($imageId) : null;
     if (!$image || (int) ($image['gallery_id'] ?? 0) !== $galleryId) {
         throw new RuntimeException(t('admin.openai.error_image_not_in_gallery', 'The selected photo does not belong to this gallery. Reload the editor and try again.'));
     }
@@ -74,10 +104,12 @@ function admin_openai_text_assist_owned_image(int $galleryId, int $imageId): arr
 
 /**
  * Return direct-gallery photo candidates for the bulk-description confirmation step.
+ *
+ * @param int $galleryId Gallery identifier.
  */
 function admin_openai_text_assist_bulk_count_response(int $galleryId): void
 {
-    $candidates = function_exists('openai_text_assist_gallery_bulk_image_candidates') ? openai_text_assist_gallery_bulk_image_candidates($galleryId) : [];
+    $candidates = function_exists('Gallery\\Services\\openai_text_assist_gallery_bulk_image_candidates') ? openai_text_assist_gallery_bulk_image_candidates($galleryId) : [];
     admin_openai_text_assist_json_response([
         'ok' => true,
         'gallery_id' => $galleryId,
@@ -89,6 +121,11 @@ function admin_openai_text_assist_bulk_count_response(int $galleryId): void
 
 /**
  * Generate and immediately save one photo description during a confirmed bulk run.
+ *
+ * @param int $userId User id identifier.
+ * @param int $galleryId Gallery identifier.
+ * @param int $imageId Image identifier.
+ * @param string $language Language value.
  */
 function admin_openai_text_assist_bulk_generate_one_response(int $userId, int $galleryId, int $imageId, string $language): void
 {
@@ -126,8 +163,6 @@ function admin_openai_text_assist_bulk_generate_one_response(int $userId, int $g
 
 /**
  * Generate one reviewable gallery-description suggestion through OpenAI.
- *
- * @return void
  */
 function cms_admin_openai_text_assist(): void
 {
@@ -151,7 +186,7 @@ function cms_admin_openai_text_assist(): void
         return;
     }
 
-    if (!function_exists('openai_text_assist_available') || !openai_text_assist_available($userId)) {
+    if (!function_exists('Gallery\\Services\\openai_text_assist_available') || !openai_text_assist_available($userId)) {
         admin_openai_text_assist_json_response([
             'ok' => false,
             'error' => t('admin.openai.error_not_enabled', 'OpenAI text assistance is not enabled for this account.'),
@@ -163,7 +198,7 @@ function cms_admin_openai_text_assist(): void
     $imageId = (int) ($_POST['image_id'] ?? 0);
     $bulkAction = trim((string) ($_POST['bulk_action'] ?? ''));
     $task = openai_text_assist_normalize_task((string) ($_POST['task'] ?? 'gallery_description'));
-    $language = function_exists('openai_text_assist_normalize_language') ? openai_text_assist_normalize_language((string) ($_POST['language'] ?? 'auto')) : 'auto';
+    $language = function_exists('Gallery\\Services\\openai_text_assist_normalize_language') ? openai_text_assist_normalize_language((string) ($_POST['language'] ?? 'auto')) : 'auto';
     if ($bulkAction !== '') {
         if ($galleryId <= 0) {
             admin_openai_text_assist_json_response([
@@ -201,12 +236,12 @@ function cms_admin_openai_text_assist(): void
         ], 400);
         return;
     }
-    $usesImages = function_exists('openai_text_assist_task_uses_images') && openai_text_assist_task_uses_images($task);
+    $usesImages = function_exists('Gallery\\Services\\openai_text_assist_task_uses_images') && openai_text_assist_task_uses_images($task);
     $targetType = $imageId > 0 ? 'image' : 'gallery';
     if ($imageId > 0 && $task === 'gallery_description') {
         $task = 'image_description';
     }
-    if ($usesImages && (!function_exists('openai_text_assist_image_input_allowed') || !openai_text_assist_image_input_allowed($userId))) {
+    if ($usesImages && (!function_exists('Gallery\\Services\\openai_text_assist_image_input_allowed') || !openai_text_assist_image_input_allowed($userId))) {
         admin_openai_text_assist_json_response([
             'ok' => false,
             'error' => t('admin.openai.error_image_input_disabled', 'Sending thumbnails to OpenAI is disabled for this account. Enable it in your profile first.'),

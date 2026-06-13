@@ -34,6 +34,21 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services;
+
+use PDO;
+use RuntimeException;
+use Throwable;
+use function Gallery\Core\absolute_public_url;
+use function Gallery\Core\db;
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\gallery_seo_title;
+use function Gallery\Core\image_alt_text;
+use function Gallery\Core\image_public_url;
+use function Gallery\Core\now_sql;
+use function Gallery\Core\public_base_url;
+use function Gallery\Core\slugify;
+
 /**
 Public URL path and slug helpers.
  *
@@ -44,6 +59,8 @@ Public URL path and slug helpers.
 
 /**
  * Return all public gallery sitemap URLs in filesystem order.
+ *
+ * @return array Structured result data for the caller.
  */
 function public_gallery_sitemap_entries(): array
 {
@@ -62,6 +79,8 @@ function public_gallery_sitemap_entries(): array
  * Each gallery entry may carry a conservative image sitemap payload so Google
  * Image Search can discover strong thumbnails, titles, captions, and canonical
  * image detail URLs without crawling every lightbox interaction first.
+ *
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_entries(): array
 {
@@ -93,6 +112,8 @@ function public_sitemap_entries(): array
 
 /**
  * Build the homepage sitemap entry using the newest public gallery timestamp.
+ *
+ * @return array Structured result data for the caller.
  */
 function public_homepage_sitemap_entry(): array
 {
@@ -113,6 +134,8 @@ function public_homepage_sitemap_entry(): array
 
 /**
  * Fetch public galleries in their stable path order.
+ *
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_gallery_rows(): array
 {
@@ -126,6 +149,10 @@ function public_sitemap_gallery_rows(): array
 
 /**
  * Fetch public images suitable for sitemap output for one gallery.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $limit Maximum number of items.
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
 {
@@ -138,7 +165,7 @@ function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
     $stmt->execute([(int) $gallery['id'], 'public']);
     $images = [];
     foreach ($stmt->fetchAll() as $image) {
-        if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+        if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
             continue;
         }
         $images[] = $image;
@@ -148,6 +175,10 @@ function public_sitemap_gallery_images(array $gallery, int $limit = 50): array
 
 /**
  * Convert public images into Google image sitemap payloads.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_image_payloads(array $gallery, array $images): array
 {
@@ -166,6 +197,11 @@ function public_sitemap_image_payloads(array $gallery, array $images): array
 
 /**
  * Build a meaningful image caption from the image description and gallery context.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $position Position value.
+ * @return string Text result for the caller.
  */
 function public_sitemap_image_caption(array $image, array $gallery, int $position): string
 {
@@ -182,6 +218,10 @@ function public_sitemap_image_caption(array $image, array $gallery, int $positio
 
 /**
  * Return the strongest known last modified value for one gallery URL.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $images Images value.
+ * @return ?string Text result for the caller.
  */
 function public_sitemap_gallery_last_modified(array $gallery, array $images): ?string
 {
@@ -205,6 +245,10 @@ function public_sitemap_gallery_last_modified(array $gallery, array $images): ?s
  * The visible image sitemap payload intentionally stays capped, but the gallery
  * URL lastmod should still reflect newer public photos that are not part of the
  * first payload set.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param array $seedImages Seed images value.
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_gallery_freshness_images(array $gallery, array $seedImages): array
 {
@@ -216,7 +260,7 @@ function public_sitemap_gallery_freshness_images(array $gallery, array $seedImag
         $stmt->execute([(int) $gallery['id'], 'public']);
         $images = [];
         foreach ($stmt->fetchAll() as $image) {
-            if (function_exists('image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
+            if (function_exists('Gallery\\Services\\image_nsfw_restricted') && image_nsfw_restricted($image, $gallery)) {
                 continue;
             }
             $images[] = $image;
@@ -229,6 +273,9 @@ function public_sitemap_gallery_freshness_images(array $gallery, array $seedImag
 
 /**
  * Return filesystem-derived dates that can make one gallery URL fresh.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_gallery_filesystem_dates(array $gallery): array
 {
@@ -245,6 +292,10 @@ function public_sitemap_gallery_filesystem_dates(array $gallery): array
 
 /**
  * Return the strongest known last modified value for one image URL.
+ *
+ * @param array $image Image row or image data.
+ * @param ?array $gallery Gallery row or gallery data.
+ * @return ?string Text result for the caller.
  */
 function public_sitemap_image_last_modified(array $image, ?array $gallery = null): ?string
 {
@@ -270,6 +321,9 @@ function public_sitemap_image_last_modified(array $image, ?array $gallery = null
 
 /**
  * Return a sitemap-compatible date for one filesystem path.
+ *
+ * @param string $path Filesystem path.
+ * @return ?string Text result for the caller.
  */
 function public_sitemap_file_lastmod(string $path): ?string
 {
@@ -285,6 +339,9 @@ function public_sitemap_file_lastmod(string $path): ?string
 
 /**
  * Return the newest valid date string from mixed SQL, ISO, and filesystem values.
+ *
+ * @param array $values Values value.
+ * @return ?string Text result for the caller.
  */
 function public_sitemap_newest_date(array $values): ?string
 {
@@ -310,6 +367,9 @@ function public_sitemap_newest_date(array $values): ?string
 
 /**
  * Format a SQL or ISO timestamp as an XML sitemap date.
+ *
+ * @param ?string $value Value to process.
+ * @return ?string Text result for the caller.
  */
 function public_sitemap_lastmod(?string $value): ?string
 {
@@ -326,6 +386,9 @@ function public_sitemap_lastmod(?string $value): ?string
 
 /**
  * Assign a light priority hint by gallery depth.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return string Text result for the caller.
  */
 function public_sitemap_gallery_priority(array $gallery): string
 {
@@ -345,6 +408,9 @@ function public_sitemap_gallery_priority(array $gallery): string
 
 /**
  * Normalize sitemap text fields and keep them compact.
+ *
+ * @param string $value Value to process.
+ * @return string Text result for the caller.
  */
 function public_sitemap_clean_text(string $value): string
 {
@@ -358,6 +424,9 @@ function public_sitemap_clean_text(string $value): string
 
 /**
  * Remove duplicate sitemap URLs while preserving their first occurrence.
+ *
+ * @param array $entries Entries value.
+ * @return array Structured result data for the caller.
  */
 function public_sitemap_unique_entries(array $entries): array
 {
@@ -376,6 +445,10 @@ function public_sitemap_unique_entries(array $entries): array
 
 /**
  * Resolve a clean public gallery or image path into database records.
+ *
+ * @param string $publicPath Public path filesystem path.
+ * @param bool $publicOnly Public only value.
+ * @return array Structured result data for the caller.
  */
 function resolve_public_gallery_path(string $publicPath, bool $publicOnly = true): array
 {
@@ -421,6 +494,9 @@ function resolve_public_gallery_path(string $publicPath, bool $publicOnly = true
 
 /**
  * Fetch one gallery by its preferred clean public URL path, with legacy fallbacks.
+ *
+ * @param string $publicPath Public path filesystem path.
+ * @return ?array Structured result data for the caller.
  */
 function find_gallery_by_public_path(string $publicPath): ?array
 {
@@ -467,6 +543,10 @@ function find_gallery_by_public_path(string $publicPath): ?array
 
 /**
  * Fetch one image by its clean slug inside a gallery, with legacy filename fallback.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $slug Slug value.
+ * @return ?array Structured result data for the caller.
  */
 function find_image_by_public_slug(int $galleryId, string $slug): ?array
 {
@@ -508,8 +588,12 @@ function find_image_by_public_slug(int $galleryId, string $slug): ?array
 
 /**
  * SQL condition used by public gallery listing queries.
+ *
+ * @param string $alias Alias value.
+ * @return string A hardcoded SQL fragment safe for interpolation — MUST NOT contain any user-derived values.
+ * @internal
  */
-function public_gallery_listing_condition(string $alias = 'g'): string
+function public_gallery_listing_sql_fragment(string $alias = 'g'): string
 {
     // $prefix stores an intermediate value used by the surrounding gallery workflow.
     $prefix = $alias . '.';
@@ -518,11 +602,14 @@ function public_gallery_listing_condition(string $alias = 'g'): string
     if (gallery_access_schema_ready()) {
         $sql .= ' AND ' . $prefix . "access_listing = 'listed'";
     }
+    // Contract: MUST only return hardcoded SQL with no user-derived values because this fragment is interpolated into prepared statement strings.
     return $sql;
 }
 
 /**
  * Check whether the clean public path database columns are available.
+ *
+ * @return bool True when the condition matches.
  */
 function public_path_schema_ready(): bool
 {
@@ -547,6 +634,8 @@ function public_path_schema_ready(): bool
 
 /**
  * Regenerate clean public gallery and image URL paths from current titles and filenames.
+ *
+ * @return array Structured result data for the caller.
  */
 function regenerate_public_paths(): array
 {
@@ -579,6 +668,9 @@ function regenerate_public_paths(): array
 
 /**
  * Regenerate clean URL path values for all galleries.
+ *
+ * @param PDO $pdo Database connection.
+ * @return int Integer result for the caller.
  */
 function regenerate_gallery_public_paths(PDO $pdo): int
 {
@@ -690,6 +782,9 @@ function regenerate_gallery_public_paths(PDO $pdo): int
 
 /**
  * Regenerate clean URL slug values for all images.
+ *
+ * @param PDO $pdo Database connection.
+ * @return int Integer result for the caller.
  */
 function regenerate_image_public_slugs(PDO $pdo): int
 {
@@ -732,6 +827,10 @@ function regenerate_image_public_slugs(PDO $pdo): int
 
 /**
  * Generate a unique clean slug within a caller-provided used-slug set.
+ *
+ * @param string $value Value to process.
+ * @param array $usedSlugs Used slugs value.
+ * @return string Text result for the caller.
  */
 function unique_public_slug_in_set(string $value, array $usedSlugs): string
 {

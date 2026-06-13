@@ -58,8 +58,6 @@ const responsiveThumbnailState = {
 
 /**
  * Releases responsive thumbnail listeners and observers before public gallery markup is replaced.
- *
- * @returns {void}
  */
 export function teardownResponsiveThumbnailSizes() {
     if (responsiveThumbnailState.frameId) {
@@ -96,7 +94,6 @@ export function teardownResponsiveThumbnailSizes() {
  * Schedules low-priority work without delaying the first gallery paint.
  *
  * @param {() => void} callback Work to run when the browser is idle enough.
- * @returns {void}
  */
 function scheduleIdleThumbnailWork(callback) {
     const delayMs = Number.parseInt(String(callback.progressiveDelayMs || '0'), 10);
@@ -126,7 +123,7 @@ function scheduleIdleThumbnailWork(callback) {
  * Parses a srcset attribute into ordered width candidates.
  *
  * @param {string} srcset Source-set string rendered by PHP.
- * @returns {{url: string, width: number}[]} Parsed candidates with numeric widths.
+ * @return {{url: string, width: number} []} Parsed candidates with numeric widths.
  */
 function parseThumbnailSrcsetCandidates(srcset) {
     return String(srcset || '')
@@ -150,7 +147,7 @@ function parseThumbnailSrcsetCandidates(srcset) {
  *
  * @param {string} srcset Source-set string rendered by PHP.
  * @param {number} requiredWidth Device-pixel width needed for a sharp thumbnail.
- * @returns {string} URL that should be decoded before the visible srcset changes.
+ * @return {string} URL that should be decoded before the visible srcset changes.
  */
 function selectThumbnailPreloadCandidate(srcset, requiredWidth) {
     const candidates = parseThumbnailSrcsetCandidates(srcset);
@@ -165,7 +162,7 @@ function selectThumbnailPreloadCandidate(srcset, requiredWidth) {
  * Decodes the likely replacement thumbnail before the visible image receives a larger srcset.
  *
  * @param {string} src URL selected from the larger progressive srcset.
- * @returns {Promise<boolean>} True when the browser has loaded or decoded the replacement.
+ * @return {Promise<boolean>} True when the browser has loaded or decoded the replacement.
  */
 function preloadProgressiveThumbnailCandidate(src) {
     if (!src) {
@@ -191,12 +188,16 @@ function preloadProgressiveThumbnailCandidate(src) {
  *
  * @param {HTMLImageElement} image Thumbnail image to upgrade.
  * @param {string} sizesValue Current measured sizes hint.
- * @returns {void}
  */
 function upgradeProgressiveThumbnail(image, sizesValue) {
     if (image.dataset.progressiveUpgraded === '1' || image.dataset.progressiveUpgradePending === '1') {
         return;
     }
+    /**
+     * Run upgrade.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const runUpgrade = () => {
         if (!image.isConnected || image.dataset.progressiveUpgraded === '1') {
             return;
@@ -254,7 +255,6 @@ function upgradeProgressiveThumbnail(image, sizesValue) {
  * Applies one measured CSS pixel width to an image and its source nodes.
  *
  * @param {HTMLImageElement} image Image element inside a public card.
- * @returns {void}
  */
 function updateImageSizes(image) {
     if (!responsiveThumbnailState.controller || responsiveThumbnailState.controller.signal.aborted || !image.isConnected) {
@@ -288,7 +288,6 @@ function updateImageSizes(image) {
  * Observes layout changes only for cards that have reached the viewport margin.
  *
  * @param {HTMLImageElement} image Thumbnail image that is now relevant.
- * @returns {void}
  */
 function activateResponsiveThumbnail(image) {
     if (!image.isConnected || responsiveThumbnailState.visibleImages.has(image)) {
@@ -312,8 +311,6 @@ function activateResponsiveThumbnail(image) {
 
 /**
  * Updates all activated thumbnails after layout changes.
- *
- * @returns {void}
  */
 function updateVisibleImageSizes() {
     if (!responsiveThumbnailState.controller || responsiveThumbnailState.controller.signal.aborted) {
@@ -330,8 +327,6 @@ function updateVisibleImageSizes() {
 
 /**
  * Schedules one thumbnail measurement pass after layout has settled.
- *
- * @returns {void}
  */
 function scheduleUpdateVisibleImageSizes() {
     if (!responsiveThumbnailState.controller || responsiveThumbnailState.controller.signal.aborted || responsiveThumbnailState.frameId) {
@@ -345,8 +340,6 @@ function scheduleUpdateVisibleImageSizes() {
 
 /**
  * Initializes progressive and responsive thumbnail sizing.
- *
- * @returns {void}
  */
 export function setupResponsiveThumbnailSizes() {
     teardownResponsiveThumbnailSizes();
@@ -383,6 +376,11 @@ export function setupResponsiveThumbnailSizes() {
     }
 
     const pending = thumbnails.slice();
+    /**
+     * Process batch.
+     *
+     * Used by browser-side gallery behavior.
+     */
     const processBatch = () => {
         if (controller.signal.aborted) {
             return;

@@ -57,8 +57,6 @@ class GalleryMigrationTimeoutError extends Error {
 
 /**
  * Initialize gallery migration forms.
- *
- * @returns {void}
  */
 export function setupAdminGalleryMigration() {
     document.addEventListener('submit', (event) => {
@@ -90,7 +88,6 @@ export function setupAdminGalleryMigration() {
  * Run one push or pull migration.
  *
  * @param {HTMLFormElement} form Migration form.
- * @returns {Promise<void>}
  */
 async function runGalleryMigration(form) {
     const mode = form.dataset.galleryMigrationMode || '';
@@ -187,7 +184,7 @@ async function runGalleryMigration(form) {
  * @param {number} index Zero-based asset index.
  * @param {number} total Total asset count.
  * @param {number} reconnectSeconds Request refresh interval.
- * @returns {Promise<Object<string, *>>} Transfer or status response.
+ * @return {Promise<Object<string, *>>} Transfer or status response.
  */
 async function transferAssetWithReconnect(form, mode, action, asset, jobId, index, total, reconnectSeconds) {
     let lastError = null;
@@ -229,7 +226,7 @@ async function transferAssetWithReconnect(form, mode, action, asset, jobId, inde
  * @param {string} jobId Migration job id.
  * @param {Object<string, *>} manifestResult Manifest response.
  * @param {number} reconnectSeconds Request refresh interval.
- * @returns {Promise<Set<string>>} Already received asset keys.
+ * @return {Promise<Set<string>>} Already received asset keys.
  */
 async function loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, reconnectSeconds) {
     const keys = new Set();
@@ -254,7 +251,7 @@ async function loadInitialReceivedAssetKeys(form, mode, jobId, manifestResult, r
  * @param {Object<string, *>} asset Manifest asset.
  * @param {string} jobId Migration job id.
  * @param {number} reconnectSeconds Request refresh interval.
- * @returns {Promise<Object<string, *>>} Status response.
+ * @return {Promise<Object<string, *>>} Status response.
  */
 async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSeconds) {
     let lastStatus = null;
@@ -291,7 +288,7 @@ async function confirmAssetOnReconnect(form, mode, asset, jobId, reconnectSecond
  * @param {string} jobId Migration job id.
  * @param {Object<string, *>|null} asset Optional asset to check.
  * @param {number} reconnectSeconds Request refresh interval.
- * @returns {Promise<Object<string, *>>} Status response.
+ * @return {Promise<Object<string, *>>} Status response.
  */
 async function requestMigrationStatus(form, mode, jobId, asset, reconnectSeconds) {
     const action = mode === 'source_push' ? 'push_status' : 'pull_status';
@@ -305,8 +302,8 @@ async function requestMigrationStatus(form, mode, jobId, asset, reconnectSeconds
  * @param {HTMLFormElement} form Migration form.
  * @param {string} action Server action.
  * @param {Object<string, string|number>} extraFields Additional fields.
- * @param {{timeoutSeconds?: number}} options Request options.
- * @returns {Promise<Object<string, *>>} JSON response.
+ * @param {object} options Optional behavior flags.
+ * @return {Promise<Object<string, *>>} JSON response.
  */
 async function postMigrationStep(form, action, extraFields, options = {}) {
     const root = form.closest('[data-gallery-migration]');
@@ -357,7 +354,7 @@ async function postMigrationStep(form, action, extraFields, options = {}) {
  *
  * @param {Object<string, *>} asset Manifest asset.
  * @param {string} jobId Migration job id.
- * @returns {Object<string, string|number>} Request fields.
+ * @return {Object<string, string|number>} Request fields.
  */
 function assetFields(asset, jobId) {
     return {
@@ -375,7 +372,6 @@ function assetFields(asset, jobId) {
  *
  * @param {Object<string, *>|null|undefined} status Status payload.
  * @param {Set<string>} keys Mutable destination set.
- * @returns {void}
  */
 function collectReceivedAssetKeys(status, keys) {
     if (!status || typeof status !== 'object' || !Array.isArray(status.received_asset_keys)) {
@@ -394,7 +390,7 @@ function collectReceivedAssetKeys(status, keys) {
  * Return a readable label for one asset.
  *
  * @param {Object<string, *>} asset Manifest asset.
- * @returns {string} Label.
+ * @return {string} Label.
  */
 function assetLabel(asset) {
     const label = String(asset.label || asset.relative_path || asset.filename || asset.kind || i18n('admin.gallery_migration.asset_fallback', 'asset'));
@@ -411,7 +407,7 @@ function assetLabel(asset) {
  * Return a compatibility status message.
  *
  * @param {Object<string, *>|null} compatibility Compatibility payload.
- * @returns {string} Readable message.
+ * @return {string} Readable message.
  */
 function versionMessage(compatibility) {
     if (!compatibility || typeof compatibility !== 'object') {
@@ -424,7 +420,7 @@ function versionMessage(compatibility) {
  * Return the configured reconnect interval for one form.
  *
  * @param {HTMLFormElement} form Migration form.
- * @returns {number} Seconds.
+ * @return {number} Seconds.
  */
 function getReconnectSeconds(form) {
     const control = form.elements.namedItem('reconnect_seconds');
@@ -439,7 +435,7 @@ function getReconnectSeconds(form) {
  * Clamp reconnect seconds to a safe browser-side range.
  *
  * @param {number} value User-entered seconds.
- * @returns {number} Safe seconds.
+ * @return {number} Safe seconds.
  */
 function clampReconnectSeconds(value) {
     if (!Number.isFinite(value)) {
@@ -452,7 +448,7 @@ function clampReconnectSeconds(value) {
  * Wait for a small delay between reconnect status probes.
  *
  * @param {number} milliseconds Delay length.
- * @returns {Promise<void>} Resolves after the delay.
+ * @return {Promise<void>} Resolves after the delay.
  */
 function sleep(milliseconds) {
     return new Promise((resolve) => {
@@ -466,7 +462,6 @@ function sleep(milliseconds) {
  * @param {HTMLFormElement} form Migration form.
  * @param {number} percent Percentage.
  * @param {string} text Visible text.
- * @returns {void}
  */
 function updateMigrationProgress(form, percent, text) {
     const progress = form.querySelector('[data-gallery-migration-progress]');
@@ -489,7 +484,6 @@ function updateMigrationProgress(form, percent, text) {
  *
  * @param {HTMLFormElement} form Migration form.
  * @param {string} text Log line.
- * @returns {void}
  */
 function appendMigrationLog(form, text) {
     const log = form.querySelector('[data-gallery-migration-log]');
@@ -505,7 +499,6 @@ function appendMigrationLog(form, text) {
  * Clear the visible log.
  *
  * @param {HTMLFormElement} form Migration form.
- * @returns {void}
  */
 function clearMigrationLog(form) {
     const log = form.querySelector('[data-gallery-migration-log]');
