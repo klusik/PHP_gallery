@@ -267,6 +267,7 @@ function cms_run(): void
         'admin_save_gallery_collapse' => '\\Gallery\\Controllers\\cms_admin_save_gallery_collapse',
         'admin_reorder_galleries' => '\\Gallery\\Controllers\\cms_admin_reorder_galleries',
         'admin_reorder_public_galleries' => '\\Gallery\\Controllers\\cms_admin_reorder_public_galleries',
+        'admin_sort_public_subgalleries_by_date' => '\\Gallery\\Controllers\\cms_admin_sort_public_subgalleries_by_date',
         'admin_scan_images' => '\\Gallery\\Controllers\\cms_admin_scan_images',
         'admin_simbrief_description' => '\\Gallery\\Controllers\\cms_admin_simbrief_description',
         'admin_openai_text_assist' => '\\Gallery\\Controllers\\cms_admin_openai_text_assist',

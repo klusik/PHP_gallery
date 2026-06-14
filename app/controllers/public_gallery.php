@@ -44,6 +44,7 @@ use function Gallery\Core\append_cms_footer_script;
 use function Gallery\Core\append_cms_head_extras;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
+use function Gallery\Core\flash_message;
 use function Gallery\Core\css_value;
 use function Gallery\Core\current_user;
 use function Gallery\Core\db;
@@ -87,9 +88,12 @@ use function Gallery\Services\gallery_effective_count_badge_enabled;
 use function Gallery\Services\gallery_effective_description_layout;
 use function Gallery\Services\gallery_effective_grid_settings;
 use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
+use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\gallery_effective_visibility;
 use function Gallery\Services\gallery_has_map_payload;
 use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
+use function Gallery\Services\gallery_sort_row_has_start_date;
+use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
 use function Gallery\Services\gallery_lightbox_excludes_restricted_nsfw;
 use function Gallery\Services\gallery_lightbox_fetch_images;
 use function Gallery\Services\gallery_lightbox_image_position;
@@ -385,7 +389,7 @@ function cms_gallery(): void
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
     // $adminSubgalleryDateSortEnabled stores whether this viewer may use the date sort overlay.
     $adminSubgalleryDateSortEnabled = current_user() && !admin_anonymous_preview_active();
-    // $subgalleryDateSortMode stores the requested temporary date sort mode for this page.
+    // $subgalleryDateSortMode stores the requested preview date sort mode for this page.
     $subgalleryDateSortMode = $adminSubgalleryDateSortEnabled ? public_subgallery_date_sort_mode() : '';
     // $datedSubgalleryCount stores how many direct children have a start date available for sorting.
     $datedSubgalleryCount = public_count_dated_subgalleries($children);
@@ -467,6 +471,11 @@ function cms_gallery(): void
     }
 
     render_header((string) $seo['title'], $gallery, $publicOnly);
+    // $publicNotice stores one-time admin feedback for public-page actions.
+    $publicNotice = (string) flash_message('public_notice');
+    if ($publicNotice !== '') {
+        echo '<div class="notice">' . e($publicNotice) . '</div>';
+    }
     echo '<section class="hero">';
     // Keep the title, date, description, and breadcrumbs in one primary column so long descriptions do not become a narrow middle strip.
     echo '<div class="hero-topbar">';
@@ -673,7 +682,7 @@ function public_subgallery_date_sort_mode(): string
  */
 function public_subgallery_has_start_date(array $gallery): bool
 {
-    return trim((string) ($gallery['gallery_date'] ?? '')) !== '';
+    return gallery_sort_row_has_start_date($gallery);
 }
 
 /**
@@ -684,14 +693,7 @@ function public_subgallery_has_start_date(array $gallery): bool
  */
 function public_count_dated_subgalleries(array $children): int
 {
-    // $count stores the number of sortable dated child galleries.
-    $count = 0;
-    foreach ($children as $child) {
-        if (is_array($child) && public_subgallery_has_start_date($child)) {
-            $count++;
-        }
-    }
-    return $count;
+    return gallery_count_dated_rows($children);
 }
 
 /**
@@ -707,53 +709,11 @@ function public_count_dated_subgalleries(array $children): int
  */
 function public_sort_subgalleries_by_date(array $children, string $mode): array
 {
-    // $datedRows stores sortable gallery rows keyed by their original index.
-    $datedRows = [];
-    foreach ($children as $index => $child) {
-        if (is_array($child) && public_subgallery_has_start_date($child)) {
-            $datedRows[(int) $index] = $child;
-        }
-    }
-
-    if (count($datedRows) < 2) {
-        return $children;
-    }
-
-    // $datedPositions stores the original visible slots occupied by dated rows.
-    $datedPositions = array_keys($datedRows);
-    usort($datedRows, static function (array $left, array $right) use ($mode): int {
-        // $leftDate stores the normalized start date used as the primary key.
-        $leftDate = (string) ($left['gallery_date'] ?? '');
-        // $rightDate stores the normalized start date used as the primary key.
-        $rightDate = (string) ($right['gallery_date'] ?? '');
-        // $dateComparison stores ascending date comparison before optional reversal.
-        $dateComparison = strcmp($leftDate, $rightDate);
-        if ($dateComparison === 0) {
-            // $orderComparison keeps date ties deterministic and close to normal gallery order.
-            $orderComparison = ((int) ($left['sort_order'] ?? 0)) <=> ((int) ($right['sort_order'] ?? 0));
-            if ($orderComparison === 0) {
-                $orderComparison = strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
-            }
-            if ($orderComparison === 0) {
-                $orderComparison = ((int) ($left['id'] ?? 0)) <=> ((int) ($right['id'] ?? 0));
-            }
-            return $orderComparison;
-        }
-        return $mode === 'desc' ? -$dateComparison : $dateComparison;
-    });
-
-    // $sortedIndex stores the next dated row to inject back into a dated position.
-    $sortedIndex = 0;
-    foreach ($datedPositions as $index) {
-        $children[(int) $index] = $datedRows[$sortedIndex];
-        $sortedIndex++;
-    }
-
-    return array_values($children);
+    return gallery_sort_rows_by_date_preserving_undated_positions($children, $mode);
 }
 
 /**
- * Build a public gallery URL for changing the temporary subgallery date sort.
+ * Build a public gallery URL for changing the preview subgallery date sort.
  *
  * @param array $gallery Gallery row or gallery data.
  * @param string $mode Sort mode: asc, desc, or an empty string for default order.
@@ -780,7 +740,7 @@ function public_subgallery_date_sort_url(array $gallery, string $mode): string
 }
 
 /**
- * Render the admin-only temporary subgallery date sort toolbar.
+ * Render the admin-only subgallery date sort preview and save toolbar.
  *
  * @param array $gallery Gallery row or gallery data.
  * @param string $activeMode Active sort mode: asc, desc, or an empty string.
@@ -807,11 +767,18 @@ function render_public_subgallery_date_sort_toolbar(array $gallery, string $acti
     $descCurrent = $activeMode === 'desc' ? ' aria-current="true"' : '';
 
     echo '<div class="public-subgallery-sort-toolbar" aria-label="' . e(t('public.subgallery_sort.label', 'Subgallery sort')) . '">';
-    echo '<div><strong>' . e(t('public.subgallery_sort.title', 'Sort subgalleries by date')) . '</strong><p>' . e(t('public.subgallery_sort.help', 'Only subgalleries with a From date participate. Undated cards keep their current positions. This changes only the current view.')) . '</p></div>';
+    echo '<div><strong>' . e(t('public.subgallery_sort.title', 'Sort subgalleries by date')) . '</strong><p>' . e(t('public.subgallery_sort.help', 'Only subgalleries with a From date participate. Undated cards keep their current positions. Preview the date order, then save it to update the real order for everyone.')) . '</p></div>';
     echo '<div class="public-subgallery-sort-actions">';
     echo '<a class="' . e($defaultClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, '')) . '"' . $defaultCurrent . '>' . e(t('public.subgallery_sort.default', 'Default order')) . '</a>';
     echo '<a class="' . e($ascClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'asc')) . '"' . $ascCurrent . '>' . e(t('public.subgallery_sort.asc', 'Oldest first')) . '</a>';
     echo '<a class="' . e($descClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'desc')) . '"' . $descCurrent . '>' . e(t('public.subgallery_sort.desc', 'Newest first')) . '</a>';
+    if (in_array($activeMode, ['asc', 'desc'], true)) {
+        echo '<form class="public-subgallery-sort-save-form" method="post" action="' . e(url_for('admin_sort_public_subgalleries_by_date')) . '">' . csrf_field();
+        echo '<input type="hidden" name="gallery_id" value="' . (int) $gallery['id'] . '">';
+        echo '<input type="hidden" name="sort_mode" value="' . e($activeMode) . '">';
+        echo '<button class="button public-subgallery-sort-save-button" type="submit">' . e(t('public.subgallery_sort.save_active', 'Save this order')) . '</button>';
+        echo '</form>';
+    }
     echo '</div>';
     echo '</div>';
 }
