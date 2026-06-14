@@ -1,5 +1,161 @@
 # Patch notes
 
+## Version 0.80.4
+
+Version 0.80.4 is a major feature release delivering a complete, production-ready browser-based upload system with integrated thumbnail rebuild, intelligent batch management, and smart asset versioning. This release moves image processing from the server to the browser, enabling faster uploads with real-time progress feedback, automatic recovery from failures, and seamless thumbnail generation.
+
+  ### Highlights
+
+  #### Complete browser-based upload system
+
+  - Images are processed entirely on the client side before upload to server.
+  - Drag-and-drop file selection with intuitive batch management UI.
+  - Real-time progress tracking throughout the upload pipeline.
+  - Automatic recovery from network interruptions and mid-flight failures.
+  - Intelligent batch handling with configurable size and timeout settings.
+  - Full EXIF metadata extraction in the browser before sending.
+
+  #### Integrated thumbnail rebuild during upload
+
+  - Thumbnails are automatically generated as images are uploaded.
+  - On-demand rebuild for specific images or entire galleries.
+  - Configurable rebuild behavior and settings in admin interface.
+  - Progress tracking shows thumbnail generation status in real time.
+  - Efficient cache invalidation prevents stale thumbnail delivery.
+
+  #### Smart cache versioning for media assets
+
+  - Media and thumbnail URLs now include automatic version tokens.
+  - Browser cache remains valid during normal use but auto-invalidates when files change.
+  - Files updated during uploads, renames, or rebuilds are fetched fresh.
+  - No manual cache busting required from users.
+  - Transparent versioning that doesn't break URL patterns.
+
+  #### Enhanced admin controls
+
+  - New browser upload settings panel for configuration.
+  - Visual upload progress with real-time event display.
+  - Detailed error messages and recovery options.
+  - Batch thumbnail rebuild interface with progress visualization.
+  - Network status awareness with reconnection support.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Created `app/services/browser_uploads.php` (1459 lines):
+    * Complete upload workflow orchestration
+    * Session and batch tracking with safety mechanisms
+    * Image validation and format detection
+    * Progress event management and reporting
+    * Retry recovery and idempotency handling
+    * Integration with experimental upload system
+
+  - Created `app/services/browser_thumbnail_rebuild.php` (786 lines):
+    * Integrated thumbnail rebuild during upload processing
+    * On-demand rebuild for images and galleries
+    * Settings management for rebuild behavior
+    * Progress tracking for rebuild operations
+    * Cache invalidation and maintenance
+    * Async rebuild with fallback support
+
+  - Enhanced `app/helpers.php`:
+    * `image_public_asset_url_with_version()` - Append version to URLs
+    * `image_public_asset_version()` - Generate stable cache versions
+    * Updated `image_public_media_url()` for versioning
+    * Updated `image_public_thumbnail_url()` for versioning
+
+  - Updated controllers:
+    * `app/controllers/admin_uploads.php` - New browser upload endpoints
+    * `app/controllers/admin_thumbnails.php` - Rebuild administration
+
+  - Updated services:
+    * `app/services/thumbnail_bundles.php` - Derivative version handling
+    * `app/services/thumbnail_sources.php` - Build coordination
+    * Integrated thumbnail maintenance and metadata services
+
+  #### Database
+
+  - Added migration `202606100001_browser_client_upload_settings.php`:
+    * Settings table for client-side upload configuration
+    * Batch size, timeout, and retry parameters
+    * Per-gallery upload behavior customization
+
+  - Added migration `202606100002_browser_upload_batch_safety.php`:
+    * Safety markers and checkpoints for batch recovery
+    * Session tracking and idempotency markers
+    * Recovery tracking for failed uploads
+
+  - Added migration `202606100003_browser_thumbnail_rebuild_settings.php`:
+    * Configuration for automatic thumbnail rebuild
+    * Rebuild scheduling and priority settings
+    * Per-gallery rebuild preferences
+
+  #### Frontend
+
+  - Created `public/assets/gallery-modules/admin-browser-upload.js` (1172 lines):
+    * Complete upload UI with progress tracking
+    * Drag-and-drop file selection
+    * Batch management and queue visualization
+    * Real-time event display and error handling
+    * Settings panel for upload configuration
+    * Network status awareness
+
+  - Created `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js` (844 lines):
+    * UI for triggering rebuild operations
+    * Progress visualization for rebuild pipeline
+    * Settings management for rebuild preferences
+    * Batch rebuild operations
+    * Status reporting and error display
+
+  - Created `public/assets/gallery-modules/browser-image-worker.js` (986 lines):
+    * Browser-side image processing pipeline
+    * EXIF metadata extraction
+    * Image variant generation (thumbnails, previews)
+    * Format detection and validation
+    * Concurrent image processing coordination
+    * Memory-efficient handling of large files
+
+  - Enhanced `public/assets/gallery-modules/admin-side-panel.js`:
+    * Integration with upload and rebuild modules
+
+  - Enhanced `public/assets/gallery-modules/admin-thumbnail-progress.js`:
+    * Better progress visualization for rebuild operations
+
+  - Enhanced `public/assets/styles.css`:
+    * Styling for upload and rebuild UI components
+
+  #### Tests
+
+  - Added `tests/browser_upload_settings_test.php`:
+    * Validation of upload settings management
+    * Configuration storage and retrieval tests
+
+  #### Documentation
+
+  - Updated `ARCHITECTURE.md` with browser upload architecture details.
+  - Updated `CODEMAP.md` with new upload-related files.
+  - Updated `DATABASE.md` documenting new migrations.
+  - Updated `docblock_manifest.txt` for new services.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Transparent asset versioning ensures fresh media and thumbnails.
+  - No browser cache issues after gallery updates.
+  - Gallery content always displays correctly without manual cache clearing.
+
+  #### For administrators
+
+  - Upload large image collections with real-time progress feedback.
+  - Browser processes images efficiently, reducing server load.
+  - Automatic thumbnail generation as part of upload pipeline.
+  - On-demand thumbnail rebuild for individual images or galleries.
+  - Intelligent recovery from network interruptions.
+  - Upload configuration available in admin settings.
+  - Detailed progress visualization throughout upload and rebuild.
+
 ## Version 0.80.3
 
 Version 0.80.3 improves upload robustness by automatically detecting and correcting file format mismatches. Instead of blocking uploads due to incorrect file extensions, the system now detects the actual file format and corrects the extension, reducing upload failures and improving user experience when importing files from other sources.
