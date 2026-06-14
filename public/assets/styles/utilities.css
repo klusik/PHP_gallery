@@ -63,6 +63,14 @@
     color: #fffdf8;
 }
 
+.public-subgallery-sort-save-form {
+    margin: 0;
+}
+
+.public-subgallery-sort-save-button {
+    white-space: nowrap;
+}
+
 .public-reorder-status {
     flex: 0 0 auto;
     padding: 0.35rem 0.55rem;

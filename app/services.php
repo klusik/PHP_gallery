@@ -71,6 +71,8 @@ require_once __DIR__ . '/services/gallery_description_layout.php';
 require_once __DIR__ . '/services/gallery_count_badges.php';
 // Load optional manual gallery-date helpers before admin and public gallery rendering.
 require_once __DIR__ . '/services/gallery_dates.php';
+// Load reusable gallery ordering helpers before public and admin lists render or persist order.
+require_once __DIR__ . '/services/gallery_sorting.php';
 // Load gallery-grid inheritance helpers after pagination dimension helpers are available.
 require_once __DIR__ . '/services/gallery_grid.php';
 // Load favorite gallery shortcuts before public and admin headers render navigation.

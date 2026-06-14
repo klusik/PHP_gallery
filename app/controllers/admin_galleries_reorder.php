@@ -38,14 +38,19 @@ namespace Gallery\Controllers;
 
 use Throwable;
 use function Gallery\Core\db;
+use function Gallery\Core\flash_message;
+use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\redirect_to;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\child_galleries;
+use function Gallery\Services\gallery_count_dated_rows;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_folder_name_from_path;
 use function Gallery\Services\gallery_path_diagnostics;
+use function Gallery\Services\gallery_sort_rows_by_date_preserving_undated_positions;
 use function Gallery\Services\move_gallery_folder_to_parent;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\regenerate_public_paths;
@@ -511,6 +516,87 @@ function admin_decode_reorder_id_list(string $rawOrder): ?array
     }
 
     return $submittedIds;
+}
+
+
+/**
+ * Persist a date-based order for direct subgalleries from a public gallery page.
+ *
+ * The endpoint is admin-only and intentionally keeps parent_id unchanged. It
+ * rewrites sort_order for the complete direct-child set of the current gallery,
+ * using the same date-sort algorithm as the public preview: only rows with a
+ * filled start date move, and undated rows keep their current positions.
+ */
+function cms_admin_sort_public_subgalleries_by_date(): void
+{
+    require_admin();
+    verify_csrf();
+
+    // $parentGalleryId stores the gallery whose direct child order is being normalized by date.
+    $parentGalleryId = (int) ($_POST['gallery_id'] ?? 0);
+    // $sortMode stores the requested date direction accepted from the admin toolbar.
+    $sortMode = strtolower(trim((string) ($_POST['sort_mode'] ?? '')));
+    // $parentGallery stores the parent gallery row used for redirect and ownership validation.
+    $parentGallery = find_gallery($parentGalleryId);
+    if (!$parentGallery) {
+        cms_not_found();
+        return;
+    }
+
+    if (!in_array($sortMode, ['asc', 'desc'], true)) {
+        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_invalid', 'Choose a valid date sort direction before saving.'));
+        redirect_to(gallery_public_url($parentGallery));
+    }
+
+    // $currentRows stores every direct child currently owned by this parent gallery.
+    $currentRows = child_galleries($parentGalleryId, false);
+    // $datedCount stores how many children can participate in the persistent date sort.
+    $datedCount = gallery_count_dated_rows($currentRows);
+    if ($datedCount < 2) {
+        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_not_enough', 'At least two direct subgalleries with a filled From date are required before date sorting can be saved.'));
+        redirect_to(gallery_public_url($parentGallery));
+    }
+
+    // $sortedRows stores the final direct-child order after date sorting only the dated positions.
+    $sortedRows = gallery_sort_rows_by_date_preserving_undated_positions($currentRows, $sortMode);
+    // $sortedIds stores the direct-child ids in the order that will become the real public order.
+    $sortedIds = array_map(static fn (array $gallery): int => (int) $gallery['id'], $sortedRows);
+
+    // $pdo stores the active database connection used for the atomic order update.
+    $pdo = db();
+    // $now stores one timestamp shared by all rows touched by this date-sort save.
+    $now = now_sql();
+    try {
+        $pdo->beginTransaction();
+        // $stmt stores the prepared update reused for each direct child gallery.
+        $stmt = $pdo->prepare('UPDATE galleries SET sort_order = ?, updated_at = ? WHERE id = ? AND parent_id = ?');
+        foreach ($sortedIds as $index => $galleryId) {
+            // $sortOrder stores a normalized sibling position after the persistent date sort.
+            $sortOrder = ($index + 1) * 10;
+            $stmt->execute([$sortOrder, $now, $galleryId, $parentGalleryId]);
+        }
+        $pdo->commit();
+
+        admin_log_event('info', 'gallery.public_subgallery_date_sorted', t('admin.galleries.log_public_subgallery_date_sorted', 'Public subgalleries were sorted by date.'), [
+            'parent_gallery_id' => $parentGalleryId,
+            'sort_mode' => $sortMode,
+            'dated_count' => $datedCount,
+            'sorted_gallery_ids' => $sortedIds,
+        ]);
+        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_saved', 'Subgallery date order was saved. This is now the real order for all visitors.'));
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        admin_log_event('error', 'gallery.public_subgallery_date_sort_failed', t('admin.galleries.log_public_subgallery_date_sort_failed', 'Public subgallery date sort failed.'), [
+            'parent_gallery_id' => $parentGalleryId,
+            'sort_mode' => $sortMode,
+            'error' => $exception->getMessage(),
+        ]);
+        flash_message('public_notice', t('admin.galleries.public_subgallery_date_sort_failed_with_error', 'Subgallery date order could not be saved: {error}', ['error' => $exception->getMessage()]));
+    }
+
+    redirect_to(gallery_public_url($parentGallery));
 }
 
 /**
