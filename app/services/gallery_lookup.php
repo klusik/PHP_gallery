@@ -580,8 +580,11 @@ function find_image_by_path(int $galleryId, string $relativePath): ?array
     $stmt->execute([$galleryId, hash('sha256', $normalizedPath)]);
     // Variable $image stores this steps working value.
     $image = $stmt->fetch();
-    $cache[$cacheKey] = $image ?: null;
-    return $cache[$cacheKey];
+    if (is_array($image)) {
+        $cache[$cacheKey] = $image;
+        return $cache[$cacheKey];
+    }
+    return null;
 }
 
 /**

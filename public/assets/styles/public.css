@@ -642,6 +642,26 @@ td {
 .thumbnail-progress p {
     margin: 0.35rem 0 0;
 }
+.upload-progress-metrics {
+    font-size: 0.92rem;
+}
+.upload-progress-log {
+    max-height: 11rem;
+    margin-top: 0.55rem;
+    padding: 0.55rem 0.65rem;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--field);
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.upload-progress-log div + div {
+    margin-top: 0.2rem;
+}
 
 .tree-toggle,
 .tree-spacer {

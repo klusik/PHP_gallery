@@ -198,7 +198,7 @@ export function createThumbnailProgress() {
     const progress = document.createElement('div');
     progress.className = 'thumbnail-progress';
     progress.dataset.thumbnailProgress = 'true';
-    progress.innerHTML = '<progress class="thumbnail-progress-bar" data-thumbnail-progress-fill value="0" max="100"></progress><p class="muted" data-thumbnail-progress-text></p>';
+    progress.innerHTML = '<progress class="thumbnail-progress-bar" data-thumbnail-progress-fill value="0" max="100"></progress><p class="muted" data-thumbnail-progress-text></p><p class="muted upload-progress-metrics" data-upload-progress-metrics hidden></p><div class="upload-progress-log" data-upload-progress-log hidden></div>';
     return progress;
 }
 
@@ -238,6 +238,56 @@ export function updateBasicProgress(progress, percent, label) {
     progress.hidden = false;
     progress.querySelector('[data-thumbnail-progress-fill]').value = Math.max(0, Math.min(100, percent));
     progress.querySelector('[data-thumbnail-progress-text]').textContent = label;
+}
+
+
+// Function `updateUploadProgressMetrics` executes this focused behavior.
+/**
+ * Update detailed upload counters under the main progress label.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} progress Progress element value.
+ * @param {string} label Metrics label.
+ */
+export function updateUploadProgressMetrics(progress, label) {
+    if (!(progress instanceof HTMLElement)) {
+        return;
+    }
+    const metrics = progress.querySelector('[data-upload-progress-metrics]');
+    if (!(metrics instanceof HTMLElement)) {
+        return;
+    }
+    metrics.hidden = String(label || '').trim() === '';
+    metrics.textContent = String(label || '');
+}
+
+// Function `appendUploadProgressLog` executes this focused behavior.
+/**
+ * Append one timestamped line to the upload progress log.
+ *
+ * Used by browser-side gallery behavior.
+ *
+ * @param {*} progress Progress element value.
+ * @param {string} message Log message.
+ */
+export function appendUploadProgressLog(progress, message) {
+    if (!(progress instanceof HTMLElement)) {
+        return;
+    }
+    const log = progress.querySelector('[data-upload-progress-log]');
+    if (!(log instanceof HTMLElement)) {
+        return;
+    }
+    const line = document.createElement('div');
+    const timestamp = new Date().toLocaleTimeString();
+    line.textContent = `[${timestamp}] ${message}`;
+    log.append(line);
+    log.hidden = false;
+    while (log.children.length > 80) {
+        log.firstElementChild?.remove();
+    }
+    log.scrollTop = log.scrollHeight;
 }
 
 // Function `setGalleryRowHiddenReason` executes this focused behavior.

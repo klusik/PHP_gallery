@@ -1123,8 +1123,12 @@ function media_renamer_execute_plan(array $plan): array
     if (function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
-    if (function_exists('Gallery\\Services\\regenerate_public_paths') && public_path_schema_ready()) {
-        regenerate_public_paths();
+    if (public_path_schema_ready()) {
+        if (function_exists('Gallery\\Services\\regenerate_gallery_image_public_slugs')) {
+            regenerate_gallery_image_public_slugs($galleryId);
+        } elseif (function_exists('Gallery\\Services\\regenerate_public_paths')) {
+            regenerate_public_paths();
+        }
     }
     $updatedGallery = find_gallery($galleryId, true);
     if ($updatedGallery && function_exists('Gallery\\Services\\write_gallery_sidecar')) {

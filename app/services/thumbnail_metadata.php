@@ -843,6 +843,105 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
 }
 
 /**
+ * Store metadata for one browser-prepared thumbnail without re-decoding the file.
+ *
+ * The experimental upload worker already decoded the source image and generated
+ * the thumbnail dimensions. Re-reading every prepared thumbnail with
+ * getimagesize() on shared hosting wastes CPU, so this path records the trusted
+ * admin-upload manifest metadata after the file has been written.
+ *
+ * @param array $image Image row or image data.
+ * @param array $gallery Gallery row or gallery data.
+ * @param int $size Size value.
+ * @param string $format Format value.
+ * @param string $thumbnailPath Thumbnail path filesystem path.
+ * @param int $width Browser-reported thumbnail width.
+ * @param int $height Browser-reported thumbnail height.
+ * @return array<string mixed>.
+ */
+function thumbnail_metadata_record_prepared_variant(array $image, array $gallery, int $size, string $format, string $thumbnailPath, int $width, int $height): array
+{
+    if (!thumbnail_metadata_schema_ready()) {
+        return ['status' => 'metadata_unavailable', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
+    if (!in_array($format, ['jpg', 'webp'], true) || !in_array($size, thumbnail_sizes(), true)) {
+        return ['status' => 'unsupported_variant', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
+    if (!is_file($thumbnailPath)) {
+        thumbnail_metadata_delete_variant($image, $size, $format);
+        return ['status' => 'missing', 'valid' => false, 'deleted' => false, 'metadata_written' => false];
+    }
+
+    $width = max(1, $width);
+    $height = max(1, $height);
+    $longSide = max($width, $height);
+    $valid = $longSide <= max(1, $size);
+    $status = $valid ? 'valid' : 'invalid';
+    $reason = $valid ? 'ok' : 'manifest_geometry_exceeds_size';
+    $now = now_sql();
+
+    $variantColumns = [
+        'image_id' => (int) ($image['id'] ?? 0),
+        'size_px' => $size,
+        'format' => $format,
+        'width' => $width,
+        'height' => $height,
+        'file_size' => (int) (filesize($thumbnailPath) ?: 0),
+        'modified_at' => thumbnail_metadata_datetime_from_timestamp((int) (filemtime($thumbnailPath) ?: time())),
+        'status' => $status,
+        'status_reason' => $reason,
+        'checked_at' => $now,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
+
+    if (thumbnail_metadata_variant_column_exists('derivative_version')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 3, true),
+            ['derivative_version' => max(1, (int) ($image['thumbnail_derivative_version'] ?? 1))],
+            array_slice($variantColumns, 3, null, true)
+        );
+    }
+
+    if (thumbnail_metadata_variant_column_exists('gallery_id')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 1, true),
+            ['gallery_id' => (int) ($gallery['id'] ?? ($image['gallery_id'] ?? 0))],
+            array_slice($variantColumns, 1, null, true)
+        );
+    }
+    if (thumbnail_metadata_variant_column_exists('thumbnail_rel_path')) {
+        $variantColumns = array_merge(
+            array_slice($variantColumns, 0, 5, true),
+            ['thumbnail_rel_path' => thumbnail_metadata_relative_path($image, $size, $format)],
+            array_slice($variantColumns, 5, null, true)
+        );
+    }
+
+    $columnNames = array_keys($variantColumns);
+    $insertColumns = implode(', ', array_map(static fn (string $column): string => '`' . $column . '`', $columnNames));
+    $placeholders = implode(', ', array_fill(0, count($columnNames), '?'));
+    $updateColumns = array_values(array_filter($columnNames, static fn (string $column): bool => !in_array($column, ['image_id', 'size_px', 'format', 'created_at'], true)));
+    $updates = implode(', ', array_map(static fn (string $column): string => '`' . $column . '` = VALUES(`' . $column . '`)', $updateColumns));
+
+    try {
+        $stmt = db()->prepare('INSERT INTO image_thumbnail_variants (' . $insertColumns . ') VALUES (' . $placeholders . ') ON DUPLICATE KEY UPDATE ' . $updates);
+        $stmt->execute(array_values($variantColumns));
+    } catch (Throwable $exception) {
+        return [
+            'status' => $status,
+            'valid' => $valid,
+            'deleted' => false,
+            'reason' => $reason,
+            'metadata_written' => false,
+            'metadata_error' => $exception->getMessage(),
+        ];
+    }
+
+    return ['status' => $status, 'valid' => $valid, 'deleted' => false, 'reason' => $reason, 'metadata_written' => true, 'source_synced' => false];
+}
+
+/**
  * Refresh metadata for all existing thumbnail files belonging to one image.
  *
  * @param array $image Image row or image data.

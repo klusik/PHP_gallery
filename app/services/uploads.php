@@ -115,9 +115,30 @@ function gallery_upload_entries(?array $files): array
     if (!$entries) {
         throw new RuntimeException(t('upload.error.choose_image', 'Choose at least one image to upload.'));
     }
+    usort($entries, static function (array $left, array $right): int {
+        return gallery_upload_entry_order_compare((string) ($left['name'] ?? ''), (string) ($right['name'] ?? ''));
+    });
     return $entries;
 }
 
+
+/**
+ * Compare two uploaded filenames using the same natural order used by the browser.
+ *
+ * @param string $left Left uploaded filename.
+ * @param string $right Right uploaded filename.
+ * @return int Sort comparison result.
+ */
+function gallery_upload_entry_order_compare(string $left, string $right): int
+{
+    $left = str_replace('\\', '/', trim($left));
+    $right = str_replace('\\', '/', trim($right));
+    $comparison = strnatcasecmp($left, $right);
+    if ($comparison !== 0) {
+        return $comparison;
+    }
+    return strcmp($left, $right);
+}
 
 /**
  * Return upload entries when files were provided, or an empty list when the file picker was left empty.
@@ -773,6 +794,48 @@ function unique_gallery_upload_target(array $gallery, string $filename): array
     return [$candidate, $galleryRoot . DIRECTORY_SEPARATOR . $candidate];
 }
 
+
+/**
+ * Return a readable byte count for server-side upload progress events.
+ *
+ * @param int $bytes Byte count value.
+ * @return string Text result for the caller.
+ */
+function gallery_upload_format_bytes(int $bytes): string
+{
+    $bytes = max(0, $bytes);
+    if ($bytes < 1024) {
+        return $bytes . ' B';
+    }
+    $units = ['KB', 'MB', 'GB', 'TB'];
+    $value = $bytes / 1024;
+    $unitIndex = 0;
+    while ($value >= 1024 && $unitIndex < count($units) - 1) {
+        $value /= 1024;
+        $unitIndex++;
+    }
+    $decimals = $value >= 100 || $unitIndex === 0 ? 0 : 1;
+    return number_format($value, $decimals, '.', '') . ' ' . $units[$unitIndex];
+}
+
+/**
+ * Create one upload progress event for the browser mini log.
+ *
+ * @param float $startedAt Request start timestamp.
+ * @param string $message Event message.
+ * @param array $context Event context.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function gallery_upload_progress_event(float $startedAt, string $message, array $context = []): array
+{
+    return [
+        'time' => date('H:i:s'),
+        'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        'message' => $message,
+        'context' => $context,
+    ];
+}
+
 /**
  * Handles store uploaded gallery images logic for the gallery application.
  *
@@ -783,6 +846,8 @@ function unique_gallery_upload_target(array $gallery, string $filename): array
  */
 function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $renameOnUpload = null): array
 {
+    $startedAt = microtime(true);
+    $events = [gallery_upload_progress_event($startedAt, 'PHP accepted classic upload request with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.')];
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
     $gallery = find_gallery($galleryId);
     if (!$gallery) {
@@ -796,18 +861,24 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
 
     // $stored stores the temporary safe filenames first used to accept the uploaded originals.
     $stored = [];
+    $storedBytes = 0;
     foreach ($entries as $entry) {
         [$filename, $target] = unique_gallery_upload_target($gallery, (string) $entry['name']);
         if (!move_uploaded_file((string) $entry['tmp_name'], $target)) {
             throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
         }
         $stored[] = $filename;
+        $storedBytes += is_file($target) ? (int) (@filesize($target) ?: 0) : (int) ($entry['size'] ?? 0);
     }
     // $uploadedCount stores the number of files accepted on disk before optional renaming changes filenames.
     $uploadedCount = count($stored);
+    $events[] = gallery_upload_progress_event($startedAt, 'Moved uploaded source file(s) into the gallery folder, ' . $uploadedCount . ' file(s), ' . gallery_upload_format_bytes($storedBytes) . '.');
 
-    // $changed stores an intermediate value used by the surrounding gallery workflow.
-    $changed = scan_gallery_images($galleryId);
+    // $changed stores source rows reconciled for the files accepted in this request only.
+    $changed = function_exists('Gallery\Services\scan_gallery_selected_uploaded_images')
+        ? scan_gallery_selected_uploaded_images($galleryId, $stored)
+        : scan_gallery_images($galleryId);
+    $events[] = gallery_upload_progress_event($startedAt, 'Indexed uploaded source file(s) in the database, changed rows: ' . $changed . '.');
     // $imageIds stores image records created or refreshed for the files accepted in this request.
     $imageIds = uploaded_gallery_image_ids($galleryId, $stored);
     // $scanFailedFilenames stores files that reached disk but were not imported as gallery image rows.
@@ -816,9 +887,11 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
     $renameResult = null;
 
     if (($renameOnUpload ?? admin_upload_auto_rename_enabled()) && $imageIds) {
+        $events[] = gallery_upload_progress_event($startedAt, 'Auto-renaming uploaded image rows.');
         $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
         $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
         $stored = uploaded_gallery_filenames_for_image_ids($galleryId, $imageIds);
+        $events[] = gallery_upload_progress_event($startedAt, 'Auto-renaming finished, renamed rows: ' . (int) ($renameResult['renamed'] ?? 0) . '.');
     }
 
     return [
@@ -830,6 +903,7 @@ function store_uploaded_gallery_images(int $galleryId, array $entries, ?bool $re
         'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
         'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
         'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+        'upload_events' => array_values($events),
     ];
 }
 

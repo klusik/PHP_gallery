@@ -786,6 +786,51 @@ function regenerate_gallery_public_paths(PDO $pdo): int
  * @param PDO $pdo Database connection.
  * @return int Integer result for the caller.
  */
+/**
+ * Regenerate clean URL slug values for images in one gallery only.
+ *
+ * Upload requests only change one gallery at a time. Rebuilding image slugs for
+ * every gallery after each accepted upload package is unnecessarily expensive on
+ * shared hosting, so this helper keeps the existing per-gallery uniqueness rule
+ * without touching unrelated image rows.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @return int Number of image rows refreshed for the gallery.
+ */
+function regenerate_gallery_image_public_slugs(int $galleryId): int
+{
+    if (!public_path_schema_ready() || $galleryId <= 0) {
+        return 0;
+    }
+
+    // $stmt stores the gallery-local image set whose slugs can conflict with one another.
+    $stmt = db()->prepare('SELECT id, gallery_id, title, filename FROM images WHERE gallery_id = ? ORDER BY sort_order, filename, id');
+    $stmt->execute([$galleryId]);
+    $images = $stmt->fetchAll();
+    if (!$images) {
+        return 0;
+    }
+
+    // $usedSlugs stores gallery-local slug values already assigned in display order.
+    $usedSlugs = [];
+    // $update stores the prepared update used for each image in this gallery.
+    $update = db()->prepare('UPDATE images SET url_slug = ?, updated_at = ? WHERE id = ?');
+    $count = 0;
+    foreach ($images as $image) {
+        // $baseName stores the filename stem used when the image title is empty.
+        $baseName = pathinfo((string) $image['filename'], PATHINFO_FILENAME);
+        // $base stores the preferred text used to derive a stable clean URL slug.
+        $base = (string) ($image['title'] ?: $baseName ?: 'image');
+        // $slug stores the final gallery-unique slug.
+        $slug = unique_public_slug_in_set($base, $usedSlugs);
+        $usedSlugs[$slug] = true;
+        $update->execute([$slug, now_sql(), (int) $image['id']]);
+        $count++;
+    }
+
+    return $count;
+}
+
 function regenerate_image_public_slugs(PDO $pdo): int
 {
     // $stmt stores an intermediate value used by the surrounding gallery workflow.

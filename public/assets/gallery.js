@@ -87,7 +87,7 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260611-admin-discovery-ajax-v1';
+} from './gallery-modules/admin-operations.js?v=20260614-upload-order-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.
