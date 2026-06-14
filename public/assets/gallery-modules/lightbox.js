@@ -3366,12 +3366,15 @@ export function setupGalleryLightbox() {
         if (!window.galleryMapMarkerIcons[markerRole]) {
             const isActivePhoto = markerRole === 'active-photo';
             const isRouteVia = markerRole === 'route-via';
+            const iconSize = isActivePhoto ? [32, 46] : (isRouteVia ? [8, 8] : [26, 40]);
+            const iconAnchor = isActivePhoto ? [16, 39] : (isRouteVia ? [4, 4] : [13, 31]);
+            const popupAnchor = isActivePhoto ? [0, -35] : (isRouteVia ? [0, -7] : [0, -27]);
             window.galleryMapMarkerIcons[markerRole] = L.divIcon({
                 className: `gallery-leaflet-marker gallery-leaflet-marker--${markerRole}`,
                 html: '<span class="gallery-leaflet-marker-shadow" aria-hidden="true"></span><span class="gallery-leaflet-marker-pin" aria-hidden="true"></span>',
-                iconAnchor: isActivePhoto ? [16, 46] : (isRouteVia ? [4, 4] : [13, 40]),
-                iconSize: isActivePhoto ? [32, 46] : (isRouteVia ? [8, 8] : [26, 40]),
-                popupAnchor: [0, isActivePhoto ? -42 : (isRouteVia ? -7 : -36)],
+                iconAnchor,
+                iconSize,
+                popupAnchor,
             });
         }
 
