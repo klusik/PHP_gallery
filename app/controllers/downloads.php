@@ -48,6 +48,10 @@ use function Gallery\Services\find_gallery;
 use function Gallery\Services\t;
 use function Gallery\Services\visitor_can_access_gallery;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\build_all_zip;
+use function Gallery\Services\build_gallery_zip;
+use function Gallery\Services\build_selected_images_zip;
+use function Gallery\Services\send_download;
 
 /**
  * Public download controller model.

@@ -39,6 +39,8 @@
  * the same rollup and retention cleanup as the Admin telemetry maintenance page.
  */
 
+use function Gallery\Services\telemetry_run_maintenance;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 try {

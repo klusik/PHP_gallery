@@ -48,6 +48,34 @@ use function Gallery\Core\verify_csrf;
 use function Gallery\Services\t;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\admin_log_event;
+use function Gallery\Services\telemetry_all_settings;
+use function Gallery\Services\telemetry_browser_mix;
+use function Gallery\Services\telemetry_cache_mix;
+use function Gallery\Services\telemetry_format_bytes;
+use function Gallery\Services\telemetry_longest_viewed_photos;
+use function Gallery\Services\telemetry_metric_events;
+use function Gallery\Services\telemetry_metric_sum;
+use function Gallery\Services\telemetry_public_usage_enabled;
+use function Gallery\Services\telemetry_report_client_errors;
+use function Gallery\Services\telemetry_report_daily_trends;
+use function Gallery\Services\telemetry_report_database_fingerprints;
+use function Gallery\Services\telemetry_report_database_summary;
+use function Gallery\Services\telemetry_report_database_totals;
+use function Gallery\Services\telemetry_report_job_runs;
+use function Gallery\Services\telemetry_report_metric_distribution;
+use function Gallery\Services\telemetry_report_performance_metrics;
+use function Gallery\Services\telemetry_report_recent_events;
+use function Gallery\Services\telemetry_report_session_distribution;
+use function Gallery\Services\telemetry_report_session_summary;
+use function Gallery\Services\telemetry_report_table_count;
+use function Gallery\Services\telemetry_report_top_galleries;
+use function Gallery\Services\telemetry_report_top_routes;
+use function Gallery\Services\telemetry_retention_days;
+use function Gallery\Services\telemetry_run_maintenance;
+use function Gallery\Services\telemetry_set_setting;
+use function Gallery\Services\telemetry_setting_enabled;
+use function Gallery\Services\telemetry_settings_schema_ready;
+use function Gallery\Services\telemetry_top_photos;
 
 /**
  * Admin telemetry controller.
