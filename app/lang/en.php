@@ -195,5 +195,11 @@ return [
     'admin.gallery_dates.suggestions_kicker' => 'EXIF suggestions',
     'admin.gallery_dates.suggestions_title' => 'Approve, edit, or ignore suggestions',
     'admin.gallery_dates.title' => 'Gallery dates',
+    'public.subgallery_sort.asc' => 'Oldest first',
+    'public.subgallery_sort.default' => 'Default order',
+    'public.subgallery_sort.desc' => 'Newest first',
+    'public.subgallery_sort.help' => 'Only subgalleries with a From date participate. Undated cards keep their current positions. This changes only the current view.',
+    'public.subgallery_sort.label' => 'Subgallery sort',
+    'public.subgallery_sort.title' => 'Sort subgalleries by date',
     'gallery.date_until' => 'Until {date}',
 ];
