@@ -92,11 +92,16 @@ async function processUploadImage(payload) {
         throw new Error('The worker did not receive a valid File object.');
     }
     const clientExif = await readClientExifMetadata(file);
+    const originalSignature = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const detectedOriginalFormat = detectImageFormatFromSignature(originalSignature);
+    if (!detectedOriginalFormat) {
+        throw new Error(`Unsupported original image signature for ${file.name || 'selected file'}. Use the default server-side upload path for this file.`);
+    }
     const bitmap = await self.createImageBitmap(file, {imageOrientation: 'from-image'});
     try {
         const sizes = Array.isArray(payload.sizes) ? payload.sizes.map(Number).filter((size) => Number.isInteger(size) && size > 0) : [];
         const formats = Array.isArray(payload.formats) ? payload.formats.map(String).filter((format) => ['jpg', 'webp'].includes(format)) : [];
-        const preparedName = safePreparedFilename(file.name || `image-${payload.id}.jpg`);
+        const preparedName = safePreparedFilename(file.name || `image-${payload.id}.${detectedOriginalFormat}`, detectedOriginalFormat);
         const itemId = `item-${payload.id}`;
         const variants = [];
         for (const size of sizes) {
@@ -135,6 +140,7 @@ async function processUploadImage(payload) {
                 originalDisplayHeight: bitmap.height,
                 originalExifOrientation: Number(clientExif?.exif_orientation || 1),
                 originalMime: file.type || mimeFromFilename(file.name),
+                originalDetectedFormat: detectedOriginalFormat,
                 originalSize: file.size || 0,
                 originalFile: file,
                 clientExif,
@@ -720,18 +726,71 @@ function compactObject(value) {
  * Create a conservative filename compatible with the PHP-side sanitizer.
  *
  * @param {string} filename Original filename.
+ * @param {string|null} detectedFormat Format detected from source bytes.
  * @return {string} Prepared filename.
  */
-function safePreparedFilename(filename) {
+function safePreparedFilename(filename, detectedFormat = null) {
     const dot = filename.lastIndexOf('.');
-    const extension = dot >= 0 ? filename.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
+    const rawExtension = dot >= 0 ? filename.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    const extension = uploadExtensionForDetectedFormat(rawExtension || 'jpg', detectedFormat);
     const base = dot >= 0 ? filename.slice(0, dot) : filename;
     const slug = base.toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'image';
-    return `${slug}.${extension || 'jpg'}`;
+    return `${slug}.${extension}`;
+}
+
+/**
+ * Return a supported extension for an original image signature.
+ *
+ * @param {string} extension Existing filename extension.
+ * @param {string|null} detectedFormat Format detected from source bytes.
+ * @return {string} Safe extension.
+ */
+function uploadExtensionForDetectedFormat(extension, detectedFormat) {
+    const normalized = String(extension || '').toLowerCase();
+    const detected = String(detectedFormat || '').toLowerCase();
+    if (detected === 'jpg') {
+        return ['jpg', 'jpeg'].includes(normalized) ? normalized : 'jpg';
+    }
+    if (['png', 'gif', 'webp'].includes(detected)) {
+        return normalized === detected ? normalized : detected;
+    }
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(normalized) ? normalized : 'jpg';
+}
+
+/**
+ * Detect an original image format from its leading file signature bytes.
+ *
+ * @param {Uint8Array} bytes Leading source bytes.
+ * @return {string|null} Detected image format.
+ */
+function detectImageFormatFromSignature(bytes) {
+    if (!(bytes instanceof Uint8Array) || bytes.length < 4) {
+        return null;
+    }
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+        return 'jpg';
+    }
+    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+        return 'png';
+    }
+    if (bytes.length >= 6) {
+        const header = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]);
+        if (header === 'GIF87a' || header === 'GIF89a') {
+            return 'gif';
+        }
+    }
+    if (bytes.length >= 12) {
+        const riff = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+        const webp = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+        if (riff === 'RIFF' && webp === 'WEBP') {
+            return 'webp';
+        }
+    }
+    return null;
 }
 
 /**

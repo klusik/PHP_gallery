@@ -65,6 +65,37 @@ const EXPERIMENTAL_UPLOAD_MIN_MAX_ZIP_BATCH_BYTES = 1 * 1024 * 1024;
 const EXPERIMENTAL_UPLOAD_HARD_MAX_ZIP_BATCH_BYTES = 128 * 1024 * 1024;
 
 /**
+ * Runtime exception with structured context for experimental upload validation.
+ */
+class ExperimentalUploadValidationException extends RuntimeException
+{
+    /** @var array<string,mixed> */
+    private array $details;
+
+    /**
+     * Store a validation message and diagnostic context for admin logs.
+     *
+     * @param string $message Human-readable failure message.
+     * @param array<string,mixed> $details Structured diagnostic context.
+     */
+    public function __construct(string $message, array $details = [])
+    {
+        parent::__construct($message);
+        $this->details = $details;
+    }
+
+    /**
+     * Return structured diagnostic context for admin logs and JSON errors.
+     *
+     * @return array<string,mixed> Diagnostic context.
+     */
+    public function details(): array
+    {
+        return $this->details;
+    }
+}
+
+/**
  * Return default settings for the experimental client-side upload pipeline.
  *
  * @return array<string mixed>.
@@ -739,18 +770,140 @@ function experimental_upload_reusable_state_filename(array $gallery, array $stat
  */
 function experimental_upload_validate_original_payload(string $filename, string $payload): void
 {
-    if (!is_supported_image_path($filename)) {
-        throw new RuntimeException(t('experimental_upload.error_unsupported_original', 'The prepared upload package contains an unsupported original image format.'));
-    }
+    experimental_upload_prepare_original_filename($filename, $payload);
+}
+
+/**
+ * Return a safe original filename whose extension matches the uploaded bytes.
+ *
+ * @param string $filename Filename value.
+ * @param string $payload Payload value.
+ * @param array<string,mixed> $context Diagnostic context.
+ * @return string Filename with corrected extension when the bytes are valid.
+ */
+function experimental_upload_prepare_original_filename(string $filename, string $payload, array $context = []): string
+{
+    $filename = safe_uploaded_image_filename($filename);
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    $diagnostics = experimental_upload_original_payload_diagnostics($filename, $payload, $context);
+
     if ($payload === '') {
-        throw new RuntimeException(t('experimental_upload.error_invalid_original', 'The prepared upload package contains an invalid original image.'));
+        throw new ExperimentalUploadValidationException(
+            t('experimental_upload.error_invalid_original_empty', 'The prepared upload package contains an empty original image payload: {filename}.', ['filename' => $filename]),
+            $diagnostics + ['validation_stage' => 'empty_payload']
+        );
     }
-    if (is_dng_image_path($filename)) {
-        throw new RuntimeException(t('experimental_upload.error_browser_dng', 'The experimental browser upload pipeline cannot accept DNG originals. Use the default server-side upload path.'));
+
+    $detectedFormat = experimental_upload_detect_payload_format($payload);
+    if ($detectedFormat === null) {
+        if (is_dng_image_path($filename)) {
+            throw new ExperimentalUploadValidationException(
+                t('experimental_upload.error_browser_dng', 'The experimental browser upload pipeline cannot accept DNG originals. Use the default server-side upload path.'),
+                $diagnostics + ['validation_stage' => 'dng_not_supported']
+            );
+        }
+        throw new ExperimentalUploadValidationException(
+            t('experimental_upload.error_invalid_original_unknown', 'The prepared upload package contains an original image whose bytes do not look like JPG, PNG, GIF, or WebP: {filename}.', ['filename' => $filename]),
+            $diagnostics + ['validation_stage' => 'unknown_signature']
+        );
     }
-    if (!experimental_upload_payload_matches_image_signature($filename, $payload)) {
-        throw new RuntimeException(t('experimental_upload.error_invalid_original', 'The prepared upload package contains an invalid original image.'));
+
+    if (!is_supported_image_path($filename) || !experimental_upload_extension_matches_detected_format($extension, $detectedFormat)) {
+        $corrected = experimental_upload_filename_with_detected_extension($filename, $detectedFormat);
+        if ($corrected !== $filename && is_supported_image_path($corrected)) {
+            return $corrected;
+        }
+        throw new ExperimentalUploadValidationException(
+            t('experimental_upload.error_invalid_original_mismatch', 'The prepared upload package contains an original image with mismatched bytes: {filename}. Extension says {extension}, but the payload looks like {detected}.', [
+                'filename' => $filename,
+                'extension' => $extension !== '' ? strtoupper($extension) : '(none)',
+                'detected' => strtoupper($detectedFormat),
+            ]),
+            $diagnostics + [
+                'validation_stage' => 'signature_extension_mismatch',
+                'corrected_filename_candidate' => $corrected,
+            ]
+        );
     }
+
+    return $filename;
+}
+
+/**
+ * Build diagnostics for one original image payload failure.
+ *
+ * @param string $filename Filename value.
+ * @param string $payload Payload value.
+ * @param array<string,mixed> $context Caller context.
+ * @return array<string,mixed> Diagnostic context.
+ */
+function experimental_upload_original_payload_diagnostics(string $filename, string $payload, array $context = []): array
+{
+    $detectedFormat = experimental_upload_detect_payload_format($payload);
+    return array_filter($context + [
+        'filename' => $filename,
+        'extension' => strtolower(pathinfo($filename, PATHINFO_EXTENSION)),
+        'payload_bytes' => strlen($payload),
+        'detected_format' => $detectedFormat ?? '',
+        'signature_hex' => bin2hex(substr($payload, 0, 16)),
+    ], static fn ($value): bool => $value !== null && $value !== '');
+}
+
+/**
+ * Return the image format identified by the file signature.
+ *
+ * @param string $payload Payload value.
+ * @return string|null Detected image format or null.
+ */
+function experimental_upload_detect_payload_format(string $payload): ?string
+{
+    if (str_starts_with($payload, "\xff\xd8\xff")) {
+        return 'jpg';
+    }
+    if (str_starts_with($payload, "\x89PNG\r\n\x1a\n")) {
+        return 'png';
+    }
+    if (str_starts_with($payload, 'GIF87a') || str_starts_with($payload, 'GIF89a')) {
+        return 'gif';
+    }
+    if (strlen($payload) >= 12 && substr($payload, 0, 4) === 'RIFF' && substr($payload, 8, 4) === 'WEBP') {
+        return 'webp';
+    }
+    return null;
+}
+
+/**
+ * Return true when an extension is compatible with a detected format.
+ *
+ * @param string $extension Extension value.
+ * @param string $detectedFormat Detected image format.
+ * @return bool True when extension and signature are compatible.
+ */
+function experimental_upload_extension_matches_detected_format(string $extension, string $detectedFormat): bool
+{
+    $extension = strtolower($extension);
+    $detectedFormat = strtolower($detectedFormat);
+    if ($detectedFormat === 'jpg') {
+        return in_array($extension, ['jpg', 'jpeg'], true);
+    }
+    return $extension === $detectedFormat;
+}
+
+/**
+ * Return a filename with the extension corrected to the detected format.
+ *
+ * @param string $filename Filename value.
+ * @param string $detectedFormat Detected image format.
+ * @return string Corrected filename.
+ */
+function experimental_upload_filename_with_detected_extension(string $filename, string $detectedFormat): string
+{
+    $extension = $detectedFormat === 'jpg' ? 'jpg' : strtolower($detectedFormat);
+    $base = pathinfo($filename, PATHINFO_FILENAME);
+    if ($base === '') {
+        $base = 'image';
+    }
+    return $base . '.' . $extension;
 }
 
 /**
@@ -775,14 +928,11 @@ function experimental_upload_validate_thumbnail_payload(string $format, string $
  */
 function experimental_upload_payload_matches_image_signature(string $filename, string $payload): bool
 {
-    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    return match ($extension) {
-        'jpg', 'jpeg' => str_starts_with($payload, "\xff\xd8\xff"),
-        'png' => str_starts_with($payload, "\x89PNG\r\n\x1a\n"),
-        'gif' => str_starts_with($payload, 'GIF87a') || str_starts_with($payload, 'GIF89a'),
-        'webp' => strlen($payload) >= 12 && substr($payload, 0, 4) === 'RIFF' && substr($payload, 8, 4) === 'WEBP',
-        default => false,
-    };
+    $detectedFormat = experimental_upload_detect_payload_format($payload);
+    if ($detectedFormat === null) {
+        return false;
+    }
+    return experimental_upload_extension_matches_detected_format(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), $detectedFormat);
 }
 
 /**
@@ -794,11 +944,14 @@ function experimental_upload_payload_matches_image_signature(string $filename, s
  */
 function experimental_upload_payload_matches_format(string $format, string $payload): bool
 {
-    return match ($format) {
-        'jpg' => str_starts_with($payload, "\xff\xd8\xff"),
-        'webp' => strlen($payload) >= 12 && substr($payload, 0, 4) === 'RIFF' && substr($payload, 8, 4) === 'WEBP',
-        default => false,
-    };
+    $detectedFormat = experimental_upload_detect_payload_format($payload);
+    if ($detectedFormat === null) {
+        return false;
+    }
+    if ($format === 'jpg') {
+        return $detectedFormat === 'jpg';
+    }
+    return $detectedFormat === $format;
 }
 
 
@@ -1038,12 +1191,38 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
         $existingStateItem = is_array($batchStateItems[$stateKey] ?? null) ? $batchStateItems[$stateKey] : [];
         $storedFilename = experimental_upload_reusable_state_filename($gallery, $existingStateItem);
         if ($storedFilename === null) {
-            $preparedName = safe_uploaded_image_filename((string) ($item['prepared_name'] ?? $item['original_name'] ?? ('image-' . ($index + 1) . '.jpg')));
+            $browserOriginalName = (string) ($item['original_name'] ?? ('image-' . ($index + 1) . '.jpg'));
+            $preparedName = safe_uploaded_image_filename((string) ($item['prepared_name'] ?? $browserOriginalName));
             $originalPath = normalize_relative_path((string) ($item['original_path'] ?? ('originals/' . $preparedName)));
+            $originalContext = [
+                'gallery_id' => $galleryId,
+                'batch_index' => $batchIndex,
+                'manifest_index' => $manifestOrderIndex,
+                'source_index' => $sourceIndex,
+                'state_key' => $stateKey,
+                'original_name' => $browserOriginalName,
+                'prepared_name' => $preparedName,
+                'original_path' => $originalPath,
+                'manifest_original_mime' => (string) ($item['original_mime'] ?? $item['mime'] ?? ''),
+                'manifest_original_detected_format' => (string) ($item['original_detected_format'] ?? ''),
+                'manifest_original_size' => (int) ($item['original_size'] ?? 0),
+                'manifest_original_width' => (int) ($item['original_width'] ?? $item['width'] ?? 0),
+                'manifest_original_height' => (int) ($item['original_height'] ?? $item['height'] ?? 0),
+            ];
             if ($originalPath === '' || !isset($entries[$originalPath])) {
-                throw new RuntimeException(t('experimental_upload.error_original_missing', 'The prepared upload package is missing an original image.'));
+                throw new ExperimentalUploadValidationException(
+                    t('experimental_upload.error_original_missing_detail', 'The prepared upload package is missing an original image entry: {path}. Source file: {filename}.', [
+                        'path' => $originalPath !== '' ? $originalPath : '(empty)',
+                        'filename' => $browserOriginalName,
+                    ]),
+                    $originalContext + ['validation_stage' => 'original_entry_missing']
+                );
             }
-            experimental_upload_validate_original_payload($preparedName, $entries[$originalPath]);
+            $validatedPreparedName = experimental_upload_prepare_original_filename($preparedName, $entries[$originalPath], $originalContext);
+            if ($validatedPreparedName !== $preparedName) {
+                $events[] = experimental_upload_progress_event($startedAt, 'Corrected original filename extension from ' . $preparedName . ' to ' . $validatedPreparedName . ' after reading the payload signature.');
+                $preparedName = $validatedPreparedName;
+            }
             [$storedFilename, $targetPath] = unique_gallery_upload_target($gallery, $preparedName);
             if (@file_put_contents($targetPath, $entries[$originalPath], LOCK_EX) === false) {
                 throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));

@@ -314,12 +314,29 @@ function cms_admin_upload_experimental_batch(): void
         }
         admin_upload_experimental_json_response($response);
     } catch (Throwable $exception) {
-        admin_log_event('error', 'gallery.experimental_upload_failed', 'Experimental browser-prepared upload batch failed.', [
+        $errorContext = [
             'error' => $exception->getMessage(),
             'gallery_id' => (int) ($_POST['gallery_id'] ?? 0),
             'batch_index' => (int) ($_POST['batch_index'] ?? 0),
-        ]);
-        admin_upload_experimental_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
+            'upload_session_id' => substr((string) ($_POST['upload_session_id'] ?? ''), 0, 120),
+            'total_batches' => (int) ($_POST['total_batches'] ?? 0),
+            'zip_upload_error' => (int) ($_FILES['zip_batch']['error'] ?? UPLOAD_ERR_NO_FILE),
+            'zip_upload_size' => (int) ($_FILES['zip_batch']['size'] ?? 0),
+            'zip_upload_name' => (string) ($_FILES['zip_batch']['name'] ?? ''),
+        ];
+        if ($exception instanceof \Gallery\Services\ExperimentalUploadValidationException) {
+            $errorContext['validation'] = $exception->details();
+        }
+        admin_log_event('error', 'gallery.experimental_upload_failed', 'Experimental browser-prepared upload batch failed.', $errorContext);
+        $response = [
+            'ok' => false,
+            'error' => $exception->getMessage(),
+            'retryable' => false,
+        ];
+        if ($exception instanceof \Gallery\Services\ExperimentalUploadValidationException) {
+            $response['error_context'] = $exception->details();
+        }
+        admin_upload_experimental_json_response($response, 422);
     }
 }
 
