@@ -61,6 +61,7 @@ use function Gallery\Services\scan_gallery_images;
 use function Gallery\Services\set_collapsed_gallery_ids;
 use function Gallery\Services\t;
 use function Gallery\Services\write_gallery_sidecar;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handles cms admin bulk galleries logic for the gallery application.

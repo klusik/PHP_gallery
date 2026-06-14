@@ -65,6 +65,9 @@ use function Gallery\Services\media_renamer_pattern_help_text;
 use function Gallery\Services\media_renamer_plan_for_gallery;
 use function Gallery\Services\media_renamer_plans_for_galleries;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_log_current_route_name;
+use function Gallery\Services\telemetry_request_id;
 
 /**
  * Handle the site-wide media renamer admin page.
@@ -885,7 +888,7 @@ function admin_media_renamer_log_exception(string $eventKey, string $message, Th
 function admin_media_renamer_log_event(string $level, string $eventKey, string $message, array $context = [], array $options = []): void
 {
     $written = admin_media_renamer_write_admin_log_direct($level, $eventKey, $message, $context, $options);
-    if (!$written && function_exists('admin_log_event')) {
+    if (!$written && function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event($level, $eventKey, $message, $context, $options);
     }
     $encodedContext = $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '';
@@ -958,7 +961,7 @@ function admin_media_renamer_write_admin_log_direct(string $level, string $event
         if (isset($options['subject_id'])) {
             $add('subject_id', (int) $options['subject_id']);
         }
-        $add('request_id', function_exists('telemetry_request_id') ? telemetry_request_id() : null);
+        $add('request_id', function_exists('Gallery\\Services\\telemetry_request_id') ? telemetry_request_id() : null);
         $add('route_name', substr((string) ($options['route_name'] ?? admin_log_current_route_name()), 0, 80));
         $add('fingerprint', hash('sha256', $eventKey . '|' . $message . '|' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
         $add('http_method', substr((string) ($_SERVER['REQUEST_METHOD'] ?? ''), 0, 12));

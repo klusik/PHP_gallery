@@ -250,7 +250,9 @@ function tag_names_for_entity(string $type, int $id): string
 function all_tag_names(): array
 {
     try {
-        return db()->query('SELECT name FROM tags ORDER BY name')->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = db()->prepare('SELECT name FROM tags ORDER BY name');
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
     } catch (PDOException) {
         return [];
     }
@@ -442,7 +444,8 @@ function tag_description_schema_ready(): bool
         return $ready;
     }
     try {
-        db()->query('SELECT description FROM tags LIMIT 1');
+        $stmt = db()->prepare('SELECT description FROM tags LIMIT 1');
+        $stmt->execute();
         return $ready = true;
     } catch (PDOException) {
         return $ready = false;
@@ -645,7 +648,9 @@ function normalize_existing_tags(): int
     // Variable $changed stores this steps working value.
     $changed = 0;
     // Variable $rows stores this steps working value.
-    $rows = db()->query('SELECT * FROM tags ORDER BY id')->fetchAll();
+    $stmt = db()->prepare('SELECT * FROM tags ORDER BY id');
+    $stmt->execute();
+    $rows = $stmt->fetchAll();
     // Variable $seen stores this steps working value.
     $seen = [];
     foreach ($rows as $row) {

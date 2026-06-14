@@ -70,6 +70,7 @@ use function Gallery\Views\view_render_admin_gallery_date_range_fields;
 use function Gallery\Views\view_render_admin_new_gallery_fields;
 use function Gallery\Views\view_render_admin_new_gallery_side_panel;
 use function Gallery\Views\view_render_gallery_description_formatting_hint;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Render the Admin gallery discovery page or process its Ajax batches.

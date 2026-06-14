@@ -3007,7 +3007,9 @@ class WatcherThread(threading.Thread):
                 message = str(exc)
                 if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
                     self.remote_skipped_paths.add((path, file_hash))
-                    self.emit("info", f"Upload response failed, but gallery inventory confirms {path.name} is already present; skipping retry.")
+                    self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {message}")
+                    if self.config.delete_uploaded_files:
+                        self.delete_uploaded_file(path, {"uploaded": 1, "filenames": [path.name]})
                     continue
                 self.state.mark_failure(path, file_hash, message)
                 self.emit("error", f"Upload failed for {path.name}: {message}")
@@ -3470,7 +3472,7 @@ class ManualUploadThread(threading.Thread):
                     with self.progress_lock:
                         self.skipped_existing += 1
                         self.completed_uploads += 1
-                    self.emit("info", f"Upload response failed, but gallery inventory confirms {path.name} is already present; skipping retry.")
+                    self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {exc}")
                     return
             except Exception as confirm_exc:  # noqa: BLE001
                 self.emit("warning", f"Could not confirm remote inventory after failure for {path.name}: {confirm_exc}")

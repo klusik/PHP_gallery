@@ -52,6 +52,7 @@ use function Gallery\Services\feature_flag_summary_counts;
 use function Gallery\Services\grouped_feature_flag_definitions;
 use function Gallery\Services\save_feature_flags_from_post;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Render the Admin feature settings page.

@@ -131,6 +131,14 @@
     color: #334155;
     font-weight: 700;
 }
+.admin-side-panel-progress-anchor .upload-progress-metrics {
+    font-weight: 600;
+}
+.admin-side-panel-progress-anchor .upload-progress-log {
+    border-color: rgba(148, 163, 184, 0.35);
+    background: rgba(248, 250, 252, 0.96);
+    color: #334155;
+}
 .admin-side-panel-card {
     padding: 1.05rem;
     border: 1px solid rgba(148, 163, 184, 0.28);

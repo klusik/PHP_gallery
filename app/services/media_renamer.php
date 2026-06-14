@@ -71,10 +71,12 @@ function media_renamer_gallery_rows(bool $hideEmptyGalleries = false): array
 function media_renamer_all_gallery_ids(bool $hideEmptyGalleries = false): array
 {
     if (!$hideEmptyGalleries) {
-        return array_map('intval', db()->query('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll(PDO::FETCH_COLUMN));
+        $stmt = db()->prepare('SELECT id FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+        $stmt->execute();
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     }
 
-    $stmt = db()->query("SELECT g.id
+    $stmt = db()->prepare("SELECT g.id
         FROM galleries g
         INNER JOIN images i ON i.gallery_id = g.id AND i.relative_path NOT LIKE '%/%'
         GROUP BY g.id
@@ -1121,8 +1123,12 @@ function media_renamer_execute_plan(array $plan): array
     if (function_exists('Gallery\\Services\\thumbnail_maintenance_summary_cache_clear')) {
         thumbnail_maintenance_summary_cache_clear();
     }
-    if (function_exists('Gallery\\Services\\regenerate_public_paths') && public_path_schema_ready()) {
-        regenerate_public_paths();
+    if (public_path_schema_ready()) {
+        if (function_exists('Gallery\\Services\\regenerate_gallery_image_public_slugs')) {
+            regenerate_gallery_image_public_slugs($galleryId);
+        } elseif (function_exists('Gallery\\Services\\regenerate_public_paths')) {
+            regenerate_public_paths();
+        }
     }
     $updatedGallery = find_gallery($galleryId, true);
     if ($updatedGallery && function_exists('Gallery\\Services\\write_gallery_sidecar')) {

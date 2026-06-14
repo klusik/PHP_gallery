@@ -66,6 +66,7 @@ use function Gallery\Services\install_application_update;
 use function Gallery\Services\restore_application_stable_release;
 use function Gallery\Services\set_application_autoupdate_enabled;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin update controller model.

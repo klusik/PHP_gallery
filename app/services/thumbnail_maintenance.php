@@ -1009,7 +1009,9 @@ function delete_all_thumbnail_files(): array
         db()->exec('DELETE FROM image_thumbnail_variants');
     }
 
-    foreach (db()->query('SELECT folder_path FROM galleries ORDER BY folder_path')->fetchAll(PDO::FETCH_COLUMN) as $folderPath) {
+    $stmt = db()->prepare('SELECT folder_path FROM galleries ORDER BY folder_path');
+    $stmt->execute();
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $folderPath) {
         // $gallery stores the minimum shape required by gallery_thumbs_dir().
         $gallery = ['folder_path' => (string) $folderPath];
         // $thumbsDirectory stores the generated thumbnail cache directory for this gallery.

@@ -54,7 +54,9 @@ function admin_dashboard_original_storage_bytes(): int
 {
     try {
         // $row stores the aggregate as a scalar-compatible result from the images table.
-        $row = db()->query('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images')->fetch();
+        $stmt = db()->prepare('SELECT COALESCE(SUM(file_size), 0) AS original_bytes FROM images');
+        $stmt->execute();
+        $row = $stmt->fetch();
         return max(0, (int) ($row['original_bytes'] ?? 0));
     } catch (Throwable) {
         return 0;
@@ -127,7 +129,11 @@ function admin_dashboard_parent_sync_fingerprint(): string
 {
     try {
         // $row stores aggregate gallery data that changes when indexed gallery rows change.
-        $row = admin_render_profile_db('parent_sync_fingerprint_query', static fn (): array => db()->query("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries")->fetch() ?: []);
+        $row = admin_render_profile_db('parent_sync_fingerprint_query', static function (): array {
+            $stmt = db()->prepare("SELECT COUNT(*) AS gallery_count, COALESCE(MAX(id), 0) AS newest_id, COALESCE(MAX(updated_at), '') AS newest_updated_at, COALESCE(SUM(CHAR_LENGTH(folder_path)), 0) AS path_length_sum FROM galleries");
+            $stmt->execute();
+            return $stmt->fetch() ?: [];
+        });
     } catch (Throwable) {
         return '';
     }

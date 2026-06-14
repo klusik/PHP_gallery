@@ -59,6 +59,7 @@ use function Gallery\Services\dng_normalize_conversion_color_policy;
 use function Gallery\Services\dng_normalize_conversion_source_policy;
 use function Gallery\Services\set_app_setting;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handle cms admin diagnostics.

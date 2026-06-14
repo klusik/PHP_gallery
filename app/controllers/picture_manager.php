@@ -54,6 +54,7 @@ use function Gallery\Services\gallery_visibility_storage_value;
 use function Gallery\Services\move_gallery_images;
 use function Gallery\Services\picture_manager_normalize_image_ids;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Send one JSON response for Picture manager endpoints.

@@ -46,7 +46,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.79.2';
+const CMS_VERSION = '0.80';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -204,9 +204,9 @@ function cms_run(): void
         'picture_manager_move' => '\\Gallery\\Controllers\\cms_picture_manager_move',
         'picture_manager_copy' => '\\Gallery\\Controllers\\cms_picture_manager_copy',
         'picture_manager_create_gallery' => '\\Gallery\\Controllers\\cms_picture_manager_create_gallery',
-        'picture_manager_download_selection' => 'cms_picture_manager_download_selection',
-        'download_gallery' => 'cms_download_gallery',
-        'download_all' => 'cms_download_all',
+        'picture_manager_download_selection' => '\\Gallery\\Controllers\\cms_picture_manager_download_selection',
+        'download_gallery' => '\\Gallery\\Controllers\\cms_download_gallery',
+        'download_all' => '\\Gallery\\Controllers\\cms_download_all',
         'admin' => '\\Gallery\\Controllers\\cms_admin',
         'admin_login' => '\\Gallery\\Controllers\\cms_admin_login',
         'admin_forgot_password' => '\\Gallery\\Controllers\\cms_admin_forgot_password',
@@ -271,16 +271,16 @@ function cms_run(): void
         'admin_simbrief_description' => '\\Gallery\\Controllers\\cms_admin_simbrief_description',
         'admin_openai_text_assist' => '\\Gallery\\Controllers\\cms_admin_openai_text_assist',
         'admin_integrity' => '\\Gallery\\Controllers\\cms_admin_integrity',
-        'admin_logs' => 'cms_admin_logs',
-        'admin_log_update' => 'cms_admin_log_update',
-        'admin_log_export' => 'cms_admin_log_export',
-        'admin_logs_export_zip' => 'cms_admin_logs_export_zip',
-        'admin_telemetry' => 'cms_admin_telemetry',
-        'admin_telemetry_settings' => 'cms_admin_telemetry_settings',
-        'admin_telemetry_maintenance' => 'cms_admin_telemetry_maintenance',
-        'admin_telemetry_export' => 'cms_admin_telemetry_export',
-        'telemetry_ingest' => 'cms_telemetry_ingest',
-        'usage_collect' => 'cms_telemetry_ingest',
+        'admin_logs' => '\\Gallery\\Controllers\\cms_admin_logs',
+        'admin_log_update' => '\\Gallery\\Controllers\\cms_admin_log_update',
+        'admin_log_export' => '\\Gallery\\Controllers\\cms_admin_log_export',
+        'admin_logs_export_zip' => '\\Gallery\\Controllers\\cms_admin_logs_export_zip',
+        'admin_telemetry' => '\\Gallery\\Controllers\\cms_admin_telemetry',
+        'admin_telemetry_settings' => '\\Gallery\\Controllers\\cms_admin_telemetry_settings',
+        'admin_telemetry_maintenance' => '\\Gallery\\Controllers\\cms_admin_telemetry_maintenance',
+        'admin_telemetry_export' => '\\Gallery\\Controllers\\cms_admin_telemetry_export',
+        'telemetry_ingest' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
+        'usage_collect' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
         'admin_edit_gallery' => '\\Gallery\\Controllers\\cms_admin_edit_gallery',
         'admin_bulk_images' => '\\Gallery\\Controllers\\cms_admin_bulk_images',
         'admin_reorder_images' => '\\Gallery\\Controllers\\cms_admin_reorder_images',

@@ -47,6 +47,7 @@ use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\t;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin integrity controller model.

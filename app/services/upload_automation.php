@@ -705,23 +705,29 @@ function upload_automation_apply_sim_camera_metadata(int $galleryId, array $stor
         return $result;
     }
 
-    $stmt = db()->prepare('UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
-    $now = now_sql();
-    foreach ($imageIds as $imageId) {
-        $stmt->execute([
-            $metadata['lat'],
-            $metadata['lng'],
-            $metadata['altitude'],
-            $now,
-            $now,
-            $imageId,
-            $galleryId,
-        ]);
-        if ($stmt->rowCount() > 0) {
-            $result['attached']++;
-        } else {
-            $result['skipped']++;
+    try {
+        $stmt = db()->prepare('UPDATE images SET gps_lat = ?, gps_lng = ?, gps_altitude = ?, gps_extracted_at = ?, updated_at = ? WHERE id = ? AND gallery_id = ?');
+        $now = now_sql();
+        foreach ($imageIds as $imageId) {
+            $stmt->execute([
+                $metadata['lat'],
+                $metadata['lng'],
+                $metadata['altitude'],
+                $now,
+                $now,
+                $imageId,
+                $galleryId,
+            ]);
+            if ($stmt->rowCount() > 0) {
+                $result['attached']++;
+            } else {
+                $result['skipped']++;
+            }
         }
+    } catch (Throwable $exception) {
+        $result['attached'] = 0;
+        $result['skipped'] = count($imageIds);
+        $result['error'] = $exception->getMessage();
     }
 
     return $result;
@@ -985,7 +991,7 @@ function upload_automation_install_client_thumbnails(int $galleryId, array $gall
             if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file')) {
                 // $metadataResult stores validation and DB registration for the uploaded client thumbnail.
                 $metadataResult = thumbnail_metadata_record_file($image, $gallery, (int) $entry['size_px'], (string) $entry['format'], $targetPath, image_abs_path($image, $gallery), true);
-                if (empty($metadataResult['valid'])) {
+                if (empty($metadataResult['valid']) && (string) ($metadataResult['status'] ?? '') !== 'metadata_unavailable') {
                     $result['failed']++;
                     $result['errors'][] = 'Client-generated thumbnail geometry did not match the original image.';
                     continue;

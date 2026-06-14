@@ -32,6 +32,13 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Services;
+
+use RuntimeException;
+use DirectoryIterator;
+use ZipArchive;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\db;
 use function Gallery\Core\normalize_relative_path;
@@ -132,7 +139,8 @@ function cleanup_expired_zip_cache(?int $now = null): array
     $deletedRows = 0;
 
     // Variable $stmt stores this steps working value.
-    $stmt = db()->query('SELECT id, file_path FROM zip_archives');
+    $stmt = db()->prepare('SELECT id, file_path FROM zip_archives');
+    $stmt->execute();
     foreach ($stmt->fetchAll() as $archive) {
         // Variable $filePath stores this steps working value.
         $filePath = (string) $archive['file_path'];
@@ -467,7 +475,9 @@ function build_all_zip(): string
     }
 
     // Variable $galleries stores this steps working value.
-    $galleries = db()->query('SELECT * FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll();
+    $stmt = db()->prepare('SELECT * FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
+    $stmt->execute();
+    $galleries = $stmt->fetchAll();
     // Variable $entries stores this steps working value.
     $entries = gallery_zip_entries_from_galleries($galleries, false);
     // Variable $filePath stores this steps working value.

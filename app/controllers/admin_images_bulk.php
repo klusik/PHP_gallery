@@ -57,6 +57,7 @@ use function Gallery\Services\move_gallery_images;
 use function Gallery\Services\nsfw_guard_schema_ready;
 use function Gallery\Services\t;
 use function Gallery\Services\thumbnail_maintenance_summary_cache_clear;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handles cms admin bulk images logic for the gallery application.

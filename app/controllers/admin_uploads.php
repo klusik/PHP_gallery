@@ -73,6 +73,7 @@ use function Gallery\Services\store_uploaded_gallery_images;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_upload_settings_page;
 use function Gallery\Views\view_render_admin_upload_support_panel;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Admin upload controller model.
@@ -381,6 +382,7 @@ function cms_admin_upload(): void
                 'image_ids' => [],
                 'filenames' => [],
                 'scan_failed_filenames' => [],
+                'upload_events' => [],
             ];
             // $scanFailedFilenames stores uploaded files that were written to disk but not imported into image rows.
             $scanFailedFilenames = array_values(array_filter(array_map('strval', (array) ($stored['scan_failed_filenames'] ?? []))));
@@ -468,6 +470,7 @@ function cms_admin_upload(): void
                 'renamed' => (int) ($stored['renamed'] ?? 0),
                 'rename_warnings' => array_values((array) ($stored['rename_warnings'] ?? [])),
                 'rename_failures' => array_values((array) ($stored['rename_failures'] ?? [])),
+                'upload_events' => array_values((array) ($stored['upload_events'] ?? [])),
                 'redirect_url' => url_for('admin_edit_gallery', ['id' => $gallery['id'], 'uploaded' => (int) $stored['uploaded'], 'scanned' => (int) $stored['scanned'], 'thumbnails' => $thumbnails, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
             ];
             if ($wantsJson) {

@@ -618,7 +618,9 @@ function admin_gallery_discovery_delete_directory_tree(string $absolutePath): ar
 function admin_gallery_discovery_known_gallery_paths(): array
 {
     try {
-        $paths = db()->query('SELECT folder_path FROM galleries')->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = db()->prepare('SELECT folder_path FROM galleries');
+        $stmt->execute();
+        $paths = $stmt->fetchAll(PDO::FETCH_COLUMN);
     } catch (Throwable) {
         return [];
     }
@@ -1082,7 +1084,9 @@ function admin_gallery_discovery_existing_gallery_rows(): array
     }
 
     try {
-        $rows = db()->query('SELECT id, title, folder_path FROM galleries')->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = db()->prepare('SELECT id, title, folder_path FROM galleries');
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable) {
         $rows = [];
     }

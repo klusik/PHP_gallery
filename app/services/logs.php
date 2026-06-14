@@ -32,6 +32,13 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Services;
+
+use Throwable;
+use RuntimeException;
+use ZipArchive;
 use function Gallery\Core\current_user;
 use function Gallery\Core\db;
 use function Gallery\Core\now_sql;
@@ -109,7 +116,7 @@ function admin_log_schema_ready(): bool
         // $stmt stores an intermediate value used by the surrounding gallery workflow.
         $stmt = db()->query("SHOW COLUMNS FROM admin_logs LIKE 'status'");
         return $stmt && (bool) $stmt->fetch();
-    } catch (PDOException) {
+    } catch (Throwable) {
         return false;
     }
 }
@@ -220,7 +227,7 @@ function ensure_admin_log_status_schema(): bool
             db()->exec("ALTER TABLE admin_logs ADD KEY admin_logs_status_created_index (status, created_at)");
         }
         return true;
-    } catch (PDOException) {
+    } catch (Throwable) {
         return false;
     }
 }

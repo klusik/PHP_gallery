@@ -133,6 +133,7 @@ use function Gallery\Services\site_name;
 use function Gallery\Services\t;
 use function Gallery\Services\tags_for_entities;
 use function Gallery\Services\tags_for_entity;
+use function Gallery\Services\telemetry_append_public_script;
 use function Gallery\Services\thumbnail_bundle;
 use function Gallery\Services\thumbnail_bundle_url;
 use function Gallery\Services\thumbnail_bundles_preload;
@@ -143,6 +144,7 @@ use function Gallery\Views\view_gallery_description_markdown_excerpt;
 use function Gallery\Views\view_gallery_description_markdown_html;
 use function Gallery\Views\view_render_gallery_json_ld;
 use function Gallery\Views\view_render_public_seo_tags;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Public gallery controller model.

@@ -32,6 +32,11 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Services;
+
+use Throwable;
 use function Gallery\Core\append_cms_footer_html;
 use function Gallery\Core\append_cms_footer_script;
 use function Gallery\Core\asset_url;

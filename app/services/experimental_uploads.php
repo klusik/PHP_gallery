@@ -47,6 +47,7 @@ use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\is_dng_image_path;
 use function Gallery\Core\is_supported_image_path;
 use function Gallery\Core\normalize_relative_path;
+use function Gallery\Core\now_sql;
 use function Gallery\Core\url_for;
 
 const EXPERIMENTAL_UPLOAD_DEFAULT_WORKER_COUNT = 8;
@@ -540,6 +541,197 @@ function experimental_upload_store_cached_batch_response(int $galleryId, string 
 }
 
 /**
+ * Return the state path for a partially handled browser upload batch.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @return string Text result for the caller.
+ */
+function experimental_upload_batch_state_path(int $galleryId, string $sessionId, int $batchIndex): string
+{
+    return experimental_upload_batch_cache_dir() . DIRECTORY_SEPARATOR . 'state-' . experimental_upload_batch_cache_key($galleryId, $sessionId, $batchIndex) . '.json';
+}
+
+/**
+ * Return the state path for upload-session source ordering.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @return string Text result for the caller.
+ */
+function experimental_upload_session_order_path(int $galleryId, string $sessionId): string
+{
+    $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', $sessionId) ?: 'session';
+    return experimental_upload_batch_cache_dir() . DIRECTORY_SEPARATOR . 'order-' . hash('sha256', $galleryId . '|' . $sessionId) . '.json';
+}
+
+/**
+ * Return the stable sort-order base for one browser upload session.
+ *
+ * The value is calculated once before the first batch is indexed, then reused
+ * for all later batches and retries. Source indexes can therefore be mapped
+ * directly to gallery sort_order values without depending on worker completion,
+ * ZIP packing boundaries, or retry timing.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @return int First sort_order value reserved for this upload session.
+ */
+function experimental_upload_session_sort_base(int $galleryId, string $sessionId): int
+{
+    $path = experimental_upload_session_order_path($galleryId, $sessionId);
+    if (is_file($path)) {
+        $raw = @file_get_contents($path);
+        $decoded = is_string($raw) ? json_decode($raw, true) : null;
+        $base = is_array($decoded) ? (int) ($decoded['sort_base'] ?? 0) : 0;
+        if ($base > 0) {
+            return $base;
+        }
+    }
+
+    $stmt = db()->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM images WHERE gallery_id = ?');
+    $stmt->execute([$galleryId]);
+    $base = (int) $stmt->fetchColumn() + 10;
+    $dir = experimental_upload_batch_cache_dir();
+    if (is_dir($dir) && is_writable($dir)) {
+        @file_put_contents($path, json_encode([
+            'version' => 1,
+            'gallery_id' => $galleryId,
+            'session_id' => $sessionId,
+            'sort_base' => $base,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    }
+    return $base;
+}
+
+/**
+ * Apply deterministic upload-session ordering to accepted image rows.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param array<string,int> $sourceIndexByRelativePath Source indexes keyed by gallery-relative path.
+ * @param int $sortBase First sort_order value for source_index zero.
+ * @return int Number of rows whose sort_order was touched.
+ */
+function experimental_upload_apply_source_sort_order(int $galleryId, array $sourceIndexByRelativePath, int $sortBase): int
+{
+    if ($galleryId <= 0 || !$sourceIndexByRelativePath) {
+        return 0;
+    }
+
+    $select = db()->prepare('SELECT id FROM images WHERE gallery_id = ? AND relative_path_hash = ? LIMIT 1');
+    $update = db()->prepare('UPDATE images SET sort_order = ?, updated_at = ? WHERE id = ?');
+    $changed = 0;
+    foreach ($sourceIndexByRelativePath as $relativePath => $sourceIndex) {
+        $relativePath = normalize_relative_path((string) $relativePath);
+        if ($relativePath === '') {
+            continue;
+        }
+        $select->execute([$galleryId, hash('sha256', $relativePath)]);
+        $imageId = (int) ($select->fetchColumn() ?: 0);
+        if ($imageId <= 0) {
+            continue;
+        }
+        $sortOrder = $sortBase + max(0, (int) $sourceIndex) * 10;
+        $update->execute([$sortOrder, now_sql(), $imageId]);
+        $changed += $update->rowCount() > 0 ? 1 : 0;
+    }
+    return $changed;
+}
+
+/**
+ * Create an empty durable batch state structure.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @param string $manifestHash Manifest hash value.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function experimental_upload_empty_batch_state(int $galleryId, string $sessionId, int $batchIndex, string $manifestHash): array
+{
+    return [
+        'version' => 1,
+        'gallery_id' => $galleryId,
+        'session_id' => $sessionId,
+        'batch_index' => $batchIndex,
+        'manifest_hash' => $manifestHash,
+        'items' => [],
+    ];
+}
+
+/**
+ * Read durable state for a partially handled browser upload batch.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @param string $manifestHash Manifest hash value.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function experimental_upload_load_batch_state(int $galleryId, string $sessionId, int $batchIndex, string $manifestHash): array
+{
+    $path = experimental_upload_batch_state_path($galleryId, $sessionId, $batchIndex);
+    if (!is_file($path)) {
+        return experimental_upload_empty_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
+    }
+    $raw = @file_get_contents($path);
+    $decoded = is_string($raw) ? json_decode($raw, true) : null;
+    if (!is_array($decoded) || (string) ($decoded['manifest_hash'] ?? '') !== $manifestHash || !is_array($decoded['items'] ?? null)) {
+        return experimental_upload_empty_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
+    }
+    return $decoded;
+}
+
+/**
+ * Persist durable state for a partially handled browser upload batch.
+ *
+ * @param int $galleryId Gallery identifier.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ * @param array $state State data.
+ */
+function experimental_upload_store_batch_state(int $galleryId, string $sessionId, int $batchIndex, array $state): void
+{
+    $dir = experimental_upload_batch_cache_dir();
+    if (!is_dir($dir) || !is_writable($dir)) {
+        return;
+    }
+    $path = experimental_upload_batch_state_path($galleryId, $sessionId, $batchIndex);
+    @file_put_contents($path, json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+/**
+ * Return the reusable filename from a prior partial batch state item.
+ *
+ * @param array $gallery Gallery row.
+ * @param array $stateItem State item data.
+ * @return string|null Text result for the caller.
+ */
+function experimental_upload_reusable_state_filename(array $gallery, array $stateItem): ?string
+{
+    $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
+    $filename = normalize_relative_path((string) ($stateItem['stored_filename'] ?? ''));
+    if ($filename !== '' && !str_contains($filename, '/') && is_file($galleryRoot . DIRECTORY_SEPARATOR . $filename)) {
+        return $filename;
+    }
+
+    $imageId = (int) ($stateItem['image_id'] ?? 0);
+    if ($imageId <= 0 || !function_exists('Gallery\Services\find_image')) {
+        return null;
+    }
+    $image = find_image($imageId);
+    if (!is_array($image) || (int) ($image['gallery_id'] ?? 0) !== (int) ($gallery['id'] ?? 0)) {
+        return null;
+    }
+    $relativePath = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+    if ($relativePath === '' || str_contains($relativePath, '/')) {
+        return null;
+    }
+    return is_file($galleryRoot . DIRECTORY_SEPARATOR . $relativePath) ? $relativePath : null;
+}
+
+/**
  * Validate one original image payload before it is placed into a gallery.
  *
  * @param string $filename Filename value.
@@ -550,21 +742,14 @@ function experimental_upload_validate_original_payload(string $filename, string 
     if (!is_supported_image_path($filename)) {
         throw new RuntimeException(t('experimental_upload.error_unsupported_original', 'The prepared upload package contains an unsupported original image format.'));
     }
-    $temporary = tempnam(sys_get_temp_dir(), 'php_gallery_upload_original_');
-    if ($temporary === false) {
-        throw new RuntimeException(t('experimental_upload.error_temp_file', 'Could not create a temporary validation file.'));
+    if ($payload === '') {
+        throw new RuntimeException(t('experimental_upload.error_invalid_original', 'The prepared upload package contains an invalid original image.'));
     }
-    try {
-        @file_put_contents($temporary, $payload);
-        if (is_dng_image_path($filename)) {
-            throw new RuntimeException(t('experimental_upload.error_browser_dng', 'The experimental browser upload pipeline cannot accept DNG originals. Use the default server-side upload path.'));
-        }
-        $info = @getimagesize($temporary);
-        if ($info === false || empty($info['mime']) || !str_starts_with((string) $info['mime'], 'image/')) {
-            throw new RuntimeException(t('experimental_upload.error_invalid_original', 'The prepared upload package contains an invalid original image.'));
-        }
-    } finally {
-        @unlink($temporary);
+    if (is_dng_image_path($filename)) {
+        throw new RuntimeException(t('experimental_upload.error_browser_dng', 'The experimental browser upload pipeline cannot accept DNG originals. Use the default server-side upload path.'));
+    }
+    if (!experimental_upload_payload_matches_image_signature($filename, $payload)) {
+        throw new RuntimeException(t('experimental_upload.error_invalid_original', 'The prepared upload package contains an invalid original image.'));
     }
 }
 
@@ -576,17 +761,86 @@ function experimental_upload_validate_original_payload(string $filename, string 
  */
 function experimental_upload_validate_thumbnail_payload(string $format, string $payload): void
 {
-    $info = @getimagesizefromstring($payload);
-    if ($info === false || empty($info['mime'])) {
-        throw new RuntimeException(t('experimental_upload.error_invalid_thumbnail', 'The prepared upload package contains an invalid thumbnail.'));
-    }
-    $mime = (string) $info['mime'];
-    if ($format === 'jpg' && $mime !== 'image/jpeg') {
+    if ($payload === '' || !experimental_upload_payload_matches_format($format, $payload)) {
         throw new RuntimeException(t('experimental_upload.error_thumbnail_format', 'The prepared upload package contains a thumbnail with the wrong format.'));
     }
-    if ($format === 'webp' && $mime !== 'image/webp') {
-        throw new RuntimeException(t('experimental_upload.error_thumbnail_format', 'The prepared upload package contains a thumbnail with the wrong format.'));
+}
+
+/**
+ * Return true when an image payload has the expected lightweight file signature.
+ *
+ * @param string $filename Filename value.
+ * @param string $payload Payload value.
+ * @return bool True when the extension and bytes are compatible.
+ */
+function experimental_upload_payload_matches_image_signature(string $filename, string $payload): bool
+{
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return match ($extension) {
+        'jpg', 'jpeg' => str_starts_with($payload, "\xff\xd8\xff"),
+        'png' => str_starts_with($payload, "\x89PNG\r\n\x1a\n"),
+        'gif' => str_starts_with($payload, 'GIF87a') || str_starts_with($payload, 'GIF89a'),
+        'webp' => strlen($payload) >= 12 && substr($payload, 0, 4) === 'RIFF' && substr($payload, 8, 4) === 'WEBP',
+        default => false,
+    };
+}
+
+/**
+ * Return true when a prepared thumbnail payload matches its manifest format.
+ *
+ * @param string $format Thumbnail format value.
+ * @param string $payload Payload value.
+ * @return bool True when the bytes match the expected thumbnail format.
+ */
+function experimental_upload_payload_matches_format(string $format, string $payload): bool
+{
+    return match ($format) {
+        'jpg' => str_starts_with($payload, "\xff\xd8\xff"),
+        'webp' => strlen($payload) >= 12 && substr($payload, 0, 4) === 'RIFF' && substr($payload, 8, 4) === 'WEBP',
+        default => false,
+    };
+}
+
+
+/**
+ * Return a readable byte count for server-side upload progress events.
+ *
+ * @param int $bytes Byte count value.
+ * @return string Text result for the caller.
+ */
+function experimental_upload_format_bytes(int $bytes): string
+{
+    $bytes = max(0, $bytes);
+    if ($bytes < 1024) {
+        return $bytes . ' B';
     }
+    $units = ['KB', 'MB', 'GB', 'TB'];
+    $value = $bytes / 1024;
+    $unitIndex = 0;
+    while ($value >= 1024 && $unitIndex < count($units) - 1) {
+        $value /= 1024;
+        $unitIndex++;
+    }
+    $decimals = $value >= 100 || $unitIndex === 0 ? 0 : 1;
+    return number_format($value, $decimals, '.', '') . ' ' . $units[$unitIndex];
+}
+
+/**
+ * Create one upload progress event for the browser mini log.
+ *
+ * @param float $startedAt Request start timestamp.
+ * @param string $message Event message.
+ * @param array $context Event context.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function experimental_upload_progress_event(float $startedAt, string $message, array $context = []): array
+{
+    return [
+        'time' => date('H:i:s'),
+        'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+        'message' => $message,
+        'context' => $context,
+    ];
 }
 
 /**
@@ -631,6 +885,83 @@ function experimental_upload_manifest_from_entries(array $entries): array
 }
 
 /**
+ * Validate that a ZIP manifest belongs to the posted upload session and batch.
+ *
+ * @param array $manifest Manifest data.
+ * @param string $sessionId Session id identifier.
+ * @param int $batchIndex Batch index value.
+ */
+function experimental_upload_validate_manifest_identity(array $manifest, string $sessionId, int $batchIndex): void
+{
+    $manifestSessionId = (string) ($manifest['upload_session_id'] ?? '');
+    $manifestBatchIndex = array_key_exists('batch_index', $manifest) ? (int) $manifest['batch_index'] : -1;
+    if ($manifestSessionId === '' || !hash_equals($sessionId, $manifestSessionId) || $manifestBatchIndex !== $batchIndex) {
+        throw new RuntimeException(t('experimental_upload.error_manifest_mismatch', 'The prepared upload package does not match the posted upload session.'));
+    }
+}
+
+/**
+ * Return manifest items in the original browser source order.
+ *
+ * The browser can prepare images concurrently, so this server-side safety net
+ * never trusts ZIP entry order alone. The source_index value is assigned before
+ * workers start and therefore represents the deterministic filename order chosen
+ * by the upload coordinator.
+ *
+ * @param array $items Manifest item values.
+ * @return array<int,array<string,mixed>> Items sorted by source_index.
+ */
+function experimental_upload_manifest_items_in_source_order(array $items): array
+{
+    $ordered = [];
+    foreach ($items as $index => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $item['_manifest_order_index'] = (int) $index;
+        $ordered[] = $item;
+    }
+
+    usort($ordered, static function (array $left, array $right): int {
+        $leftSource = experimental_upload_manifest_source_index($left, (int) ($left['_manifest_order_index'] ?? 0));
+        $rightSource = experimental_upload_manifest_source_index($right, (int) ($right['_manifest_order_index'] ?? 0));
+        if ($leftSource !== $rightSource) {
+            return $leftSource <=> $rightSource;
+        }
+        return (int) ($left['_manifest_order_index'] ?? 0) <=> (int) ($right['_manifest_order_index'] ?? 0);
+    });
+
+    return $ordered;
+}
+
+/**
+ * Return one manifest item source index with a safe fallback.
+ *
+ * @param array $item Manifest item value.
+ * @param int $fallback Fallback order value.
+ * @return int Source order value.
+ */
+function experimental_upload_manifest_source_index(array $item, int $fallback): int
+{
+    if (array_key_exists('source_index', $item) && is_numeric($item['source_index'])) {
+        return max(0, (int) $item['source_index']);
+    }
+    return max(0, $fallback);
+}
+
+/**
+ * Return the durable partial-batch state key for one manifest item.
+ *
+ * @param array $item Manifest item value.
+ * @param int $fallback Fallback order value.
+ * @return string State key used by retry idempotency.
+ */
+function experimental_upload_manifest_state_key(array $item, int $fallback): string
+{
+    return 'source-' . experimental_upload_manifest_source_index($item, $fallback);
+}
+
+/**
  * Store one browser-prepared ZIP package in a target gallery.
  *
  * @param int $galleryId Gallery identifier.
@@ -641,11 +972,18 @@ function experimental_upload_manifest_from_entries(array $entries): array
  */
 function experimental_upload_store_prepared_zip_batch(int $galleryId, array $uploadedZip, string $sessionId, int $batchIndex): array
 {
+    $startedAt = microtime(true);
+    $events = [experimental_upload_progress_event($startedAt, 'PHP received prepared ZIP request for batch ' . ($batchIndex + 1) . '.')];
     if ($galleryId <= 0) {
         throw new RuntimeException(t('experimental_upload.error_gallery_required', 'Choose an existing gallery before using the experimental upload pipeline.'));
     }
     if (($cached = experimental_upload_cached_batch_response($galleryId, $sessionId, $batchIndex)) !== null) {
         $cached['cached'] = true;
+        $cached['upload_events'] = array_merge(
+            $events,
+            [experimental_upload_progress_event($startedAt, 'Reused cached result for this already accepted ZIP batch.')],
+            array_values((array) ($cached['upload_events'] ?? []))
+        );
         return $cached;
     }
 
@@ -669,13 +1007,24 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
         throw new RuntimeException(t('upload.error.file_unavailable', 'Uploaded file is not available.'));
     }
+    $zipSize = (int) ($uploadedZip['size'] ?? (@filesize($tmpName) ?: 0));
+    $events[] = experimental_upload_progress_event($startedAt, 'Uploaded ZIP is available in PHP temp storage, ' . experimental_upload_format_bytes($zipSize) . '.');
 
     $uploadLimit = experimental_upload_server_upload_limit_bytes();
     $settings = experimental_upload_settings();
     $maxBatchBytes = experimental_upload_effective_batch_target_bytes($uploadLimit, (float) $settings['zip_size_threshold_ratio'], (int) $settings['max_zip_batch_bytes']);
     $entries = experimental_upload_parse_store_zip($tmpName, $maxBatchBytes);
+    $events[] = experimental_upload_progress_event($startedAt, 'Parsed store-only ZIP with ' . count($entries) . ' file entr' . (count($entries) === 1 ? 'y' : 'ies') . '.');
     $manifest = experimental_upload_manifest_from_entries($entries);
-    $items = array_values((array) ($manifest['items'] ?? []));
+    experimental_upload_validate_manifest_identity($manifest, $sessionId, $batchIndex);
+    $events[] = experimental_upload_progress_event($startedAt, 'Validated ZIP manifest for batch ' . ($batchIndex + 1) . '.');
+    $events[] = experimental_upload_progress_event($startedAt, 'Preserving browser source order for accepted images.');
+    $sortBase = experimental_upload_session_sort_base($galleryId, $sessionId);
+    $events[] = experimental_upload_progress_event($startedAt, 'Reserved deterministic upload order base ' . $sortBase . ' for this browser session.');
+    $manifestHash = hash('sha256', (string) ($entries['manifest.json'] ?? ''));
+    $batchState = experimental_upload_load_batch_state($galleryId, $sessionId, $batchIndex, $manifestHash);
+    $batchStateItems = is_array($batchState['items'] ?? null) ? $batchState['items'] : [];
+    $items = experimental_upload_manifest_items_in_source_order((array) ($manifest['items'] ?? []));
     $storedItems = [];
     $storedFilenames = [];
 
@@ -683,26 +1032,90 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
         if (!is_array($item)) {
             continue;
         }
-        $preparedName = safe_uploaded_image_filename((string) ($item['prepared_name'] ?? $item['original_name'] ?? ('image-' . ($index + 1) . '.jpg')));
-        $originalPath = normalize_relative_path((string) ($item['original_path'] ?? ('originals/' . $preparedName)));
-        if ($originalPath === '' || !isset($entries[$originalPath])) {
-            throw new RuntimeException(t('experimental_upload.error_original_missing', 'The prepared upload package is missing an original image.'));
-        }
-        experimental_upload_validate_original_payload($preparedName, $entries[$originalPath]);
-        [$storedFilename, $targetPath] = unique_gallery_upload_target($gallery, $preparedName);
-        if (@file_put_contents($targetPath, $entries[$originalPath], LOCK_EX) === false) {
-            throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
+        $manifestOrderIndex = (int) ($item['_manifest_order_index'] ?? $index);
+        $sourceIndex = experimental_upload_manifest_source_index($item, $manifestOrderIndex);
+        $stateKey = experimental_upload_manifest_state_key($item, $manifestOrderIndex);
+        $existingStateItem = is_array($batchStateItems[$stateKey] ?? null) ? $batchStateItems[$stateKey] : [];
+        $storedFilename = experimental_upload_reusable_state_filename($gallery, $existingStateItem);
+        if ($storedFilename === null) {
+            $preparedName = safe_uploaded_image_filename((string) ($item['prepared_name'] ?? $item['original_name'] ?? ('image-' . ($index + 1) . '.jpg')));
+            $originalPath = normalize_relative_path((string) ($item['original_path'] ?? ('originals/' . $preparedName)));
+            if ($originalPath === '' || !isset($entries[$originalPath])) {
+                throw new RuntimeException(t('experimental_upload.error_original_missing', 'The prepared upload package is missing an original image.'));
+            }
+            experimental_upload_validate_original_payload($preparedName, $entries[$originalPath]);
+            [$storedFilename, $targetPath] = unique_gallery_upload_target($gallery, $preparedName);
+            if (@file_put_contents($targetPath, $entries[$originalPath], LOCK_EX) === false) {
+                throw new RuntimeException(t('upload.error.store_image_failed', 'Could not store uploaded image.'));
+            }
+            $batchStateItems[$stateKey] = [
+                'manifest_index' => $manifestOrderIndex,
+                'source_index' => $sourceIndex,
+                'stored_filename' => $storedFilename,
+                'image_id' => 0,
+            ];
+            $batchState['items'] = $batchStateItems;
+            experimental_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
         }
         $storedFilenames[] = $storedFilename;
         $storedItems[] = [
-            'manifest_index' => $index,
+            'manifest_index' => $manifestOrderIndex,
+            'source_index' => $sourceIndex,
+            'state_key' => $stateKey,
             'stored_filename' => $storedFilename,
+            'source_metadata' => [
+                'width' => (int) ($item['original_width'] ?? $item['width'] ?? 0),
+                'height' => (int) ($item['original_height'] ?? $item['height'] ?? 0),
+                'display_width' => (int) ($item['original_display_width'] ?? $item['original_width'] ?? $item['width'] ?? 0),
+                'display_height' => (int) ($item['original_display_height'] ?? $item['original_height'] ?? $item['height'] ?? 0),
+                'exif_orientation' => (int) ($item['original_exif_orientation'] ?? 1),
+                'mime' => (string) ($item['original_mime'] ?? $item['mime'] ?? ''),
+                'exif' => is_array($item['client_exif'] ?? null) ? $item['client_exif'] : [],
+            ],
             'variants' => array_values((array) ($item['variants'] ?? [])),
         ];
     }
 
     $uploadedCount = count($storedFilenames);
-    $changed = $uploadedCount > 0 ? scan_gallery_images($galleryId) : 0;
+    $storedOriginalBytes = 0;
+    foreach ($storedFilenames as $filename) {
+        $path = $galleryRoot . DIRECTORY_SEPARATOR . $filename;
+        $storedOriginalBytes += is_file($path) ? (int) (@filesize($path) ?: 0) : 0;
+    }
+    $events[] = experimental_upload_progress_event($startedAt, 'Stored or reused ' . $uploadedCount . ' original image file(s), ' . experimental_upload_format_bytes($storedOriginalBytes) . '.');
+    $sourceMetadataByFilename = [];
+    $sourceIndexByFilename = [];
+    foreach ($storedItems as $storedItem) {
+        $filename = normalize_relative_path((string) ($storedItem['stored_filename'] ?? ''));
+        if ($filename !== '' && is_array($storedItem['source_metadata'] ?? null)) {
+            $sourceMetadataByFilename[$filename] = $storedItem['source_metadata'];
+        }
+        if ($filename !== '') {
+            $sourceIndexByFilename[$filename] = experimental_upload_manifest_source_index($storedItem, (int) ($storedItem['manifest_index'] ?? 0));
+        }
+    }
+    $clientExifCount = 0;
+    $clientGpsCount = 0;
+    foreach ($sourceMetadataByFilename as $sourceMetadata) {
+        $clientExif = is_array($sourceMetadata['exif'] ?? null) ? $sourceMetadata['exif'] : [];
+        if ($clientExif !== []) {
+            $clientExifCount++;
+        }
+        if (isset($clientExif['gps_lat'], $clientExif['gps_lng'])) {
+            $clientGpsCount++;
+        }
+    }
+    $changed = $uploadedCount > 0
+        ? scan_gallery_selected_uploaded_images($galleryId, $storedFilenames, $sourceMetadataByFilename)
+        : 0;
+    $events[] = experimental_upload_progress_event($startedAt, 'Indexed uploaded originals in the database, changed rows: ' . $changed . '.');
+    $orderedRows = experimental_upload_apply_source_sort_order($galleryId, $sourceIndexByFilename, $sortBase);
+    if ($orderedRows > 0) {
+        $events[] = experimental_upload_progress_event($startedAt, 'Applied deterministic source order to ' . $orderedRows . ' image row(s).');
+    }
+    if ($clientExifCount > 0 || $clientGpsCount > 0) {
+        $events[] = experimental_upload_progress_event($startedAt, 'Stored client-side EXIF metadata for ' . $clientExifCount . ' image(s), including GPS for ' . $clientGpsCount . ' image(s).');
+    }
     $imageIds = uploaded_gallery_image_ids($galleryId, $storedFilenames);
     $scanFailedFilenames = gallery_upload_scan_failed_filenames($galleryId, $storedFilenames);
     $preRenameRowsByPath = [];
@@ -712,14 +1125,39 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
             $preRenameRowsByPath[$filename] = $row;
         }
     }
+    foreach ($storedItems as $storedItem) {
+        $stateKey = (string) ($storedItem['state_key'] ?? ($storedItem['manifest_index'] ?? ''));
+        $filename = (string) ($storedItem['stored_filename'] ?? '');
+        $row = $preRenameRowsByPath[$filename] ?? null;
+        if ($stateKey !== '' && is_array($row)) {
+            $batchStateItems[$stateKey]['image_id'] = (int) ($row['id'] ?? 0);
+            $batchStateItems[$stateKey]['stored_filename'] = (string) ($row['relative_path'] ?? $filename);
+        }
+    }
+    $batchState['items'] = $batchStateItems;
+    experimental_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
 
     $renameResult = null;
     if (admin_upload_auto_rename_enabled() && $imageIds) {
+        $events[] = experimental_upload_progress_event($startedAt, 'Auto-renaming uploaded image rows.');
         $renameResult = gallery_upload_auto_rename_image_ids($galleryId, $imageIds);
         $imageIds = uploaded_gallery_existing_image_ids($galleryId, $imageIds);
+        $events[] = experimental_upload_progress_event($startedAt, 'Auto-renaming finished, renamed rows: ' . (int) ($renameResult['renamed'] ?? 0) . '.');
     }
     $rowsById = experimental_upload_image_rows_by_ids($imageIds);
     $finalFilenames = uploaded_gallery_filenames_for_image_ids($galleryId, $imageIds);
+    foreach ($storedItems as $storedItem) {
+        $stateKey = (string) ($storedItem['state_key'] ?? ($storedItem['manifest_index'] ?? ''));
+        $storedFilename = (string) ($storedItem['stored_filename'] ?? '');
+        $preRenameRow = $preRenameRowsByPath[$storedFilename] ?? null;
+        $imageId = is_array($preRenameRow) ? (int) ($preRenameRow['id'] ?? 0) : 0;
+        if ($stateKey !== '' && $imageId > 0 && isset($rowsById[$imageId])) {
+            $batchStateItems[$stateKey]['image_id'] = $imageId;
+            $batchStateItems[$stateKey]['stored_filename'] = (string) ($rowsById[$imageId]['relative_path'] ?? $storedFilename);
+        }
+    }
+    $batchState['items'] = $batchStateItems;
+    experimental_upload_store_batch_state($galleryId, $sessionId, $batchIndex, $batchState);
 
     $thumbsCreated = 0;
     $thumbnailFailed = 0;
@@ -728,6 +1166,7 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
         gallery_thumbs_dir($gallery, true);
     }
 
+    $events[] = experimental_upload_progress_event($startedAt, 'Writing prepared thumbnail files for accepted images.');
     foreach ($storedItems as $storedItem) {
         $storedFilename = (string) $storedItem['stored_filename'];
         $preRenameRow = $preRenameRowsByPath[$storedFilename] ?? null;
@@ -765,7 +1204,22 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
                 if (function_exists('Gallery\\Services\\thumbnail_touch_generated_file_for_source')) {
                     thumbnail_touch_generated_file_for_source($targetPath, $sourcePath);
                 }
-                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
+                if (function_exists('Gallery\\Services\\thumbnail_metadata_record_prepared_variant') && thumbnail_metadata_schema_ready()) {
+                    $metadata = thumbnail_metadata_record_prepared_variant(
+                        $image,
+                        $gallery,
+                        $size,
+                        $format,
+                        $targetPath,
+                        (int) ($variant['width'] ?? 0),
+                        (int) ($variant['height'] ?? 0)
+                    );
+                    if (empty($metadata['valid'])) {
+                        $thumbnailFailed++;
+                        $thumbnailErrors[] = 'Invalid prepared thumbnail: ' . basename($targetPath);
+                        continue;
+                    }
+                } elseif (function_exists('Gallery\\Services\\thumbnail_metadata_record_file') && thumbnail_metadata_schema_ready()) {
                     $metadata = thumbnail_metadata_record_file($image, $gallery, $size, $format, $targetPath, $sourcePath, true);
                     if (empty($metadata['valid'])) {
                         $thumbnailFailed++;
@@ -780,6 +1234,8 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
             }
         }
     }
+
+    $events[] = experimental_upload_progress_event($startedAt, 'Registered prepared thumbnails, created ' . $thumbsCreated . ', failed ' . $thumbnailFailed . '.');
 
     $response = [
         'ok' => true,
@@ -806,6 +1262,7 @@ function experimental_upload_store_prepared_zip_batch(int $galleryId, array $upl
         'renamed' => $renameResult === null ? 0 : (int) ($renameResult['renamed'] ?? 0),
         'rename_warnings' => $renameResult === null ? [] : array_values((array) ($renameResult['warnings'] ?? [])),
         'rename_failures' => $renameResult === null ? [] : array_values((array) ($renameResult['failures'] ?? [])),
+        'upload_events' => array_values($events),
         'redirect_url' => url_for('admin_edit_gallery', ['id' => $galleryId, 'uploaded' => $uploadedCount, 'scanned' => $changed, 'thumbnails' => $thumbsCreated, 'thumbnail_failed' => $thumbnailFailed, 'scan_failed' => count($scanFailedFilenames), 'tab' => 'admin-edit-images']) . '#admin-edit-images',
     ];
 

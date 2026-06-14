@@ -40,8 +40,8 @@ import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabs, setupAdminTab
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
-import { escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
-import { experimentalUploadRequested, runExperimentalGalleryUpload } from './admin-experimental-upload.js?v=20260610-client-upload-v2';
+import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
+import { experimentalUploadRequested, runExperimentalGalleryUpload } from './admin-experimental-upload.js?v=20260614-upload-order-v2';
 
 const adminSidePanelMotionDurationMs = 280;
 
@@ -1832,6 +1832,84 @@ function showAdminGallerySidePanelResultNotice(message, targetUrl) {
     main.prepend(notice);
 }
 
+
+/**
+ * Return a readable byte count for upload progress text.
+ *
+ * @param {*} value Byte count value.
+ * @return {string} Human-readable byte count.
+ */
+function formatFileSize(value) {
+    const bytes = Math.max(0, Number(value || 0));
+    if (bytes < 1024) {
+        return `${Math.round(bytes)} B`;
+    }
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let number = bytes / 1024;
+    let unitIndex = 0;
+    while (number >= 1024 && unitIndex < units.length - 1) {
+        number /= 1024;
+        unitIndex++;
+    }
+    const digits = number >= 100 || unitIndex === 0 ? 0 : 1;
+    return `${number.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+/**
+ * Return source-file totals for the classic upload path.
+ *
+ * @param {File[]} files Selected files.
+ * @return {Record<string, number>} Progress state.
+ */
+function createClassicUploadProgressState(files) {
+    return {
+        totalFiles: files.length,
+        totalBytes: files.reduce((sum, file) => sum + Number(file.size || 0), 0),
+        uploadedFiles: 0,
+        uploadedBytes: 0,
+        currentFileIndex: 0,
+        currentFileBytes: 0,
+        currentFileUploadedBytes: 0,
+    };
+}
+
+/**
+ * Return a compact progress metrics string for classic uploads.
+ *
+ * @param {Record<string, number>} state Progress state.
+ * @return {string} Metrics label.
+ */
+function classicUploadProgressMetrics(state) {
+    const parts = [
+        `Pictures uploaded ${state.uploadedFiles}/${state.totalFiles}`,
+        `source data ${formatFileSize(state.uploadedBytes)} / ${formatFileSize(state.totalBytes)}`,
+    ];
+    if (state.currentFileBytes > 0) {
+        parts.push(`current picture ${state.currentFileIndex}: ${formatFileSize(state.currentFileUploadedBytes)} / ${formatFileSize(state.currentFileBytes)}`);
+    }
+    return parts.join(' | ');
+}
+
+/**
+ * Append server-reported upload events to the rolling progress log.
+ *
+ * @param {HTMLElement} progress Progress container.
+ * @param {Array<Record<string, *>>} events Server events.
+ */
+function appendServerUploadEvents(progress, events) {
+    if (!Array.isArray(events)) {
+        return;
+    }
+    events.forEach((event) => {
+        const message = String(event.message || '').trim();
+        if (message === '') {
+            return;
+        }
+        const elapsed = Number(event.elapsed_ms || 0);
+        appendUploadProgressLog(progress, elapsed > 0 ? `Server: ${message} (${elapsed} ms)` : `Server: ${message}`);
+    });
+}
+
 /**
  * Handles selected gallery upload files behavior for the gallery UI.
  *
@@ -1844,7 +1922,51 @@ function selectedGalleryUploadFiles(form) {
     if (!(fileInput instanceof HTMLInputElement) || !fileInput.files || fileInput.files.length === 0) {
         return [];
     }
-    return Array.from(fileInput.files);
+    return Array.from(fileInput.files)
+        .filter((file) => file instanceof File)
+        .sort(compareGalleryUploadFilesByDefaultFolderOrder);
+}
+
+/**
+ * Compare selected files by deterministic folder/name order for classic uploads.
+ *
+ * @param {File} left Left selected file.
+ * @param {File} right Right selected file.
+ * @return {number} Sort comparison result.
+ */
+function compareGalleryUploadFilesByDefaultFolderOrder(left, right) {
+    const comparison = galleryUploadFileNameCollator().compare(galleryUploadFileOrderKey(left), galleryUploadFileOrderKey(right));
+    if (comparison !== 0) {
+        return comparison;
+    }
+    return galleryUploadFileNameCollator().compare(String(left.name || ''), String(right.name || ''));
+}
+
+/**
+ * Return the stable path/name key used for upload ordering.
+ *
+ * @param {File} file Selected browser file.
+ * @return {string} Folder-relative path when available, otherwise filename.
+ */
+function galleryUploadFileOrderKey(file) {
+    const relativePath = typeof file.webkitRelativePath === 'string' ? file.webkitRelativePath : '';
+    const key = relativePath.trim() !== '' ? relativePath : String(file.name || '');
+    return key.replace(/\\/g, '/');
+}
+
+/**
+ * Return a cached natural filename collator for upload order.
+ *
+ * @return {Intl.Collator} Collator used for source file ordering.
+ */
+function galleryUploadFileNameCollator() {
+    if (!galleryUploadFileNameCollator.instance) {
+        galleryUploadFileNameCollator.instance = new Intl.Collator(undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        });
+    }
+    return galleryUploadFileNameCollator.instance;
 }
 
 /**
@@ -1935,6 +2057,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         };
     }
 
+    const progressState = createClassicUploadProgressState(files);
+    appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_selected', 'Selected {count} image(s), {bytes} source data.', {count: files.length, bytes: formatFileSize(progressState.totalBytes)}));
+    updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
+
     // uploaded stores state or configuration for the gallery front-end flow.
     let uploaded = 0;
     // scanned stores state or configuration for the gallery front-end flow.
@@ -1971,19 +2097,36 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         const file = files[fileIndex];
         // humanIndex stores state or configuration for the gallery front-end flow.
         const humanIndex = fileIndex + 1;
+        const uploadedBeforeFile = progressState.uploadedBytes;
+        progressState.currentFileIndex = humanIndex;
+        progressState.currentFileBytes = Number(file.size || 0);
+        progressState.currentFileUploadedBytes = 0;
         updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+        updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
+        appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_uploading_file', 'Uploading picture {current}/{total}: {name}, {bytes}.', {current: humanIndex, total: files.length, name: file.name, bytes: formatFileSize(file.size || 0)}));
         // uploadResult stores state or configuration for the gallery front-end flow.
         const uploadResult = await sendGalleryUploadChunk(form, cloneGalleryUploadBody(form, [file], galleryId), (event) => {
             if (!event.lengthComputable) {
                 updateBasicProgress(progress, Math.round((fileIndex / files.length) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+                updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
                 return;
             }
             // completedPart stores state or configuration for the gallery front-end flow.
             const completedPart = fileIndex / files.length;
             // currentPart stores state or configuration for the gallery front-end flow.
             const currentPart = (event.loaded / event.total) / files.length;
+            const ratio = Math.max(0, Math.min(1, event.loaded / event.total));
+            progressState.currentFileUploadedBytes = Math.round(Number(file.size || 0) * ratio);
+            progressState.uploadedBytes = uploadedBeforeFile + progressState.currentFileUploadedBytes;
             updateBasicProgress(progress, Math.round((completedPart + currentPart) * 100), `Uploading ${humanIndex} of ${files.length}: ${file.name}`);
+            updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
         });
+        appendServerUploadEvents(progress, uploadResult.upload_events || []);
+        progressState.uploadedFiles = humanIndex;
+        progressState.uploadedBytes = uploadedBeforeFile + Number(file.size || 0);
+        progressState.currentFileUploadedBytes = Number(file.size || 0);
+        updateUploadProgressMetrics(progress, classicUploadProgressMetrics(progressState));
+        appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_uploaded_file', 'Finished picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
 
         if (!galleryId) {
             galleryId = Number(uploadResult.gallery_id || 0);
@@ -2004,8 +2147,10 @@ async function runGalleryUploadFiles(form, progress, createThumbnails) {
         if (createThumbnails) {
             // imageIds stores state or configuration for the gallery front-end flow.
             const imageIds = Array.isArray(uploadResult.image_ids) ? uploadResult.image_ids : [];
+            appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_thumbnails_started', 'Creating server thumbnails for picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
             // thumbResult stores state or configuration for the gallery front-end flow.
             const thumbResult = await runUploadedImageThumbnailJob(form, progress, imageIds, humanIndex, files.length, file.name, thumbnails, thumbnailSkipped);
+            appendUploadProgressLog(progress, i18n('admin.side_panel.upload_log_thumbnails_finished', 'Thumbnail job finished for picture {current}/{total}: {name}.', {current: humanIndex, total: files.length, name: file.name}));
             thumbnails += Number(thumbResult.created || 0);
             thumbnailSkipped += Number(thumbResult.skipped || 0);
             thumbnailFailed += Number(thumbResult.failed || 0);

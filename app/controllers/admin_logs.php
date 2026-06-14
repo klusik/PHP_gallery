@@ -32,6 +32,12 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Controllers;
+
+use Throwable;
+use RuntimeException;
 use function Gallery\Controllers\cms_not_found;
 use function Gallery\Core\base_url;
 use function Gallery\Core\csrf_field;
@@ -48,6 +54,28 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Views\view_render_admin_feature_flag;
+use function Gallery\Services\admin_log_event;
+use function Gallery\Services\admin_log_category_options;
+use function Gallery\Services\admin_log_context_array;
+use function Gallery\Services\admin_log_count;
+use function Gallery\Services\admin_log_create_export_zip;
+use function Gallery\Services\admin_log_export_group_text;
+use function Gallery\Services\admin_log_export_payload;
+use function Gallery\Services\admin_log_export_rows;
+use function Gallery\Services\admin_log_export_temp_path;
+use function Gallery\Services\admin_log_export_text;
+use function Gallery\Services\admin_log_export_zip_filename;
+use function Gallery\Services\admin_log_find;
+use function Gallery\Services\admin_log_group_member_rows;
+use function Gallery\Services\admin_log_grouped_count;
+use function Gallery\Services\admin_log_grouped_list;
+use function Gallery\Services\admin_log_list;
+use function Gallery\Services\admin_log_send_export_zip;
+use function Gallery\Services\admin_log_severity_options;
+use function Gallery\Services\admin_log_status_label;
+use function Gallery\Services\admin_log_status_options;
+use function Gallery\Services\admin_log_update_group_status;
+use function Gallery\Services\admin_log_update_status;
 
 /**
  * Administrative log controller model.

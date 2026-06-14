@@ -1,5 +1,81 @@
 # Patch notes
 
+## Version 0.80
+
+Version 0.80 is a major quality-of-life release focused on upload reliability, performance, and user experience. It refactors the experimental upload system with client-side EXIF metadata extraction, robust batch idempotency recovery, real-time progress tracking, and deterministic image ordering. It also fixes map pin positioning accuracy, improves admin storage statistics and logging, and strengthens the overall data integrity throughout the platform.
+
+  ### Highlights
+
+  #### Refactored experimental upload with client-side EXIF processing
+
+  - Implemented browser-based EXIF and GPS metadata extraction from JPEG files, eliminating server-side parsing overhead during uploads.
+  - Added robust batch idempotency recovery so uploads can be safely retried without duplicating stored images.
+  - Introduced real-time upload event tracking with detailed progress feedback to users throughout the pipeline.
+  - Preserved deterministic image ordering across multi-batch uploads to match the user's original file selection.
+
+  #### Fixed map pin accuracy for location display
+
+  - Corrected the icon anchor positioning so map pins now display location at the visual pin point rather than above the marker.
+  - Improved marker positioning for active photo pins and route waypoint markers.
+
+  #### Enhanced admin storage statistics
+
+  - Added detailed storage breakdown by file type and category.
+  - Improved query performance and accuracy of storage reporting.
+
+  #### Improved admin logs and diagnostics
+
+  - Enhanced log filtering and search capabilities.
+  - Added better formatting and readability to log entries.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Refactored `app/services/experimental_uploads.php` with batch markers, state management, and recovery functions.
+  - Enhanced `app/services/image_scanning.php` with uncached lookups and client-provided EXIF metadata handling.
+  - Added `app/services/public_paths.php` for public path resolution utilities.
+  - Expanded `app/services/thumbnail_metadata.php` with enhanced metadata record management.
+  - Updated `app/services/uploads.php` with event tracking and improved status reporting.
+  - Enhanced `app/controllers/admin_uploads.php` to track and report upload events.
+  - Improved `app/controllers/admin_logs.php` filtering and display.
+  - Updated `app/services/admin_storage_statistics.php` with comprehensive breakdown reporting.
+
+  #### Database
+
+  - No new migrations required.
+  - Improved query performance with added LIMIT clauses and proper indexing.
+
+  #### Frontend
+
+  - Added new `public/assets/gallery-modules/experimental-upload-worker.js` for browser-side JPEG EXIF parsing.
+  - Significantly enhanced `public/assets/gallery-modules/admin-experimental-upload.js` with progress indicators and event timeline.
+  - Updated `public/assets/gallery-modules/admin-side-panel.js` with event display and order tracking.
+  - Improved `public/assets/gallery-modules/lightbox.js` map pin positioning with corrected icon anchors.
+  - Added CSS styling in `public/assets/styles/public.css` and `public/assets/styles/side-panel.css` for upload progress visualization.
+
+  #### Tests
+
+  - Verified EXIF parsing with various JPEG files.
+  - Tested batch idempotency recovery under network failure scenarios.
+  - Validated image order preservation across multi-batch uploads.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Map pins now display your location at the exact point of the marker pin.
+  - Improved accuracy of location indicators on map-based galleries.
+
+  #### For administrators
+
+  - Faster uploads with client-side EXIF extraction reducing server load.
+  - Automatic recovery from interrupted uploads without requiring manual retry.
+  - Real-time visibility into upload progress with detailed event tracking.
+  - Images always maintain their original selection order across multiple batch uploads.
+  - Enhanced storage statistics showing detailed breakdown by file type.
+  - Improved admin logs with better filtering and search capabilities.
+
 ## Version 0.79.2
 
 Version 0.79.2 synchronizes the release metadata after the 0.79.1 admin editor and version-display fixes, so the public footer, Admin update menu, patch notes, and core integrity manifest all report the same patch-level release.

@@ -150,6 +150,7 @@ use function Gallery\Views\view_render_admin_metric_grid;
 use function Gallery\Views\view_render_admin_openai_text_assist_tool;
 use function Gallery\Views\view_render_admin_simbrief_description_tool;
 use function Gallery\Views\view_render_admin_tab_intro;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Handles cms admin scan images logic for the gallery application.
@@ -983,7 +984,7 @@ function cms_admin_edit_gallery(): void
                         'gallery_path' => (string) ($gallery['folder_path'] ?? ''),
                         'pattern' => $renamerPattern,
                     ]);
-                } elseif (function_exists('admin_log_event')) {
+                } elseif (function_exists('Gallery\\Services\\admin_log_event')) {
                     admin_log_event('error', 'media_renamer.gallery_failed', 'Gallery media rename failed.', [
                         'gallery_id' => (int) $gallery['id'],
                         'error' => $exception->getMessage(),

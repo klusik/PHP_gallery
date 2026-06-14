@@ -79,6 +79,7 @@ use function Gallery\Views\view_render_admin_storage_statistics_page;
 use function Gallery\Views\view_render_admin_storage_statistics_panel;
 use function Gallery\Views\view_render_admin_url_rewrite_card;
 use function Gallery\Views\view_render_admin_url_rewrite_warning;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Render the main Admin dashboard.

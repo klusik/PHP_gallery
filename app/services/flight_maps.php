@@ -735,14 +735,20 @@ function flight_map_navdata_status(): array
     }
 
     try {
-        $status['total'] = (int) db()->query('SELECT COUNT(*) FROM flight_map_nav_points')->fetchColumn();
+        $stmt = db()->prepare('SELECT COUNT(*) FROM flight_map_nav_points');
+        $stmt->execute();
+        $status['total'] = (int) $stmt->fetchColumn();
 
-        $kindRows = db()->query('SELECT kind, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY kind ORDER BY kind')->fetchAll();
+        $stmt = db()->prepare('SELECT kind, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY kind ORDER BY kind');
+        $stmt->execute();
+        $kindRows = $stmt->fetchAll();
         foreach ($kindRows ?: [] as $row) {
             $status['by_kind'][(string) ($row['kind'] ?? 'unknown')] = (int) ($row['row_count'] ?? 0);
         }
 
-        $sourceRows = db()->query('SELECT source, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY source ORDER BY source')->fetchAll();
+        $stmt = db()->prepare('SELECT source, COUNT(*) AS row_count FROM flight_map_nav_points GROUP BY source ORDER BY source');
+        $stmt->execute();
+        $sourceRows = $stmt->fetchAll();
         foreach ($sourceRows ?: [] as $row) {
             $source = trim((string) ($row['source'] ?? ''));
             $status['by_source'][$source !== '' ? $source : 'manual'] = (int) ($row['row_count'] ?? 0);

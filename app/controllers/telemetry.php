@@ -32,8 +32,14 @@
  *   2026-05-04
  */
 
+declare(strict_types=1);
+
+namespace Gallery\Controllers;
+
 use function Gallery\Core\request_method;
 use function Gallery\Services\t;
+use function Gallery\Services\telemetry_record_event;
+use function Gallery\Services\telemetry_request_excluded;
 
 /**
  * Public anonymous telemetry ingestion controller.

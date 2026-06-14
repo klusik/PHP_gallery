@@ -53,6 +53,7 @@ use function Gallery\Services\navigation_data_resolve_ident;
 use function Gallery\Services\navigation_data_status;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_navigation_data;
+use function Gallery\Services\admin_log_event;
 
 /**
  * Send a navigation-data JSON response and stop the request.
