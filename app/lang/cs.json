@@ -2785,5 +2785,11 @@
   "upload_automation.title": "API pro upload sledované složky",
   "vote.error.too_many_votes": "Hlasujete příliš rychle. Zkuste to za chvíli znovu.",
   "vote.like": "To se mi líbí",
-  "vote.no_like": "Bez hlasu"
+  "vote.no_like": "Bez hlasu",
+  "public.subgallery_sort.asc": "Nejstarší první",
+  "public.subgallery_sort.default": "Výchozí pořadí",
+  "public.subgallery_sort.desc": "Nejnovější první",
+  "public.subgallery_sort.help": "Řazení se týká jen podgalerií s vyplněným datem Od. Karty bez data zůstanou na svých aktuálních pozicích. Mění se jen aktuální zobrazení.",
+  "public.subgallery_sort.label": "Řazení podgalerií",
+  "public.subgallery_sort.title": "Seřadit podgalerie podle data"
 }

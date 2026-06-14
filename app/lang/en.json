@@ -2821,5 +2821,11 @@
   "upload_automation.title": "Watched-folder upload API",
   "vote.error.too_many_votes": "Too many votes. Try again in a moment.",
   "vote.like": "Like",
-  "vote.no_like": "No like"
+  "vote.no_like": "No like",
+  "public.subgallery_sort.asc": "Oldest first",
+  "public.subgallery_sort.default": "Default order",
+  "public.subgallery_sort.desc": "Newest first",
+  "public.subgallery_sort.help": "Only subgalleries with a From date participate. Undated cards keep their current positions. This changes only the current view.",
+  "public.subgallery_sort.label": "Subgallery sort",
+  "public.subgallery_sort.title": "Sort subgalleries by date"
 }

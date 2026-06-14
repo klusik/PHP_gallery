@@ -151,6 +151,8 @@ use function Gallery\Services\admin_log_event;
  *
  * This module renders the public home page, gallery pages, gallery access gate, share redirects, gallery cards, lightbox markup, and public inline admin edit forms.
  */
+const PUBLIC_SUBGALLERY_DATE_SORT_PARAM = 'subgallery_date_sort';
+
 function cms_home(): void
 {
     public_render_profile_start('home');
@@ -381,6 +383,16 @@ function cms_gallery(): void
     // Variable $children stores this steps working value.
     public_render_profile_count('gallery_scan_calls');
     $children = public_render_profile_span('child_gallery_lookup', static fn (): array => child_galleries((int) $gallery['id'], $publicOnly));
+    // $adminSubgalleryDateSortEnabled stores whether this viewer may use the date sort overlay.
+    $adminSubgalleryDateSortEnabled = current_user() && !admin_anonymous_preview_active();
+    // $subgalleryDateSortMode stores the requested temporary date sort mode for this page.
+    $subgalleryDateSortMode = $adminSubgalleryDateSortEnabled ? public_subgallery_date_sort_mode() : '';
+    // $datedSubgalleryCount stores how many direct children have a start date available for sorting.
+    $datedSubgalleryCount = public_count_dated_subgalleries($children);
+    if ($subgalleryDateSortMode !== '' && $datedSubgalleryCount > 1) {
+        // $children stores the same direct children with only dated rows reordered by their start date.
+        $children = public_sort_subgalleries_by_date($children, $subgalleryDateSortMode);
+    }
     // Variable $allChildren stores the complete sorted child-gallery list before optional pagination slicing.
     $allChildren = $children;
     // Variable $photoMapsAllowed stores whether individual photos may expose EXIF GPS points.
@@ -426,7 +438,7 @@ function cms_gallery(): void
     // Variable $photoPagination stores this steps working value.
     $photoPagination = pagination_model($imageTotalCount, $photoCurrentPage, (int) $paginationSettings['columns'], (int) $paginationSettings['rows'], 'photo_page', $galleryPaginationQuery, static fn (int $pageNumber): string => pagination_gallery_clean_url($gallery, $pageNumber, 'photos'));
     if (!empty($paginationSettings['enabled'])) {
-        // $children stores the subgallery list after sorting has already been applied by child_galleries().
+        // $children stores the subgallery list after any requested date sort has already been applied.
         $children = pagination_slice_items($children, $childPagination);
         // $images stores only the visible photo page so large galleries do not render full-gallery metadata.
         $images = public_render_profile_db('gallery_image_page_query', static fn (): array => gallery_lightbox_fetch_images($gallery, $publicOnly, (int) $photoPagination['offset'], (int) $photoPagination['limit'], false));
@@ -489,6 +501,8 @@ function cms_gallery(): void
     render_public_search_bar($gallery);
     // Variable $publicPageReorderEnabled stores whether the logged-in admin can reorder visible public-page cards.
     $publicPageReorderEnabled = current_user() && !admin_anonymous_preview_active();
+    // $publicSubgalleryReorderEnabled stores whether subgallery cards can expose drag ordering handles.
+    $publicSubgalleryReorderEnabled = $publicPageReorderEnabled && $subgalleryDateSortMode === '';
     // $pictureManagerEnabled stores whether the logged-in viewer can select and manage visible photos.
     $pictureManagerEnabled = current_user() && !admin_anonymous_preview_active() && (!function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('picture_manager'));
     if ($children || $images) {
@@ -497,14 +511,17 @@ function cms_gallery(): void
     }
     if ($children) {
         echo '<section class="panel public-subgallery-panel" data-public-subgallery-section aria-label="' . e(t('public.subgalleries', 'Subgalleries')) . '">';
-        render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
+        render_public_subgallery_date_sort_toolbar($gallery, $subgalleryDateSortMode, $datedSubgalleryCount, count($allChildren));
+        if ($subgalleryDateSortMode === '') {
+            render_public_page_reorder_toolbar('gallery', $gallery, !empty($paginationSettings['enabled']) ? $childPagination : [], count($children), count($allChildren));
+        }
         render_pagination_controls(!empty($paginationSettings['enabled']) ? $childPagination : [], t('pagination.subgallery_pages', 'Subgallery pages'));
         echo '<div class="grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="gallery" data-public-subgallery-grid>';
         public_render_profile_count('rendered_subgalleries', count($children));
         $subgalleryCardContexts = public_render_profile_span('subgallery_card_context_preload', static fn (): array => public_gallery_card_rendering_contexts($children, true, true));
-        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicPageReorderEnabled, $subgalleryCardContexts): void {
+        public_render_profile_span('render_subgallery_cards', static function () use ($children, $publicSubgalleryReorderEnabled, $subgalleryCardContexts): void {
             foreach ($children as $index => $child) {
-                render_gallery_card($child, true, $publicPageReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
+                render_gallery_card($child, true, $publicSubgalleryReorderEnabled && count($children) > 1, true, $index, $subgalleryCardContexts[(int) $child['id']] ?? []);
             }
         });
         echo '</div>';
@@ -635,6 +652,169 @@ function cms_gallery(): void
 /**
  * Render the anonymous preview control for logged-in admins viewing a public gallery page.
  */
+
+/**
+ * Return the requested admin-only subgallery date sort mode.
+ *
+ * @return string Sort mode: asc, desc, or an empty string for default order.
+ */
+function public_subgallery_date_sort_mode(): string
+{
+    // $mode stores the raw query value accepted from the public gallery URL.
+    $mode = strtolower(trim((string) ($_GET[PUBLIC_SUBGALLERY_DATE_SORT_PARAM] ?? '')));
+    return in_array($mode, ['asc', 'desc'], true) ? $mode : '';
+}
+
+/**
+ * Return whether a gallery row has a filled start date for date sorting.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @return bool True when the gallery has a usable start date.
+ */
+function public_subgallery_has_start_date(array $gallery): bool
+{
+    return trim((string) ($gallery['gallery_date'] ?? '')) !== '';
+}
+
+/**
+ * Count direct child galleries that have a filled start date.
+ *
+ * @param array $children Direct child gallery rows.
+ * @return int Number of child galleries that can participate in date sorting.
+ */
+function public_count_dated_subgalleries(array $children): int
+{
+    // $count stores the number of sortable dated child galleries.
+    $count = 0;
+    foreach ($children as $child) {
+        if (is_array($child) && public_subgallery_has_start_date($child)) {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+/**
+ * Sort dated subgalleries by start date while leaving undated positions alone.
+ *
+ * Undated cards are ignored by the sort exactly as requested by the Admin UI:
+ * their current visible positions remain stable, while dated rows occupy only
+ * the positions that already belonged to dated rows.
+ *
+ * @param array $children Direct child gallery rows in default order.
+ * @param string $mode Sort mode: asc or desc.
+ * @return array Direct child gallery rows with dated rows sorted.
+ */
+function public_sort_subgalleries_by_date(array $children, string $mode): array
+{
+    // $datedRows stores sortable gallery rows keyed by their original index.
+    $datedRows = [];
+    foreach ($children as $index => $child) {
+        if (is_array($child) && public_subgallery_has_start_date($child)) {
+            $datedRows[(int) $index] = $child;
+        }
+    }
+
+    if (count($datedRows) < 2) {
+        return $children;
+    }
+
+    // $datedPositions stores the original visible slots occupied by dated rows.
+    $datedPositions = array_keys($datedRows);
+    usort($datedRows, static function (array $left, array $right) use ($mode): int {
+        // $leftDate stores the normalized start date used as the primary key.
+        $leftDate = (string) ($left['gallery_date'] ?? '');
+        // $rightDate stores the normalized start date used as the primary key.
+        $rightDate = (string) ($right['gallery_date'] ?? '');
+        // $dateComparison stores ascending date comparison before optional reversal.
+        $dateComparison = strcmp($leftDate, $rightDate);
+        if ($dateComparison === 0) {
+            // $orderComparison keeps date ties deterministic and close to normal gallery order.
+            $orderComparison = ((int) ($left['sort_order'] ?? 0)) <=> ((int) ($right['sort_order'] ?? 0));
+            if ($orderComparison === 0) {
+                $orderComparison = strcasecmp((string) ($left['title'] ?? ''), (string) ($right['title'] ?? ''));
+            }
+            if ($orderComparison === 0) {
+                $orderComparison = ((int) ($left['id'] ?? 0)) <=> ((int) ($right['id'] ?? 0));
+            }
+            return $orderComparison;
+        }
+        return $mode === 'desc' ? -$dateComparison : $dateComparison;
+    });
+
+    // $sortedIndex stores the next dated row to inject back into a dated position.
+    $sortedIndex = 0;
+    foreach ($datedPositions as $index) {
+        $children[(int) $index] = $datedRows[$sortedIndex];
+        $sortedIndex++;
+    }
+
+    return array_values($children);
+}
+
+/**
+ * Build a public gallery URL for changing the temporary subgallery date sort.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $mode Sort mode: asc, desc, or an empty string for default order.
+ * @return string Public gallery URL with the requested sort state.
+ */
+function public_subgallery_date_sort_url(array $gallery, string $mode): string
+{
+    // $query stores non-routing query parameters that should survive the view switch.
+    $query = $_GET;
+    foreach (['page', 'public_path', 'gallery_path', 'slug', 'gallery_page', 'list_page', PUBLIC_SUBGALLERY_DATE_SORT_PARAM] as $name) {
+        unset($query[$name]);
+    }
+
+    if (in_array($mode, ['asc', 'desc'], true)) {
+        $query[PUBLIC_SUBGALLERY_DATE_SORT_PARAM] = $mode;
+    }
+
+    // $baseUrl stores the canonical public gallery URL without existing route state.
+    $baseUrl = rtrim(gallery_public_url($gallery), '/') . '/';
+    if ($query === []) {
+        return $baseUrl;
+    }
+    return $baseUrl . '?' . http_build_query($query);
+}
+
+/**
+ * Render the admin-only temporary subgallery date sort toolbar.
+ *
+ * @param array $gallery Gallery row or gallery data.
+ * @param string $activeMode Active sort mode: asc, desc, or an empty string.
+ * @param int $datedCount Number of child galleries with a filled start date.
+ * @param int $totalCount Total number of visible direct child galleries.
+ */
+function render_public_subgallery_date_sort_toolbar(array $gallery, string $activeMode, int $datedCount, int $totalCount): void
+{
+    if (!current_user() || admin_anonymous_preview_active() || $datedCount < 2 || $totalCount < 2) {
+        return;
+    }
+
+    // $defaultClass stores the visual state for the default order button.
+    $defaultClass = 'button secondary public-subgallery-sort-button' . ($activeMode === '' ? ' is-active' : '');
+    // $ascClass stores the visual state for the ascending date button.
+    $ascClass = 'button secondary public-subgallery-sort-button' . ($activeMode === 'asc' ? ' is-active' : '');
+    // $descClass stores the visual state for the descending date button.
+    $descClass = 'button secondary public-subgallery-sort-button' . ($activeMode === 'desc' ? ' is-active' : '');
+    // $defaultCurrent stores the accessible current marker for default order.
+    $defaultCurrent = $activeMode === '' ? ' aria-current="true"' : '';
+    // $ascCurrent stores the accessible current marker for ascending order.
+    $ascCurrent = $activeMode === 'asc' ? ' aria-current="true"' : '';
+    // $descCurrent stores the accessible current marker for descending order.
+    $descCurrent = $activeMode === 'desc' ? ' aria-current="true"' : '';
+
+    echo '<div class="public-subgallery-sort-toolbar" aria-label="' . e(t('public.subgallery_sort.label', 'Subgallery sort')) . '">';
+    echo '<div><strong>' . e(t('public.subgallery_sort.title', 'Sort subgalleries by date')) . '</strong><p>' . e(t('public.subgallery_sort.help', 'Only subgalleries with a From date participate. Undated cards keep their current positions. This changes only the current view.')) . '</p></div>';
+    echo '<div class="public-subgallery-sort-actions">';
+    echo '<a class="' . e($defaultClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, '')) . '"' . $defaultCurrent . '>' . e(t('public.subgallery_sort.default', 'Default order')) . '</a>';
+    echo '<a class="' . e($ascClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'asc')) . '"' . $ascCurrent . '>' . e(t('public.subgallery_sort.asc', 'Oldest first')) . '</a>';
+    echo '<a class="' . e($descClass) . '" href="' . e(public_subgallery_date_sort_url($gallery, 'desc')) . '"' . $descCurrent . '>' . e(t('public.subgallery_sort.desc', 'Newest first')) . '</a>';
+    echo '</div>';
+    echo '</div>';
+}
 
 /**
  * Render the small public-page reorder toolbar used by logged-in admins.

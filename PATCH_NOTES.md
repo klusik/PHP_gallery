@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 0.80.1
+
+Version 0.80.1 adds an admin-only subgallery date sorting feature for curators reviewing galleries. Logged-in administrators can now temporarily reorder subgalleries by their start date while viewing a gallery page, without modifying the permanent gallery structure or affecting public visitors.
+
+  ### Highlights
+
+  #### Added admin-only subgallery date sorting
+
+  - Administrators can temporarily reorder subgalleries by start date while viewing a gallery.
+  - Sort direction can be toggled between ascending, descending, and default order.
+  - Sorting only applies to subgalleries that have a filled start date.
+  - Date sort control is hidden when fewer than 2 dated subgalleries exist.
+  - Reorder toolbar is hidden when date sorting is active to avoid UI confusion.
+  - Changes are temporary and do not modify the gallery structure.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `public_subgallery_date_sort_mode()` to parse and validate the sort mode query parameter.
+  - Added `public_subgallery_has_start_date()` to check if a gallery has a usable start date.
+  - Added `public_count_dated_subgalleries()` to count subgalleries with start dates.
+  - Added `public_sort_subgalleries_by_date()` to reorder subgalleries by their start date.
+  - Added `render_public_subgallery_date_sort_toolbar()` to render the admin-only sort control.
+  - Updated `app/controllers/public_gallery.php` to integrate date sort functionality into the gallery rendering pipeline.
+  - Updated logic to disable drag reorder on subgallery cards when date sorting is active.
+
+  #### Database
+
+  - No database migrations required.
+  - Leverages existing `gallery_date` column for start date sorting.
+
+  #### Frontend
+
+  - Added CSS styling in `public/assets/styles/utilities.css` for the date sort toolbar.
+  - Added visual indicators for active sort mode.
+  - Responsive layout for sort controls on mobile and desktop views.
+
+  #### Internationalization
+
+  - Added Czech translations in `app/lang/cs.json` and `app/lang/cs.php`.
+  - Added English translations in `app/lang/en.json` and `app/lang/en.php`.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Public gallery views are unchanged. Subgalleries continue to display in their default order.
+
+  #### For administrators
+
+  - An admin-only sort overlay is available while viewing gallery pages.
+  - Click the sort control to toggle between ascending date, descending date, and default order.
+  - Drag reordering is disabled while date sorting is active to prevent UI confusion.
+  - Permanent gallery order is never modified by date sorting.
+
 ## Version 0.80
 
 Version 0.80 is a major quality-of-life release focused on upload reliability, performance, and user experience. It refactors the experimental upload system with client-side EXIF metadata extraction, robust batch idempotency recovery, real-time progress tracking, and deterministic image ordering. It also fixes map pin positioning accuracy, improves admin storage statistics and logging, and strengthens the overall data integrity throughout the platform.

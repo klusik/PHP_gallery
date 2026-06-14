@@ -190,5 +190,11 @@ return [
     'admin.gallery_dates.suggestions_kicker' => 'EXIF návrhy',
     'admin.gallery_dates.suggestions_title' => 'Schválit, upravit nebo ignorovat návrhy',
     'admin.gallery_dates.title' => 'Data galerií',
+    'public.subgallery_sort.asc' => 'Nejstarší první',
+    'public.subgallery_sort.default' => 'Výchozí pořadí',
+    'public.subgallery_sort.desc' => 'Nejnovější první',
+    'public.subgallery_sort.help' => 'Řazení se týká jen podgalerií s vyplněným datem Od. Karty bez data zůstanou na svých aktuálních pozicích. Mění se jen aktuální zobrazení.',
+    'public.subgallery_sort.label' => 'Řazení podgalerií',
+    'public.subgallery_sort.title' => 'Seřadit podgalerie podle data',
     'gallery.date_until' => 'Do {date}',
 ];
