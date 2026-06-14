@@ -56,10 +56,10 @@ use function Gallery\Services\admin_upload_auto_rename_enabled;
 use function Gallery\Services\admin_upload_client_format_mode;
 use function Gallery\Services\admin_upload_client_format_mode_normalize;
 use function Gallery\Services\create_image_thumbnails_result;
-use function Gallery\Services\experimental_upload_browser_config;
-use function Gallery\Services\experimental_upload_server_upload_limit_bytes;
-use function Gallery\Services\experimental_upload_settings;
-use function Gallery\Services\experimental_upload_store_prepared_zip_batch;
+use function Gallery\Services\browser_upload_browser_config;
+use function Gallery\Services\browser_upload_server_upload_limit_bytes;
+use function Gallery\Services\browser_upload_settings;
+use function Gallery\Services\browser_upload_store_prepared_zip_batch;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_upload_entries;
@@ -68,7 +68,7 @@ use function Gallery\Services\heic_conversion_supported;
 use function Gallery\Services\raw_conversion_supported;
 use function Gallery\Services\set_admin_upload_auto_rename_enabled;
 use function Gallery\Services\set_app_setting;
-use function Gallery\Services\set_experimental_upload_settings;
+use function Gallery\Services\set_browser_upload_settings;
 use function Gallery\Services\store_uploaded_gallery_images;
 use function Gallery\Services\t;
 use function Gallery\Views\view_render_admin_upload_settings_page;
@@ -127,7 +127,7 @@ function admin_upload_safe_refresh_url(mixed $value): string
  * @param array $payload Payload value.
  * @param int $statusCode Status code value.
  */
-function admin_upload_experimental_json_response(array $payload, int $statusCode = 200): void
+function admin_upload_browser_json_response(array $payload, int $statusCode = 200): void
 {
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
@@ -135,9 +135,9 @@ function admin_upload_experimental_json_response(array $payload, int $statusCode
 }
 
 /**
- * Throw instead of exiting when the experimental JSON endpoint receives a bad CSRF token.
+ * Throw instead of exiting when the browser JSON endpoint receives a bad CSRF token.
  */
-function admin_upload_experimental_verify_csrf(): void
+function admin_upload_browser_verify_csrf(): void
 {
     $token = (string) ($_POST['csrf_token'] ?? '');
     if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $token)) {
@@ -150,20 +150,20 @@ function admin_upload_experimental_verify_csrf(): void
  *
  * @return bool True when the condition matches.
  */
-function admin_upload_experimental_reject_discarded_body(): bool
+function admin_upload_browser_reject_discarded_body(): bool
 {
     $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
     if ($contentLength <= 0 || $_POST !== [] || $_FILES !== []) {
         return false;
     }
-    $uploadLimit = function_exists('Gallery\\Services\\experimental_upload_server_upload_limit_bytes') ? experimental_upload_server_upload_limit_bytes() : 0;
-    admin_log_event('warning', 'gallery.experimental_upload_rejected', 'Experimental upload request body was discarded before PHP could read files.', [
+    $uploadLimit = function_exists('Gallery\\Services\\browser_upload_server_upload_limit_bytes') ? browser_upload_server_upload_limit_bytes() : 0;
+    admin_log_event('warning', 'gallery.browser_upload_rejected', 'Browser upload request body was discarded before PHP could read files.', [
         'content_length' => $contentLength,
         'upload_limit_bytes' => $uploadLimit,
     ]);
-    admin_upload_experimental_json_response([
+    admin_upload_browser_json_response([
         'ok' => false,
-        'error' => t('experimental_upload.error_php_discarded_body', 'The prepared ZIP batch was larger than this PHP request can accept. Lower the experimental ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.'),
+        'error' => t('browser_upload.error_php_discarded_body', 'The prepared ZIP batch was larger than this PHP request can accept. Lower the browser ZIP ratio, maximum ZIP batch size, or maximum images per batch in Admin upload settings.'),
         'content_length' => $contentLength,
         'upload_limit_bytes' => $uploadLimit,
     ], 413);
@@ -179,7 +179,7 @@ function admin_upload_experimental_reject_discarded_body(): bool
  */
 function admin_upload_settings_normalize_tab(string $tab): string
 {
-    return $tab === 'experimental' ? 'experimental' : 'general';
+    return $tab === 'browser' ? 'browser' : 'general';
 }
 
 /**
@@ -205,7 +205,7 @@ function admin_upload_settings_view_model(string $activeTab, string $notice = ''
         'support' => admin_upload_support_model(),
         'client_format_mode' => admin_upload_client_format_mode(),
         'auto_rename_enabled' => admin_upload_auto_rename_enabled(),
-        'experimental_settings' => function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : [],
+        'browser_settings' => function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : [],
     ];
 }
 
@@ -253,10 +253,10 @@ function cms_admin_upload_settings(): void
             flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
             redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
         }
-        if (!empty($_POST['update_experimental_upload_settings'])) {
-            if (function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
-                $settings = set_experimental_upload_settings($_POST);
-                admin_log_event('info', 'settings.experimental_upload_updated', 'Admin updated experimental browser upload settings.', [
+        if (!empty($_POST['update_browser_upload_settings'])) {
+            if (function_exists('Gallery\\Services\\set_browser_upload_settings')) {
+                $settings = set_browser_upload_settings($_POST);
+                admin_log_event('info', 'settings.browser_upload_updated', 'Admin updated browser upload settings.', [
                     'enabled' => !empty($settings['enabled']),
                     'default_worker_count' => (int) ($settings['default_worker_count'] ?? 0),
                     'max_worker_count' => (int) ($settings['max_worker_count'] ?? 0),
@@ -266,8 +266,8 @@ function cms_admin_upload_settings(): void
                     'max_zip_batch_bytes' => (int) ($settings['max_zip_batch_bytes'] ?? 0),
                 ]);
             }
-            flash_message('admin_notice', t('admin.upload_settings.notice_experimental_saved', 'Experimental upload settings saved.'));
-            redirect_to(url_for('admin_upload_settings', ['tab' => 'experimental', 'saved' => 'experimental']));
+            flash_message('admin_notice', t('admin.upload_settings.notice_browser_saved', 'Browser upload settings saved.'));
+            redirect_to(url_for('admin_upload_settings', ['tab' => 'browser', 'saved' => 'browser']));
         }
         redirect_to(url_for('admin_upload_settings', ['tab' => $activeTab]));
     }
@@ -278,28 +278,28 @@ function cms_admin_upload_settings(): void
 
 
 /**
- * Accept one browser-prepared experimental upload batch.
+ * Accept one browser-prepared upload batch.
  */
-function cms_admin_upload_experimental_batch(): void
+function cms_admin_upload_browser_batch(): void
 {
     $user = current_user();
     if (!$user || $user['role'] !== 'admin') {
-        admin_upload_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')], 401);
+        admin_upload_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_session_expired', 'Your admin session expired. Please sign in again.')], 401);
         return;
     }
     if (request_method() !== 'POST') {
-        admin_upload_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
+        admin_upload_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
         return;
     }
-    if (admin_upload_experimental_reject_discarded_body()) {
+    if (admin_upload_browser_reject_discarded_body()) {
         return;
     }
 
     try {
-        admin_upload_experimental_verify_csrf();
-        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        admin_upload_browser_verify_csrf();
+        $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
-            throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
+            throw new RuntimeException(t('browser_upload.error_disabled', 'Browser-side upload is disabled in Admin settings.'));
         }
         $galleryId = (int) ($_POST['gallery_id'] ?? 0);
         $sessionId = substr((string) ($_POST['upload_session_id'] ?? ''), 0, 120);
@@ -307,12 +307,12 @@ function cms_admin_upload_experimental_batch(): void
             $sessionId = bin2hex(random_bytes(12));
         }
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
-        $response = experimental_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+        $response = browser_upload_store_prepared_zip_batch($galleryId, $_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
         $callerRefreshUrl = admin_upload_safe_refresh_url($_POST['source_url'] ?? '');
         if ($callerRefreshUrl !== '') {
             $response['refresh_url'] = $callerRefreshUrl;
         }
-        admin_upload_experimental_json_response($response);
+        admin_upload_browser_json_response($response);
     } catch (Throwable $exception) {
         $errorContext = [
             'error' => $exception->getMessage(),
@@ -324,19 +324,19 @@ function cms_admin_upload_experimental_batch(): void
             'zip_upload_size' => (int) ($_FILES['zip_batch']['size'] ?? 0),
             'zip_upload_name' => (string) ($_FILES['zip_batch']['name'] ?? ''),
         ];
-        if ($exception instanceof \Gallery\Services\ExperimentalUploadValidationException) {
+        if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
             $errorContext['validation'] = $exception->details();
         }
-        admin_log_event('error', 'gallery.experimental_upload_failed', 'Experimental browser-prepared upload batch failed.', $errorContext);
+        admin_log_event('error', 'gallery.browser_upload_failed', 'Browser-prepared upload batch failed.', $errorContext);
         $response = [
             'ok' => false,
             'error' => $exception->getMessage(),
             'retryable' => false,
         ];
-        if ($exception instanceof \Gallery\Services\ExperimentalUploadValidationException) {
+        if ($exception instanceof \Gallery\Services\BrowserUploadValidationException) {
             $response['error_context'] = $exception->details();
         }
-        admin_upload_experimental_json_response($response, 422);
+        admin_upload_browser_json_response($response, 422);
     }
 }
 
@@ -371,8 +371,8 @@ function cms_admin_upload(): void
         try {
             if (!empty($_POST['update_upload_preferences'])) {
                 admin_upload_save_general_settings($_POST);
-                if (!empty($_POST['update_experimental_upload_settings']) && function_exists('Gallery\\Services\\set_experimental_upload_settings')) {
-                    set_experimental_upload_settings($_POST);
+                if (!empty($_POST['update_browser_upload_settings']) && function_exists('Gallery\\Services\\set_browser_upload_settings')) {
+                    set_browser_upload_settings($_POST);
                 }
                 flash_message('admin_notice', t('admin.upload_settings.notice_general_saved', 'General upload settings saved.'));
                 redirect_to(url_for('admin_upload_settings', ['tab' => 'general', 'saved' => 'general']));
@@ -612,20 +612,21 @@ function render_admin_upload_support_panel(): void
 
 
 /**
- * Render the opt-in experimental client-side upload checkbox.
+ * Render the browser-side upload checkbox.
  *
  * @param bool $panelMode Panel mode value.
  */
-function render_admin_upload_experimental_checkbox(bool $panelMode = false): void
+function render_admin_upload_browser_checkbox(bool $panelMode = false): void
 {
-    $config = function_exists('Gallery\\Services\\experimental_upload_browser_config') ? experimental_upload_browser_config() : ['enabled' => false];
+    $config = function_exists('Gallery\\Services\\browser_upload_browser_config') ? browser_upload_browser_config() : ['enabled' => false];
     $encodedConfig = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($encodedConfig)) {
         $encodedConfig = '{}';
     }
     $disabled = empty($config['enabled']);
-    $className = $panelMode ? 'admin-side-panel-experimental-upload-toggle' : 'experimental-upload-toggle';
-    echo '<label class="' . e($className) . '"><input type="checkbox" name="experimental_client_upload" value="1" data-experimental-upload-toggle data-experimental-upload-config="' . e($encodedConfig) . '"' . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.experimental_client_upload_label', 'Experimental: prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.experimental_client_upload_help', 'Off by default. This is not the normal upload behavior. If browser capabilities or packaging fail, the form falls back to the existing server-side upload path.')) . '</span></label>';
+    $checked = $disabled ? '' : ' checked';
+    $className = $panelMode ? 'admin-side-panel-browser-upload-toggle' : 'browser-upload-toggle';
+    echo '<label class="' . e($className) . '"><input type="checkbox" name="browser_client_upload" value="1" data-browser-upload-toggle data-browser-upload-config="' . e($encodedConfig) . '"' . $checked . ($disabled ? ' disabled' : '') . '> <span>' . e(t('admin.upload.browser_client_upload_label', 'Prepare thumbnails and ZIP batches in this browser')) . '</span><span class="muted">' . e(t('admin.upload.browser_client_upload_help', 'Checked by default. If browser preparation fails before any server-side write starts, the upload automatically uses the normal server fallback. Uncheck this to use the standard server-side upload path immediately.')) . '</span></label>';
 }
 
 /**
@@ -654,7 +655,7 @@ function render_admin_upload_existing_gallery_form(int $prefillGalleryId, bool $
     }
     echo '<label' . ($panelMode ? ' class="admin-side-panel-file-drop"' : '') . '><span class="admin-side-panel-file-title">' . e(t('admin.upload.images', 'Images')) . '</span><input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple' . ($panelMode ? ' required' : ' required') . '><span class="muted">' . e(t('admin.upload.choose_images_for_gallery', 'Choose one or more images for this gallery.')) . '</span></label>';
     echo '<label' . ($panelMode ? ' class="admin-side-panel-thumbnail-toggle"' : '') . '><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
-    render_admin_upload_experimental_checkbox($panelMode);
+    render_admin_upload_browser_checkbox($panelMode);
     if ($panelMode) {
         echo '<div class="admin-side-panel-actions"><button type="submit" class="button primary" data-gallery-panel-submit>' . e(t('admin.upload.upload_images', 'Upload images')) . '</button><p class="muted">' . e(t('admin.upload.progress_top_panel', 'Progress appears at the top of this panel.')) . '</p></div>';
     } else {
@@ -700,7 +701,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
         render_admin_new_gallery_fields($prefillParentId, false, 'upload');
         echo '<label>' . e(t('admin.upload.images', 'Images')) . '<input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple required><span class="muted">' . e(t('admin.upload.choose_one_or_more_images', 'Choose one or more images.')) . '</span></label>';
         echo '<label><input type="checkbox" name="create_thumbnails" value="1" checked> ' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</label>';
-        render_admin_upload_experimental_checkbox(false);
+        render_admin_upload_browser_checkbox(false);
         echo '<button type="submit">' . e(t('admin.upload.create_gallery_and_upload', 'Create gallery and upload')) . '</button></form></section>';
         return;
     }
@@ -715,7 +716,7 @@ function render_admin_upload_new_gallery_form_shell(int $prefillParentId, bool $
     echo '<div class="admin-side-panel-card-heading"><div><p class="admin-kicker">' . e(t('admin.upload.optional_photos', 'Optional photos')) . '</p><h3>' . e(t('admin.upload.upload_now', 'Upload now')) . '</h3></div><p class="muted">' . e(t('admin.upload.optional_photos_help', 'Leave this empty to create only the gallery.')) . '</p></div>';
     echo '<label class="admin-side-panel-file-drop"><span class="admin-side-panel-file-title">' . e(t('admin.upload.choose_images', 'Choose images')) . '</span><input name="images[]" type="file" accept="' . e($acceptValue) . '" multiple><span class="muted">' . e(t('admin.upload.multiple_files_help', 'Multiple files are supported. The existing upload pipeline and thumbnail generation are reused.')) . '</span></label>';
     echo '<label class="admin-side-panel-thumbnail-toggle"><input type="checkbox" name="create_thumbnails" value="1" checked> <span>' . e(t('admin.upload.create_thumbnails_after_upload', 'Create optimized thumbnails after upload')) . '</span></label>';
-    render_admin_upload_experimental_checkbox(true);
+    render_admin_upload_browser_checkbox(true);
     echo '</div>';
 
     echo '<div class="admin-side-panel-actions">';

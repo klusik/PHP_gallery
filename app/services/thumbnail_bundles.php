@@ -38,6 +38,7 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\url_for;
 
@@ -77,9 +78,9 @@ function thumbnail_bundle_normalize_format(string $format): string
 function thumbnail_bundle_media_url(array $image, ?array $gallery): string
 {
     if ($gallery) {
-        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
     }
-    return url_for('media', ['id' => $image['id']]);
+    return image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
 }
 
 

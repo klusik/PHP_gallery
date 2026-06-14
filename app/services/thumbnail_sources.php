@@ -39,6 +39,7 @@ namespace Gallery\Services;
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\base_url;
+use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
 use function Gallery\Core\normalize_relative_path;
@@ -376,7 +377,7 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
                 return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
             }
             public_render_profile_count('thumbnail_media_fallbacks');
-            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
         }
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;
@@ -415,13 +416,13 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
                 return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
             }
         } catch (RuntimeException) {
-            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+            return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
         }
         public_render_profile_count('thumbnail_media_fallbacks');
-        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : url_for('media', ['id' => $image['id']]);
+        return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
     }
     public_render_profile_count('thumbnail_media_fallbacks');
-    return url_for('media', ['id' => $image['id']]);
+    return image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
         });
     } finally {
         public_render_profile_record_thumbnail_purpose($purpose, $size, $normalizedFormat, 'lookup', (microtime(true) - $startedAt) * 1000);
@@ -445,7 +446,7 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
     if (thumbnail_can_use_static_public_url($image, $gallery)) {
         return gallery_static_file_url($gallery, 'thumbs/' . thumbnail_filename($image, $size, $format));
     }
-    return url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]);
+    return image_public_asset_url_with_version(url_for('thumb', ['id' => $image['id'], 'size' => $size, 'format' => $format]), $image);
 }
 
 /**

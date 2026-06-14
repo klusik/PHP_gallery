@@ -46,7 +46,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.80.3';
+const CMS_VERSION = '0.80.4';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -234,7 +234,7 @@ function cms_run(): void
         'admin_new_gallery' => '\\Gallery\\Controllers\\cms_admin_new_gallery',
         'admin_upload' => '\\Gallery\\Controllers\\cms_admin_upload',
         'admin_upload_settings' => '\\Gallery\\Controllers\\cms_admin_upload_settings',
-        'admin_upload_experimental_batch' => '\\Gallery\\Controllers\\cms_admin_upload_experimental_batch',
+        'admin_upload_browser_batch' => '\\Gallery\\Controllers\\cms_admin_upload_browser_batch',
         'admin_upload_automation_token' => '\\Gallery\\Controllers\\cms_admin_upload_automation_token',
         'admin_mobile_uploads' => '\\Gallery\\Controllers\\cms_admin_mobile_uploads',
         'mobile_webdav' => '\\Gallery\\Controllers\\cms_mobile_webdav',
@@ -257,8 +257,8 @@ function cms_run(): void
         'admin_navdata' => '\\Gallery\\Controllers\\cms_admin_navdata',
         'admin_check_thumbnail_maintenance' => '\\Gallery\\Controllers\\cms_admin_check_thumbnail_maintenance',
         'admin_create_thumbnails' => '\\Gallery\\Controllers\\cms_admin_create_thumbnails',
-        'admin_thumbnail_experimental_source_chunk' => '\\Gallery\\Controllers\\cms_admin_thumbnail_experimental_source_chunk',
-        'admin_thumbnail_experimental_upload_batch' => '\\Gallery\\Controllers\\cms_admin_thumbnail_experimental_upload_batch',
+        'admin_thumbnail_browser_source_chunk' => '\\Gallery\\Controllers\\cms_admin_thumbnail_browser_source_chunk',
+        'admin_thumbnail_browser_upload_batch' => '\\Gallery\\Controllers\\cms_admin_thumbnail_browser_upload_batch',
         'admin_thumbnail_compatibility_settings' => '\\Gallery\\Controllers\\cms_admin_thumbnail_compatibility_settings',
         'admin_delete_legacy_jpg_thumbnails' => '\\Gallery\\Controllers\\cms_admin_delete_legacy_jpg_thumbnails',
         'admin_delete_thumbnails' => '\\Gallery\\Controllers\\cms_admin_delete_thumbnails',

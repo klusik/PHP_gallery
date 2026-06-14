@@ -87,10 +87,10 @@ require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
 require_once __DIR__ . '/services/mobile_webdav.php';
 require_once __DIR__ . '/services/thumbnails.php';
-// Load experimental browser upload helpers after upload and thumbnail services are available.
-require_once __DIR__ . '/services/experimental_uploads.php';
-// Load browser-assisted thumbnail rebuild helpers after shared experimental upload helpers.
-require_once __DIR__ . '/services/experimental_thumbnail_rebuild.php';
+// Load browser upload helpers after upload and thumbnail services are available.
+require_once __DIR__ . '/services/browser_uploads.php';
+// Load browser-assisted thumbnail rebuild helpers after shared browser upload helpers.
+require_once __DIR__ . '/services/browser_thumbnail_rebuild.php';
 // Load AI-analysis queue helpers after media path helpers are available.
 require_once __DIR__ . '/services/ai_image_analysis.php';
 require_once __DIR__ . '/services/thumbnail_bounds.php';
