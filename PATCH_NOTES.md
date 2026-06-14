@@ -1,5 +1,82 @@
 # Patch notes
 
+## Version 0.80.2
+
+Version 0.80.2 improves code organization and maintainability by extracting gallery sorting logic into a dedicated service layer. This refactor reduces duplication, improves testability, and provides a foundation for extending sorting capabilities across different gallery management workflows.
+
+  ### Highlights
+
+  #### Extracted gallery sorting into dedicated service
+
+  - Moved sorting logic from public gallery controller into a reusable service.
+  - Created `app/services/gallery_sorting.php` as the single source of truth for all sorting operations.
+  - Improved code organization and reduced controller complexity.
+  - Foundation for consistent sorting behavior across admin and public interfaces.
+
+  #### Enhanced admin gallery reorder workflow
+
+  - Added admin-specific gallery sorting controls in the reorder interface.
+  - Support for multiple sort strategies from a unified service.
+  - Better integration between admin reorder and sorting operations.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Created new `app/services/gallery_sorting.php`:
+    * `public_subgallery_date_sort_mode()` - Parse and validate sort mode from query parameter
+    * `public_subgallery_has_start_date()` - Check if gallery has a usable start date
+    * `public_count_dated_subgalleries()` - Count galleries with filled start dates
+    * `public_sort_subgalleries_by_date()` - Reorder subgalleries by start date
+    * `render_public_subgallery_date_sort_toolbar()` - Render the sort control UI
+    * `is_valid_subgallery_sort_direction()` - Validate sort direction parameter
+
+  - Refactored `app/controllers/public_gallery.php`:
+    * Removed sorting logic (delegated to gallery_sorting service)
+    * Simplified `cms_gallery()` by importing service functions
+    * Reduced controller size and improved readability
+    * Better separation of concerns
+
+  - Enhanced `app/controllers/admin_galleries_reorder.php`:
+    * Added admin-specific sorting controls
+    * Integrated with gallery_sorting service
+    * Support for multiple sort strategies
+    * Improved admin workflow for managing gallery order
+
+  - Updated `app/services.php`:
+    * Registered new gallery_sorting service
+    * Made sorting functions available throughout the application
+
+  #### Database
+
+  - No database migrations required.
+  - Leverages existing `gallery_date` column for date-based sorting.
+
+  #### Frontend
+
+  - Enhanced `public/assets/styles/utilities.css`:
+    * Additional styling for reorder and sort controls
+    * Consistent visual indicators for active sort mode
+
+  #### Internationalization
+
+  - Updated Czech translations in `app/lang/cs.json` and `app/lang/cs.php`.
+  - Updated English translations in `app/lang/en.json` and `app/lang/en.php`.
+  - Consistent terminology for sort controls and options.
+
+  ### User Impact
+
+  #### For visitors
+
+  - No changes to public gallery display or functionality.
+  - Sorting behavior remains consistent and unchanged.
+
+  #### For administrators
+
+  - Cleaner, more intuitive sorting controls in the gallery reorder interface.
+  - Consistent sorting behavior across different admin workflows.
+  - Better organization of reordering and sorting options.
+
 ## Version 0.80.1
 
 Version 0.80.1 adds an admin-only subgallery date sorting feature for curators reviewing galleries. Logged-in administrators can now temporarily reorder subgalleries by their start date while viewing a gallery page, without modifying the permanent gallery structure or affecting public visitors.
