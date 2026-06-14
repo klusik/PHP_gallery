@@ -1,5 +1,97 @@
 # Patch notes
 
+## Version 0.80.3
+
+Version 0.80.3 improves upload robustness by automatically detecting and correcting file format mismatches. Instead of blocking uploads due to incorrect file extensions, the system now detects the actual file format and corrects the extension, reducing upload failures and improving user experience when importing files from other sources.
+
+  ### Highlights
+
+  #### Enhanced file format validation and auto-correction
+
+  - Automatically detect actual file format from file contents (magic bytes).
+  - Correct mismatched file extensions based on detected format.
+  - Continue with corrected filename instead of blocking upload.
+  - Provide detailed diagnostics when format validation occurs.
+  - Support recovery from common file format issues.
+
+  #### Improved upload error reporting
+
+  - Detailed error information for validation failures.
+  - Format suggestions and auto-correction details in error messages.
+  - Better diagnostics to help users understand format issues.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `experimental_upload_detect_payload_format()`:
+    * Detect file format from binary payload headers (magic bytes)
+    * Support JPEG, PNG, GIF, WebP, BMP, TIFF formats
+    * Accurate format identification independent of filename
+
+  - Added `experimental_upload_extension_matches_detected_format()`:
+    * Validate file extension against detected format
+    * Support multiple valid extensions per format (jpg/jpeg)
+    * Case-insensitive comparison
+
+  - Added `experimental_upload_filename_with_detected_extension()`:
+    * Generate corrected filename with proper extension
+    * Replace mismatched extension with detected format
+    * Preserve original filename when possible
+
+  - Added `experimental_upload_prepare_original_filename()`:
+    * Prepare and validate original filenames before storage
+    * Apply auto-correction based on detected format
+    * Support fallback behavior for ambiguous formats
+
+  - Added `experimental_upload_original_payload_diagnostics()`:
+    * Provide detailed diagnostic information for validation
+    * Include detected format, expected extension, and suggestions
+    * Help users understand validation decisions
+
+  - Created `ExperimentalUploadPayloadValidationError` exception:
+    * Include error details in exception context
+    * Provide programmatic access to validation information
+    * Better error reporting throughout upload pipeline
+
+  - Enhanced `app/controllers/admin_uploads.php`:
+    * Use format detection and correction in upload pipeline
+    * Pass correction details to response
+
+  - Updated `app/services/experimental_uploads.php`:
+    * Integrate format detection into validation workflow
+    * Apply filename correction automatically
+    * Improved error handling and diagnostics
+
+  #### Frontend
+
+  - Enhanced `public/assets/gallery-modules/admin-experimental-upload.js`:
+    * Display format correction information to users
+    * Show correction applied when extension is changed
+    * Improve error messages with format details
+
+  - Updated `public/assets/gallery-modules/experimental-upload-worker.js`:
+    * Enhanced payload validation with format detection
+    * Provide detailed format information in upload manifest
+
+  #### Database
+
+  - No database migrations required.
+
+  ### User Impact
+
+  #### For visitors
+
+  - No changes to public gallery functionality.
+
+  #### For administrators
+
+  - Uploads with mismatched file extensions no longer fail.
+  - System automatically detects and corrects extension mismatches.
+  - Better feedback when file format issues are detected.
+  - Easier importing of files from other sources with incorrect extensions.
+  - Fewer upload failures due to naming issues.
+
 ## Version 0.80.2
 
 Version 0.80.2 improves code organization and maintainability by extracting gallery sorting logic into a dedicated service layer. This refactor reduces duplication, improves testability, and provides a foundation for extending sorting capabilities across different gallery management workflows.

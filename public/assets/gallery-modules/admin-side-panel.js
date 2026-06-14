@@ -41,7 +41,7 @@ import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-ci
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20260512-modular-admin-v1';
 import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260512-modular-admin-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
-import { experimentalUploadRequested, runExperimentalGalleryUpload } from './admin-experimental-upload.js?v=20260614-upload-order-v2';
+import { experimentalUploadRequested, runExperimentalGalleryUpload } from './admin-experimental-upload.js?v=20260614-upload-original-diagnostics-v1';
 
 const adminSidePanelMotionDurationMs = 280;
 

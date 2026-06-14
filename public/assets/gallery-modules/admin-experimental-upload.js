@@ -32,9 +32,9 @@
  *   2026-06-10
  */
 
-import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-order-v2';
+import { appendUploadProgressLog, i18n, updateBasicProgress, updateUploadProgressMetrics } from './admin-core.js?v=20260614-upload-original-diagnostics-v1';
 
-const workerScriptUrl = new URL('./experimental-upload-worker.js?v=20260614-upload-order-v2', import.meta.url);
+const workerScriptUrl = new URL('./experimental-upload-worker.js?v=20260614-upload-original-diagnostics-v1', import.meta.url);
 const tempDatabaseName = 'php_gallery_experimental_uploads';
 const tempStoreName = 'prepared_batches';
 
@@ -743,6 +743,7 @@ function manifestItemForPreparedItem(item) {
         original_display_height: Number(item.originalDisplayHeight || item.originalHeight || 0),
         original_exif_orientation: Number(item.originalExifOrientation || item.clientExif?.exif_orientation || 1),
         original_mime: String(item.originalMime || ''),
+        original_detected_format: String(item.originalDetectedFormat || ''),
         original_size: Number(item.originalSize || 0),
         client_exif: item.clientExif && typeof item.clientExif === 'object' ? item.clientExif : null,
         variants: item.variants.map((variant) => ({
@@ -852,6 +853,9 @@ async function uploadPreparedBatchWithRetry(form, config, galleryId, uploadSessi
             return await uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, batchIndex, totalBatches, progressHandler);
         } catch (error) {
             lastError = error;
+            if (!isRetryablePreparedUploadError(error)) {
+                throw error;
+            }
             if (attempt < 3) {
                 await delay(750 * attempt);
             }
@@ -901,7 +905,12 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
                 });
                 const result = await readJsonResponseSafely(response, i18n('admin.experimental_upload.batch_failed', 'Prepared batch upload failed.'));
                 if (xhr.status < 200 || xhr.status >= 300 || result.ok === false) {
-                    throw new Error(result.error || i18n('admin.experimental_upload.batch_failed', 'Prepared batch upload failed.'));
+                    const message = experimentalUploadServerErrorMessage(result, i18n('admin.experimental_upload.batch_failed', 'Prepared batch upload failed.'));
+                    const failure = new Error(message);
+                    failure.httpStatus = xhr.status;
+                    failure.retryable = result.retryable !== false && experimentalUploadStatusIsRetryable(xhr.status);
+                    failure.serverContext = result.error_context || null;
+                    throw failure;
                 }
                 resolve(result);
             } catch (error) {
@@ -909,10 +918,78 @@ function uploadPreparedBatch(form, config, galleryId, uploadSessionId, batch, ba
             }
         });
         xhr.addEventListener('error', () => {
-            reject(new Error(i18n('admin.experimental_upload.batch_failed', 'Prepared batch upload failed.')));
+            const failure = new Error(i18n('admin.experimental_upload.batch_failed', 'Prepared batch upload failed.'));
+            failure.retryable = true;
+            reject(failure);
         });
         xhr.send(body);
     });
+}
+
+/**
+ * Return whether a prepared upload failure should be retried.
+ *
+ * @param {*} error Error value.
+ * @return {boolean} True when retry is useful.
+ */
+function isRetryablePreparedUploadError(error) {
+    if (error && typeof error === 'object' && error.retryable === false) {
+        return false;
+    }
+    const status = Number(error?.httpStatus || 0);
+    if (status > 0) {
+        return experimentalUploadStatusIsRetryable(status);
+    }
+    return true;
+}
+
+/**
+ * Return whether an HTTP status usually represents a transient upload failure.
+ *
+ * @param {number} status HTTP status.
+ * @return {boolean} True when retry is useful.
+ */
+function experimentalUploadStatusIsRetryable(status) {
+    return status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Build a readable server error message with compact validation context.
+ *
+ * @param {Record<string, *>} result Server JSON response.
+ * @param {string} fallbackMessage Fallback message.
+ * @return {string} Error message.
+ */
+function experimentalUploadServerErrorMessage(result, fallbackMessage) {
+    const base = String(result?.error || fallbackMessage);
+    const details = experimentalUploadContextSummary(result?.error_context || null);
+    return details ? `${base} Details: ${details}` : base;
+}
+
+/**
+ * Return a compact validation context summary for browser-visible failures.
+ *
+ * @param {*} context Validation context.
+ * @return {string} Summary text.
+ */
+function experimentalUploadContextSummary(context) {
+    if (!context || typeof context !== 'object') {
+        return '';
+    }
+    const keys = [
+        'validation_stage',
+        'original_name',
+        'prepared_name',
+        'original_path',
+        'extension',
+        'detected_format',
+        'payload_bytes',
+        'signature_hex',
+    ];
+    return keys
+        .filter((key) => context[key] !== undefined && context[key] !== null && String(context[key]) !== '')
+        .map((key) => `${key}=${String(context[key])}`)
+        .join(', ');
 }
 
 /**
