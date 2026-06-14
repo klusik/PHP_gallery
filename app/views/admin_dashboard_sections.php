@@ -40,7 +40,7 @@ use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
 use function Gallery\Core\url_for;
-use function Gallery\Services\experimental_thumbnail_rebuild_browser_config;
+use function Gallery\Services\browser_thumbnail_rebuild_browser_config;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\seo_request_guard_status;
@@ -532,12 +532,12 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
     echo '<button type="submit" class="secondary" data-check-missing-thumbnails>' . e(t('admin.thumbnails.check_missing', 'Check missing thumbnails')) . '</button>';
     echo '</form>';
 
-    $experimentalRebuildConfig = function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_browser_config') ? experimental_thumbnail_rebuild_browser_config() : ['enabled' => false];
-    $experimentalRebuildJson = json_encode($experimentalRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($experimentalRebuildJson)) {
-        $experimentalRebuildJson = '{}';
+    $browserRebuildConfig = function_exists('Gallery\\Services\\browser_thumbnail_rebuild_browser_config') ? browser_thumbnail_rebuild_browser_config() : ['enabled' => false];
+    $browserRebuildJson = json_encode($browserRebuildConfig, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($browserRebuildJson)) {
+        $browserRebuildJson = '{}';
     }
-    $experimentalRebuildDisabled = empty($experimentalRebuildConfig['enabled']);
+    $browserRebuildDisabled = empty($browserRebuildConfig['enabled']);
     $hasUsableThumbnailCheck = !empty($lastThumbnailCheck) && (int) ($lastThumbnailCheck['images_scanned'] ?? 0) > 0;
     $hasMissingFromLastCheck = $hasUsableThumbnailCheck && (int) ($lastThumbnailCheck['images_with_missing'] ?? 0) > 0;
     $missingButtonDisabled = !$hasMissingFromLastCheck;
@@ -548,7 +548,7 @@ function view_render_admin_dashboard_thumbnail_card(array $model, string $classN
         : t('admin.thumbnails.create_missing_requires_check', 'Run Check missing thumbnails first to populate the targeted repair list.');
 
     echo '<form method="post" action="' . e(url_for('admin_create_thumbnails')) . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">' . csrf_field();
-    echo '<label class="admin-compact-toggle experimental-thumbnail-rebuild-toggle"><input type="checkbox" name="experimental_thumbnail_rebuild" value="1" data-experimental-thumbnail-rebuild-toggle data-experimental-thumbnail-rebuild-config="' . e($experimentalRebuildJson) . '"' . ($experimentalRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.experimental_rebuild_label', 'Experimental browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.experimental_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
+    echo '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="' . e($browserRebuildJson) . '"' . ($browserRebuildDisabled ? ' disabled' : '') . '> <span><strong>' . e(t('admin.thumbnails.browser_rebuild_label', 'Browser-side thumbnail rebuild')) . '</strong> ' . e(t('admin.thumbnails.browser_rebuild_help', 'Off by default. The server sends original files in source ZIP chunks, this browser creates thumbnails, then uploads prepared thumbnail ZIP batches back.')) . '</span></label>';
     echo '<div class="nav"><button type="button" class="secondary" data-create-all-thumbnails>' . e(t('admin.dashboard.create_all_thumbnails', 'Create all thumbnails')) . '</button><button type="button" class="secondary" data-create-missing-thumbnails' . ($missingButtonDisabled ? ' disabled' : '') . ' aria-disabled="' . ($missingButtonDisabled ? 'true' : 'false') . '">' . e(t('admin.thumbnails.create_missing', 'Create missing thumbnails')) . '</button></div>';
     echo '<span class="muted" data-create-missing-thumbnails-status>' . e($missingButtonStatus) . '</span></form>';
 

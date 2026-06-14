@@ -55,8 +55,8 @@ app/services/dng_derivatives.php
 app/services/download_signatures.php
 app/services/downloads.php
 app/services/exif.php
-app/services/experimental_thumbnail_rebuild.php
-app/services/experimental_uploads.php
+app/services/browser_thumbnail_rebuild.php
+app/services/browser_uploads.php
 app/services/favicon.php
 app/services/favorite_galleries.php
 app/services/feature_flags.php
@@ -133,8 +133,8 @@ install.php
 public/assets/gallery-modules/admin-bulk-actions.js
 public/assets/gallery-modules/admin-core.js
 public/assets/gallery-modules/admin-date-picker.js
-public/assets/gallery-modules/admin-experimental-thumbnail-rebuild.js
-public/assets/gallery-modules/admin-experimental-upload.js
+public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js
+public/assets/gallery-modules/admin-browser-upload.js
 public/assets/gallery-modules/admin-gallery-date-suggestion.js
 public/assets/gallery-modules/admin-gallery-list.js
 public/assets/gallery-modules/admin-gallery-migration.js
@@ -154,7 +154,7 @@ public/assets/gallery-modules/admin-table-drag-ghost.js
 public/assets/gallery-modules/admin-tabs.js
 public/assets/gallery-modules/admin-thumbnail-progress.js
 public/assets/gallery-modules/back-to-top.js
-public/assets/gallery-modules/experimental-upload-worker.js
+public/assets/gallery-modules/browser-image-worker.js
 public/assets/gallery-modules/favicon-cropper.js
 public/assets/gallery-modules/lightbox-deferred.js
 public/assets/gallery-modules/lightbox-votes.js
@@ -179,7 +179,7 @@ tests/admin_database_usage_test.php
 tests/admin_log_severity_filter_test.php
 tests/admin_storage_statistics_test.php
 tests/dng_conversion_policy_test.php
-tests/experimental_upload_settings_test.php
+tests/browser_upload_settings_test.php
 tests/favorite_galleries_model_test.php
 tests/gallery_branding_model_test.php
 tests/gallery_dates_model_test.php

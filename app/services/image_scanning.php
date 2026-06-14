@@ -290,7 +290,7 @@ function scan_image_upload_exif_orientation(array $metadata): int
 /**
  * Normalize client-provided EXIF and GPS metadata for fast upload scans.
  *
- * The experimental upload worker parses compact JPEG EXIF metadata in the
+ * The browser upload worker parses compact JPEG EXIF metadata in the
  * browser. This helper accepts only fields that map directly to the images table
  * and keeps server-side EXIF parsing out of the upload request.
  *

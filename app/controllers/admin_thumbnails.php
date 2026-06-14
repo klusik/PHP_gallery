@@ -57,10 +57,10 @@ use function Gallery\Services\create_image_thumbnails_result;
 use function Gallery\Services\delete_all_thumbnail_files;
 use function Gallery\Services\delete_app_settings;
 use function Gallery\Services\delete_legacy_jpg_thumbnails_for_image_ids;
-use function Gallery\Services\experimental_thumbnail_rebuild_source_chunk_plan;
-use function Gallery\Services\experimental_thumbnail_rebuild_store_prepared_zip_batch;
-use function Gallery\Services\experimental_thumbnail_rebuild_stream_source_zip;
-use function Gallery\Services\experimental_upload_settings;
+use function Gallery\Services\browser_thumbnail_rebuild_source_chunk_plan;
+use function Gallery\Services\browser_thumbnail_rebuild_store_prepared_zip_batch;
+use function Gallery\Services\browser_thumbnail_rebuild_stream_source_zip;
+use function Gallery\Services\browser_upload_settings;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
 use function Gallery\Services\image_ids_for_galleries;
@@ -786,15 +786,15 @@ function cms_admin_create_thumbnails_batch(): void
 
 
 /**
- * Return a JSON response for experimental thumbnail rebuild endpoints.
+ * Return a JSON response for browser thumbnail rebuild endpoints.
  *
  * @param array $payload Payload value.
  * @param int $statusCode Status code value.
  */
-function cms_admin_thumbnail_experimental_json_response(array $payload, int $statusCode = 200): void
+function cms_admin_thumbnail_browser_json_response(array $payload, int $statusCode = 200): void
 {
-    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_json_response')) {
-        admin_upload_experimental_json_response($payload, $statusCode);
+    if (function_exists('Gallery\\Controllers\\admin_upload_browser_json_response')) {
+        admin_upload_browser_json_response($payload, $statusCode);
         return;
     }
     http_response_code($statusCode);
@@ -803,12 +803,12 @@ function cms_admin_thumbnail_experimental_json_response(array $payload, int $sta
 }
 
 /**
- * Verify CSRF for an experimental thumbnail rebuild request without emitting HTML.
+ * Verify CSRF for an browser thumbnail rebuild request without emitting HTML.
  */
-function cms_admin_thumbnail_experimental_verify_csrf(): void
+function cms_admin_thumbnail_browser_verify_csrf(): void
 {
-    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_verify_csrf')) {
-        admin_upload_experimental_verify_csrf();
+    if (function_exists('Gallery\\Controllers\\admin_upload_browser_verify_csrf')) {
+        admin_upload_browser_verify_csrf();
         return;
     }
     $token = (string) ($_POST['csrf_token'] ?? '');
@@ -818,28 +818,28 @@ function cms_admin_thumbnail_experimental_verify_csrf(): void
 }
 
 /**
- * Stream one source ZIP chunk for the experimental browser thumbnail rebuild path.
+ * Stream one source ZIP chunk for the browser thumbnail rebuild path.
  */
-function cms_admin_thumbnail_experimental_source_chunk(): void
+function cms_admin_thumbnail_browser_source_chunk(): void
 {
     require_admin();
     if (request_method() !== 'POST') {
-        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This endpoint accepts POST requests only.')], 405);
+        cms_admin_thumbnail_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This endpoint accepts POST requests only.')], 405);
         return;
     }
 
     try {
-        cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        cms_admin_thumbnail_browser_verify_csrf();
+        $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
-            throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
+            throw new RuntimeException(t('browser_upload.error_disabled', 'Browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_source_chunk_plan') || !function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_stream_source_zip')) {
-            throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
+        if (!function_exists('Gallery\\Services\\browser_thumbnail_rebuild_source_chunk_plan') || !function_exists('Gallery\\Services\\browser_thumbnail_rebuild_stream_source_zip')) {
+            throw new RuntimeException(t('browser_thumbnail_rebuild.error_unavailable', 'Browser thumbnail rebuild support is not available.'));
         }
 
-        $plan = experimental_thumbnail_rebuild_source_chunk_plan($_POST);
-        admin_log_event('info', 'thumbnail.experimental_rebuild_source_chunk', 'Admin downloaded a browser thumbnail rebuild source chunk.', [
+        $plan = browser_thumbnail_rebuild_source_chunk_plan($_POST);
+        admin_log_event('info', 'thumbnail.browser_rebuild_source_chunk', 'Admin downloaded a browser thumbnail rebuild source chunk.', [
             'offset' => (int) ($plan['offset'] ?? 0),
             'next_offset' => (int) ($plan['next_offset'] ?? 0),
             'total' => (int) ($plan['total'] ?? 0),
@@ -847,49 +847,49 @@ function cms_admin_thumbnail_experimental_source_chunk(): void
             'skipped' => count((array) ($plan['skipped'] ?? [])),
             'source_payload_bytes' => (int) ($plan['source_payload_bytes'] ?? 0),
         ]);
-        experimental_thumbnail_rebuild_stream_source_zip($plan);
+        browser_thumbnail_rebuild_stream_source_zip($plan);
     } catch (Throwable $exception) {
-        admin_log_event('error', 'thumbnail.experimental_rebuild_source_failed', 'Experimental thumbnail source chunk request failed.', [
+        admin_log_event('error', 'thumbnail.browser_rebuild_source_failed', 'Browser thumbnail source chunk request failed.', [
             'error' => $exception->getMessage(),
             'offset' => (int) ($_POST['offset'] ?? 0),
         ], ['category' => 'other', 'severity' => 'error']);
-        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
+        cms_admin_thumbnail_browser_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
     }
 }
 
 /**
- * Accept one browser-prepared thumbnail ZIP batch for the experimental rebuild path.
+ * Accept one browser-prepared thumbnail ZIP batch for the browser rebuild path.
  */
-function cms_admin_thumbnail_experimental_upload_batch(): void
+function cms_admin_thumbnail_browser_upload_batch(): void
 {
     require_admin();
     if (request_method() !== 'POST') {
-        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
+        cms_admin_thumbnail_browser_json_response(['ok' => false, 'error' => t('admin.upload.error_method_not_allowed', 'This upload endpoint accepts POST requests only.')], 405);
         return;
     }
-    if (function_exists('Gallery\\Controllers\\admin_upload_experimental_reject_discarded_body') && admin_upload_experimental_reject_discarded_body()) {
+    if (function_exists('Gallery\\Controllers\\admin_upload_browser_reject_discarded_body') && admin_upload_browser_reject_discarded_body()) {
         return;
     }
 
     try {
-        cms_admin_thumbnail_experimental_verify_csrf();
-        $settings = function_exists('Gallery\\Services\\experimental_upload_settings') ? experimental_upload_settings() : ['enabled' => false];
+        cms_admin_thumbnail_browser_verify_csrf();
+        $settings = function_exists('Gallery\\Services\\browser_upload_settings') ? browser_upload_settings() : ['enabled' => false];
         if (empty($settings['enabled'])) {
-            throw new RuntimeException(t('experimental_upload.error_disabled', 'Experimental browser-side upload is disabled in Admin settings.'));
+            throw new RuntimeException(t('browser_upload.error_disabled', 'Browser-side upload is disabled in Admin settings.'));
         }
-        if (!function_exists('Gallery\\Services\\experimental_thumbnail_rebuild_store_prepared_zip_batch')) {
-            throw new RuntimeException(t('experimental_thumbnail_rebuild.error_unavailable', 'Experimental thumbnail rebuild support is not available.'));
+        if (!function_exists('Gallery\\Services\\browser_thumbnail_rebuild_store_prepared_zip_batch')) {
+            throw new RuntimeException(t('browser_thumbnail_rebuild.error_unavailable', 'Browser thumbnail rebuild support is not available.'));
         }
         $sessionId = preg_replace('/[^A-Za-z0-9_.-]/', '', (string) ($_POST['upload_session_id'] ?? '')) ?: bin2hex(random_bytes(8));
         $batchIndex = max(0, (int) ($_POST['batch_index'] ?? 0));
-        $response = experimental_thumbnail_rebuild_store_prepared_zip_batch($_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
-        cms_admin_thumbnail_experimental_json_response($response);
+        $response = browser_thumbnail_rebuild_store_prepared_zip_batch($_FILES['zip_batch'] ?? [], $sessionId, $batchIndex);
+        cms_admin_thumbnail_browser_json_response($response);
     } catch (Throwable $exception) {
-        admin_log_event('error', 'thumbnail.experimental_rebuild_upload_failed', 'Experimental browser-prepared thumbnail upload batch failed.', [
+        admin_log_event('error', 'thumbnail.browser_rebuild_upload_failed', 'Browser-prepared thumbnail upload batch failed.', [
             'error' => $exception->getMessage(),
             'batch_index' => (int) ($_POST['batch_index'] ?? 0),
         ], ['category' => 'other', 'severity' => 'error']);
-        cms_admin_thumbnail_experimental_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
+        cms_admin_thumbnail_browser_json_response(['ok' => false, 'error' => $exception->getMessage()], 422);
     }
 }
 

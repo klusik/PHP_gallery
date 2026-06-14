@@ -1046,7 +1046,7 @@ function delete_all_thumbnail_files(): array
  *
  * Generated thumbnail directories should normally contain only flat thumb files,
  * but the recursive iterator keeps cleanup safe and complete if an older or
- * experimental version created nested cache folders. The safety boundary remains
+ * browser version created nested cache folders. The safety boundary remains
  * the configured gallery root and every path is checked before deletion.
  *
  * @param string $thumbsDirectory Thumbs directory value.

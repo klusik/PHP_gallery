@@ -31,7 +31,7 @@
  */
 
 import { adminUrlWithParams, ensureThumbnailProgress, i18n, isThumbnailSubmission, thumbnailEndpoint, updateThumbnailProgress } from './admin-core.js?v=20260512-modular-admin-v1';
-import { experimentalThumbnailRebuildRequested, runExperimentalThumbnailRebuild } from './admin-experimental-thumbnail-rebuild.js?v=20260610-thumbnail-serial-v5';
+import { browserThumbnailRebuildRequested, runBrowserThumbnailRebuild } from './admin-browser-thumbnail-rebuild.js?v=20260610-thumbnail-serial-v5';
 
 
 /**
@@ -177,8 +177,8 @@ export function setupThumbnailProgress() {
             event.preventDefault();
             button.disabled = true;
             try {
-                if (experimentalThumbnailRebuildRequested(maintenanceForm)) {
-                    await runExperimentalThumbnailRebuild(maintenanceForm, ensureThumbnailProgress(maintenanceForm), {scope: 'all'});
+                if (browserThumbnailRebuildRequested(maintenanceForm)) {
+                    await runBrowserThumbnailRebuild(maintenanceForm, ensureThumbnailProgress(maintenanceForm), {scope: 'all'});
                 } else {
                     await runThumbnailJob(maintenanceForm, null, {scope: 'all'});
                 }
@@ -187,12 +187,12 @@ export function setupThumbnailProgress() {
             }
             return;
         }
-        const experimentalForm = button.closest('form');
-        if (experimentalForm instanceof HTMLFormElement && experimentalThumbnailRebuildRequested(experimentalForm)) {
+        const browserForm = button.closest('form');
+        if (browserForm instanceof HTMLFormElement && browserThumbnailRebuildRequested(browserForm)) {
             event.preventDefault();
             button.disabled = true;
             try {
-                await runExperimentalThumbnailRebuild(experimentalForm, ensureThumbnailProgress(experimentalForm), {scope: 'all'});
+                await runBrowserThumbnailRebuild(browserForm, ensureThumbnailProgress(browserForm), {scope: 'all'});
             } finally {
                 button.disabled = false;
             }

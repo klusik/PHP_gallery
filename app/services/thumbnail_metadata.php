@@ -845,7 +845,7 @@ function thumbnail_metadata_record_file(array $image, array $gallery, int $size,
 /**
  * Store metadata for one browser-prepared thumbnail without re-decoding the file.
  *
- * The experimental upload worker already decoded the source image and generated
+ * The browser upload worker already decoded the source image and generated
  * the thumbnail dimensions. Re-reading every prepared thumbnail with
  * getimagesize() on shared hosting wastes CPU, so this path records the trusted
  * admin-upload manifest metadata after the file has been written.

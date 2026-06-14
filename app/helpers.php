@@ -547,7 +547,52 @@ function image_public_url(array $image, array $gallery): string
  */
 function image_public_media_url(array $image, array $gallery): string
 {
-    return rtrim(image_public_url($image, $gallery), '/') . '/media';
+    return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/media', $image);
+}
+
+/**
+ * Append an image source version to a public media or thumbnail URL.
+ *
+ * The gallery can replace or regenerate files behind the same clean image URL
+ * during browser-side uploads, upload-time renaming, and thumbnail rebuilds. The
+ * source version keeps dynamic admin refreshes from showing a stale browser cache
+ * entry for the same URL until the user performs a hard reload.
+ *
+ * @param string $url Public media or thumbnail URL.
+ * @param array $image Image row or image data.
+ * @return string Versioned URL.
+ */
+function image_public_asset_url_with_version(string $url, array $image): string
+{
+    $version = image_public_asset_version($image);
+    if ($version === '') {
+        return $url;
+    }
+    return $url . (str_contains($url, '?') ? '&' : '?') . 'v=' . rawurlencode($version);
+}
+
+/**
+ * Build a stable cache version for media and thumbnail URLs.
+ *
+ * @param array $image Image row or image data.
+ * @return string Compact cache version.
+ */
+function image_public_asset_version(array $image): string
+{
+    $values = [
+        (string) ((int) ($image['id'] ?? 0)),
+        (string) ((int) ($image['thumbnail_derivative_version'] ?? 0)),
+        trim((string) ($image['relative_path_hash'] ?? '')),
+        trim((string) ($image['checksum_sha256'] ?? '')),
+        trim((string) ($image['modified_at'] ?? '')),
+        trim((string) ($image['updated_at'] ?? '')),
+        (string) ((int) ($image['file_size'] ?? 0)),
+    ];
+    $seed = implode('|', array_filter($values, static fn (string $value): bool => $value !== '' && $value !== '0'));
+    if ($seed === '') {
+        return '';
+    }
+    return substr(hash('sha256', $seed), 0, 12);
 }
 
 /**
@@ -563,7 +608,7 @@ function image_public_thumbnail_url(array $image, array $gallery, int $size, str
 {
     // $format stores an intermediate value used by the surrounding gallery workflow.
     $format = $format === 'webp' ? 'webp' : 'jpg';
-    return rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format;
+    return image_public_asset_url_with_version(rtrim(image_public_url($image, $gallery), '/') . '/thumb-' . $size . '.' . $format, $image);
 }
 
 /**

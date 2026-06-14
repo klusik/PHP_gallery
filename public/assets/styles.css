@@ -219,8 +219,8 @@
     }
 }
 
-.experimental-upload-toggle,
-.admin-side-panel-experimental-upload-toggle {
+.browser-upload-toggle,
+.admin-side-panel-browser-upload-toggle {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 0.25rem 0.55rem;
@@ -231,17 +231,17 @@
     background: rgba(245, 158, 11, 0.10);
 }
 
-.experimental-upload-toggle input,
-.admin-side-panel-experimental-upload-toggle input {
+.browser-upload-toggle input,
+.admin-side-panel-browser-upload-toggle input {
     margin-top: 0.2rem;
 }
 
-.experimental-upload-toggle .muted,
-.admin-side-panel-experimental-upload-toggle .muted {
+.browser-upload-toggle .muted,
+.admin-side-panel-browser-upload-toggle .muted {
     grid-column: 2;
 }
 
-.experimental-upload-settings-grid {
+.browser-upload-settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 0.75rem;
