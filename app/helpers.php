@@ -551,24 +551,22 @@ function image_public_media_url(array $image, array $gallery): string
 }
 
 /**
- * Append an image source version to a public media or thumbnail URL.
+ * Return a public media or thumbnail URL without adding query parameters.
  *
- * The gallery can replace or regenerate files behind the same clean image URL
- * during browser-side uploads, upload-time renaming, and thumbnail rebuilds. The
- * source version keeps dynamic admin refreshes from showing a stale browser cache
- * entry for the same URL until the user performs a hard reload.
+ * The public gallery serves clean image URLs only. Cache invalidation for
+ * replaced media and regenerated thumbnails must not append version parameters,
+ * because some shared-hosting rewrite paths and lightbox consumers treat
+ * those parameterized thumbnail URLs as separate, invalid resources.
  *
  * @param string $url Public media or thumbnail URL.
  * @param array $image Image row or image data.
- * @return string Versioned URL.
+ * @return string Unmodified public URL.
  */
 function image_public_asset_url_with_version(string $url, array $image): string
 {
-    $version = image_public_asset_version($image);
-    if ($version === '') {
-        return $url;
-    }
-    return $url . (str_contains($url, '?') ? '&' : '?') . 'v=' . rawurlencode($version);
+    unset($image);
+
+    return $url;
 }
 
 /**
@@ -579,20 +577,9 @@ function image_public_asset_url_with_version(string $url, array $image): string
  */
 function image_public_asset_version(array $image): string
 {
-    $values = [
-        (string) ((int) ($image['id'] ?? 0)),
-        (string) ((int) ($image['thumbnail_derivative_version'] ?? 0)),
-        trim((string) ($image['relative_path_hash'] ?? '')),
-        trim((string) ($image['checksum_sha256'] ?? '')),
-        trim((string) ($image['modified_at'] ?? '')),
-        trim((string) ($image['updated_at'] ?? '')),
-        (string) ((int) ($image['file_size'] ?? 0)),
-    ];
-    $seed = implode('|', array_filter($values, static fn (string $value): bool => $value !== '' && $value !== '0'));
-    if ($seed === '') {
-        return '';
-    }
-    return substr(hash('sha256', $seed), 0, 12);
+    unset($image);
+
+    return '';
 }
 
 /**
@@ -789,15 +776,13 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
     // $alt stores descriptive text for Open Graph and Twitter image metadata.
     $alt = image_alt_text($image, $currentGallery);
 
-    // $versionedUrl stores a stable cache-busting URL. Discord caches embed
-    // images aggressively, so using the thumbnail modification time makes the
-    // preview refresh when the underlying thumbnail is regenerated without
-    // changing normal visitor URLs.
-    $versionedUrl = social_preview_cache_busted_url($url, $thumbnailPath);
+    // $previewUrl stores the crawler URL exactly as generated, without adding
+    // query parameters. Public thumbnail URLs must remain clean.
+    $previewUrl = social_preview_cache_busted_url($url, $thumbnailPath);
 
     return [
-        'url' => $versionedUrl,
-        'secure_url' => preg_replace('#^http://#i', 'https://', $versionedUrl) ?: $versionedUrl,
+        'url' => $previewUrl,
+        'secure_url' => preg_replace('#^http://#i', 'https://', $previewUrl) ?: $previewUrl,
         'type' => 'image/jpeg',
         'width' => (int) $imageSize[0],
         'height' => (int) $imageSize[1],
@@ -806,11 +791,11 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
 }
 
 /**
- * Add a deterministic version marker to one social preview image URL.
+ * Return the social preview image URL without adding a version marker.
  *
- * Discord, Slack, Facebook, and other crawlers cache fetched preview images. A
- * version marker based on the generated thumbnail file keeps the URL stable for
- * normal sharing, but changes when the thumbnail is rebuilt.
+ * Public image URLs must stay parameter-free for normal gallery pages and
+ * metadata consumers. The file path is accepted for compatibility with older
+ * callers, but it is intentionally not used to append cache markers.
  *
  * @param string $url URL used by this workflow.
  * @param string $filePath File path filesystem path.
@@ -818,16 +803,9 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
  */
 function social_preview_cache_busted_url(string $url, string $filePath): string
 {
-    // $modifiedAt stores the thumbnail timestamp used as a cheap content version.
-    $modifiedAt = is_file($filePath) ? (string) filemtime($filePath) : '';
-    if ($modifiedAt === '') {
-        return $url;
-    }
+    unset($filePath);
 
-    // $separator stores the correct query separator for URLs that already carry
-    // parameters, such as the legacy index.php?page=thumb route.
-    $separator = str_contains($url, '?') ? '&' : '?';
-    return $url . $separator . 'v=' . rawurlencode($modifiedAt);
+    return $url;
 }
 
 /**

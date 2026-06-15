@@ -1,5 +1,75 @@
 # Patch notes
 
+## Version 0.80.5
+
+Version 0.80.5 fixes URL handling for public media and thumbnail assets. It removes query parameter-based cache versioning that was causing compatibility issues with shared-hosting rewrite paths and lightbox consumers. Public URLs now remain clean and parameter-free while maintaining proper cache management through HTTP headers and file system timestamps.
+
+  ### Highlights
+
+  #### Fixed public URL compatibility
+
+  - Removed query parameter versioning from media and thumbnail URLs.
+  - Public URLs now remain clean and parameter-free.
+  - Improved compatibility with all hosting configurations and URL consumers.
+  - Better support for shared-hosting rewrite paths.
+  - Fixed issues with lightbox consumers and social media crawlers.
+
+  #### Restored cache management via HTTP headers
+
+  - Cache invalidation now relies on HTTP headers and file timestamps.
+  - Cleaner URLs for better SEO and sharing.
+  - Simplified URL handling throughout the system.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Modified `image_public_asset_url_with_version()`:
+    * Now returns unmodified URLs without query parameters
+    * Maintained for backward compatibility
+    * Cache invalidation handled by HTTP layer
+
+  - Modified `image_public_asset_version()`:
+    * Now returns empty string (no version generated)
+    * Previous hash-based versioning removed
+    * Maintained for backward compatibility with callers
+
+  - Modified `social_preview_cache_busted_url()`:
+    * Returns clean URLs without query parameters
+    * Removed version marker appending logic
+    * Maintains compatibility with social crawlers
+
+  - Updated `social_preview_image_from_thumbnail()`:
+    * Uses clean preview URLs without parameters
+    * Simplified URL handling
+    * Better support for metadata consumers
+
+  - Updated `app/core-manifest.json`:
+    * Regenerated with current file hashes
+
+  #### Database
+
+  - No database changes required.
+
+  #### Frontend
+
+  - No frontend changes required.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Media and thumbnail URLs are now cleaner and simpler.
+  - Better compatibility with all browsers and URL handlers.
+  - Improved performance with shared-hosting configurations.
+  - Social media previews work reliably without parameter issues.
+
+  #### For administrators
+
+  - Cache management simplified through HTTP headers.
+  - URLs remain consistent and predictable.
+  - Better compatibility with all URL rewrite systems.
+
 ## Version 0.80.4
 
 Version 0.80.4 is a major feature release delivering a complete, production-ready browser-based upload system with integrated thumbnail rebuild, intelligent batch management, and smart asset versioning. This release moves image processing from the server to the browser, enabling faster uploads with real-time progress feedback, automatic recovery from failures, and seamless thumbnail generation.

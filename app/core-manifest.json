@@ -1,5 +1,5 @@
 {
-    "version": "0.80.4",
+    "version": "0.80.5",
     "generated_at": "2026-06-14T21:41:47+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
@@ -56,7 +56,7 @@
         "app/controllers/upload_automation.php": "sha256:ab023ca6d07d229266258a7d5938f88c26bc502f1f3f19c2a57bd92368c66de4",
         "app/controllers/votes.php": "sha256:e0158e621e6cd99784a845c6bc69b4c5dd9a75cb362a6c054eec1dd945f694b0",
         "app/database.php": "sha256:b809a884469ebc1069e7c974c3d31cfb0a936b74848dbbe7a965272c80685cb5",
-        "app/helpers.php": "sha256:80406c4f20dfa468af1b1a031adc081e8bf146a8b4f25ea32944800a0768fc3f",
+        "app/helpers.php": "sha256:041d7ddfc61e7c5cb1fe479fb74f11ba7be164850a87f024148cc35d0c6865b5",
         "app/integrity.php": "sha256:e83c0744f6d9250b656a3176a034edd184515c66c90e1791b114fd8a4bac018b",
         "app/lang/cs.json": "sha256:6bdf2053a359ee5e03e74ca03441e400f6b8dacbbb9c8c4d91c9e2a43f0ffd0b",
         "app/lang/cs.php": "sha256:7dab92c9782370c5fead8aa3f91dfadef19fbb47b0283e07f8637e5ac483248a",
