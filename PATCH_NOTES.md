@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.81.1
+
+Version 0.81.1 fixes compatibility issues in the gallery reporting service. It adds proper namespace qualification for built-in PHP functions and function existence validation for disk space operations, ensuring the report system works correctly in restricted hosting environments and strict namespace contexts.
+
+  ### Highlights
+
+  #### Fixed namespace compatibility
+
+  - Corrected namespace references in gallery report service.
+  - Added function existence checks for disk space functions.
+  - Better support for restricted hosting environments.
+  - Improved PHP namespace compliance.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Fixed `admin_gallery_report_disk_free_bytes()`:
+    * Use fully qualified `\disk_free_space()` function reference
+    * Added `function_exists()` check before calling
+    * Returns 0 gracefully if function unavailable
+    * Handles restricted hosting environments
+
+  - Fixed `admin_gallery_report_disk_total_bytes()`:
+    * Use fully qualified `\disk_total_space()` function reference
+    * Added `function_exists()` check before calling
+    * Returns 0 gracefully if function unavailable
+    * Supports hosting restrictions on disk functions
+
+  - Updated `app/core-manifest.json`:
+    * Regenerated with updated file hashes
+
+  #### Database
+
+  - No database changes required.
+
+  #### Frontend
+
+  - No frontend changes required.
+
+  ### User Impact
+
+  #### For visitors
+
+  - No changes to public gallery functionality.
+
+  #### For administrators
+
+  - Gallery reports now work correctly in all hosting environments.
+  - Better error handling when disk space functions are restricted.
+  - No impact on storage reporting functionality when functions unavailable.
+
 ## Version 0.81
 
 Version 0.81 is a major feature release delivering a comprehensive gallery reporting and analytics dashboard. It builds on the 0.80 release series (which introduced browser-based uploads, intelligent batch management, subgallery sorting, and upload validation) by adding powerful admin tools for understanding gallery content, storage usage, metadata coverage, and geographic distribution of images.
