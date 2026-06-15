@@ -1076,11 +1076,11 @@ function admin_gallery_report_data_path_summary(): array
  */
 function admin_gallery_report_disk_free_bytes(string $path): int
 {
-    if ($path === '') {
+    if ($path === '' || !\function_exists('disk_free_space')) {
         return 0;
     }
     $probe = is_dir($path) ? $path : dirname($path);
-    $bytes = @disk_free_space($probe);
+    $bytes = @\disk_free_space($probe);
     return is_float($bytes) ? (int) $bytes : 0;
 }
 
@@ -1092,11 +1092,11 @@ function admin_gallery_report_disk_free_bytes(string $path): int
  */
 function admin_gallery_report_disk_total_bytes(string $path): int
 {
-    if ($path === '') {
+    if ($path === '' || !\function_exists('disk_total_space')) {
         return 0;
     }
     $probe = is_dir($path) ? $path : dirname($path);
-    $bytes = @disk_total_space($probe);
+    $bytes = @\disk_total_space($probe);
     return is_float($bytes) ? (int) $bytes : 0;
 }
 
