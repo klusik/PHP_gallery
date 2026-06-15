@@ -1,5 +1,149 @@
 # Patch notes
 
+## Version 0.81
+
+Version 0.81 is a major feature release delivering a comprehensive gallery reporting and analytics dashboard. It builds on the 0.80 release series (which introduced browser-based uploads, intelligent batch management, subgallery sorting, and upload validation) by adding powerful admin tools for understanding gallery content, storage usage, metadata coverage, and geographic distribution of images.
+
+  ### Highlights
+
+  #### Comprehensive gallery reporting and analytics
+
+  - New interactive analytics dashboard with detailed gallery insights.
+  - Real-time reporting on images, storage, metadata, and GPS locations.
+  - Export gallery reports to HTML for offline review and sharing.
+  - Identify metadata gaps and optimization opportunities.
+  - Understand geographic distribution of images through GPS clustering.
+
+  #### Detailed storage and metadata analysis
+
+  - Storage breakdown by gallery with trend analysis.
+  - Image type distribution and format analysis.
+  - Metadata coverage reporting (EXIF, GPS, captions, tags).
+  - Missing metadata identification and suggestions.
+  - Database table statistics and exact row counts.
+
+  #### GPS clustering with geographic intelligence
+
+  - Intelligent geographic clustering of GPS-tagged images.
+  - City-scale grouping using Haversine distance calculations.
+  - Place matching against comprehensive offline database.
+  - Fallback to nearest known location for out-of-radius clusters.
+  - Visual display of geographic patterns in image collection.
+
+  #### Telemetry and usage insights
+
+  - Session statistics and usage trends.
+  - Route popularity and gallery access patterns.
+  - Multi-window analysis (7, 30, 90, 365-day views).
+  - Detailed breakdown of visitor interactions.
+  - Performance and optimization recommendations.
+
+  ### Previous 0.80 Release Series Summary
+
+  The 0.80 release series introduced significant improvements to the upload system and gallery management:
+
+  - **0.80.0**: Complete browser-based upload system with client-side EXIF extraction, integrated thumbnail rebuild, batch idempotency recovery, real-time progress tracking, and deterministic image ordering.
+  - **0.80.1**: Extracted gallery sorting logic into dedicated service layer for improved maintainability.
+  - **0.80.2**: Added admin-only subgallery date sorting feature for temporary reordering by start date.
+  - **0.80.3**: Improved upload validation with automatic detection and correction of mismatched file formats.
+  - **0.80.4**: Removed query parameter versioning from public URLs for better hosting compatibility while maintaining asset cache management.
+  - **0.80.5**: Fixed URL handling and improved cache management through HTTP headers.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Created `app/services/admin_gallery_report.php` (2245 lines):
+    * Comprehensive reporting engine with analytics
+    * Image statistics and aggregation
+    * Storage usage tracking and breakdown
+    * Metadata coverage analysis
+    * GPS cluster identification and place matching
+    * Database analysis with exact row counts
+    * Telemetry integration and trending
+    * Report generation and caching
+
+  - Created `app/services/gallery_sorting.php` (125 lines):
+    * Reusable gallery sorting utilities
+    * Subgallery date sorting logic
+    * Support for multiple sort strategies
+
+  - Created `app/services/browser_uploads.php` (1459 lines):
+    * Complete client-side upload workflow orchestration
+    * Session and batch management
+    * Image validation and format detection
+
+  - Created `app/services/browser_thumbnail_rebuild.php` (786 lines):
+    * Integrated thumbnail rebuild during uploads
+    * On-demand rebuild operations
+    * Async processing with fallback
+
+  - Enhanced `app/controllers/admin_gallery_report.php`:
+    * Report request handling and coordination
+    * Data transformation for visualization
+
+  - Enhanced `app/controllers/admin_galleries_reorder.php`:
+    * Gallery reordering with sorting integration
+
+  - Updated upload and image scanning services:
+    * Better format detection and validation
+    * Improved metadata handling
+
+  #### Database
+
+  - Added migration `202606100001_browser_client_upload_settings.php`:
+    * Settings for client-side upload configuration
+
+  - Added migration `202606100002_browser_upload_batch_safety.php`:
+    * Safety markers for upload recovery
+
+  - Added migration `202606100003_browser_thumbnail_rebuild_settings.php`:
+    * Thumbnail rebuild configuration
+
+  #### Frontend
+
+  - Created `public/assets/gallery-modules/admin-gallery-report.js` (297 lines):
+    * Interactive report UI and visualization
+    * Real-time filtering and drill-down
+
+  - Created `public/assets/gallery-modules/admin-browser-upload.js` (1172 lines):
+    * Complete browser upload interface
+
+  - Created `public/assets/gallery-modules/browser-image-worker.js` (986 lines):
+    * Client-side image processing pipeline
+
+  - Created `public/assets/gallery-modules/admin-browser-thumbnail-rebuild.js` (844 lines):
+    * Thumbnail rebuild UI and progress tracking
+
+  - Enhanced CSS:
+    * Admin dashboard styling for reports
+    * Upload and rebuild UI styling
+
+  #### Internationalization
+
+  - Added English translations for reporting UI
+  - Added Czech translations for reporting UI
+  - Complete language support for all new features
+
+  ### User Impact
+
+  #### For visitors
+
+  - Faster uploads with client-side processing.
+  - Better gallery organization with subgallery sorting by date.
+  - Improved media URL handling and caching.
+
+  #### For administrators
+
+  - **Gallery insights**: Comprehensive reports on gallery content and organization.
+  - **Storage management**: Detailed breakdown of storage usage by gallery.
+  - **Metadata coverage**: Identify missing EXIF, GPS, captions, and tags.
+  - **Geographic patterns**: Understand where images were taken through GPS clustering.
+  - **Optimization**: Recommendations for missing metadata and optimization opportunities.
+  - **Upload management**: Browser-based uploads with real-time progress and recovery.
+  - **Gallery tools**: Subgallery date sorting, improved reordering, better filtering.
+  - **Diagnostics**: Database analysis and telemetry for system health monitoring.
+
 ## Version 0.80.5
 
 Version 0.80.5 fixes URL handling for public media and thumbnail assets. It removes query parameter-based cache versioning that was causing compatibility issues with shared-hosting rewrite paths and lightbox consumers. Public URLs now remain clean and parameter-free while maintaining proper cache management through HTTP headers and file system timestamps.
