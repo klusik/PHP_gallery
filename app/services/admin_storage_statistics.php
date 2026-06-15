@@ -444,12 +444,16 @@ function admin_storage_statistics_accumulate_source_row(array &$summary, array $
  */
 function admin_storage_statistics_compact_source_summary(array $source): array
 {
+    $knownSourceSizeCount = (int) ($source['known_source_size_count'] ?? 0);
+    $originalBytes = (int) ($source['original_bytes'] ?? 0);
+    $averageOriginalBytes = $knownSourceSizeCount > 0 ? (int) floor($originalBytes / $knownSourceSizeCount) : 0;
+
     return [
         'image_count' => (int) ($source['image_count'] ?? 0),
-        'known_source_size_count' => (int) ($source['known_source_size_count'] ?? 0),
+        'known_source_size_count' => $knownSourceSizeCount,
         'unknown_source_size_count' => (int) ($source['unknown_source_size_count'] ?? 0),
-        'original_bytes' => (int) ($source['original_bytes'] ?? 0),
-        'average_original_bytes' => (int) ($source['average_original_bytes'] ?? 0),
+        'original_bytes' => $originalBytes,
+        'average_original_bytes' => $averageOriginalBytes,
         'largest_original_bytes' => (int) ($source['largest_original_bytes'] ?? 0),
         'largest_original_name' => (string) ($source['largest_original_name'] ?? ''),
         'type_rows' => admin_storage_statistics_finalize_group_rows(is_array($source['type_groups'] ?? null) ? $source['type_groups'] : [], 'bytes'),

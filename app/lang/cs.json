@@ -2798,5 +2798,9 @@
   "admin.galleries.public_subgallery_date_sort_saved": "Pořadí podgalerií podle data bylo uloženo. Teď je to skutečné pořadí pro všechny návštěvníky.",
   "admin.galleries.public_subgallery_date_sort_failed_with_error": "Pořadí podgalerií podle data se nepodařilo uložit: {error}",
   "admin.galleries.log_public_subgallery_date_sorted": "Veřejné podgalerie byly seřazeny podle data.",
-  "admin.galleries.log_public_subgallery_date_sort_failed": "Řazení veřejných podgalerií podle data selhalo."
+  "admin.galleries.log_public_subgallery_date_sort_failed": "Řazení veřejných podgalerií podle data selhalo.",
+  "admin.menu.gallery_report": "Kompletní report",
+  "admin.dashboard.gallery_report": "Kompletní report galerie",
+  "admin.dashboard.gallery_report_hint": "Vygeneruje jeden podrobný stažitelný HTML report se storage, databází, telemetrií, EXIF, GPS, galeriemi a diagnostikou běhového prostředí.",
+  "admin.dashboard.open_gallery_report": "Otevřít generátor reportu"
 }

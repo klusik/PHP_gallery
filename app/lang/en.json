@@ -2834,5 +2834,9 @@
   "admin.galleries.public_subgallery_date_sort_saved": "Subgallery date order was saved. This is now the real order for all visitors.",
   "admin.galleries.public_subgallery_date_sort_failed_with_error": "Subgallery date order could not be saved: {error}",
   "admin.galleries.log_public_subgallery_date_sorted": "Public subgalleries were sorted by date.",
-  "admin.galleries.log_public_subgallery_date_sort_failed": "Public subgallery date sort failed."
+  "admin.galleries.log_public_subgallery_date_sort_failed": "Public subgallery date sort failed.",
+  "admin.menu.gallery_report": "Complete report",
+  "admin.dashboard.gallery_report": "Complete gallery report",
+  "admin.dashboard.gallery_report_hint": "Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.",
+  "admin.dashboard.open_gallery_report": "Open report generator"
 }

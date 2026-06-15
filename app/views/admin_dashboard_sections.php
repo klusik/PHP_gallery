@@ -255,6 +255,9 @@ function view_render_admin_dashboard_maintenance_panel(array $model): void
         'title' => t('admin.dashboard.system_tools', 'System tools'),
         'description' => t('admin.dashboard.system_tools_hint', 'Operational controls are grouped by purpose so display settings, media cache work, map data, and system health do not compete in one long list.'),
     ]);
+    echo '<div class="admin-maintenance-grid admin-maintenance-featured-grid">';
+    view_render_admin_gallery_report_maintenance_card('admin-maintenance-card is-featured');
+    echo '</div>';
     echo '<div class="admin-subtab-scope admin-dashboard-maintenance-scope" data-admin-subtab-scope>';
     view_render_admin_subtabs($maintenanceSubtabs, 'admin-maintenance-content', t('admin.dashboard.maintenance_subtabs_aria', 'Maintenance tool groups'));
 
@@ -354,6 +357,16 @@ function view_render_admin_dashboard_navigation_tools(array $model): void
 }
 
 /**
+ * Render the complete gallery report maintenance card.
+ *
+ * @param string $className CSS class name for the card wrapper.
+ */
+function view_render_admin_gallery_report_maintenance_card(string $className = 'admin-maintenance-card'): void
+{
+    echo '<article class="' . e($className) . '"><strong>' . e(t('admin.dashboard.gallery_report', 'Complete gallery report')) . '</strong><span>' . e(t('admin.dashboard.gallery_report_hint', 'Generate one detailed downloadable HTML report with storage, database, telemetry, EXIF, GPS, galleries, and runtime diagnostics.')) . '</span><a class="button secondary" href="' . e(url_for('admin_gallery_report')) . '">' . e(t('admin.dashboard.open_gallery_report', 'Open report generator')) . '</a></article>';
+}
+
+/**
  * Render maintenance tools for application health and diagnostics.
  *
  * @param array $model Model value.
@@ -377,6 +390,7 @@ function view_render_admin_dashboard_system_tools(array $model): void
         echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.telemetry', 'Telemetry')) . '</strong><span>' . e(t('admin.dashboard.telemetry_hint', 'Inspect anonymous usage telemetry without collecting personal data.')) . '</span><a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(t('admin.dashboard.open_telemetry', 'Open telemetry')) . '</a></article>';
     }
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.integrity', 'Integrity')) . '</strong><span>' . e(t('admin.dashboard.integrity_hint', 'Check core files and deployment health.')) . '</span><a class="button secondary" href="' . e(url_for('admin_integrity')) . '">' . e(t('admin.dashboard.run_integrity_check', 'Run integrity check')) . '</a></article>';
+    view_render_admin_gallery_report_maintenance_card('admin-maintenance-card');
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.updates', 'Updates')) . '</strong><span>' . e(t('admin.dashboard.updates_hint', 'Check and apply project updates.')) . '</span><a class="' . e($updateButtonClass) . '" href="' . e(url_for('admin_update')) . '">' . e($updateLabel) . '</a></article>';
     echo '<article class="admin-maintenance-card"><strong>' . e(t('admin.dashboard.features', 'Features')) . '</strong><span>' . e(t('admin.dashboard.features_hint', 'Enable or hide unfinished, optional, or site-specific feature areas.')) . '</span><a class="button secondary" href="' . e(url_for('admin_features')) . '">' . e(t('admin.dashboard.open_features', 'Open features')) . '</a></article>';
     view_render_admin_devmode_card('admin-maintenance-card');

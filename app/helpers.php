@@ -1174,6 +1174,7 @@ function admin_menu_structure(): array
             'items' => [
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
+                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report')],
                 ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
             ],

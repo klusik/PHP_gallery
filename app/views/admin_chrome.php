@@ -88,6 +88,7 @@ function view_admin_menu_structure(): array
             'items' => [
                 ['label' => t('admin.menu.logs', 'Logs'), 'page' => 'admin_logs', 'url' => url_for('admin_logs')],
                 ['label' => t('admin.menu.telemetry', 'Telemetry'), 'page' => 'admin_telemetry', 'url' => url_for('admin_telemetry'), 'feature' => 'telemetry'],
+                ['label' => t('admin.menu.gallery_report', 'Complete report'), 'page' => 'admin_gallery_report', 'url' => url_for('admin_gallery_report')],
                 ['label' => t('admin.menu.integrity', 'Integrity'), 'page' => 'admin_integrity', 'url' => url_for('admin_integrity')],
                 ['label' => t('admin.menu.navdata', 'Navigation data'), 'page' => 'admin_navdata', 'url' => url_for('admin_navdata'), 'feature' => 'navigation_data'],
                 ['label' => $updateLabel, 'page' => 'admin_update', 'url' => url_for('admin_update'), 'highlight' => $updatePending],
