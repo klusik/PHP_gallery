@@ -142,4 +142,5 @@ require_once __DIR__ . '/services/tags.php';
 require_once __DIR__ . '/services/public_search.php';
 require_once __DIR__ . '/services/flight_maps.php';
 require_once __DIR__ . '/services/exif.php';
+require_once __DIR__ . '/services/admin_gallery_report.php';
 require_once __DIR__ . '/services/gallery_migration.php';

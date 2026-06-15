@@ -224,6 +224,8 @@ function cms_run(): void
         'admin_url_rewrite' => '\\Gallery\\Controllers\\cms_admin_url_rewrite',
         'admin_storage_statistics' => '\\Gallery\\Controllers\\cms_admin_storage_statistics',
         'admin_storage_statistics_update' => '\\Gallery\\Controllers\\cms_admin_storage_statistics_update',
+        'admin_gallery_report' => '\\Gallery\\Controllers\\cms_admin_gallery_report',
+        'admin_gallery_report_generate' => '\\Gallery\\Controllers\\cms_admin_gallery_report_generate',
         'admin_database_usage_recompute' => '\\Gallery\\Controllers\\cms_admin_database_usage_recompute',
         'admin_public_search_settings' => '\\Gallery\\Controllers\\cms_admin_public_search_settings',
         'admin_exif_gps_settings' => '\\Gallery\\Controllers\\cms_admin_exif_gps_settings',

@@ -67,6 +67,7 @@ import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
+import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260613-lightbox-preview-then-media-v4';
@@ -117,6 +118,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupAdminGalleryDateSuggestions();
     setupAdminStorageStatistics();
+    setupAdminGalleryReport();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();
     setupGallerySearchPickers();
