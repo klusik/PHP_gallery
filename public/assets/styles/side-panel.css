@@ -1,4 +1,4 @@
-﻿/* Add gallery side panel */
+/* Add gallery side panel */
 .admin-side-panel {
     position: fixed !important;
     inset: 0 !important;
@@ -1266,6 +1266,30 @@ body.has-admin-side-panel {
     border-radius: 18px;
     background: rgba(246, 248, 251, 0.94);
     backdrop-filter: blur(14px);
+}
+
+.admin-side-panel.is-edit-panel .admin-metadata-organizer {
+    scroll-margin-top: 8.5rem;
+}
+
+.admin-side-panel.is-edit-panel .admin-metadata-organizer-progress:not([hidden]) {
+    position: sticky;
+    top: 8.5rem;
+    z-index: 8;
+    width: auto;
+    max-width: none;
+    box-sizing: border-box;
+    margin-top: 0.85rem;
+}
+
+@media (max-width: 720px) {
+    .admin-side-panel.is-edit-panel .admin-metadata-organizer {
+        scroll-margin-top: 7.5rem;
+    }
+
+    .admin-side-panel.is-edit-panel .admin-metadata-organizer-progress:not([hidden]) {
+        top: 7.5rem;
+    }
 }
 .admin-side-panel .admin-tab-panel {
     margin: 0;

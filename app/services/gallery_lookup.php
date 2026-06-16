@@ -491,15 +491,16 @@ function find_gallery_by_slug(string $slug): ?array
  * Fetch one gallery by normalized folder path.
  *
  * @param string $folderPath Folder path filesystem path.
+ * @param bool $fresh True to bypass the per-request lookup cache after mutations.
  * @return ?array Structured result data for the caller.
  */
-function find_gallery_by_folder_path(string $folderPath): ?array
+function find_gallery_by_folder_path(string $folderPath, bool $fresh = false): ?array
 {
     static $cache = [];
 
     // $normalizedPath stores an intermediate value used by the surrounding gallery workflow.
     $normalizedPath = normalize_relative_path($folderPath);
-    if (array_key_exists($normalizedPath, $cache)) {
+    if (!$fresh && array_key_exists($normalizedPath, $cache)) {
         return $cache[$normalizedPath];
     }
 

@@ -368,7 +368,7 @@ function unique_gallery_child_folder_path(?array $parent, string $folderName): s
     $candidate = gallery_child_folder_path($parent, $segment);
     // $counter stores an intermediate value used by the surrounding gallery workflow.
     $counter = 2;
-    while (is_dir(gallery_target_abs_path($candidate)) || find_gallery_by_folder_path($candidate)) {
+    while (is_dir(gallery_target_abs_path($candidate)) || find_gallery_by_folder_path($candidate, true)) {
         // $candidate stores an intermediate value used by the surrounding gallery workflow.
         $candidate = gallery_child_folder_path($parent, $segment . '-' . $counter);
         $counter++;

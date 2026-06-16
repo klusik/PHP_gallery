@@ -46,7 +46,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.81.1';
+const CMS_VERSION = '0.82';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -285,6 +285,8 @@ function cms_run(): void
         'telemetry_ingest' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
         'usage_collect' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
         'admin_edit_gallery' => '\\Gallery\\Controllers\\cms_admin_edit_gallery',
+        'admin_metadata_organizer_preview_batch' => '\\Gallery\\Controllers\\cms_admin_metadata_organizer_preview_batch',
+        'admin_metadata_organizer_apply_date_plan_batch' => '\\Gallery\\Controllers\\cms_admin_metadata_organizer_apply_date_plan_batch',
         'admin_bulk_images' => '\\Gallery\\Controllers\\cms_admin_bulk_images',
         'admin_reorder_images' => '\\Gallery\\Controllers\\cms_admin_reorder_images',
         'admin_edit_image' => '\\Gallery\\Controllers\\cms_admin_edit_image',

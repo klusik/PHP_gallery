@@ -81,6 +81,7 @@ require_once __DIR__ . '/services/favorite_galleries.php';
 require_once __DIR__ . '/services/gallery_picker.php';
 // Load separated service modules. These require_once calls preserve the legacy app/services.php include contract.
 require_once __DIR__ . '/services/gallery_mutations.php';
+require_once __DIR__ . '/services/gallery_metadata_organizer.php';
 require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
 require_once __DIR__ . '/services/uploads.php';
