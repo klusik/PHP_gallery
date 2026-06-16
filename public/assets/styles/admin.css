@@ -5285,3 +5285,47 @@ button.gallery-row-action.secondary {
 .admin-discovery-panel tr.warning td {
     background: color-mix(in srgb, var(--warning, #f5a623) 12%, transparent);
 }
+
+/* Keeps the metadata organizer workflow readable while AJAX batches are running. */
+.admin-metadata-organizer {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-metadata-organizer-progress {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 6;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--admin-accent, var(--accent, #2563eb)) 25%, transparent);
+    border-radius: var(--radius-md, 8px);
+    background: color-mix(in srgb, var(--background, #fff), transparent 4%);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(14px);
+}
+
+.admin-side-panel .admin-metadata-organizer-progress {
+    top: 8.75rem;
+    z-index: 7;
+}
+
+.admin-metadata-organizer-progress progress {
+    width: 100%;
+}
+
+.admin-metadata-organizer-progress p {
+    margin: 0.45rem 0 0;
+}
+
+.admin-metadata-organizer-log {
+    max-height: 12rem;
+    overflow: auto;
+    margin: 1rem 0 0;
+    padding: 0.75rem;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid color-mix(in srgb, var(--border, #c3c4c7), transparent 20%);
+    background: color-mix(in srgb, var(--background, #fff), #000 3%);
+    color: var(--muted-text, #646970);
+    white-space: pre-wrap;
+}

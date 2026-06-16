@@ -50,9 +50,11 @@ use function Gallery\Core\request_method;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
+use function Gallery\Services\admin_log_event;
 use function Gallery\Services\ai_image_analysis_latest_metadata_for_image;
 use function Gallery\Services\ai_image_analysis_metadata_pretty_json;
 use function Gallery\Services\ai_image_analysis_schema_ready;
+use function Gallery\Services\delete_gallery_subtrees;
 use function Gallery\Services\exif_gps_schema_ready;
 use function Gallery\Services\feature_flag_enabled;
 use function Gallery\Services\find_gallery;
@@ -96,15 +98,30 @@ function cms_admin_public_update_gallery(): void
         $redirect = url_for('home');
         if (!empty($gallery['parent_id'])) {
             // Variable $parent stores this steps working value.
-            $parent = find_gallery((int) $gallery['parent_id']);
+            $parent = find_gallery((int) $gallery['parent_id'], true);
             if ($parent) {
                 // $redirect stores an intermediate value used by the surrounding gallery workflow.
                 $redirect = gallery_public_url($parent);
             }
         }
-        // Variable $stmt stores this steps working value.
-        $stmt = db()->prepare('DELETE FROM galleries WHERE id = ?');
-        $stmt->execute([(int) $gallery['id']]);
+        try {
+            // $deleted stores the filesystem and database deletion result.
+            $deleted = delete_gallery_subtrees([(int) $gallery['id']]);
+            admin_log_event('warning', 'gallery.public_deleted', 'Admin deleted a gallery from the public page.', [
+                'gallery_id' => (int) $gallery['id'],
+                'folder_path' => (string) $gallery['folder_path'],
+                'deleted_roots' => (int) ($deleted['root_count'] ?? 0),
+                'deleted_rows' => (int) ($deleted['row_count'] ?? 0),
+                'missing_folders' => (int) ($deleted['missing_folders'] ?? 0),
+            ]);
+        } catch (Throwable $exception) {
+            admin_log_event('error', 'gallery.public_delete_failed', 'Public-page gallery delete failed.', [
+                'gallery_id' => (int) $gallery['id'],
+                'folder_path' => (string) $gallery['folder_path'],
+                'error' => $exception->getMessage(),
+            ]);
+            flash_message('admin_notice', t('admin.galleries.delete_failed', 'Gallery delete failed: {error}', ['error' => $exception->getMessage()]));
+        }
         redirect_to($redirect);
     }
 

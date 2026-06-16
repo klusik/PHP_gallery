@@ -470,7 +470,7 @@ function create_gallery_row_for_folder(string $folderPath): ?array
     }
 
     // Variable $existing stores this steps working value.
-    $existing = find_gallery_by_folder_path($folderPath);
+    $existing = find_gallery_by_folder_path($folderPath, true);
     if ($existing) {
         return $existing;
     }
@@ -662,6 +662,11 @@ function create_empty_gallery(array $input): array
 
     // $folderName stores an intermediate value used by the surrounding gallery workflow.
     $folderName = trim((string) ($input['folder_name'] ?? ''));
+    // $requestedFolderPath stores the preferred folder path before suffix fallback is applied.
+    $requestedFolderPath = gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
+    if (!is_dir(gallery_target_abs_path($requestedFolderPath)) && function_exists('Gallery\Services\delete_missing_gallery_database_subtree_by_folder_path')) {
+        delete_missing_gallery_database_subtree_by_folder_path($requestedFolderPath);
+    }
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = unique_gallery_child_folder_path($parent, $folderName !== '' ? $folderName : $title);
     // $target stores an intermediate value used by the surrounding gallery workflow.

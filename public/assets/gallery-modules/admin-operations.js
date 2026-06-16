@@ -33,7 +33,7 @@
 export { setupAdminTabs } from './admin-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20260608-admin-cinematic-v1';
 export { setupGalleryRefreshProgress } from './admin-refresh-progress.js?v=20260611-admin-discovery-actions-v1';
-export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260614-upload-original-diagnostics-v1';
+export { setupGalleryUploadProgress, setupAdminGallerySidePanel } from './admin-side-panel.js?v=20260616-metadata-organizer-scroll-v1';
 export { setupThumbnailProgress } from './admin-thumbnail-progress.js?v=20260611-import-errors-v1';
 export { setupAdminNavdataUpdateFeedback } from './admin-navdata-update.js?v=20260521-navdata-feedback-v2';
 export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-admin-v1';
@@ -41,3 +41,4 @@ export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs
 export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260519-public-drop-refactor-v1';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260519-drag-ghost-v1';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260603-media-renamer-apply-batches-v1';
+export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20260616-metadata-organizer-scroll-v1';

@@ -285,6 +285,8 @@ function cms_run(): void
         'telemetry_ingest' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
         'usage_collect' => '\\Gallery\\Controllers\\cms_telemetry_ingest',
         'admin_edit_gallery' => '\\Gallery\\Controllers\\cms_admin_edit_gallery',
+        'admin_metadata_organizer_preview_batch' => '\\Gallery\\Controllers\\cms_admin_metadata_organizer_preview_batch',
+        'admin_metadata_organizer_apply_date_plan_batch' => '\\Gallery\\Controllers\\cms_admin_metadata_organizer_apply_date_plan_batch',
         'admin_bulk_images' => '\\Gallery\\Controllers\\cms_admin_bulk_images',
         'admin_reorder_images' => '\\Gallery\\Controllers\\cms_admin_reorder_images',
         'admin_edit_image' => '\\Gallery\\Controllers\\cms_admin_edit_image',

@@ -195,6 +195,29 @@ export function setupAdminGallerySidePanel() {
         await refreshCurrentGalleryContextFromServer('');
     });
 
+    document.addEventListener('php-gallery:metadata-organizer-applied', async (event) => {
+        const detail = event.detail || {};
+        detail.handled = true;
+        const result = detail.result || {};
+        const panel = document.querySelector('[data-admin-side-panel]:not([hidden])');
+        const editUrl = String(result.edit_url || '');
+        const galleryUrl = String(result.gallery_url || '');
+        if (panel instanceof HTMLElement) {
+            writeAdminGallerySidePanelStatus(panel, i18n('admin.metadata_organizer.refreshing', 'Refreshing gallery view...'), false);
+            const panelRefreshed = await refreshAdminSidePanelFromServer(editUrl);
+            const contextRefreshed = await refreshCurrentGalleryContextFromServer(galleryUrl);
+            writeAdminGallerySidePanelStatus(panel, String(result.message || i18n('admin.metadata_organizer.apply_done_title', 'Organizer applied')), false);
+            if (!panelRefreshed && !contextRefreshed) {
+                window.location.reload();
+            }
+            return;
+        }
+        const refreshed = await refreshCurrentGalleryContextFromServer(galleryUrl);
+        if (!refreshed) {
+            window.location.reload();
+        }
+    });
+
     document.addEventListener('click', async (event) => {
         if (!(event.target instanceof Element)) {
             return;

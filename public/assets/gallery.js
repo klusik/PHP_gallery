@@ -88,7 +88,8 @@ import {
     setupThumbnailProgress,
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
-} from './gallery-modules/admin-operations.js?v=20260614-upload-order-v2';
+    setupAdminMetadataOrganizer,
+} from './gallery-modules/admin-operations.js?v=20260616-metadata-organizer-scroll-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -131,6 +132,7 @@ function bootGalleryBrowserFeatures() {
     setupOpenAITextAssist();
     setupAdminGalleryMigration();
     setupAdminMediaRenamer();
+    setupAdminMetadataOrganizer();
     setupAdminGalleryFilters();
     setupAdminGalleryTree();
     setupAdminGalleryReordering();

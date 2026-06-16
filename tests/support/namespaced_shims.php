@@ -68,7 +68,10 @@ namespace Gallery\Services {
          */
         function db_column_exists(string $table, string $column): bool
         {
-            return $table === 'galleries' && in_array($column, ['gallery_date', 'gallery_date_end'], true);
+            if ($table === 'galleries' && in_array($column, ['gallery_date', 'gallery_date_end'], true)) {
+                return true;
+            }
+            return $table === 'images' && $column === 'exif_taken_at';
         }
     }
 
