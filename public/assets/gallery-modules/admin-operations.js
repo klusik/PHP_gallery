@@ -41,4 +41,4 @@ export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs
 export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20260519-public-drop-refactor-v1';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20260519-drag-ghost-v1';
 export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20260603-media-renamer-apply-batches-v1';
-export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20260616-metadata-organizer-scroll-v1';
+export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20260616-metadata-organizer-ajax-v2';

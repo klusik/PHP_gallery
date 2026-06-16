@@ -1024,7 +1024,7 @@ function admin_apply_gallery_metadata_organizer_date_plan_batch(array $gallery):
     }
 
     try {
-        $limit = max(1, min(100, (int) ($_POST['batch_limit'] ?? 20)));
+        $limit = max(1, min(10, (int) ($_POST['batch_limit'] ?? 1)));
         $result = gallery_metadata_organizer_apply_date_plan_batch($galleryId, $_POST, $limit);
         $ok = empty($result['failures']);
         admin_gallery_metadata_organizer_json_response([
@@ -1159,7 +1159,7 @@ function render_admin_gallery_metadata_organizer_panel(array $gallery): void
     }
     echo '</tbody></table>';
 
-    echo '<form method="post" action="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-admin-metadata-organizer-apply-form data-admin-metadata-organizer-batch-size="20">' . csrf_field();
+    echo '<form method="post" action="' . e(url_for('admin_edit_gallery', ['id' => $gallery['id']])) . '" data-admin-metadata-organizer-apply-form data-admin-metadata-organizer-batch-size="1">' . csrf_field();
     echo '<input type="hidden" name="id" value="' . (int) $gallery['id'] . '">';
     echo '<input type="hidden" name="return_tab" value="admin-edit-organizer">';
     echo '<input type="hidden" name="action" value="apply_metadata_organizer_date_plan">';

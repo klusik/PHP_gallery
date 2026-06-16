@@ -1364,7 +1364,7 @@
   "admin.metadata_organizer.kicker": "Metadata organizer",
   "admin.metadata_organizer.log_apply_batch": "Move batch completed: moved {moved}, originals {originals}, derivatives {derivatives}, remaining {remaining}.",
   "admin.metadata_organizer.log_apply_done": "Apply completed. The edit panel stayed open.",
-  "admin.metadata_organizer.log_apply_start": "Apply started. Each request moves a small set of matching photos.",
+  "admin.metadata_organizer.log_apply_start": "Apply started. The browser now controls the loop and the server receives only small AJAX move requests.",
   "admin.metadata_organizer.log_preview_batch": "Preview batch: rows {start} to {end}, candidates {candidates}.",
   "admin.metadata_organizer.log_preview_done": "Preview completed. No files were moved.",
   "admin.metadata_organizer.log_preview_start": "Preview started. Reading image metadata from the database only.",
@@ -1383,7 +1383,7 @@
   "admin.metadata_organizer.primary_help": "Phase 1 groups by EXIF capture date. GPS/place grouping will use the same draft model later.",
   "admin.metadata_organizer.progress_apply_batch": "Moved {moved} photo(s). Remaining candidates: {remaining}.",
   "admin.metadata_organizer.progress_apply_failed": "Metadata organizer apply failed.",
-  "admin.metadata_organizer.progress_apply_start": "Starting physical move batches...",
+  "admin.metadata_organizer.progress_apply_start": "Starting physical move batches. One browser request moves at most {limit} photo(s).",
   "admin.metadata_organizer.progress_preview_batch": "Previewed {processed}/{total} image row(s)...",
   "admin.metadata_organizer.progress_preview_done": "Preview draft ready. Review it before applying moves.",
   "admin.metadata_organizer.progress_preview_failed": "Metadata organizer preview failed.",
@@ -2896,5 +2896,10 @@
   "upload_automation.title": "Watched-folder upload API",
   "vote.error.too_many_votes": "Too many votes. Try again in a moment.",
   "vote.like": "Like",
-  "vote.no_like": "No like"
+  "vote.no_like": "No like",
+  "admin.metadata_organizer.log_apply_request": "Request {batch}: asking server to move up to {limit} photo(s).",
+  "admin.metadata_organizer.log_apply_batch_rich": "Request {batch} finished: selected {selected}, groups {groups}, moved {moved}, originals {originals}, derivatives {derivatives}, remaining {remaining}, server {server}, DB select {select}, filesystem move {move}, maintenance {maintenance}, browser wait {client}.",
+  "admin.metadata_organizer.log_apply_maintenance": "Final maintenance: public gallery paths {paths}, image slugs {slugs}, sidecars {sidecars}, duration {duration}.",
+  "admin.metadata_organizer.progress_apply_waiting": "Request {batch} is running. Waiting for the server response...",
+  "admin.metadata_organizer.progress_apply_batch_rich": "Moved {done}/{total} photo(s). Batch {batch}: {batch_moved} photo(s), {originals} original(s), {derivatives} derivative(s), server {server}, browser wait {client}. Remaining: {remaining}."
 }

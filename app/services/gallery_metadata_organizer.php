@@ -562,8 +562,9 @@ function gallery_metadata_organizer_groups_from_images(int $galleryId, array $im
  * @param int $limit Maximum candidate photos to move in this request.
  * @return array<string,mixed> Structured result data for the caller.
  */
-function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array $input = [], int $limit = 20): array
+function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array $input = [], int $limit = 1): array
 {
+    $requestStartedAt = microtime(true);
     if (!gallery_metadata_organizer_schema_ready()) {
         throw new RuntimeException(t('admin.metadata_organizer.schema_unavailable', 'Metadata organizer requires scanned EXIF capture-date data in the image database.'));
     }
@@ -573,10 +574,12 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
         throw new RuntimeException(t('admin.metadata_organizer.gallery_missing', 'Gallery was not found.'));
     }
 
-    $limit = max(1, min(100, $limit));
+    $limit = max(1, min(10, $limit));
+    $optionsStartedAt = microtime(true);
     $options = gallery_metadata_organizer_options($input);
     $remainingBefore = gallery_metadata_organizer_remaining_candidate_count($galleryId, $input);
     $candidateRows = gallery_metadata_organizer_candidate_images_batch($galleryId, $input, $limit);
+    $selectionMs = gallery_metadata_organizer_elapsed_ms($optionsStartedAt);
     if ($remainingBefore > 0 && !$candidateRows) {
         throw new RuntimeException(t('admin.metadata_organizer.no_valid_candidates_left', 'The organizer found remaining database candidates, but none of them had a valid EXIF date. Re-scan metadata or narrow the date range.'));
     }
@@ -591,8 +594,19 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
     $derivativesMoved = 0;
     $groupResults = [];
     $failures = [];
+    $touchedDestinationIds = [];
+    $moveMs = 0;
+    $maintenanceMs = 0;
+    $maintenance = [
+        'ran' => false,
+        'thumbnail_cache_cleared' => false,
+        'gallery_public_paths' => 0,
+        'image_public_slugs' => 0,
+        'sidecars_written' => 0,
+    ];
 
     foreach ($groups as $group) {
+        $groupStartedAt = microtime(true);
         $imageIds = gallery_metadata_organizer_group_image_ids($group);
         if (!$imageIds) {
             continue;
@@ -615,9 +629,10 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             $failures[] = (string) ($group['title'] ?? '') . ': destination gallery could not be resolved.';
             continue;
         }
+        $touchedDestinationIds[$destinationGalleryId] = $destinationGalleryId;
 
         try {
-            $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds);
+            $moveResult = move_gallery_images($galleryId, $destinationGalleryId, $imageIds, ['defer_maintenance' => true]);
         } catch (Throwable $exception) {
             if ($createdThisGallery) {
                 delete_gallery_subtrees([$destinationGalleryId]);
@@ -636,6 +651,8 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             continue;
         }
 
+        $groupMoveMs = gallery_metadata_organizer_elapsed_ms($groupStartedAt);
+        $moveMs += $groupMoveMs;
         $movedImages += (int) ($moveResult['moved'] ?? 0);
         $originalsMoved += (int) ($moveResult['originals_moved'] ?? 0);
         $derivativesMoved += (int) ($moveResult['derivatives_moved'] ?? 0);
@@ -646,26 +663,39 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
             'destination_status' => $createdThisGallery ? 'created' : 'existing',
             'requested' => count($imageIds),
             'moved' => (int) ($moveResult['moved'] ?? 0),
+            'originals_moved' => (int) ($moveResult['originals_moved'] ?? 0),
+            'derivatives_moved' => (int) ($moveResult['derivatives_moved'] ?? 0),
+            'duration_ms' => $groupMoveMs,
         ];
     }
 
     $remainingAfter = gallery_metadata_organizer_remaining_candidate_count($galleryId, $input);
+    $done = $remainingAfter <= 0;
+    if ($done || $failures) {
+        $maintenanceStartedAt = microtime(true);
+        $maintenance = gallery_metadata_organizer_finalize_move_maintenance($galleryId, array_values($touchedDestinationIds));
+        $maintenanceMs = gallery_metadata_organizer_elapsed_ms($maintenanceStartedAt);
+    }
+
     if (function_exists('Gallery\\Services\\admin_log_event')) {
         admin_log_event($failures ? 'warning' : 'info', 'metadata_organizer.date_apply_batch', 'Admin applied one metadata organizer date batch.', [
             'gallery_id' => $galleryId,
+            'batch_limit' => $limit,
+            'candidate_rows' => count($candidateRows),
             'created_galleries' => $createdGalleries,
             'reused_galleries' => $reusedGalleries,
             'requested_images' => $requestedImages,
             'moved_images' => $movedImages,
+            'originals_moved' => $originalsMoved,
+            'derivatives_moved' => $derivativesMoved,
             'remaining_before' => $remainingBefore,
             'remaining_after' => $remainingAfter,
+            'duration_ms' => gallery_metadata_organizer_elapsed_ms($requestStartedAt),
+            'selection_ms' => $selectionMs,
+            'move_ms' => $moveMs,
+            'maintenance_ms' => $maintenanceMs,
             'failures' => array_slice($failures, 0, 20),
         ], ['category' => 'media', 'severity' => $failures ? 'warning' : 'info']);
-    }
-
-    $updatedSourceGallery = find_gallery($galleryId, true);
-    if ($updatedSourceGallery) {
-        write_gallery_sidecar($updatedSourceGallery);
     }
 
     return [
@@ -677,10 +707,97 @@ function gallery_metadata_organizer_apply_date_plan_batch(int $galleryId, array 
         'derivatives_moved' => $derivativesMoved,
         'remaining_before' => $remainingBefore,
         'remaining_after' => $remainingAfter,
-        'done' => $remainingAfter <= 0,
+        'done' => $done,
+        'batch_limit' => $limit,
+        'candidate_rows' => count($candidateRows),
+        'groups_processed' => count($groups),
+        'selection_ms' => $selectionMs,
+        'move_ms' => $moveMs,
+        'maintenance_ms' => $maintenanceMs,
+        'duration_ms' => gallery_metadata_organizer_elapsed_ms($requestStartedAt),
+        'maintenance' => $maintenance,
         'group_results' => $groupResults,
         'failures' => $failures,
     ];
+}
+
+/**
+ * Return elapsed milliseconds since a monotonic-style request timestamp.
+ *
+ * @param float $startedAt Timestamp from microtime(true).
+ * @return int Integer result for the caller.
+ */
+function gallery_metadata_organizer_elapsed_ms(float $startedAt): int
+{
+    return max(0, (int) round((microtime(true) - $startedAt) * 1000));
+}
+
+/**
+ * Run shared move maintenance once after AJAX-sized organizer moves.
+ *
+ * @param int $sourceGalleryId Source gallery identifier.
+ * @param array<int> $destinationGalleryIds Destination galleries touched by the current request.
+ * @return array<string,mixed> Structured result data for the caller.
+ */
+function gallery_metadata_organizer_finalize_move_maintenance(int $sourceGalleryId, array $destinationGalleryIds = []): array
+{
+    $result = [
+        'ran' => true,
+        'thumbnail_cache_cleared' => false,
+        'gallery_public_paths' => 0,
+        'image_public_slugs' => 0,
+        'sidecars_written' => 0,
+    ];
+
+    thumbnail_maintenance_summary_cache_clear();
+    $result['thumbnail_cache_cleared'] = true;
+
+    $directChildIds = gallery_metadata_organizer_direct_child_ids($sourceGalleryId);
+    $affectedGalleryIds = array_values(array_unique(array_filter(array_merge([$sourceGalleryId], $directChildIds, array_map('intval', $destinationGalleryIds)), static fn (int $galleryId): bool => $galleryId > 0)));
+
+    if (public_path_schema_ready()) {
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $result['gallery_public_paths'] = regenerate_gallery_public_paths($pdo);
+            $pdo->commit();
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
+
+        foreach ($affectedGalleryIds as $galleryId) {
+            $result['image_public_slugs'] += regenerate_gallery_image_public_slugs($galleryId);
+        }
+    }
+
+    foreach ($affectedGalleryIds as $galleryId) {
+        $gallery = find_gallery($galleryId, true);
+        if ($gallery && write_gallery_sidecar($gallery)) {
+            $result['sidecars_written']++;
+        }
+    }
+
+    return $result;
+}
+
+/**
+ * Return direct child gallery identifiers for a source gallery.
+ *
+ * @param int $sourceGalleryId Source gallery identifier.
+ * @return array<int> Integer identifiers.
+ */
+function gallery_metadata_organizer_direct_child_ids(int $sourceGalleryId): array
+{
+    if ($sourceGalleryId <= 0) {
+        return [];
+    }
+
+    $stmt = db()->prepare('SELECT id FROM galleries WHERE parent_id = ? ORDER BY sort_order, id');
+    $stmt->execute([$sourceGalleryId]);
+    return array_values(array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN)));
 }
 
 /**

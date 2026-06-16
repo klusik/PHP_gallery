@@ -171,19 +171,36 @@ async function applyMetadataOrganizerDraft(form, submitter) {
 
     const root = rootForForm(form);
     const originalLabel = buttonLabelStart(submitter);
-    const batchSize = positiveInteger(form.dataset.adminMetadataOrganizerBatchSize, 20, 1, 100);
+    const batchSize = positiveInteger(form.dataset.adminMetadataOrganizerBatchSize, 1, 1, 10);
     const aggregate = emptyApplyAggregate();
     const initialBody = formDataSnapshot(form);
     let done = false;
     let total = Number(form.dataset.candidateCount || 0);
 
+    let requestNumber = 0;
+
     setFormDisabled(form, true);
-    setProgress(root, 5, i18n('admin.metadata_organizer.progress_apply_start', 'Starting physical move batches...'));
+    setProgress(root, 5, i18n('admin.metadata_organizer.progress_apply_start', 'Starting physical move batches. One browser request moves at most {limit} photo(s).', {
+        limit: String(batchSize),
+    }));
     revealProgressArea(root);
-    appendLog(root, i18n('admin.metadata_organizer.log_apply_start', 'Apply started. Each request moves a small set of matching photos.'));
+    clearLog(root);
+    appendLog(root, i18n('admin.metadata_organizer.log_apply_start', 'Apply started. The browser now controls the loop and the server receives only small AJAX move requests.'));
+    await yieldToBrowser();
 
     try {
         while (!done) {
+            requestNumber += 1;
+            appendLog(root, i18n('admin.metadata_organizer.log_apply_request', 'Request {batch}: asking server to move up to {limit} photo(s).', {
+                batch: String(requestNumber),
+                limit: String(batchSize),
+            }));
+            setProgress(root, Math.min(96, 8 + requestNumber), i18n('admin.metadata_organizer.progress_apply_waiting', 'Request {batch} is running. Waiting for the server response...', {
+                batch: String(requestNumber),
+            }));
+            await yieldToBrowser();
+
+            const clientStartedAt = Date.now();
             const response = await fetch(formActionUrl(form), {
                 method: 'POST',
                 body: applyBatchBody(form, batchSize, initialBody),
@@ -193,8 +210,10 @@ async function applyMetadataOrganizerDraft(form, submitter) {
                     'X-Requested-With': 'XMLHttpRequest',
                 },
             });
+            const clientMs = Math.max(0, Date.now() - clientStartedAt);
             const payload = await readJsonResponse(response);
             const result = payload.result || {};
+            result.client_ms = clientMs;
             mergeApplyResult(aggregate, result);
             mergeApplyPayloadUrls(aggregate, payload);
             if (!response.ok || payload.ok === false) {
@@ -209,16 +228,22 @@ async function applyMetadataOrganizerDraft(form, submitter) {
             done = Boolean(result.done) || remaining <= 0;
             const processed = Math.max(0, total - remaining);
             const percent = total > 0 ? Math.min(96, 8 + Math.round((processed / total) * 88)) : 96;
-            setProgress(root, percent, i18n('admin.metadata_organizer.progress_apply_batch', 'Moved {moved} photo(s). Remaining candidates: {remaining}.', {
-                moved: String(Number(aggregate.moved_images || 0)),
-                remaining: String(remaining),
-            }));
-            appendLog(root, i18n('admin.metadata_organizer.log_apply_batch', 'Move batch completed: moved {moved}, originals {originals}, derivatives {derivatives}, remaining {remaining}.', {
-                moved: String(moved),
+            setProgress(root, percent, i18n('admin.metadata_organizer.progress_apply_batch_rich', 'Moved {done}/{total} photo(s). Batch {batch}: {batch_moved} photo(s), {originals} original(s), {derivatives} derivative(s), server {server}, browser wait {client}. Remaining: {remaining}.', {
+                done: String(Number(aggregate.moved_images || 0)),
+                total: String(total),
+                batch: String(requestNumber),
+                batch_moved: String(moved),
                 originals: String(Number(result.originals_moved || 0)),
                 derivatives: String(Number(result.derivatives_moved || 0)),
+                server: formatDuration(Number(result.duration_ms || 0)),
+                client: formatDuration(clientMs),
                 remaining: String(remaining),
             }));
+            appendLog(root, applyBatchLogText(requestNumber, result));
+            if (result.maintenance && result.maintenance.ran) {
+                appendLog(root, maintenanceLogText(result));
+            }
+            await yieldToBrowser();
         }
 
         setProgress(root, 100, applySummaryText(aggregate));
@@ -462,6 +487,81 @@ function appendLog(root, message) {
 }
 
 /**
+ * Build a detailed one-line log entry for one apply response.
+ *
+ * @param {number} requestNumber Browser request sequence number.
+ * @param {Record<string, *>} result Server result.
+ * @return {string} Log message.
+ */
+function applyBatchLogText(requestNumber, result) {
+    const moved = Number(result.moved_images || 0);
+    const selected = Number(result.candidate_rows || result.requested_images || 0);
+    const groups = Number(result.groups_processed || 0);
+    return i18n('admin.metadata_organizer.log_apply_batch_rich', 'Request {batch} finished: selected {selected}, groups {groups}, moved {moved}, originals {originals}, derivatives {derivatives}, remaining {remaining}, server {server}, DB select {select}, filesystem move {move}, maintenance {maintenance}, browser wait {client}.', {
+        batch: String(requestNumber),
+        selected: String(selected),
+        groups: String(groups),
+        moved: String(moved),
+        originals: String(Number(result.originals_moved || 0)),
+        derivatives: String(Number(result.derivatives_moved || 0)),
+        remaining: String(Number(result.remaining_after || 0)),
+        server: formatDuration(Number(result.duration_ms || 0)),
+        select: formatDuration(Number(result.selection_ms || 0)),
+        move: formatDuration(Number(result.move_ms || 0)),
+        maintenance: formatDuration(Number(result.maintenance_ms || 0)),
+        client: formatDuration(Number(result.client_ms || 0)),
+    });
+}
+
+/**
+ * Build a detailed maintenance log entry for a final apply response.
+ *
+ * @param {Record<string, *>} result Server result.
+ * @return {string} Log message.
+ */
+function maintenanceLogText(result) {
+    const maintenance = result.maintenance || {};
+    return i18n('admin.metadata_organizer.log_apply_maintenance', 'Final maintenance: public gallery paths {paths}, image slugs {slugs}, sidecars {sidecars}, duration {duration}.', {
+        paths: String(Number(maintenance.gallery_public_paths || 0)),
+        slugs: String(Number(maintenance.image_public_slugs || 0)),
+        sidecars: String(Number(maintenance.sidecars_written || 0)),
+        duration: formatDuration(Number(result.maintenance_ms || 0)),
+    });
+}
+
+/**
+ * Format milliseconds for compact progress text.
+ *
+ * @param {number} milliseconds Duration in milliseconds.
+ * @return {string} Readable duration.
+ */
+function formatDuration(milliseconds) {
+    const value = Math.max(0, Number(milliseconds || 0));
+    if (value < 1000) {
+        return `${Math.round(value)} ms`;
+    }
+    if (value < 60000) {
+        return `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
+    }
+    const minutes = Math.floor(value / 60000);
+    const seconds = Math.round((value % 60000) / 1000);
+    return `${minutes} min ${seconds} s`;
+}
+
+/**
+ * Yield to the browser so progress text and the mini console paint before the next request.
+ *
+ * @return {Promise<void>} Promise resolved after a paint opportunity.
+ */
+function yieldToBrowser() {
+    return new Promise((resolve) => {
+        window.requestAnimationFrame(() => {
+            window.setTimeout(resolve, 0);
+        });
+    });
+}
+
+/**
  * Return an empty preview aggregate.
  *
  * @return {Record<string, *>} Mutable aggregate.
@@ -595,7 +695,7 @@ function applyFormHtml(sourceForm, aggregate) {
     const maxDate = fieldValue(sourceForm, 'max_date');
     const action = new URL(sourceForm.dataset.adminMetadataOrganizerApplyUrl || sourceForm.getAttribute('action') || sourceForm.action || window.location.href, window.location.href);
     action.searchParams.set('id', galleryId);
-    return `<form method="post" action="${escapeHtmlAttribute(action.toString())}" data-admin-metadata-organizer-apply-form data-admin-metadata-organizer-batch-size="20" data-candidate-count="${Number(aggregate.candidate_images || 0)}">
+    return `<form method="post" action="${escapeHtmlAttribute(action.toString())}" data-admin-metadata-organizer-apply-form data-admin-metadata-organizer-batch-size="1" data-candidate-count="${Number(aggregate.candidate_images || 0)}">
         <input type="hidden" name="csrf_token" value="${escapeHtmlAttribute(csrf)}">
         <input type="hidden" name="id" value="${escapeHtmlAttribute(galleryId)}">
         <input type="hidden" name="return_tab" value="admin-edit-organizer">

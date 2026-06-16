@@ -1344,7 +1344,7 @@
   "admin.metadata_organizer.kicker": "Organizátor podle metadat",
   "admin.metadata_organizer.log_apply_batch": "Dávka přesunu dokončena: přesunuto {moved}, originály {originals}, odvozené soubory {derivatives}, zbývá {remaining}.",
   "admin.metadata_organizer.log_apply_done": "Použití dokončeno. Editační panel zůstal otevřený.",
-  "admin.metadata_organizer.log_apply_start": "Použití spuštěno. Každý požadavek přesune malou sadu odpovídajících fotek.",
+  "admin.metadata_organizer.log_apply_start": "Použití spuštěno. Smyčku nyní řídí prohlížeč a server dostává jen malé AJAX požadavky pro přesun.",
   "admin.metadata_organizer.log_preview_batch": "Dávka náhledu: řádky {start} až {end}, kandidáti {candidates}.",
   "admin.metadata_organizer.log_preview_done": "Náhled dokončen. Žádné soubory nebyly přesunuty.",
   "admin.metadata_organizer.log_preview_start": "Náhled spuštěn. Čtou se pouze metadata obrázků z databáze.",
@@ -1363,7 +1363,7 @@
   "admin.metadata_organizer.primary_help": "První fáze seskupuje podle EXIF data pořízení. GPS/místní seskupení později použije stejný návrhový model.",
   "admin.metadata_organizer.progress_apply_batch": "Přesunuto {moved} fotek. Zbývající kandidáti: {remaining}.",
   "admin.metadata_organizer.progress_apply_failed": "Použití organizátoru podle metadat selhalo.",
-  "admin.metadata_organizer.progress_apply_start": "Spouštím dávky fyzických přesunů...",
+  "admin.metadata_organizer.progress_apply_start": "Spouštím dávky fyzických přesunů. Jeden požadavek prohlížeče přesune nejvýše {limit} fotek.",
   "admin.metadata_organizer.progress_preview_batch": "Zpracován náhled {processed}/{total} řádků obrázků...",
   "admin.metadata_organizer.progress_preview_done": "Návrh je připravený. Před použitím jej zkontrolujte.",
   "admin.metadata_organizer.progress_preview_failed": "Náhled organizátoru podle metadat selhal.",
@@ -2860,5 +2860,10 @@
   "upload_automation.title": "API pro upload sledované složky",
   "vote.error.too_many_votes": "Hlasujete příliš rychle. Zkuste to za chvíli znovu.",
   "vote.like": "To se mi líbí",
-  "vote.no_like": "Bez hlasu"
+  "vote.no_like": "Bez hlasu",
+  "admin.metadata_organizer.log_apply_request": "Požadavek {batch}: server má přesunout nejvýše {limit} fotek.",
+  "admin.metadata_organizer.log_apply_batch_rich": "Požadavek {batch} dokončen: vybráno {selected}, skupiny {groups}, přesunuto {moved}, originály {originals}, odvozené soubory {derivatives}, zbývá {remaining}, server {server}, výběr DB {select}, přesun souborů {move}, údržba {maintenance}, čekání prohlížeče {client}.",
+  "admin.metadata_organizer.log_apply_maintenance": "Finální údržba: veřejné cesty galerií {paths}, URL slugy obrázků {slugs}, sidecary {sidecars}, trvání {duration}.",
+  "admin.metadata_organizer.progress_apply_waiting": "Požadavek {batch} běží. Čeká se na odpověď serveru...",
+  "admin.metadata_organizer.progress_apply_batch_rich": "Přesunuto {done}/{total} fotek. Dávka {batch}: {batch_moved} fotek, originály {originals}, odvozené soubory {derivatives}, server {server}, čekání prohlížeče {client}. Zbývá: {remaining}."
 }

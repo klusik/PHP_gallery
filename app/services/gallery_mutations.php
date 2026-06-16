@@ -575,7 +575,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
  * @param array<int> $imageIds Image ids submitted by the admin UI.
  * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:array<int,string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Structured result data for the caller.
  */
-function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds): array
+function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, array $imageIds, array $options = []): array
 {
     // $normalizedIds stores the unique positive image ids selected by the admin.
     $normalizedIds = array_values(array_unique(array_filter(array_map('intval', $imageIds), static fn (int $imageId): bool => $imageId > 0)));
@@ -593,6 +593,9 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
     if ($sourceGalleryId === $destinationGalleryId) {
         throw new RuntimeException('Choose a different destination gallery.');
     }
+
+    // $deferMaintenance stores whether the caller will perform shared post-move maintenance later.
+    $deferMaintenance = !empty($options['defer_maintenance']);
 
     // $sourceGallery stores the gallery that currently owns the selected rows.
     $sourceGallery = find_gallery($sourceGalleryId, true);
@@ -796,19 +799,21 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
         throw $exception;
     }
 
-    thumbnail_maintenance_summary_cache_clear();
-    if (public_path_schema_ready()) {
-        regenerate_public_paths();
-    }
-    // $updatedSourceGallery stores the source row after title-picture cleanup.
-    $updatedSourceGallery = find_gallery($sourceGalleryId, true);
-    if ($updatedSourceGallery) {
-        write_gallery_sidecar($updatedSourceGallery);
-    }
-    // $updatedDestinationGallery stores the destination row after image ownership changes.
-    $updatedDestinationGallery = find_gallery($destinationGalleryId, true);
-    if ($updatedDestinationGallery) {
-        write_gallery_sidecar($updatedDestinationGallery);
+    if (!$deferMaintenance) {
+        thumbnail_maintenance_summary_cache_clear();
+        if (public_path_schema_ready()) {
+            regenerate_public_paths();
+        }
+        // $updatedSourceGallery stores the source row after title-picture cleanup.
+        $updatedSourceGallery = find_gallery($sourceGalleryId, true);
+        if ($updatedSourceGallery) {
+            write_gallery_sidecar($updatedSourceGallery);
+        }
+        // $updatedDestinationGallery stores the destination row after image ownership changes.
+        $updatedDestinationGallery = find_gallery($destinationGalleryId, true);
+        if ($updatedDestinationGallery) {
+            write_gallery_sidecar($updatedDestinationGallery);
+        }
     }
 
     // $originalsMoved stores moved original media files.
