@@ -1,5 +1,102 @@
 # Patch notes
 
+## Version 0.82
+
+Version 0.82 delivers comprehensive gallery metadata organization capabilities, enabling administrators to intelligently structure galleries into hierarchical subgallery systems based on image metadata. This major feature release includes an interactive organization workflow with real-time preview, secure AJAX batch processing, and multiple organization strategies for transforming flat galleries into organized hierarchies.
+
+  ### Highlights
+
+  #### Gallery metadata organization system
+
+  - Create hierarchical subgallery structures from image metadata automatically.
+  - Multiple organization strategies (date, location, camera, custom fields).
+  - Interactive workflow with real-time preview before applying changes.
+  - Safe batch processing with error recovery and validation.
+  - CSRF protection and admin-only access controls.
+
+  #### Interactive organization workflow
+
+  - Step-by-step wizard interface for organization setup.
+  - Real-time preview of proposed gallery hierarchy.
+  - Strategy customization and configuration.
+  - Undo capability with confirmation dialogs.
+  - Progress tracking for batch operations.
+
+  #### Secure AJAX batch processing
+
+  - Reliable batch operation handling with error recovery.
+  - CSRF token rotation support for long-running tasks.
+  - Form state management across multiple requests.
+  - Comprehensive error reporting and logging.
+  - Safe operation rollback on failure.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Created `app/services/gallery_metadata_organizer.php` (944 lines):
+    * Gallery organization engine with multiple strategies
+    * Date-based, location-based, camera-based hierarchies
+    * Intelligent subgallery naming and conflict resolution
+    * Batch processing with dry-run preview
+    * Validation and safety checks
+
+  - Enhanced `app/services/gallery_mutations.php` (276 lines):
+    * Gallery deletion and subtree operations
+    * Safe database row management
+    * Foreign key handling and cleanup
+    * SQL injection prevention
+
+  - Enhanced `app/controllers/admin_galleries_edit.php`:
+    * Metadata organization endpoints
+    * AJAX handlers for preview and execution
+    * Security validation and CSRF checks
+    * Progress tracking and error handling
+
+  #### Frontend
+
+  - Created `public/assets/gallery-modules/admin-metadata-organizer.js` (945 lines):
+    * Interactive organization UI
+    * AJAX batch request handling
+    * Form state management
+    * Error handling and recovery
+    * Progress visualization
+
+  - Enhanced admin sidebar and dashboard
+  - Responsive styling for all screen sizes
+  - Visual feedback and status indicators
+
+  #### Database
+
+  - No new migrations required.
+  - Uses existing gallery structure.
+
+  #### Internationalization
+
+  - Complete English and Czech translations
+  - UI labels, help text, error messages
+  - Strategy descriptions and options
+
+  #### Testing
+
+  - Unit tests for organization logic
+  - Validation of strategies and edge cases
+
+  ### User Impact
+
+  #### For visitors
+
+  - More organized gallery navigation when galleries are structured by metadata.
+  - Improved content discovery through hierarchical organization.
+
+  #### For administrators
+
+  - Powerful one-click gallery organization by metadata.
+  - Multiple organization strategies to choose from.
+  - Interactive preview before making changes.
+  - Safe operations with error recovery.
+  - Detailed progress tracking during organization.
+
 ## Version 0.81.1
 
 Version 0.81.1 fixes compatibility issues in the gallery reporting service. It adds proper namespace qualification for built-in PHP functions and function existence validation for disk space operations, ensuring the report system works correctly in restricted hosting environments and strict namespace contexts.
