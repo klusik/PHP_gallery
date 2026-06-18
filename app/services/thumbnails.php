@@ -39,6 +39,7 @@ namespace Gallery\Services;
 require_once __DIR__ . '/thumbnail_sources.php';
 require_once __DIR__ . '/thumbnail_metadata.php';
 require_once __DIR__ . '/thumbnail_bundles.php';
+require_once __DIR__ . '/public_gallery_media_manifest.php';
 require_once __DIR__ . '/dng_derivatives.php';
 require_once __DIR__ . '/thumbnail_compatibility.php';
 require_once __DIR__ . '/thumbnail_html.php';

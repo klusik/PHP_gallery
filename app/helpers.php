@@ -70,8 +70,11 @@ use function Gallery\Services\theme_favorite_gallery_navigation_items;
 use function Gallery\Services\theme_page_width_mode;
 use function Gallery\Services\theme_settings;
 use function Gallery\Services\thumbnail_abs_path;
+use function Gallery\Services\thumbnail_bound_filter_sizes;
 use function Gallery\Services\thumbnail_existing_fallback;
+use function Gallery\Services\thumbnail_metadata_select_renderable_variant;
 use function Gallery\Services\thumbnail_serving_url;
+use function Gallery\Services\thumbnail_sizes;
 use function Gallery\Services\thumbnail_url;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\translation_default_language;
@@ -668,10 +671,10 @@ function image_alt_text(array $image, array $gallery, int $index = 1): string
  *
  * Link-preview crawlers are much stricter than normal browsers. Discord,
  * WhatsApp, Facebook, Slack, X/Twitter, and similar consumers behave most
- * consistently when the first image is a public JPEG URL with a stable absolute
- * URL, a real Content-Type, explicit pixel dimensions, and alt text. This helper
- * prefers an existing generated JPEG thumbnail because it is smaller than the
- * original upload and does not depend on WebP support in the crawler.
+ * consistently when the first image has a stable absolute URL, a real
+ * Content-Type, explicit pixel dimensions, and alt text. This helper prefers a
+ * generated JPEG thumbnail when DB metadata says one exists, but it can use a
+ * generated WebP thumbnail for WebP-only galleries instead of probing files.
  *
  * @param array $gallery Gallery row or gallery data.
  * @param array $images Images value.
@@ -730,7 +733,7 @@ function gallery_social_preview_image(array $gallery, array $images = []): ?arra
 }
 
 /**
- * Build crawler-facing metadata for one generated JPEG thumbnail.
+ * Build crawler-facing metadata for one generated thumbnail.
  *
  * @param array $image Image row or image data.
  * @param array $currentGallery Current gallery value.
@@ -747,45 +750,67 @@ function social_preview_image_from_thumbnail(array $image, array $currentGallery
         return null;
     }
 
-    try {
-        // $fallback stores the closest existing JPEG thumbnail, preferring a
-        // wider image so large-preview consumers can render a rich card.
-        $fallback = thumbnail_existing_fallback($image, $imageGallery, $preferredSize, 'jpg');
-        if ($fallback === null || (string) ($fallback['format'] ?? '') !== 'jpg') {
+    // $sizes stores the configured thumbnail sizes the preview may use.
+    $sizes = function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')
+        ? thumbnail_bound_filter_sizes(thumbnail_sizes(), $image, $imageGallery)
+        : thumbnail_sizes();
+    // $selected stores the best crawler preview candidate known from DB metadata only.
+    $selected = function_exists('Gallery\\Services\\thumbnail_metadata_select_renderable_variant')
+        ? thumbnail_metadata_select_renderable_variant($image, $sizes, $preferredSize, 'jpg', true)
+        : null;
+    if ($selected === null) {
+        try {
+            // $fallback stores the closest existing thumbnail for older installations without metadata.
+            $fallback = thumbnail_existing_fallback($image, $imageGallery, $preferredSize, 'jpg');
+            if ($fallback === null) {
+                return null;
+            }
+            // $thumbnailPath stores the local file for legacy dimension extraction only.
+            $thumbnailPath = thumbnail_abs_path($image, $imageGallery, (int) $fallback['size'], (string) $fallback['format']);
+        } catch (RuntimeException) {
             return null;
         }
-        // $thumbnailPath stores the local file so dimensions can be emitted in
-        // the Open Graph metadata instead of asking crawlers to infer them.
-        $thumbnailPath = thumbnail_abs_path($image, $imageGallery, (int) $fallback['size'], 'jpg');
-    } catch (RuntimeException) {
+
+        if (!is_file($thumbnailPath)) {
+            return null;
+        }
+
+        // $imageSize stores the actual thumbnail dimensions from disk for legacy installations.
+        $imageSize = @getimagesize($thumbnailPath);
+        if ($imageSize === false || (int) $imageSize[0] < 200 || (int) $imageSize[1] < 200) {
+            return null;
+        }
+
+        // $selected stores the legacy fallback represented with the same shape used by metadata rows.
+        $selected = [
+            'size' => (int) $fallback['size'],
+            'format' => (string) $fallback['format'],
+            'width' => (int) $imageSize[0],
+            'height' => (int) $imageSize[1],
+        ];
+    }
+
+    if ((int) ($selected['width'] ?? 0) < 200 || (int) ($selected['height'] ?? 0) < 200) {
         return null;
     }
 
-    if (!is_file($thumbnailPath)) {
-        return null;
-    }
-
-    // $imageSize stores the actual thumbnail dimensions from disk.
-    $imageSize = @getimagesize($thumbnailPath);
-    if ($imageSize === false || (int) $imageSize[0] < 200 || (int) $imageSize[1] < 200) {
-        return null;
-    }
-
+    // $format stores the concrete image format selected from metadata.
+    $format = (string) ($selected['format'] ?? 'jpg');
     // $url stores the absolute public URL that social crawlers receive.
-    $url = absolute_public_url(thumbnail_serving_url($image, $imageGallery, (int) $fallback['size'], 'jpg'));
+    $url = absolute_public_url(thumbnail_serving_url($image, $imageGallery, (int) $selected['size'], $format));
     // $alt stores descriptive text for Open Graph and Twitter image metadata.
     $alt = image_alt_text($image, $currentGallery);
 
     // $previewUrl stores the crawler URL exactly as generated, without adding
     // query parameters. Public thumbnail URLs must remain clean.
-    $previewUrl = social_preview_cache_busted_url($url, $thumbnailPath);
+    $previewUrl = social_preview_cache_busted_url($url, '');
 
     return [
         'url' => $previewUrl,
         'secure_url' => preg_replace('#^http://#i', 'https://', $previewUrl) ?: $previewUrl,
-        'type' => 'image/jpeg',
-        'width' => (int) $imageSize[0],
-        'height' => (int) $imageSize[1],
+        'type' => $format === 'webp' ? 'image/webp' : 'image/jpeg',
+        'width' => (int) $selected['width'],
+        'height' => (int) $selected['height'],
         'alt' => $alt,
     ];
 }
@@ -905,11 +930,12 @@ function render_public_seo_tags(array $gallery, array $images = []): void
  *
  * @param array $gallery Gallery row or gallery data.
  * @param array $images Images value.
+ * @param array $publicMediaManifest Request-local media manifest keyed by image id.
  */
-function render_gallery_json_ld(array $gallery, array $images = []): void
+function render_gallery_json_ld(array $gallery, array $images = [], array $publicMediaManifest = []): void
 {
     if (function_exists('Gallery\\Views\\view_render_gallery_json_ld')) {
-        view_render_gallery_json_ld($gallery, $images);
+        view_render_gallery_json_ld($gallery, $images, $publicMediaManifest);
         return;
     }
     // $items stores an intermediate value used by the surrounding gallery workflow.
@@ -925,13 +951,26 @@ function render_gallery_json_ld(array $gallery, array $images = []): void
             continue;
         }
         $imageName = image_alt_text($image, $gallery, $position);
+        $manifestEntry = is_array($publicMediaManifest[(int) ($image['id'] ?? 0)] ?? null) ? $publicMediaManifest[(int) ($image['id'] ?? 0)] : [];
+        $contentUrl = (string) ($manifestEntry['seo_content_url'] ?? '');
+        if ($contentUrl === '') {
+            $contentUrl = public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200 fallback', static fn (): string => thumbnail_url($image, 1200, 'jpg'));
+        } else {
+            public_render_profile_count('seo_json_ld_manifest_hits');
+        }
+        $thumbnailUrl = (string) ($manifestEntry['seo_thumbnail_url'] ?? '');
+        if ($thumbnailUrl === '') {
+            $thumbnailUrl = public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800 fallback', static fn (): string => thumbnail_url($image, 800, 'jpg'));
+        } else {
+            public_render_profile_count('seo_json_ld_manifest_hits');
+        }
         $item = [
             '@type' => 'ImageObject',
             'position' => $position++,
             'name' => $imageName,
             'description' => trim((string) ($image['description'] ?? '')) !== '' ? trim((string) $image['description']) : $imageName,
-            'contentUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200', static fn (): string => thumbnail_url($image, 1200, 'jpg'))),
-            'thumbnailUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800', static fn (): string => thumbnail_url($image, 800, 'jpg'))),
+            'contentUrl' => absolute_public_url($contentUrl),
+            'thumbnailUrl' => absolute_public_url($thumbnailUrl),
             'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
         if (!empty($image['width'])) {
@@ -1887,6 +1926,7 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-benchmark.js',
     ];
     $scriptVersion = 0;
     foreach ($scriptVersionPaths as $versionPath) {

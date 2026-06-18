@@ -160,7 +160,7 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
     $global = ['page', 'lang'];
     $map = [
         'home' => ['gallery_page', 'view_as'],
-        'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as'],
+        'gallery' => ['public_path', 'gallery_path', 'slug', 'gallery_page', 'photo_page', 'share', 'token', 'q', 'view_as', 'benchmark_token', 'benchmark_run', 'benchmark_cache_bust'],
         'tag' => ['slug', 'view_as'],
         'public_search' => ['q', 'context_only', 'gallery_id'],
         'gallery_lightbox_data' => ['id', 'limit', 'offset', 'view_as'],
@@ -179,6 +179,7 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         'theme_branding_asset' => ['kind', 'v'],
         'favicon_asset' => ['s', 'v'],
         'theme_css' => ['v'],
+        'browser_i18n' => ['scope', 'lang', 'v'],
         'download_gallery' => ['id', 'token', 'share'],
         'robots' => [],
         'sitemap' => [],

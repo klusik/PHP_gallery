@@ -70,6 +70,7 @@ use function Gallery\Services\find_gallery_by_folder_path;
 use function Gallery\Services\find_gallery_by_slug;
 use function Gallery\Services\find_image;
 use function Gallery\Services\gallery_access_lifetime_seconds;
+use function Gallery\Services\gallery_benchmark_record_public_render;
 use function Gallery\Services\gallery_access_requirement;
 use function Gallery\Services\gallery_access_schema_ready;
 use function Gallery\Services\gallery_allows_direct_public_request;
@@ -115,6 +116,7 @@ use function Gallery\Services\pagination_model;
 use function Gallery\Services\pagination_photo_thumbnail_sizes_attribute;
 use function Gallery\Services\pagination_slice_items;
 use function Gallery\Services\picture_game_available;
+use function Gallery\Services\public_gallery_media_manifest;
 use function Gallery\Services\public_gallery_listing_sql_fragment;
 use function Gallery\Services\public_gallery_metadata;
 use function Gallery\Services\public_home_search_enabled;
@@ -124,6 +126,7 @@ use function Gallery\Services\public_render_profile_count;
 use function Gallery\Services\public_render_profile_db;
 use function Gallery\Services\public_render_profile_set_gallery;
 use function Gallery\Services\public_render_profile_span;
+use function Gallery\Services\public_render_profile_snapshot;
 use function Gallery\Services\public_render_profile_start;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
 use function Gallery\Services\public_search_normalize_query;
@@ -454,6 +457,8 @@ function cms_gallery(): void
     $allImages = $images;
     // Variable $imageIds stores this steps working value.
     $imageIds = array_map(static fn (array $image): int => (int) $image['id'], $images);
+    // $publicMediaManifest stores request-local thumbnail data for visible cards.
+    $publicMediaManifest = $images ? public_gallery_media_manifest($images, $gallery) : [];
     // Variable $imageTagsById stores this steps working value.
     $imageTagsById = public_render_profile_span('image_tag_lookup', static fn (): array => tags_for_entities('image', $imageIds));
     // Variable $votesById stores this steps working value.
@@ -464,7 +469,7 @@ function cms_gallery(): void
     $seo = public_render_profile_span('seo_metadata_lookup', static fn (): array => public_gallery_metadata($gallery));
     ob_start();
     view_render_public_seo_tags($gallery, $allImages);
-    view_render_gallery_json_ld($gallery, $images);
+    view_render_gallery_json_ld($gallery, $images, $publicMediaManifest);
     append_cms_head_extras((string) ob_get_clean());
     if ($backgroundAssetUrl !== '') {
         append_cms_head_extras('<style>.theme-background-image{background-image:url("' . css_value($backgroundAssetUrl) . '");}</style>');
@@ -555,7 +560,7 @@ function cms_gallery(): void
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list' . $lightboxConfigAttributes . '>';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -570,10 +575,17 @@ function cms_gallery(): void
         $mediaUrl = url_for('media', ['id' => $image['id']]);
         // Variable $imagePageUrl stores this steps working value.
         $imagePageUrl = image_public_url($image, $gallery);
+        // $mediaManifestEntry stores thumbnail data prepared once for the visible image set.
+        $mediaManifestEntry = is_array($publicMediaManifest[(int) $image['id']] ?? null) ? $publicMediaManifest[(int) $image['id']] : [];
         // Variable $thumbnailBundle stores all generated variants for this visible card during this request.
-        $thumbnailBundle = public_render_profile_with_thumbnail_purpose('image card bundle discovery', static fn (): array => thumbnail_bundle($image));
+        $thumbnailBundle = is_array($mediaManifestEntry['bundle'] ?? null)
+            ? $mediaManifestEntry['bundle']
+            : public_render_profile_with_thumbnail_purpose('image card bundle discovery fallback', static fn (): array => thumbnail_bundle($image));
         // Variable $previewUrl stores this steps working value.
-        $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
+        $previewUrl = (string) ($mediaManifestEntry['preview_url'] ?? '');
+        if ($previewUrl === '') {
+            $previewUrl = public_render_profile_with_thumbnail_purpose('image card lightbox preview 1600 fallback', static fn (): string => thumbnail_bundle_url($thumbnailBundle, 1600));
+        }
         // Variable $imageTags stores this steps working value.
         $imageTags = $imageTagsById[(int) $image['id']] ?? [];
         // Variable $imageHasPublicGps stores this steps working value.
@@ -654,6 +666,7 @@ function cms_gallery(): void
         'image_id' => $requestedImage ? (int) $requestedImage['id'] : null,
     ]);
     render_footer();
+    gallery_benchmark_record_public_render($gallery, public_render_profile_snapshot());
 }
 
 

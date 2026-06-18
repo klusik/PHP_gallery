@@ -65,7 +65,10 @@ use function Gallery\Services\theme_page_width_mode;
 use function Gallery\Services\theme_settings;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\translation_default_language;
+use function Gallery\Services\translation_language_allowed;
+use function Gallery\Services\translation_language_dir;
 use function Gallery\Services\translation_load_language;
+use function Gallery\Services\translation_normalize_language_code;
 
 /**
  * Handle view public header branding model.
@@ -324,78 +327,174 @@ function view_render_header(string $title, ?array $currentGallery = null, bool $
 }
 
 /**
+ * Resolve the language used for browser-side translations.
+ *
+ * @param ?string $language Requested language code.
+ * @return string Safe active language code.
+ */
+function view_browser_i18n_language(?string $language = null): string
+{
+    $candidate = translation_normalize_language_code((string) ($language ?? ''));
+    if ($candidate !== '' && translation_language_allowed($candidate)) {
+        return $candidate;
+    }
+    return translation_active_language();
+}
+
+/**
+ * Return one browser translation string from the resolved language dictionaries.
+ *
+ * @param array<string mixed> $strings Merged default and active language strings.
+ * @param string $key Translation key.
+ * @param string $fallback Fallback string.
+ * @return string Browser-facing translation text.
+ */
+function view_browser_i18n_string(array $strings, string $key, string $fallback): string
+{
+    $value = $strings[$key] ?? null;
+    return is_string($value) && $value !== '' ? $value : $fallback;
+}
+
+/**
+ * Return a cache key for the external browser translation asset.
+ *
+ * @param ?string $language Requested language code.
+ * @return string Stable cache key for the selected dictionaries.
+ */
+function view_browser_i18n_cache_key(?string $language = null): string
+{
+    $language = view_browser_i18n_language($language);
+    $default = translation_default_language();
+    $paths = [__FILE__];
+    foreach (array_unique([$default, $language]) as $code) {
+        foreach (['json', 'php'] as $extension) {
+            $path = translation_language_dir() . '/' . $code . '.' . $extension;
+            if (is_file($path)) {
+                $paths[] = $path;
+            }
+        }
+    }
+
+    $latest = 0;
+    foreach ($paths as $path) {
+        if (is_file($path)) {
+            $latest = max($latest, (int) filemtime($path));
+        }
+    }
+    return substr(sha1($language . ':' . (string) $latest), 0, 12);
+}
+
+/**
+ * Return JavaScript that installs the browser translation payload.
+ *
+ * @param ?string $language Requested language code.
+ * @return string JavaScript asset content.
+ */
+function view_browser_i18n_javascript(?string $language = null): string
+{
+    $language = view_browser_i18n_language($language);
+    $payload = [
+        'language' => $language,
+        'strings' => view_cms_browser_i18n_strings($language),
+    ];
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json)) {
+        $json = '{"language":"en","strings":{}}';
+    }
+    return 'window.PHP_GALLERY_I18N = ' . $json . ';';
+}
+
+/**
+ * Return the external browser translation asset URL for the current page context.
+ *
+ * @param bool $isAdminPage Whether the current route renders an admin page.
+ * @param ?string $language Requested language code.
+ * @return string URL for the cacheable translation asset.
+ */
+function view_browser_i18n_asset_url(bool $isAdminPage, ?string $language = null): string
+{
+    $language = view_browser_i18n_language($language);
+    return url_for($isAdminPage ? 'admin_browser_i18n' : 'browser_i18n', [
+        'scope' => $isAdminPage ? 'admin' : 'public',
+        'lang' => $language,
+        'v' => view_browser_i18n_cache_key($language),
+    ]);
+}
+
+/**
  * Handle view cms browser i18n strings.
  *
  * Used by server-rendered view helpers.
  *
  * @return array Structured result data for the caller.
  */
-function view_cms_browser_i18n_strings(): array
+function view_cms_browser_i18n_strings(?string $language = null): array
 {
-    $activeStrings = translation_load_language(translation_active_language());
+    $language = view_browser_i18n_language($language);
+    $activeStrings = translation_load_language($language);
     $defaultStrings = translation_load_language(translation_default_language());
     $strings = array_merge($defaultStrings, $activeStrings);
 
     return array_merge($strings, [
-        'admin.bulk.select_gallery_delete' => t('js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
-        'admin.bulk.delete_galleries_title' => t('js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
-        'admin.bulk.delete_galleries_detail' => t('js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
-        'admin.bulk.gallery_fallback' => t('js.admin.bulk.gallery_fallback', 'Gallery {id}'),
-        'admin.bulk.image_fallback' => t('js.admin.bulk.image_fallback', 'Image {id}'),
-        'admin.bulk.selected_photo_fallback' => t('js.admin.bulk.selected_photo_fallback', 'Selected photo'),
-        'admin.bulk.photo_selected_one' => t('js.admin.bulk.photo_selected_one', '1 photo selected'),
-        'admin.bulk.photo_selected_many' => t('js.admin.bulk.photo_selected_many', '{count} photos selected'),
-        'admin.bulk.select_photos_first' => t('js.admin.bulk.select_photos_first', 'Select one or more photos first.'),
-        'admin.bulk.choose_move_action_summary' => t('js.admin.bulk.choose_move_action_summary', '{count} selected. Choose one of the move actions above.'),
-        'admin.bulk.choose_destination_summary' => t('js.admin.bulk.choose_destination_summary', '{count} selected. Choose the destination gallery.'),
-        'admin.bulk.enter_new_gallery_summary' => t('js.admin.bulk.enter_new_gallery_summary', '{count} selected. Enter the new gallery title.'),
-        'admin.bulk.existing_gallery' => t('js.admin.bulk.existing_gallery', 'existing gallery'),
-        'admin.bulk.new_gallery' => t('js.admin.bulk.new_gallery', 'new gallery'),
-        'admin.bulk.move_summary' => t('js.admin.bulk.move_summary', '{count} selected. Move originals, thumbnails, and generated display files to the {target_type}: {target}.'),
-        'admin.bulk.choose_move_type' => t('js.admin.bulk.choose_move_type', 'Choose whether to move to an existing gallery or a new gallery.'),
-        'admin.bulk.select_photo_move' => t('js.admin.bulk.select_photo_move', 'Select at least one photo to move.'),
-        'admin.bulk.select_photo_delete' => t('js.admin.bulk.select_photo_delete', 'Select at least one photo to delete.'),
-        'admin.bulk.choose_destination' => t('js.admin.bulk.choose_destination', 'Choose the destination gallery.'),
-        'admin.bulk.enter_new_gallery' => t('js.admin.bulk.enter_new_gallery', 'Enter the new gallery title.'),
-        'admin.bulk.move_photo_one' => t('js.admin.bulk.move_photo_one', 'Move this photo?'),
-        'admin.bulk.move_photo_many' => t('js.admin.bulk.move_photo_many', 'Move these photos?'),
-        'admin.bulk.move_photo_detail' => t('js.admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.'),
-        'admin.bulk.delete_photo_one' => t('js.admin.bulk.delete_photo_one', 'Delete this photo from the gallery?'),
-        'admin.bulk.delete_photo_many' => t('js.admin.bulk.delete_photo_many', 'Delete these photos?'),
-        'admin.bulk.delete_photo_detail' => t('js.admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.'),
-        'admin.thumbnails.delete_not_configured' => t('js.admin.thumbnails.delete_not_configured', 'Thumbnail deletion is not configured correctly. No files were deleted.'),
-        'admin.thumbnails.delete_prompt_intro' => t('js.admin.thumbnails.delete_prompt_intro', 'This will delete all generated thumbnail files for every gallery.'),
-        'admin.thumbnails.delete_prompt_originals' => t('js.admin.thumbnails.delete_prompt_originals', 'Original photos and gallery records will not be deleted.'),
-        'admin.thumbnails.delete_prompt_regenerate' => t('js.admin.thumbnails.delete_prompt_regenerate', 'The next public/admin view can regenerate thumbnails when needed.'),
-        'admin.thumbnails.delete_prompt_confirm' => t('js.admin.thumbnails.delete_prompt_confirm', 'Type {word} to confirm.'),
-        'admin.thumbnails.delete_cancelled' => t('js.admin.thumbnails.delete_cancelled', 'Thumbnail deletion cancelled. No thumbnail files were deleted.'),
-        'admin.operations.scanning' => t('js.admin.operations.scanning', 'Scanning...'),
-        'admin.operations.scan_detail' => t('js.admin.operations.scan_detail', 'Scanning existing galleries and checking for new gallery folders...'),
-        'admin.operations.working' => t('js.admin.operations.working', 'Working...'),
-        'admin.operations.upload_thumbnail_failed' => t('js.admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.'),
-        'admin.operations.upload_complete' => t('js.admin.operations.upload_complete', 'Upload and thumbnail job complete.'),
-        'admin.operations.uploaded_scanning_complete' => t('js.admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.'),
-        'admin.operations.upload_failed' => t('js.admin.operations.upload_failed', 'Upload failed.'),
-        'votes.liked' => t('js.votes.liked', 'Liked'),
-        'votes.no_like' => t('js.votes.no_like', 'No like'),
-        'thumbnail_bounds.auto_min' => t('thumbnail_bounds.auto_min', 'Auto min'),
-        'thumbnail_bounds.auto_max' => t('thumbnail_bounds.auto_max', 'Auto max'),
-        'admin.date_picker.open' => t('js.admin.date_picker.open', 'Open calendar'),
-        'admin.date_picker.today' => t('js.admin.date_picker.today', 'Today'),
-        'admin.date_picker.delete' => t('js.admin.date_picker.delete', 'Delete'),
-        'admin.simbrief.js_missing_form' => t('admin.simbrief.js_missing_form', 'The gallery form could not be found.'),
-        'admin.simbrief.js_missing_textarea' => t('admin.simbrief.js_missing_textarea', 'The description field could not be found.'),
-        'admin.simbrief.js_missing_identifier' => t('admin.simbrief.js_missing_identifier', 'Enter a SimBrief Pilot ID or pilot name first.'),
-        'admin.simbrief.js_replace_confirm' => t('admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'),
-        'admin.simbrief.js_not_configured' => t('admin.simbrief.js_not_configured', 'SimBrief generation is not configured correctly on this page.'),
-        'admin.simbrief.js_generating' => t('admin.simbrief.js_generating', 'Fetching SimBrief data and generating draft...'),
-        'admin.simbrief.js_failed' => t('admin.simbrief.js_failed', 'SimBrief generation failed.'),
-        'admin.simbrief.js_empty' => t('admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'),
-        'admin.simbrief.js_generated' => t('admin.simbrief.js_generated', 'Draft generated. Review it, then save the gallery.'),
-        'admin.simbrief.js_invalid_json' => t('admin.simbrief.js_invalid_json', 'The server returned an invalid SimBrief response.'),
-        'admin.simbrief.js_html_response' => t('admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
-        'lightbox.no_gps_title' => t('lightbox.no_gps_title', 'No GPS EXIF data'),
-        'lightbox.no_gps_detail' => t('lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
+        'admin.bulk.select_gallery_delete' => view_browser_i18n_string($strings, 'js.admin.bulk.select_gallery_delete', 'Select at least one gallery to delete.'),
+        'admin.bulk.delete_galleries_title' => view_browser_i18n_string($strings, 'js.admin.bulk.delete_galleries_title', 'Delete these gallery folders and all subgalleries?'),
+        'admin.bulk.delete_galleries_detail' => view_browser_i18n_string($strings, 'js.admin.bulk.delete_galleries_detail', 'This removes the folders from disk and deletes their database records. This cannot be undone.'),
+        'admin.bulk.gallery_fallback' => view_browser_i18n_string($strings, 'js.admin.bulk.gallery_fallback', 'Gallery {id}'),
+        'admin.bulk.image_fallback' => view_browser_i18n_string($strings, 'js.admin.bulk.image_fallback', 'Image {id}'),
+        'admin.bulk.selected_photo_fallback' => view_browser_i18n_string($strings, 'js.admin.bulk.selected_photo_fallback', 'Selected photo'),
+        'admin.bulk.photo_selected_one' => view_browser_i18n_string($strings, 'js.admin.bulk.photo_selected_one', '1 photo selected'),
+        'admin.bulk.photo_selected_many' => view_browser_i18n_string($strings, 'js.admin.bulk.photo_selected_many', '{count} photos selected'),
+        'admin.bulk.select_photos_first' => view_browser_i18n_string($strings, 'js.admin.bulk.select_photos_first', 'Select one or more photos first.'),
+        'admin.bulk.choose_move_action_summary' => view_browser_i18n_string($strings, 'js.admin.bulk.choose_move_action_summary', '{count} selected. Choose one of the move actions above.'),
+        'admin.bulk.choose_destination_summary' => view_browser_i18n_string($strings, 'js.admin.bulk.choose_destination_summary', '{count} selected. Choose the destination gallery.'),
+        'admin.bulk.enter_new_gallery_summary' => view_browser_i18n_string($strings, 'js.admin.bulk.enter_new_gallery_summary', '{count} selected. Enter the new gallery title.'),
+        'admin.bulk.existing_gallery' => view_browser_i18n_string($strings, 'js.admin.bulk.existing_gallery', 'existing gallery'),
+        'admin.bulk.new_gallery' => view_browser_i18n_string($strings, 'js.admin.bulk.new_gallery', 'new gallery'),
+        'admin.bulk.move_summary' => view_browser_i18n_string($strings, 'js.admin.bulk.move_summary', '{count} selected. Move originals, thumbnails, and generated display files to the {target_type}: {target}.'),
+        'admin.bulk.choose_move_type' => view_browser_i18n_string($strings, 'js.admin.bulk.choose_move_type', 'Choose whether to move to an existing gallery or a new gallery.'),
+        'admin.bulk.select_photo_move' => view_browser_i18n_string($strings, 'js.admin.bulk.select_photo_move', 'Select at least one photo to move.'),
+        'admin.bulk.select_photo_delete' => view_browser_i18n_string($strings, 'js.admin.bulk.select_photo_delete', 'Select at least one photo to delete.'),
+        'admin.bulk.choose_destination' => view_browser_i18n_string($strings, 'js.admin.bulk.choose_destination', 'Choose the destination gallery.'),
+        'admin.bulk.enter_new_gallery' => view_browser_i18n_string($strings, 'js.admin.bulk.enter_new_gallery', 'Enter the new gallery title.'),
+        'admin.bulk.move_photo_one' => view_browser_i18n_string($strings, 'js.admin.bulk.move_photo_one', 'Move this photo?'),
+        'admin.bulk.move_photo_many' => view_browser_i18n_string($strings, 'js.admin.bulk.move_photo_many', 'Move these photos?'),
+        'admin.bulk.move_photo_detail' => view_browser_i18n_string($strings, 'js.admin.bulk.move_photo_detail', 'This physically moves the original files, generated thumbnails, and display derivatives. The source gallery will no longer contain them.'),
+        'admin.bulk.delete_photo_one' => view_browser_i18n_string($strings, 'js.admin.bulk.delete_photo_one', 'Delete this photo from the gallery?'),
+        'admin.bulk.delete_photo_many' => view_browser_i18n_string($strings, 'js.admin.bulk.delete_photo_many', 'Delete these photos?'),
+        'admin.bulk.delete_photo_detail' => view_browser_i18n_string($strings, 'js.admin.bulk.delete_photo_detail', 'This removes the original file from disk, deletes its database record, and cleans generated thumbnails. This cannot be undone.'),
+        'admin.thumbnails.delete_not_configured' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_not_configured', 'Thumbnail deletion is not configured correctly. No files were deleted.'),
+        'admin.thumbnails.delete_prompt_intro' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_prompt_intro', 'This will delete all generated thumbnail files for every gallery.'),
+        'admin.thumbnails.delete_prompt_originals' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_prompt_originals', 'Original photos and gallery records will not be deleted.'),
+        'admin.thumbnails.delete_prompt_regenerate' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_prompt_regenerate', 'The next public/admin view can regenerate thumbnails when needed.'),
+        'admin.thumbnails.delete_prompt_confirm' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_prompt_confirm', 'Type {word} to confirm.'),
+        'admin.thumbnails.delete_cancelled' => view_browser_i18n_string($strings, 'js.admin.thumbnails.delete_cancelled', 'Thumbnail deletion cancelled. No thumbnail files were deleted.'),
+        'admin.operations.scanning' => view_browser_i18n_string($strings, 'js.admin.operations.scanning', 'Scanning...'),
+        'admin.operations.scan_detail' => view_browser_i18n_string($strings, 'js.admin.operations.scan_detail', 'Scanning existing galleries and checking for new gallery folders...'),
+        'admin.operations.working' => view_browser_i18n_string($strings, 'js.admin.operations.working', 'Working...'),
+        'admin.operations.upload_thumbnail_failed' => view_browser_i18n_string($strings, 'js.admin.operations.upload_thumbnail_failed', 'Upload finished, but {count} thumbnail or DNG display derivative(s) failed.'),
+        'admin.operations.upload_complete' => view_browser_i18n_string($strings, 'js.admin.operations.upload_complete', 'Upload and thumbnail job complete.'),
+        'admin.operations.uploaded_scanning_complete' => view_browser_i18n_string($strings, 'js.admin.operations.uploaded_scanning_complete', 'Uploaded {count} images. Scanning complete.'),
+        'admin.operations.upload_failed' => view_browser_i18n_string($strings, 'js.admin.operations.upload_failed', 'Upload failed.'),
+        'votes.liked' => view_browser_i18n_string($strings, 'js.votes.liked', 'Liked'),
+        'votes.no_like' => view_browser_i18n_string($strings, 'js.votes.no_like', 'No like'),
+        'thumbnail_bounds.auto_min' => view_browser_i18n_string($strings, 'thumbnail_bounds.auto_min', 'Auto min'),
+        'thumbnail_bounds.auto_max' => view_browser_i18n_string($strings, 'thumbnail_bounds.auto_max', 'Auto max'),
+        'admin.date_picker.open' => view_browser_i18n_string($strings, 'js.admin.date_picker.open', 'Open calendar'),
+        'admin.date_picker.today' => view_browser_i18n_string($strings, 'js.admin.date_picker.today', 'Today'),
+        'admin.date_picker.delete' => view_browser_i18n_string($strings, 'js.admin.date_picker.delete', 'Delete'),
+        'admin.simbrief.js_missing_form' => view_browser_i18n_string($strings, 'admin.simbrief.js_missing_form', 'The gallery form could not be found.'),
+        'admin.simbrief.js_missing_textarea' => view_browser_i18n_string($strings, 'admin.simbrief.js_missing_textarea', 'The description field could not be found.'),
+        'admin.simbrief.js_missing_identifier' => view_browser_i18n_string($strings, 'admin.simbrief.js_missing_identifier', 'Enter a SimBrief Pilot ID or pilot name first.'),
+        'admin.simbrief.js_replace_confirm' => view_browser_i18n_string($strings, 'admin.simbrief.js_replace_confirm', 'Replace the current description text in the editor? This is not saved until you save the gallery.'),
+        'admin.simbrief.js_not_configured' => view_browser_i18n_string($strings, 'admin.simbrief.js_not_configured', 'SimBrief generation is not configured correctly on this page.'),
+        'admin.simbrief.js_generating' => view_browser_i18n_string($strings, 'admin.simbrief.js_generating', 'Fetching SimBrief data and generating draft...'),
+        'admin.simbrief.js_failed' => view_browser_i18n_string($strings, 'admin.simbrief.js_failed', 'SimBrief generation failed.'),
+        'admin.simbrief.js_empty' => view_browser_i18n_string($strings, 'admin.simbrief.js_empty', 'SimBrief returned flight data, but no description could be generated.'),
+        'admin.simbrief.js_generated' => view_browser_i18n_string($strings, 'admin.simbrief.js_generated', 'Draft generated. Review it, then save the gallery.'),
+        'admin.simbrief.js_invalid_json' => view_browser_i18n_string($strings, 'admin.simbrief.js_invalid_json', 'The server returned an invalid SimBrief response.'),
+        'admin.simbrief.js_html_response' => view_browser_i18n_string($strings, 'admin.simbrief.js_html_response', 'The server returned HTML instead of JSON. Check the admin logs or PHP error log.'),
+        'lightbox.no_gps_title' => view_browser_i18n_string($strings, 'lightbox.no_gps_title', 'No GPS EXIF data'),
+        'lightbox.no_gps_detail' => view_browser_i18n_string($strings, 'lightbox.no_gps_detail', 'This photo has no coordinates, so the fullscreen map is unavailable for this item.'),
     ]);
 }
 
@@ -406,15 +505,9 @@ function view_cms_browser_i18n_strings(): array
  */
 function view_render_browser_i18n_script(): void
 {
-    $payload = [
-        'language' => translation_active_language(),
-        'strings' => view_cms_browser_i18n_strings(),
-    ];
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($json)) {
-        $json = '{"language":"en","strings":{}}';
-    }
-    echo '<script>window.PHP_GALLERY_I18N = ' . $json . ';</script>';
+    $page = (string) ($_GET['page'] ?? 'home');
+    $isAdminPage = str_starts_with($page, 'admin') || $page === 'setup';
+    echo '<script src="' . e(view_browser_i18n_asset_url($isAdminPage, translation_active_language())) . '"></script>';
 }
 
 /**

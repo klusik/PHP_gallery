@@ -412,10 +412,10 @@ export function setupGalleryLightbox() {
     const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
     // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
     const lightboxSlideshowTransitionDuration = readLightboxTimingSetting('lightboxSlideshowTransitionMs', 1000, 0, 30000);
-    // lightboxPreviewPreloadRadius stores state or configuration for the gallery front-end flow.
-    const lightboxPreviewPreloadRadius = 8;
-    // lightboxFullPreloadRadius stores state or configuration for the gallery front-end flow.
-    const lightboxFullPreloadRadius = 2;
+    // lightboxPreviewPreloadRadius limits how many nearby preview images are warmed after a photo opens.
+    const lightboxPreviewPreloadRadius = 4;
+    // lightboxFullPreloadRadius stays zero so adjacent navigation warms previews without downloading full media early.
+    const lightboxFullPreloadRadius = 0;
     // lightboxFullSwapIdleDelay stores state or configuration for the gallery front-end flow.
     const lightboxFullSwapIdleDelay = 80;
     // lightboxDecodedImageCacheLimit stores state or configuration for the gallery front-end flow.
@@ -472,6 +472,18 @@ export function setupGalleryLightbox() {
     const preloadedSources = new Set();
     // decodedLightboxImages stores state or configuration for the gallery front-end flow.
     const decodedLightboxImages = new Map();
+    // lightboxPreloadQueue holds nearby preview work so opening a photo does not start all downloads at once.
+    const lightboxPreloadQueue = [];
+    // lightboxQueuedSources prevents duplicate queued work while still allowing cached image reuse.
+    const lightboxQueuedSources = new Set();
+    // lightboxPreloadGeneration invalidates stale queued work after fast next/previous navigation.
+    let lightboxPreloadGeneration = 0;
+    // activeLightboxPreloads tracks how many background image decodes are currently active.
+    let activeLightboxPreloads = 0;
+    // lightboxPreloadDrainHandle stores the pending queue drain callback handle.
+    let lightboxPreloadDrainHandle = 0;
+    // lightboxPreloadDrainUsesIdleCallback tracks which browser timer API owns the drain handle.
+    let lightboxPreloadDrainUsesIdleCallback = false;
     // fullscreenHideTimer stores state or configuration for the gallery front-end flow.
     let fullscreenHideTimer = null;
     // lightboxSlideshowTimer stores the automatic advance timer while slideshow mode is active.
@@ -540,6 +552,7 @@ export function setupGalleryLightbox() {
         stopLightboxSlideshow(false);
         removeTransitionImage();
         preloadedSources.clear();
+        resetLightboxPreloadQueue();
         lightboxPendingWindows.clear();
         lightboxGalleryMapPayloadPromises.clear();
         decodedLightboxImages.clear();
@@ -1266,6 +1279,114 @@ export function setupGalleryLightbox() {
     }
 
         /**
+     * Return how many background lightbox preview preloads may run at once.
+     *
+     * @return {number} Safe concurrent preload count for the current browser context.
+     */
+    function lightboxPreloadConcurrency() {
+        if (shouldLimitLightboxPreloading()) {
+            return 1;
+        }
+        const connection = currentLightboxConnection();
+        if (isMobileTouchDevice || connection?.effectiveType === '3g') {
+            return 1;
+        }
+        return 2;
+    }
+
+        /**
+     * Schedule a low-priority drain of the nearby-image preload queue.
+     */
+    function scheduleLightboxPreloadDrain() {
+        if (lightboxPreloadDrainHandle || controller.signal.aborted) {
+            return;
+        }
+        const drain = () => {
+            lightboxPreloadDrainHandle = 0;
+            lightboxPreloadDrainUsesIdleCallback = false;
+            drainLightboxPreloadQueue();
+        };
+        if ('requestIdleCallback' in window) {
+            lightboxPreloadDrainUsesIdleCallback = true;
+            lightboxPreloadDrainHandle = window.requestIdleCallback(drain, {timeout: 350});
+            return;
+        }
+        lightboxPreloadDrainUsesIdleCallback = false;
+        lightboxPreloadDrainHandle = window.setTimeout(drain, 80);
+    }
+
+        /**
+     * Cancel queued nearby-image preload work that has not started yet.
+     */
+    function resetLightboxPreloadQueue() {
+        lightboxPreloadGeneration += 1;
+        lightboxPreloadQueue.length = 0;
+        lightboxQueuedSources.clear();
+        if (!lightboxPreloadDrainHandle) {
+            return;
+        }
+        if (lightboxPreloadDrainUsesIdleCallback && 'cancelIdleCallback' in window) {
+            window.cancelIdleCallback(lightboxPreloadDrainHandle);
+        } else {
+            window.clearTimeout(lightboxPreloadDrainHandle);
+        }
+        lightboxPreloadDrainHandle = 0;
+        lightboxPreloadDrainUsesIdleCallback = false;
+    }
+
+        /**
+     * Add one low-priority nearby-image preload to the queue.
+     *
+     * @param {string} src Image URL to warm.
+     * @param {string} reason Diagnostic reason shown in dev mode.
+     * @param {number} generation Queue generation that owns this work item.
+     */
+    function queueDecodedLightboxPreload(src, reason, generation) {
+        if (!src || controller.signal.aborted) {
+            return;
+        }
+        if (decodedLightboxImages.has(src)) {
+            preloadDecodedLightboxImage(src);
+            return;
+        }
+        if (lightboxQueuedSources.has(src)) {
+            return;
+        }
+        lightboxQueuedSources.add(src);
+        lightboxPreloadQueue.push({src, reason, generation});
+        scheduleLightboxPreloadDrain();
+    }
+
+        /**
+     * Start queued nearby-image preloads within the current concurrency limit.
+     */
+    function drainLightboxPreloadQueue() {
+        if (controller.signal.aborted) {
+            resetLightboxPreloadQueue();
+            return;
+        }
+        const concurrency = lightboxPreloadConcurrency();
+        while (activeLightboxPreloads < concurrency && lightboxPreloadQueue.length > 0) {
+            const item = lightboxPreloadQueue.shift();
+            if (!item || !item.src) {
+                continue;
+            }
+            lightboxQueuedSources.delete(item.src);
+            if (item.generation !== lightboxPreloadGeneration) {
+                continue;
+            }
+            activeLightboxPreloads += 1;
+            devMarkSource(item.src, 'preloading', item.reason || 'queued-preview');
+            preloadDecodedLightboxImage(item.src).finally(() => {
+                activeLightboxPreloads = Math.max(0, activeLightboxPreloads - 1);
+                if (lightboxPreloadQueue.length > 0) {
+                    scheduleLightboxPreloadDrain();
+                }
+            });
+        }
+    }
+
+        /**
      * Handles load decoded lightbox image behavior for the gallery UI.
      *
      * @param {*} src Value supplied by the caller or event context.
@@ -1687,10 +1808,13 @@ export function setupGalleryLightbox() {
         }
         const radius = pictureStripRadius();
         for (let offset = -radius; offset <= radius; offset += 1) {
+            if (offset === 0) {
+                continue;
+            }
             const neighborIndex = normalizeLightboxIndex(centerIndex + offset);
             const neighborCard = neighborIndex >= 0 ? cards[neighborIndex] : null;
             if (neighborCard) {
-                preloadCardLightboxImages(neighborCard, Math.abs(offset) <= 1);
+                preloadCardLightboxImages(neighborCard, false, {queued: true, reason: 'strip-preview', generation: lightboxPreloadGeneration});
             }
         }
     }
@@ -2084,6 +2208,7 @@ export function setupGalleryLightbox() {
             hideInitialLightboxLoader();
             scheduleLightboxSlideshowNext();
         });
+        resetLightboxPreloadQueue();
         syncPictureStrip(normalizedIndex);
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
@@ -2273,7 +2398,7 @@ export function setupGalleryLightbox() {
      * @param {*} card Value supplied by the caller or event context.
      * @param {*} includeFullImage Value supplied by the caller or event context.
      */
-    function preloadCardLightboxImages(card, includeFullImage) {
+    function preloadCardLightboxImages(card, includeFullImage, options = {}) {
         if (!card) {
             return;
         }
@@ -2284,14 +2409,58 @@ export function setupGalleryLightbox() {
         const previewSrc = card.dataset.previewSrc || '';
         // fullSrc stores state or configuration for the gallery front-end flow.
         const fullSrc = card.dataset.fullSrc || previewSrc;
-        [previewSrc, includeFullImage ? fullSrc : ''].forEach((src) => {
-            if (!src) {
+        const generation = Number.isInteger(options.generation) ? options.generation : lightboxPreloadGeneration;
+        const sources = [
+            {src: previewSrc, reason: options.reason || 'adjacent-preview'},
+            {src: includeFullImage ? fullSrc : '', reason: options.reasonFull || 'adjacent-full'},
+        ];
+        sources.forEach((item) => {
+            if (!item.src) {
                 return;
             }
-            preloadedSources.add(src);
-            devMarkSource(src, 'preloading', includeFullImage && src === fullSrc ? 'adjacent-full' : 'adjacent-preview');
-            preloadDecodedLightboxImage(src);
+            preloadedSources.add(item.src);
+            if (options.queued) {
+                queueDecodedLightboxPreload(item.src, item.reason, generation);
+                return;
+            }
+            devMarkSource(item.src, 'preloading', item.reason);
+            preloadDecodedLightboxImage(item.src);
         });
+    }
+
+        /**
+     * Return the active nearby-preview preload radius for the current connection.
+     *
+     * @return {number} Number of next/previous preview images to queue.
+     */
+    function lightboxActivePreviewPreloadRadius() {
+        if (cards.length <= 1) {
+            return 0;
+        }
+        if (shouldLimitLightboxPreloading()) {
+            return 1;
+        }
+        const connection = currentLightboxConnection();
+        if (isMobileTouchDevice || connection?.effectiveType === '3g') {
+            return Math.min(2, lightboxPreviewPreloadRadius);
+        }
+        return lightboxPreviewPreloadRadius;
+    }
+
+        /**
+     * Return the active nearby full-media preload radius for the current connection.
+     *
+     * @return {number} Number of next/previous full media items to queue.
+     */
+    function lightboxActiveFullPreloadRadius() {
+        if (lightboxFullPreloadRadius <= 0 || shouldLimitLightboxPreloading()) {
+            return 0;
+        }
+        const connection = currentLightboxConnection();
+        if (isMobileTouchDevice || connection?.effectiveType === '3g') {
+            return 0;
+        }
+        return lightboxFullPreloadRadius;
     }
 
         /**
@@ -2303,18 +2472,21 @@ export function setupGalleryLightbox() {
         if (cards.length === 0) {
             return;
         }
-        const edgeDistance = Math.max(lightboxPreviewPreloadRadius + 4, 12);
+        const previewRadius = lightboxActivePreviewPreloadRadius();
+        const fullRadius = lightboxActiveFullPreloadRadius();
+        const edgeDistance = Math.max(previewRadius + 4, 12);
         const nearStart = index <= edgeDistance;
         const nearEnd = index >= cards.length - edgeDistance - 1;
         if (!cards[index] || nearStart || nearEnd) {
             fetchLightboxWindowAround(index);
         }
-        if (shouldLimitLightboxPreloading()) {
+        if (previewRadius <= 0) {
             return;
         }
-        // previewOffsets stores state or configuration for the gallery front-end flow.
+        const generation = lightboxPreloadGeneration;
+        // previewOffsets warms likely next steps first, then less likely previous steps.
         const previewOffsets = [];
-        for (let distance = 1; distance <= lightboxPreviewPreloadRadius; distance += 1) {
+        for (let distance = 1; distance <= previewRadius; distance += 1) {
             previewOffsets.push(distance, -distance);
         }
         previewOffsets.forEach((offset) => {
@@ -2326,8 +2498,17 @@ export function setupGalleryLightbox() {
                 fetchLightboxWindowAround(normalizedIndex);
                 return;
             }
-            preloadCardLightboxImages(card, Math.abs(offset) <= lightboxFullPreloadRadius);
+            preloadCardLightboxImages(card, Math.abs(offset) <= fullRadius, {queued: true, reason: 'adjacent-preview', reasonFull: 'adjacent-full', generation});
         });
+    }
+
+        /**
+     * Return the browser connection object when the Network Information API is available.
+     *
+     * @return {NetworkInformation|null} Browser connection details, or null.
+     */
+    function currentLightboxConnection() {
+        return navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
     }
 
         /**
@@ -2337,7 +2518,7 @@ export function setupGalleryLightbox() {
      */
     function shouldLimitLightboxPreloading() {
         // connection stores state or configuration for the gallery front-end flow.
-        const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        const connection = currentLightboxConnection();
         if (!connection) {
             return false;
         }

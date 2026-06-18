@@ -49,10 +49,16 @@ use function Gallery\Core\now_sql;
  */
 function thumbnail_bounds_schema_ready(): bool
 {
-    return db_column_exists('galleries', 'thumbnail_min_size')
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+
+    $ready = db_column_exists('galleries', 'thumbnail_min_size')
         && db_column_exists('galleries', 'thumbnail_max_size')
         && db_column_exists('images', 'thumbnail_min_size')
         && db_column_exists('images', 'thumbnail_max_size');
+    return $ready;
 }
 
 /**

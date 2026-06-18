@@ -64,6 +64,7 @@ require_once __DIR__ . '/controllers/navigation_data.php';
 require_once __DIR__ . '/controllers/admin_thumbnails.php';
 require_once __DIR__ . '/controllers/admin_dashboard.php';
 require_once __DIR__ . '/controllers/admin_gallery_report.php';
+require_once __DIR__ . '/controllers/admin_gallery_benchmark.php';
 require_once __DIR__ . '/controllers/admin_features.php';
 require_once __DIR__ . '/controllers/setup.php';
 require_once __DIR__ . '/controllers/downloads.php';
