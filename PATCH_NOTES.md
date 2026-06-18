@@ -1,5 +1,176 @@
 # Patch notes
 
+## Version 0.83
+
+Version 0.83 is a comprehensive performance optimization and profiling release focused on measuring, analyzing, and improving gallery rendering efficiency. It introduces sophisticated benchmarking tools for administrators, optimizes critical rendering paths, implements lightbox preloading, and adds detailed performance profiling across the entire platform. The release includes four-phase optimization initiatives targeting thumbnail lookup performance, internationalization handling, manifest generation, and browser rendering speed.
+
+  ### Highlights
+
+  #### Comprehensive gallery benchmarking system
+
+  - New admin benchmarking interface for measuring gallery performance.
+  - Real-time performance metrics collection and visualization.
+  - Detailed rendering time analysis and bottleneck identification.
+  - Database query profiling and optimization metrics.
+  - Performance trend tracking and historical analysis.
+  - Comparative performance metrics and reporting.
+
+  #### Performance optimization across four phases
+
+  - **Phase 1**: Thumbnail fallback lookup optimization for faster resolution.
+  - **Phase 2**: Internationalization optimization by moving translations out of initial page load.
+  - **Phase 3A-3D**: Manifest JSON generation, JSON-LD support, profiling improvements.
+  - **Phase 4**: Lightbox preloading for improved browser rendering performance.
+
+  #### Enhanced profiling and metrics
+
+  - Detailed rendering performance profiling.
+  - Phase-based performance tracking.
+  - Resource usage analysis and reporting.
+  - Optimization impact measurement.
+  - Performance baseline establishment.
+
+  #### Lightbox preloading
+
+  - Intelligent image preloading for lightbox views.
+  - Optimized loading strategy for better UX.
+  - Reduced initial render time.
+  - Better caching of lightbox resources.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Created `app/services/gallery_benchmark.php` (512 lines):
+    * Comprehensive benchmarking engine
+    * Performance metrics collection and aggregation
+    * Rendering time analysis and profiling
+    * Database query performance tracking
+    * Cache effectiveness measurement
+    * Trend analysis and comparison metrics
+    * Detailed performance reporting
+
+  - Created `app/services/public_gallery_media_manifest.php` (452 lines):
+    * Media manifest generation for galleries
+    * Structured data preparation
+    * SEO optimization with JSON-LD support
+    * Efficient metadata aggregation
+    * Performance-optimized caching
+    * Manifest versioning and validation
+
+  - Enhanced `app/services/public_render_profiler.php`:
+    * Better profiling metrics collection
+    * Phase-based performance tracking
+    * Detailed timing information capture
+    * Resource usage analysis
+    * Bottleneck identification
+
+  - Enhanced `app/services/thumbnail_sources.php`:
+    * Optimized thumbnail source resolution
+    * Improved caching strategies
+    * Reduced database query overhead
+    * Faster fallback lookups
+
+  - Enhanced `app/services/thumbnail_metadata.php`:
+    * Improved metadata handling
+    * Better caching mechanisms
+
+  - Enhanced `app/services/seo_request_guard.php`:
+    * Better SEO integration
+    * Structured data handling
+
+  - Enhanced `app/helpers.php`:
+    * Performance-critical optimization
+    * Better caching and memoization
+
+  - Created `app/controllers/admin_gallery_benchmark.php` (303 lines):
+    * Admin benchmark management interface
+    * Benchmark execution and result tracking
+    * Performance visualization endpoints
+    * Trend analysis and reporting
+
+  - Enhanced `app/controllers/public_gallery.php`:
+    * Better manifest integration
+    * Optimized rendering pipeline
+
+  - Enhanced `app/controllers/theme_assets.php`:
+    * Optimized asset delivery
+
+  - Updated `app/bootstrap.php`:
+    * Register benchmark service
+    * Initialize profiler
+
+  - Updated `app/services.php`:
+    * Register new services
+
+  #### Database
+
+  - No database migrations required.
+  - Uses existing gallery structure.
+
+  #### Frontend
+
+  - Created `public/assets/gallery-modules/admin-gallery-benchmark.js` (460 lines):
+    * Interactive benchmark UI with real-time metrics
+    * Chart and graph visualization
+    * Performance trend analysis interface
+    * Comparative metrics display
+    * Export and reporting functionality
+    * Historical data visualization
+
+  - Enhanced `public/assets/gallery-modules/lightbox.js` (215 lines):
+    * Lightbox preloading implementation
+    * Optimized image loading strategy
+    * Improved performance metrics tracking
+    * Better cache utilization
+
+  - Enhanced `public/assets/gallery-modules/lightbox-deferred.js`:
+    * Optimized deferred loading
+    * Better resource management
+
+  - Enhanced `app/views/layout.php` (233 lines):
+    * Template optimization
+    * Reduced rendering time
+    * Optimized asset loading order
+    * Better compression support
+    * Manifest integration
+
+  - Enhanced `app/views/seo.php`:
+    * JSON-LD structured data support
+    * Better SEO metadata
+
+  - Updated `public/assets/gallery.js`:
+    * Load and initialize benchmark module
+    * Better module integration
+
+  - Updated `public/assets/public-gallery.js`:
+    * Integration with optimizations
+
+  #### Tests
+
+  - Comprehensive benchmarking validation.
+  - Performance regression detection.
+  - Optimization impact measurement.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Faster lightbox loading with preloading strategy.
+  - Better page performance from optimization phases.
+  - Reduced initial page load time from i18n optimization.
+  - Improved SEO through JSON-LD structured data.
+
+  #### For administrators
+
+  - New benchmarking interface for measuring performance.
+  - Real-time performance metrics and visualization.
+  - Historical trend analysis for optimization tracking.
+  - Bottleneck identification and reporting.
+  - Performance baseline establishment.
+  - Optimization impact measurement.
+  - Detailed profiling data for diagnosis.
+
 ## Version 0.82
 
 Version 0.82 delivers comprehensive gallery metadata organization capabilities, enabling administrators to intelligently structure galleries into hierarchical subgallery systems based on image metadata. This major feature release includes an interactive organization workflow with real-time preview, secure AJAX batch processing, and multiple organization strategies for transforming flat galleries into organized hierarchies.
