@@ -347,6 +347,7 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
     // $cacheKey stores repeated thumbnail URL lookups inside one request.
     $format = $format !== '' ? $format : (function_exists('Gallery\\Services\\thumbnail_preferred_browser_format') ? thumbnail_preferred_browser_format() : 'jpg');
     $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
+    $format = $normalizedFormat;
     $purpose = function_exists('Gallery\\Services\\public_render_profile_thumbnail_purpose') ? public_render_profile_thumbnail_purpose() : 'unprofiled';
     $cacheKey = (int) ($image['id'] ?? 0) . ':' . (int) $size . ':' . $normalizedFormat;
     if (array_key_exists($cacheKey, $cache)) {
@@ -365,16 +366,15 @@ function thumbnail_url(array $image, int $size, string $format = ''): string
             $size = thumbnail_bound_fallback_size($image, $size, $gallery);
         }
         if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
-            // $metadataRows stores renderable variants known from DB without checking thumbnail files.
-            $metadataRows = thumbnail_metadata_renderable_rows($image, thumbnail_sizes());
-            if (isset($metadataRows[$format][$size])) {
-                public_render_profile_count('thumbnail_direct_hits');
-                return thumbnail_serving_url($image, $gallery, $size, $format);
-            }
-            // $fallback stores the closest DB-known valid thumbnail for this request.
-            $fallback = thumbnail_existing_fallback($image, $gallery, $size, $format);
-            if ($fallback !== null) {
-                return thumbnail_serving_url($image, $gallery, $fallback['size'], $fallback['format']);
+            // $selected stores the best DB-known thumbnail variant without probing thumbnail files.
+            $selected = thumbnail_metadata_select_renderable_variant($image, thumbnail_sizes(), $size, $format, true);
+            if ($selected !== null) {
+                if (!empty($selected['is_exact'])) {
+                    public_render_profile_count('thumbnail_direct_hits');
+                } else {
+                    public_render_profile_count('thumbnail_db_fallback_hits');
+                }
+                return thumbnail_serving_url($image, $gallery, (int) $selected['size'], (string) $selected['format']);
             }
             public_render_profile_count('thumbnail_media_fallbacks');
             return public_path_schema_ready() ? image_public_media_url($image, $gallery) : image_public_asset_url_with_version(url_for('media', ['id' => $image['id']]), $image);
@@ -460,36 +460,29 @@ function thumbnail_serving_url(array $image, array $gallery, int $size, string $
  */
 function thumbnail_existing_fallback(array $image, array $gallery, int $preferredSize, string $preferredFormat = 'jpg'): ?array
 {
-    public_render_profile_count('thumbnail_fallback_searches');
-    return public_render_profile_span('thumbnail_fallback_search', static function () use ($image, $gallery, $preferredSize, $preferredFormat): ?array {
-        // Variable $sizes stores this steps working value.
-        $sizes = thumbnail_sizes();
-        if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
-            $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    // Variable $sizes stores this steps working value.
+    $sizes = thumbnail_sizes();
+    if (function_exists('Gallery\\Services\\thumbnail_bound_filter_sizes')) {
+        $sizes = thumbnail_bound_filter_sizes($sizes, $image, $gallery);
+    }
+
+    if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
+        // $selected stores the closest renderable fallback known from DB metadata only.
+        $selected = thumbnail_metadata_select_renderable_variant($image, $sizes, $preferredSize, $preferredFormat, true);
+        if ($selected !== null) {
+            public_render_profile_count('thumbnail_db_fallback_hits');
+            return ['size' => (int) $selected['size'], 'format' => (string) $selected['format']];
         }
+        return null;
+    }
+
+    public_render_profile_count('thumbnail_fallback_searches');
+    return public_render_profile_span('thumbnail_fallback_search', static function () use ($image, $gallery, $preferredSize, $preferredFormat, $sizes): ?array {
         usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
             return abs($left - $preferredSize) <=> abs($right - $preferredSize);
         });
         // Variable $formats stores this steps working value.
         $formats = array_values(array_unique([$preferredFormat, 'jpg', 'webp']));
-
-        if (function_exists('Gallery\\Services\\thumbnail_metadata_schema_ready') && thumbnail_metadata_schema_ready()) {
-            // $metadataRows stores renderable fallback candidates known from DB.
-            $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
-            foreach ($sizes as $size) {
-                foreach ($formats as $format) {
-                    if (!in_array($format, ['jpg', 'webp'], true)) {
-                        continue;
-                    }
-                    public_render_profile_count('thumbnail_fallback_checks');
-                    if (isset($metadataRows[$format][(int) $size])) {
-                        public_render_profile_count('thumbnail_fallback_hits');
-                        return ['size' => (int) $size, 'format' => $format];
-                    }
-                }
-            }
-            return null;
-        }
 
         // $sourceGeometry stores source dimensions used to reject invalid stale thumbnails before serving them.
         $sourceGeometry = null;

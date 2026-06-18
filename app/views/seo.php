@@ -135,8 +135,9 @@ function view_render_public_seo_tags(array $gallery, array $images = []): void
  *
  * @param array $gallery Gallery row or gallery data.
  * @param array $images Images value.
+ * @param array $publicMediaManifest Request-local media manifest keyed by image id.
  */
-function view_render_gallery_json_ld(array $gallery, array $images = []): void
+function view_render_gallery_json_ld(array $gallery, array $images = [], array $publicMediaManifest = []): void
 {
     $items = [];
     $position = 1;
@@ -148,13 +149,26 @@ function view_render_gallery_json_ld(array $gallery, array $images = []): void
             continue;
         }
         $imageName = image_alt_text($image, $gallery, $position);
+        $manifestEntry = is_array($publicMediaManifest[(int) ($image['id'] ?? 0)] ?? null) ? $publicMediaManifest[(int) ($image['id'] ?? 0)] : [];
+        $contentUrl = (string) ($manifestEntry['seo_content_url'] ?? '');
+        if ($contentUrl === '') {
+            $contentUrl = public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200 fallback', static fn (): string => thumbnail_url($image, 1200, 'jpg'));
+        } else {
+            public_render_profile_count('seo_json_ld_manifest_hits');
+        }
+        $thumbnailUrl = (string) ($manifestEntry['seo_thumbnail_url'] ?? '');
+        if ($thumbnailUrl === '') {
+            $thumbnailUrl = public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800 fallback', static fn (): string => thumbnail_url($image, 800, 'jpg'));
+        } else {
+            public_render_profile_count('seo_json_ld_manifest_hits');
+        }
         $item = [
             '@type' => 'ImageObject',
             'position' => $position++,
             'name' => $imageName,
             'description' => trim((string) ($image['description'] ?? '')) !== '' ? trim((string) $image['description']) : $imageName,
-            'contentUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld visible content 1200', static fn (): string => thumbnail_url($image, 1200, 'jpg'))),
-            'thumbnailUrl' => absolute_public_url(public_render_profile_with_thumbnail_purpose('seo json-ld thumbnail 800', static fn (): string => thumbnail_url($image, 800, 'jpg'))),
+            'contentUrl' => absolute_public_url($contentUrl),
+            'thumbnailUrl' => absolute_public_url($thumbnailUrl),
             'url' => absolute_public_url(image_public_url($image, $gallery)),
         ];
         if (!empty($image['width'])) {

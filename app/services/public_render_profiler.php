@@ -37,7 +37,9 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 use function Gallery\Core\current_user;
+use function Gallery\Core\csrf_token;
 use function Gallery\Core\e;
+use function Gallery\Core\url_for;
 
 /**
  * Return whether the current request should collect public render profiling data.
@@ -73,6 +75,7 @@ function &public_render_profile_state(): array
                 'filesystem_checks' => 0,
                 'thumbnail_lookups' => 0,
                 'thumbnail_direct_hits' => 0,
+                'thumbnail_db_fallback_hits' => 0,
                 'thumbnail_fallback_searches' => 0,
                 'thumbnail_fallback_checks' => 0,
                 'thumbnail_fallback_hits' => 0,
@@ -343,6 +346,60 @@ function public_render_profile_is_file(string $path): bool
     }
 }
 
+
+/**
+ * Return a structured snapshot of the current public render profile state.
+ *
+ * The snapshot is safe to store in benchmark logs because it contains counters,
+ * timers, memory usage, and request shape only. It does not include rendered HTML
+ * or private photo data.
+ *
+ * @return array<string, mixed> Structured result data for the caller.
+ */
+function public_render_profile_snapshot(): array
+{
+    if (!public_render_profile_enabled()) {
+        return [];
+    }
+    $state =& public_render_profile_state();
+    $endedAt = microtime(true);
+    $totalMs = ($endedAt - (float) $state['started_at']) * 1000;
+    $timers = $state['timers'];
+    $timers['total_request'] = [
+        'count' => 1,
+        'total_ms' => $totalMs,
+        'max_ms' => $totalMs,
+    ];
+    $thumbnailPurposes = $state['thumbnail_purposes'] ?? [];
+    uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
+    if ($thumbnailPurposes) {
+        uasort($thumbnailPurposes, static function (array $left, array $right): int {
+            return (($right['total_ms'] ?? 0.0) <=> ($left['total_ms'] ?? 0.0))
+                ?: (($right['calls'] ?? 0) <=> ($left['calls'] ?? 0));
+        });
+    }
+
+    return [
+        'route' => (string) $state['route'],
+        'gallery_id' => $state['gallery_id'],
+        'started_at_unix' => (float) $state['started_at'],
+        'ended_at_unix' => $endedAt,
+        'total_ms' => $totalMs,
+        'memory_usage_bytes' => memory_get_usage(true),
+        'memory_peak_bytes' => memory_get_peak_usage(true),
+        'included_file_count' => count(get_included_files()),
+        'counters' => $state['counters'],
+        'timers' => $timers,
+        'thumbnail_purposes' => array_values($thumbnailPurposes),
+        'events' => $state['events'] ?? [],
+        'request' => [
+            'method' => (string) ($_SERVER['REQUEST_METHOD'] ?? ''),
+            'request_uri' => (string) ($_SERVER['REQUEST_URI'] ?? ''),
+            'query_keys' => array_values(array_map('strval', array_keys($_GET))),
+        ],
+    ];
+}
+
 /**
  * Render the admin-only public render profile diagnostic panel.
  */
@@ -351,23 +408,20 @@ function render_public_render_profile_panel(): void
     if (!public_render_profile_enabled()) {
         return;
     }
-    $state =& public_render_profile_state();
-    $state['timers']['total_request'] = [
-        'count' => 1,
-        'total_ms' => (microtime(true) - (float) $state['started_at']) * 1000,
-        'max_ms' => (microtime(true) - (float) $state['started_at']) * 1000,
-    ];
-    $counters = $state['counters'];
-    $timers = $state['timers'];
-    uasort($timers, static fn (array $left, array $right): int => $right['total_ms'] <=> $left['total_ms']);
+    if (isset($_GET['benchmark_token'])) {
+        return;
+    }
+    $snapshot = public_render_profile_snapshot();
+    $counters = isset($snapshot['counters']) && is_array($snapshot['counters']) ? $snapshot['counters'] : [];
+    $timers = isset($snapshot['timers']) && is_array($snapshot['timers']) ? $snapshot['timers'] : [];
 
     echo '<details class="public-render-profile" data-public-render-profile>'; 
     echo '<summary>' . e(t('dev.public_render_profile.title', 'Public render profile'));
-    if ($state['route'] !== '') {
-        echo ' · ' . e((string) $state['route']);
+    if ((string) ($snapshot['route'] ?? '') !== '') {
+        echo ' · ' . e((string) $snapshot['route']);
     }
-    if ($state['gallery_id'] !== null) {
-        echo ' · ' . e(t('dev.public_render_profile.gallery_number', 'gallery #{id}', ['id' => (string) $state['gallery_id']]));
+    if (($snapshot['gallery_id'] ?? null) !== null) {
+        echo ' · ' . e(t('dev.public_render_profile.gallery_number', 'gallery #{id}', ['id' => (string) $snapshot['gallery_id']]));
     }
     echo '</summary>';
     echo '<div class="public-render-profile-grid">';
@@ -381,12 +435,8 @@ function render_public_render_profile_panel(): void
         echo '<tr><th>' . e(str_replace('_', ' ', (string) $name)) . '</th><td>' . (int) $timer['count'] . '</td><td>' . number_format((float) $timer['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $timer['max_ms'], 2, '.', ' ') . '</td></tr>';
     }
     echo '</tbody></table></section>';
-    $thumbnailPurposes = $state['thumbnail_purposes'] ?? [];
+    $thumbnailPurposes = isset($snapshot['thumbnail_purposes']) && is_array($snapshot['thumbnail_purposes']) ? $snapshot['thumbnail_purposes'] : [];
     if ($thumbnailPurposes) {
-        uasort($thumbnailPurposes, static function (array $left, array $right): int {
-            return (($right['total_ms'] ?? 0.0) <=> ($left['total_ms'] ?? 0.0))
-                ?: (($right['calls'] ?? 0) <=> ($left['calls'] ?? 0));
-        });
         echo '<section class="public-render-profile-wide"><h2>' . e(t('dev.public_render_profile.thumbnail_lookup_purposes', 'Thumbnail lookup purposes')) . '</h2><table><thead><tr><th>' . e(t('dev.public_render_profile.purpose', 'Purpose')) . '</th><th>' . e(t('dev.public_render_profile.size', 'Size')) . '</th><th>' . e(t('dev.public_render_profile.format', 'Format')) . '</th><th>' . e(t('dev.public_render_profile.lookups', 'Lookups')) . '</th><th>' . e(t('dev.public_render_profile.cache_hits', 'Cache hits')) . '</th><th>' . e(t('dev.public_render_profile.bundle_calls', 'Bundle calls')) . '</th><th>' . e(t('dev.public_render_profile.total_ms', 'Total ms')) . '</th><th>' . e(t('dev.public_render_profile.max_ms', 'Max ms')) . '</th></tr></thead><tbody>';
         foreach ($thumbnailPurposes as $row) {
             echo '<tr><th>' . e((string) $row['purpose']) . '</th><td>' . (int) $row['size'] . '</td><td>' . e((string) $row['format']) . '</td><td>' . (int) $row['calls'] . '</td><td>' . (int) $row['cache_hits'] . '</td><td>' . (int) $row['bundle_calls'] . '</td><td>' . number_format((float) $row['total_ms'], 2, '.', ' ') . '</td><td>' . number_format((float) $row['max_ms'], 2, '.', ' ') . '</td></tr>';
@@ -396,4 +446,23 @@ function render_public_render_profile_panel(): void
     echo '</div>';
     echo '<p class="public-render-profile-note">' . e(t('dev.public_render_profile.admin_only_note', 'Admin-only diagnostics. Anonymous visitors do not see this panel.')) . '</p>';
     echo '</details>';
+    render_public_gallery_benchmark_panel($snapshot);
+}
+
+/**
+ * Render the admin-only benchmark launcher for the current public gallery.
+ *
+ * @param array<string, mixed> $snapshot Public render profile snapshot.
+ */
+function render_public_gallery_benchmark_panel(array $snapshot): void
+{
+    $galleryId = (int) ($snapshot['gallery_id'] ?? 0);
+    if ((string) ($snapshot['route'] ?? '') !== 'gallery' || $galleryId <= 0) {
+        return;
+    }
+    echo '<section class="panel public-gallery-benchmark" data-gallery-benchmark data-gallery-id="' . $galleryId . '" data-benchmark-runs="5" data-csrf-token="' . e(csrf_token()) . '" data-start-url="' . e(url_for('admin_gallery_benchmark_start')) . '" data-browser-url="' . e(url_for('admin_gallery_benchmark_browser')) . '" data-status-url="' . e(url_for('admin_gallery_benchmark_status')) . '">';
+    echo '<div class="admin-panel-heading"><div><p class="admin-kicker">' . e(t('admin.gallery_benchmark.kicker', 'Benchmark')) . '</p><h2>' . e(t('admin.gallery_benchmark.title', 'Public gallery load benchmark')) . '</h2></div><div class="admin-hero-actions"><button type="button" class="button secondary" data-gallery-benchmark-start>' . e(t('admin.gallery_benchmark.start_button', 'Run benchmark')) . '</button><a class="button secondary is-disabled" data-gallery-benchmark-download href="#" aria-disabled="true" download>' . e(t('admin.gallery_benchmark.download_button', 'Download log')) . '</a></div></div>';
+    echo '<p class="muted">' . e(t('admin.gallery_benchmark.help', 'Runs this gallery several times in a hidden same-origin iframe as an anonymous preview, records PHP render counters plus browser timing, then enables the JSON log download.')) . '</p>';
+    echo '<div class="thumbnail-progress" data-gallery-benchmark-progress hidden><progress class="thumbnail-progress-bar" max="100" value="0" data-gallery-benchmark-progress-bar></progress><p class="muted" data-gallery-benchmark-status>' . e(t('admin.gallery_benchmark.idle', 'Benchmark is idle.')) . '</p><p class="muted" data-gallery-benchmark-summary></p></div>';
+    echo '</section>';
 }

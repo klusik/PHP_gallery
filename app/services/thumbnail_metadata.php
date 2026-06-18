@@ -538,6 +538,69 @@ function thumbnail_metadata_renderable_rows(array $image, array $sizes): array
 }
 
 /**
+ * Select the best public thumbnail variant from durable database metadata only.
+ *
+ * Normal public rendering should not probe thumbnail files just to decide which
+ * URL to emit. This helper uses the already validated metadata rows, prefers the
+ * requested size and format, then falls back to the nearest DB-known renderable
+ * variant. The caller can still decide whether to accept alternate formats.
+ *
+ * @param array $image Image row or image data.
+ * @param array $sizes Candidate sizes value.
+ * @param int $preferredSize Preferred size value.
+ * @param string $preferredFormat Preferred format value.
+ * @param bool $allowAlternateFormats Allow alternate image formats value.
+ * @return array{size:int,format:string,width:int,height:int,row:array<string,mixed>,is_exact:bool}|null Structured result data for the caller.
+ */
+function thumbnail_metadata_select_renderable_variant(array $image, array $sizes, int $preferredSize, string $preferredFormat = 'jpg', bool $allowAlternateFormats = true): ?array
+{
+    if (!thumbnail_metadata_schema_ready()) {
+        return null;
+    }
+
+    // $preferredFormat stores the normalized caller preference used for DB row selection.
+    $preferredFormat = $preferredFormat === 'webp' ? 'webp' : 'jpg';
+    // $sizes stores the normalized configured sizes this lookup is allowed to return.
+    $sizes = array_values(array_unique(array_filter(array_map('intval', $sizes), static fn (int $size): bool => in_array($size, thumbnail_sizes(), true))));
+    if (!$sizes) {
+        return null;
+    }
+
+    usort($sizes, static function (int $left, int $right) use ($preferredSize): int {
+        return abs($left - $preferredSize) <=> abs($right - $preferredSize);
+    });
+
+    // $formats stores the fallback format order, but never leaves DB metadata.
+    $formats = $allowAlternateFormats ? array_values(array_unique([$preferredFormat, 'jpg', 'webp'])) : [$preferredFormat];
+    // $metadataRows stores renderable variants already validated by metadata rules.
+    $metadataRows = thumbnail_metadata_renderable_rows($image, $sizes);
+
+    foreach ($sizes as $size) {
+        foreach ($formats as $format) {
+            if (!in_array($format, ['jpg', 'webp'], true)) {
+                continue;
+            }
+            if (!isset($metadataRows[$format][(int) $size])) {
+                continue;
+            }
+
+            // $row stores the selected database thumbnail variant row.
+            $row = $metadataRows[$format][(int) $size];
+            return [
+                'size' => (int) $size,
+                'format' => $format,
+                'width' => (int) ($row['width'] ?? 0),
+                'height' => (int) ($row['height'] ?? 0),
+                'row' => $row,
+                'is_exact' => (int) $size === (int) $preferredSize && $format === $preferredFormat,
+            ];
+        }
+    }
+
+    return null;
+}
+
+/**
  * Return whether any metadata row exists for one image.
  *
  * @param array $image Image row or image data.
