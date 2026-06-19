@@ -337,6 +337,32 @@
 .lightbox.is-initial-loading .lightbox-stage-link > img {
     opacity: 0;
 }
+.lightbox.is-navigation-loading .lightbox-stage-link {
+    cursor: progress;
+}
+.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
+    content: '';
+    grid-area: 1 / 1;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 0.22rem solid rgba(255, 255, 255, 0.28);
+    border-top-color: rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    box-shadow: 0 0.7rem 2.2rem rgba(0, 0, 0, 0.42);
+    pointer-events: none;
+    z-index: 6;
+    animation: lightbox-navigation-spinner 0.82s linear infinite;
+}
+@keyframes lightbox-navigation-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
+        animation: none;
+    }
+}
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {
     width: var(--lightbox-stage-width, auto);
     height: var(--lightbox-stage-height, auto);

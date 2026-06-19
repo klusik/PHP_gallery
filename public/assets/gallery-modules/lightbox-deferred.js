@@ -34,7 +34,7 @@
 
 import { i18n } from './admin-core.js?v=20260512-modular-admin-v1';
 
-const lightboxModuleUrl = './lightbox.js?v=20260618-lightbox-adjacent-preload-v1';
+const lightboxModuleUrl = './lightbox.js?v=20260619-lightbox-sturdy-navigation-v1';
 
 const deferredLightboxState = {
     controller: null,

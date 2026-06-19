@@ -408,6 +408,8 @@ export function setupGalleryLightbox() {
     const lightboxMeta = overlay.querySelector('.lightbox-meta');
     // lightboxDefaultTransitionDuration stores the quick manual viewer blend duration.
     const lightboxDefaultTransitionDuration = 80;
+    // lightboxRapidNavigationThreshold skips blend waits when the visitor outruns decoding.
+    const lightboxRapidNavigationThreshold = 220;
     // lightboxSlideshowVisibleDuration stores how long one slideshow image remains stable before the next blend starts.
     const lightboxSlideshowVisibleDuration = readLightboxTimingSetting('lightboxSlideshowVisibleMs', 2000, 500, 600000);
     // lightboxSlideshowTransitionDuration stores the slideshow blend duration for automatic picture changes.
@@ -426,6 +428,10 @@ export function setupGalleryLightbox() {
     let activeLightboxTransitionToken = 0;
     // pendingFullImageSwapTimer stores state or configuration for the gallery front-end flow.
     let pendingFullImageSwapTimer = null;
+    // pendingLightboxNavigationTimer delays the busy indicator so hot cached images do not flash a spinner.
+    let pendingLightboxNavigationTimer = 0;
+    // pendingLightboxNavigationToken owns the delayed busy indicator for the latest requested image.
+    let pendingLightboxNavigationToken = 0;
     // Variable `title` stores this steps working value.
     const title = overlay.querySelector('[data-lightbox-title]');
     // Variable `description` stores this steps working value.
@@ -480,6 +486,8 @@ export function setupGalleryLightbox() {
     let lightboxPreloadGeneration = 0;
     // activeLightboxPreloads tracks how many background image decodes are currently active.
     let activeLightboxPreloads = 0;
+    // lastLightboxNavigationRequestedAt stores the last manual navigation timestamp.
+    let lastLightboxNavigationRequestedAt = 0;
     // lightboxPreloadDrainHandle stores the pending queue drain callback handle.
     let lightboxPreloadDrainHandle = 0;
     // lightboxPreloadDrainUsesIdleCallback tracks which browser timer API owns the drain handle.
@@ -547,7 +555,11 @@ export function setupGalleryLightbox() {
         controller.abort();
         cards = [];
         clearPendingFullImageSwap();
+        clearLightboxNavigationPending();
         clearLightboxHudTimer();
+        activeLightboxImageToken += 1;
+        activeLightboxTransitionToken += 1;
+        clearLightboxNavigationPending();
         resetMobileSwipeVisuals(false);
         stopLightboxSlideshow(false);
         removeTransitionImage();
@@ -663,6 +675,55 @@ export function setupGalleryLightbox() {
             window.clearTimeout(pendingFullImageSwapTimer);
             pendingFullImageSwapTimer = null;
         }
+    }
+
+        /**
+     * Report whether an async lightbox image request still belongs to the active photo.
+     *
+     * @param {number} index Requested lightbox index.
+     * @param {number} token Request token captured when the navigation started.
+     * @return {boolean} True when the request may still update the visible image.
+     */
+    function isCurrentLightboxImageRequest(index, token) {
+        return !controller.signal.aborted && currentIndex === index && activeLightboxImageToken === token;
+    }
+
+        /**
+     * Clear the delayed busy state used while a fast navigation waits for decoding.
+     *
+     * @param {number|null} token Optional request token that must own the pending state.
+     */
+    function clearLightboxNavigationPending(token = null) {
+        if (token !== null && pendingLightboxNavigationToken !== token) {
+            return;
+        }
+        if (pendingLightboxNavigationTimer) {
+            window.clearTimeout(pendingLightboxNavigationTimer);
+            pendingLightboxNavigationTimer = 0;
+        }
+        pendingLightboxNavigationToken = 0;
+        overlay.classList.remove('is-navigation-loading');
+    }
+
+        /**
+     * Show a subtle busy state only when a requested image is not ready quickly.
+     *
+     * @param {number} index Requested lightbox index.
+     * @param {number} token Request token captured when the navigation started.
+     * @param {string} targetSrc Image URL expected to appear first.
+     */
+    function scheduleLightboxNavigationPending(index, token, targetSrc) {
+        clearLightboxNavigationPending();
+        pendingLightboxNavigationToken = token;
+        if (!targetSrc || image.getAttribute('src') === targetSrc) {
+            return;
+        }
+        pendingLightboxNavigationTimer = window.setTimeout(() => {
+            pendingLightboxNavigationTimer = 0;
+            if (isCurrentLightboxImageRequest(index, token) && image.getAttribute('src') !== targetSrc) {
+                overlay.classList.add('is-navigation-loading');
+            }
+        }, 140);
     }
 
         /**
@@ -1190,7 +1251,7 @@ export function setupGalleryLightbox() {
      * @param {*} src Value supplied by the caller or event context.
      * @return {*} Result of the UI operation, when a value is produced.
      */
-    function loadFreshDecodedLightboxImage(src) {
+    function loadFreshDecodedLightboxImage(src, options = {}) {
         return new Promise((resolve, reject) => {
             if (!src) {
                 reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
@@ -1202,6 +1263,9 @@ export function setupGalleryLightbox() {
             const loadedImage = new Image();
             loadedImage.decoding = 'async';
             loadedImage.loading = 'eager';
+            if ('fetchPriority' in loadedImage && options.priority) {
+                loadedImage.fetchPriority = options.priority;
+            }
             loadedImage.onload = () => {
                 decodeLoadedImage(loadedImage).then(() => {
                     devMarkSource(src, 'ready', 'decoded', loadedImage);
@@ -1274,7 +1338,7 @@ export function setupGalleryLightbox() {
         galleryDevModeState.preloadStarted += galleryDevModeEnabled ? 1 : 0;
         devMarkSource(src, 'preloading', 'preload-miss');
         // preloadPromise stores state or configuration for the gallery front-end flow.
-        const preloadPromise = loadFreshDecodedLightboxImage(src).catch(() => null);
+        const preloadPromise = loadFreshDecodedLightboxImage(src, {priority: 'low'}).catch(() => null);
         return rememberDecodedLightboxImage(src, preloadPromise);
     }
 
@@ -1392,7 +1456,7 @@ export function setupGalleryLightbox() {
      * @param {*} src Value supplied by the caller or event context.
      * @return {*} Result of the UI operation, when a value is produced.
      */
-    function loadDecodedLightboxImage(src) {
+    function loadDecodedLightboxImage(src, options = {}) {
         if (!src) {
             return Promise.reject(new Error(i18n('lightbox.missing_image_source', 'Missing lightbox image source.')));
         }
@@ -1408,14 +1472,14 @@ export function setupGalleryLightbox() {
                     return preloadedImage;
                 }
                 // freshPromise stores state or configuration for the gallery front-end flow.
-                const freshPromise = loadFreshDecodedLightboxImage(src);
+                const freshPromise = loadFreshDecodedLightboxImage(src, options);
                 rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
                 return freshPromise;
             });
         }
         galleryDevModeState.cacheMisses += galleryDevModeEnabled ? 1 : 0;
         // freshPromise stores state or configuration for the gallery front-end flow.
-        const freshPromise = loadFreshDecodedLightboxImage(src);
+        const freshPromise = loadFreshDecodedLightboxImage(src, options);
         rememberDecodedLightboxImage(src, freshPromise.catch(() => null));
         return freshPromise;
     }
@@ -1555,26 +1619,35 @@ export function setupGalleryLightbox() {
         if (immediate || !stageLink || !image.getAttribute('src')) {
             activeLightboxTransitionToken += 1;
             removeTransitionImage();
-            applyLightboxImageSource(src, altText);
-            if (!initialLightboxLoadActive) {
-                return Promise.resolve(true);
+            if (!isCurrentLightboxImageRequest(index, token)) {
+                return Promise.resolve(false);
             }
-            return loadDecodedLightboxImage(src).then((loadedImage) => {
-                if (currentIndex !== index || activeLightboxImageToken !== token || image.getAttribute('src') !== src) {
+            applyLightboxImageSource(src, altText);
+            return loadDecodedLightboxImage(src, {priority: 'high'}).then((loadedImage) => {
+                if (!isCurrentLightboxImageRequest(index, token) || image.getAttribute('src') !== src) {
                     return false;
                 }
                 updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
+                clearLightboxNavigationPending(token);
                 return true;
-            }).catch(() => currentIndex === index && activeLightboxImageToken === token && image.getAttribute('src') === src);
+            }).catch(() => {
+                const stillCurrent = isCurrentLightboxImageRequest(index, token) && image.getAttribute('src') === src;
+                if (stillCurrent) {
+                    clearLightboxNavigationPending(token);
+                }
+                return stillCurrent;
+            });
         }
-        return loadDecodedLightboxImage(src).then((loadedImage) => new Promise((resolve) => {
-            if (currentIndex !== index || activeLightboxImageToken !== token) {
+        const decodedImagePromise = decodedImage instanceof HTMLImageElement ? Promise.resolve(decodedImage) : loadDecodedLightboxImage(src, {priority: 'high'});
+        return decodedImagePromise.then((loadedImage) => new Promise((resolve) => {
+            if (!isCurrentLightboxImageRequest(index, token)) {
                 resolve(false);
                 return;
             }
             updateNormalLightboxStageSizeFromLoadedImage(loadedImage);
             if (image.getAttribute('src') === src) {
                 image.alt = altText;
+                clearLightboxNavigationPending(token);
                 resolve(true);
                 return;
             }
@@ -1601,8 +1674,7 @@ export function setupGalleryLightbox() {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     if (
-                        currentIndex !== index ||
-                        activeLightboxImageToken !== token ||
+                        !isCurrentLightboxImageRequest(index, token) ||
                         activeLightboxTransitionToken !== transitionToken ||
                         transitionImage !== transitionNode
                     ) {
@@ -1613,8 +1685,7 @@ export function setupGalleryLightbox() {
                     transitionNode.classList.add('is-visible');
                     window.setTimeout(() => {
                         if (
-                            currentIndex !== index ||
-                            activeLightboxImageToken !== token ||
+                            !isCurrentLightboxImageRequest(index, token) ||
                             activeLightboxTransitionToken !== transitionToken ||
                             transitionImage !== transitionNode
                         ) {
@@ -1623,6 +1694,7 @@ export function setupGalleryLightbox() {
                             return;
                         }
                         applyLightboxImageSource(src, altText);
+                        clearLightboxNavigationPending(token);
                         requestAnimationFrame(() => {
                             removeTransitionImage(transitionNode);
                             resolve(true);
@@ -1651,8 +1723,12 @@ export function setupGalleryLightbox() {
         return new Promise((resolve) => {
             pendingFullImageSwapTimer = window.setTimeout(() => {
                 pendingFullImageSwapTimer = null;
-                loadDecodedLightboxImage(fullSrc).then((loadedImage) => {
-                    if (currentIndex !== index || activeLightboxImageToken !== token) {
+                if (!isCurrentLightboxImageRequest(index, token)) {
+                    resolve(false);
+                    return;
+                }
+                loadDecodedLightboxImage(fullSrc, {priority: 'auto'}).then((loadedImage) => {
+                    if (!isCurrentLightboxImageRequest(index, token)) {
                         resolve(false);
                         return;
                     }
@@ -2117,6 +2193,8 @@ export function setupGalleryLightbox() {
         activeLightboxImageToken += 1;
         activeLightboxTransitionToken += 1;
         clearPendingFullImageSwap();
+        removeTransitionImage();
+        resetLightboxPreloadQueue();
         // imageToken stores state or configuration for the gallery front-end flow.
         const imageToken = activeLightboxImageToken;
         // pageUrl stores state or configuration for the gallery front-end flow.
@@ -2157,7 +2235,14 @@ export function setupGalleryLightbox() {
         updateNormalLightboxStageSize(card);
         // shouldShowImmediately stores state or configuration for the gallery front-end flow.
         const shouldShowImmediately = overlay.hidden || !image.getAttribute('src');
-        preloadCardLightboxImages(card, true);
+        const navigationRequestedAt = performance.now();
+        const rapidManualNavigation = !shouldShowImmediately && !lightboxSlideshowActive && navigationRequestedAt - lastLightboxNavigationRequestedAt <= lightboxRapidNavigationThreshold;
+        lastLightboxNavigationRequestedAt = navigationRequestedAt;
+        const shouldSwapImmediately = shouldShowImmediately || rapidManualNavigation;
+        if (!shouldShowImmediately) {
+            scheduleLightboxNavigationPending(normalizedIndex, imageToken, previewSrc || mainSrc);
+        }
+        preloadCardLightboxImages(card, false, {reason: 'current-preview'});
         /**
          * Handle show lightweight preview image before the full media source.
          *
@@ -2165,7 +2250,7 @@ export function setupGalleryLightbox() {
          *
          * @return {*} Result value for the caller.
          */
-        const showPreviewFirst = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldShowImmediately);
+        const showPreviewFirst = () => showLightboxImageSource(normalizedIndex, imageToken, previewSrc, altText, shouldSwapImmediately);
         /**
          * Handle show main media image when no separate preview is available.
          *
@@ -2174,7 +2259,7 @@ export function setupGalleryLightbox() {
          * @param {*} loadedImage Loaded image value.
          * @return {*} Result value for the caller.
          */
-        const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldShowImmediately, loadedImage);
+        const showMainImage = (loadedImage = null) => showLightboxImageSource(normalizedIndex, imageToken, mainSrc, altText, shouldSwapImmediately, loadedImage);
         /**
          * Handle full media swap after the preview is already visible.
          *
@@ -2190,25 +2275,28 @@ export function setupGalleryLightbox() {
         };
         const initialMainPromise = previewSrc && mainSrc && previewSrc !== mainSrc
             ? showPreviewFirst().then((wasDisplayed) => {
-                if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
+                if (!isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
                     return false;
                 }
-                scheduleFullMediaSwap();
-                return true;
+                if (wasDisplayed) {
+                    scheduleFullMediaSwap();
+                    return true;
+                }
+                return loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage).catch(() => false);
             })
             : (mainSrc
                 ? (shouldShowImmediately
                     ? showMainImage(null)
-                    : loadDecodedLightboxImage(mainSrc).then(showMainImage))
+                    : loadDecodedLightboxImage(mainSrc, {priority: 'high'}).then(showMainImage))
                 : Promise.resolve(false));
         Promise.resolve(initialMainPromise).then((wasDisplayed) => {
-            if (!wasDisplayed || currentIndex !== normalizedIndex || activeLightboxImageToken !== imageToken) {
+            if (!wasDisplayed || !isCurrentLightboxImageRequest(normalizedIndex, imageToken)) {
                 return;
             }
+            clearLightboxNavigationPending(imageToken);
             hideInitialLightboxLoader();
             scheduleLightboxSlideshowNext();
         });
-        resetLightboxPreloadQueue();
         syncPictureStrip(normalizedIndex);
         if (lightboxMapSplit && !lightboxMapSplit.hidden) {
             if (!sharedLightboxMapUiAvailable() || !isLightboxFullscreen()) {
@@ -2365,6 +2453,9 @@ export function setupGalleryLightbox() {
         stopLightboxSlideshow();
         exitLightboxFullscreen();
         clearLightboxHudTimer();
+        activeLightboxImageToken += 1;
+        activeLightboxTransitionToken += 1;
+        clearLightboxNavigationPending();
         resetMobileSwipeVisuals(false);
         overlay.classList.remove('is-ui-visible', 'is-picture-strip-animating');
         if (pictureStripTrack instanceof HTMLElement) {
