@@ -38,6 +38,8 @@ declare(strict_types=1);
 
 use function Gallery\Core\discover_migration_files;
 use function Gallery\Core\load_migration_definition;
+use function Gallery\Core\load_migration_definitions;
+use function Gallery\Core\migration_array_is_list;
 use function Gallery\Core\pending_migration_files;
 
 require_once __DIR__ . '/../app/migration_definitions.php';
@@ -57,6 +59,11 @@ function assert_migration_consistency(bool $condition, string $label): void
 
 $migrationFiles = discover_migration_files(__DIR__ . '/../database/migrations');
 assert_migration_consistency($migrationFiles !== [], 'Migration directory must not be empty.');
+assert_migration_consistency(migration_array_is_list([]), 'Empty arrays must be recognized as migration lists on PHP 8.0.');
+assert_migration_consistency(migration_array_is_list(['SELECT 1']), 'Sequential SQL arrays must be recognized as migration lists.');
+assert_migration_consistency(!migration_array_is_list(['statements' => []]), 'Associative migration definitions must not be recognized as SQL lists.');
+$preflightDefinitions = load_migration_definitions($migrationFiles);
+assert_migration_consistency(count($preflightDefinitions) === count($migrationFiles), 'Migration preflight must validate the complete discovered set.');
 
 $versions = [];
 $definitions = [];
@@ -85,8 +92,9 @@ $browserRebuild = '202606100003_browser_thumbnail_rebuild_settings';
 $legacyCleanup = '202607120001_browser_upload_legacy_settings_cleanup';
 $publicPathRepair = '202607120002_harden_gallery_public_paths';
 $hierarchicalPathRepair = '202607120003_restore_hierarchical_gallery_public_paths';
+$runnerCompatibilityRepair = '202607120004_verify_gallery_public_paths_after_runner_upgrade';
 
-foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair] as $requiredVersion) {
+foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair] as $requiredVersion) {
     assert_migration_consistency(isset($definitions[$requiredVersion]), 'Required migration is missing: ' . $requiredVersion);
 }
 assert_migration_consistency(strcmp($legacyCleanup, $browserRebuild) > 0, 'Legacy cleanup must run after canonical browser setting migrations.');
@@ -96,11 +104,15 @@ assert_migration_consistency($definitions[$publicPathRepair]['statements'] === [
 assert_migration_consistency($definitions[$hierarchicalPathRepair]['after'] !== null, 'Hierarchical public-path repair must be recorded as a post-migration callback.');
 assert_migration_consistency($definitions[$hierarchicalPathRepair]['statements'] === [], 'Hierarchical public-path repair should not contain unrelated SQL schema changes.');
 assert_migration_consistency(strcmp($hierarchicalPathRepair, $publicPathRepair) > 0, 'Hierarchical public-path repair must run after the first hardening repair.');
+assert_migration_consistency($definitions[$runnerCompatibilityRepair]['after'] !== null, 'Runner compatibility repair must be recorded as a post-migration callback.');
+assert_migration_consistency($definitions[$runnerCompatibilityRepair]['statements'] === [], 'Runner compatibility repair should not contain unrelated SQL schema changes.');
+assert_migration_consistency(strcmp($runnerCompatibilityRepair, $hierarchicalPathRepair) > 0, 'Runner compatibility repair must run after the hierarchical path repair.');
 
 $simulatedFiles = [
     '/project/database/migrations/202606100001_browser_client_upload_settings.php',
     '/project/database/migrations/202607120002_harden_gallery_public_paths.php',
     '/project/database/migrations/202607120003_restore_hierarchical_gallery_public_paths.php',
+    '/project/database/migrations/202607120004_verify_gallery_public_paths_after_runner_upgrade.php',
 ];
 $pendingWithRemovedHistory = pending_migration_files($simulatedFiles, [
     '202606100001_browser_client_upload_settings',
@@ -110,6 +122,7 @@ assert_migration_consistency(
     $pendingWithRemovedHistory === [
         '/project/database/migrations/202607120002_harden_gallery_public_paths.php',
         '/project/database/migrations/202607120003_restore_hierarchical_gallery_public_paths.php',
+        '/project/database/migrations/202607120004_verify_gallery_public_paths_after_runner_upgrade.php',
     ],
     'Removed historical migration audit rows must not affect current pending-file detection.'
 );
@@ -118,6 +131,7 @@ assert_migration_consistency(
         '202606100001_browser_client_upload_settings',
         '202607120002_harden_gallery_public_paths',
         '202607120003_restore_hierarchical_gallery_public_paths',
+        '202607120004_verify_gallery_public_paths_after_runner_upgrade',
         '202606100001_experimental_client_upload_settings',
     ]) === [],
     'Extra applied historical versions must not make a fully migrated database appear pending.'

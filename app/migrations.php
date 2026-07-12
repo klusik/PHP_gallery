@@ -48,8 +48,9 @@ use function Gallery\Services\thumbnail_metadata_storage_snapshot;
  * Apply all pending database migrations in filename order.
  *
  * MySQL can auto-commit DDL statements such as CREATE TABLE, so migrations are
- * not wrapped in an explicit transaction. Each migration records its version
- * only after every SQL statement in that file has executed successfully.
+ * not wrapped in an explicit transaction. The complete pending definition set
+ * is validated before execution starts, and each migration records its version
+ * only after every SQL statement and repair callback succeeds.
  *
  * @return array Structured result data for the caller.
  */
@@ -69,6 +70,8 @@ function run_migrations(): array
         discover_migration_files(dirname(__DIR__) . '/database/migrations'),
         $appliedVersions
     );
+    // $definitionsByFile validates the complete pending set before any database change is applied.
+    $definitionsByFile = load_migration_definitions($files);
     // Variable $ran stores this steps working value.
     $ran = [];
     // $migrationDiagnostics stores detailed timing data for admin update logs.
@@ -82,7 +85,7 @@ function run_migrations(): array
         // Variable $version stores this steps working value.
         $version = basename($file, '.php');
         // $definition stores the validated SQL statements and optional post-migration repair.
-        $definition = load_migration_definition($file);
+        $definition = $definitionsByFile[$file];
         // $statements stores this migration's ordered SQL statements.
         $statements = $definition['statements'];
         // $after stores an optional PHP data repair executed before the version is recorded.

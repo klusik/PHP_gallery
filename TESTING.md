@@ -28,13 +28,15 @@ php tests/gallery_visibility_model_test.php
 php tests/browser_upload_settings_test.php
 php tests/gallery_public_paths_test.php
 php tests/migration_consistency_test.php
+php tests/migration_legacy_runner_compatibility_test.php
 php tests/thumbnail_warmup_model_test.php
 ```
 
 The favorite shortcut test covers zero configured shortcuts, direct gallery links, the optional main-page shortcut, duplicate/missing-gallery cleanup, public visibility filtering, and HTML escaping.
 The gallery dates test covers manual date range normalization, reversed-range rejection, public display formatting with en dash separators, rendered date attributes, and branch matching used by scoped EXIF suggestion reviews.
 The gallery public-path test covers Czech transliteration, decomposed accents, invisible Unicode characters, HTML entities, hierarchical paths, and sibling slug collisions.
-The migration consistency test validates every migration definition and proves that old schema_migrations rows remain harmless after obsolete migration files are removed.
+The migration consistency test validates every migration definition, preflights the complete migration set, and proves that old schema_migrations rows remain harmless after obsolete migration files are removed.
+The legacy migration-runner compatibility test verifies that PHP repair migrations work both with the current definition-aware runner and with the former SQL-only runner that may still be present during a partial patch deployment.
 
 These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
 
