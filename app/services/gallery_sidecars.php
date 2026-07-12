@@ -712,8 +712,11 @@ function create_empty_gallery(array $input): array
         throw new RuntimeException('Gallery folder was created, but the database row could not be created.');
     }
     sync_gallery_parent_ids();
+    if (public_path_schema_ready()) {
+        refresh_gallery_public_paths();
+    }
     // $gallery stores an intermediate value used by the surrounding gallery workflow.
-    $gallery = find_gallery((int) $gallery['id']) ?: $gallery;
+    $gallery = find_gallery((int) $gallery['id'], true) ?: $gallery;
     write_gallery_sidecar($gallery);
     return $gallery;
 }

@@ -36,6 +36,8 @@ declare(strict_types=1);
 
 namespace Gallery\Core;
 
+require_once __DIR__ . '/migration_definitions.php';
+
 use PDO;
 use PDOException;
 use Throwable;
@@ -60,13 +62,13 @@ function run_migrations(): array
         applied_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Variable $applied stores this steps working value.
-    $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
-    // Variable $applied stores this steps working value.
-    $applied = array_flip($applied);
-    // Variable $files stores this steps working value.
-    $files = glob(dirname(__DIR__) . '/database/migrations/*.php') ?: [];
-    sort($files);
+    // $appliedVersions stores the immutable audit rows already recorded by this database.
+    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    // $files stores only current migration files that have not yet been applied.
+    $files = pending_migration_files(
+        discover_migration_files(dirname(__DIR__) . '/database/migrations'),
+        $appliedVersions
+    );
     // Variable $ran stores this steps working value.
     $ran = [];
     // $migrationDiagnostics stores detailed timing data for admin update logs.
@@ -79,20 +81,31 @@ function run_migrations(): array
     foreach ($files as $file) {
         // Variable $version stores this steps working value.
         $version = basename($file, '.php');
-        if (isset($applied[$version])) {
-            continue;
-        }
-        // Variable $statements stores this steps working value.
-        $statements = require $file;
+        // $definition stores the validated SQL statements and optional post-migration repair.
+        $definition = load_migration_definition($file);
+        // $statements stores this migration's ordered SQL statements.
+        $statements = $definition['statements'];
+        // $after stores an optional PHP data repair executed before the version is recorded.
+        $after = $definition['after'];
         // $singleMigrationStartedAt stores per-migration duration for diagnostics.
         $singleMigrationStartedAt = microtime(true);
         // $statementDiagnostics stores per-SQL timing and replay data for this migration.
         $statementDiagnostics = [];
+        // $afterDiagnostic stores timing for an optional PHP data repair.
+        $afterDiagnostic = null;
         try {
             foreach ($statements as $statementIndex => $statement) {
                 $statementDiagnostic = apply_migration_statement($pdo, $statement);
                 $statementDiagnostic['statement_number'] = (int) $statementIndex + 1;
                 $statementDiagnostics[] = $statementDiagnostic;
+            }
+            if ($after !== null) {
+                $afterStartedAt = microtime(true);
+                $after($pdo);
+                $afterDiagnostic = [
+                    'status' => 'applied',
+                    'duration_seconds' => round(microtime(true) - $afterStartedAt, 4),
+                ];
             }
             // Variable $stmt stores this steps working value.
             $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');
@@ -103,6 +116,7 @@ function run_migrations(): array
                 'statement_count' => count($statements),
                 'duration_seconds' => round(microtime(true) - $singleMigrationStartedAt, 4),
                 'statements' => $statementDiagnostics,
+                'after' => $afterDiagnostic,
             ];
         } catch (Throwable $exception) {
             if ($pdo->inTransaction()) {
@@ -232,21 +246,13 @@ function pending_migrations_exist(): bool
             version VARCHAR(64) NOT NULL PRIMARY KEY,
             applied_at DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-        // $applied stores an intermediate value used by the surrounding gallery workflow.
-        $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
-        // $applied stores an intermediate value used by the surrounding gallery workflow.
-        $applied = array_flip($applied);
-        // $files stores an intermediate value used by the surrounding gallery workflow.
-        $files = glob(dirname(__DIR__) . '/database/migrations/*.php') ?: [];
-        sort($files);
-        foreach ($files as $file) {
-            // $version stores an intermediate value used by the surrounding gallery workflow.
-            $version = basename($file, '.php');
-            if (!isset($applied[$version])) {
-                return true;
-            }
-        }
-        return false;
+        // $appliedVersions stores the immutable audit rows already recorded by this database.
+        $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+        // Extra historical audit rows are harmless when their obsolete files no longer ship.
+        return pending_migration_files(
+            discover_migration_files(dirname(__DIR__) . '/database/migrations'),
+            $appliedVersions
+        ) !== [];
     } catch (Throwable) {
         return true;
     }

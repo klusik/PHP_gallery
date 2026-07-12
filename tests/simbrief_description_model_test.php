@@ -36,6 +36,14 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\simbrief_description_build_markdown;
+use function Gallery\Services\simbrief_description_coordinate_value;
+use function Gallery\Services\simbrief_description_extract_details;
+use function Gallery\Services\simbrief_description_extract_route_points;
+use function Gallery\Services\simbrief_description_identifier;
+use function Gallery\Services\simbrief_description_pdf_url;
+use function Gallery\Services\simbrief_description_route_text_from_points;
+
 require_once __DIR__ . '/../app/services/simbrief_descriptions.php';
 
 /**

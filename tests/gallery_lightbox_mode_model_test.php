@@ -35,6 +35,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\gallery_effective_lightbox_browsing_mode;
+use function Gallery\Services\gallery_lightbox_browsing_mode_label;
+use function Gallery\Services\gallery_lightbox_browsing_mode_normalize;
+use function Gallery\Services\gallery_lightbox_browsing_mode_storage_value;
+use function Gallery\Services\theme_lightbox_browsing_mode;
+
 require_once __DIR__ . '/../app/services/app_settings.php';
 
 if (!function_exists('t')) {

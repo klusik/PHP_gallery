@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\upload_automation_sim_camera_metadata;
+
 require_once __DIR__ . '/../app/services/upload_automation.php';
 
 /**

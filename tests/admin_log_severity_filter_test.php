@@ -36,6 +36,11 @@
 
 declare(strict_types=1);
 
+use function Gallery\Controllers\admin_log_normalize_severity_filter;
+use function Gallery\Controllers\admin_log_persisted_severity_filter;
+use function Gallery\Controllers\admin_log_severity_filter_setting_key;
+use function Gallery\Controllers\admin_log_severity_filter_summary;
+
 require_once __DIR__ . '/../app/services/app_settings.php';
 require_once __DIR__ . '/../app/controllers/admin_logs.php';
 require_once __DIR__ . '/../app/services/logs.php';

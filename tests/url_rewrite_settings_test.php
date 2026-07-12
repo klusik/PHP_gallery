@@ -36,6 +36,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Core\gallery_public_url;
+use function Gallery\Core\url_for;
+use function Gallery\Services\url_rewrite_compatibility;
+use function Gallery\Services\url_rewrite_enabled;
+use function Gallery\Services\url_rewrite_should_emit_clean_urls;
+
 // These tests avoid a live database by priming the app setting cache directly.
 
 /**
@@ -142,6 +148,16 @@ try {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
     assert_url_rewrite_same(true, url_rewrite_should_emit_clean_urls(), 'default enabled emit clean URLs');
     assert_url_rewrite_same('https://example.test/tag/friedrichshafen', url_for('tag', ['slug' => 'friedrichshafen']), 'default enabled tag clean URL');
+    assert_url_rewrite_same(
+        'https://example.test/gallery/testovaci-fotky',
+        rtrim(gallery_public_url([
+            'url_path' => '',
+            'folder_path' => 'Testovací fotky',
+            'slug' => 'testovaci-fotky',
+            'title' => 'Testovací fotky',
+        ]), '/'),
+        'missing public path uses safe stored slug instead of physical folder name'
+    );
 } finally {
     remove_url_rewrite_test_root($supportedRoot);
     remove_url_rewrite_test_root($unsupportedRoot);

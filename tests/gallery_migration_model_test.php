@@ -34,6 +34,9 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\gallery_migration_compatibility_result;
+use function Gallery\Services\gallery_migration_endpoint_url;
+
 require_once __DIR__ . '/../app/services/gallery_migration.php';
 
 /**

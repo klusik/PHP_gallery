@@ -35,6 +35,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\admin_database_usage_build_summary_from_rows;
+use function Gallery\Services\admin_database_usage_finalize_table_rows;
+use function Gallery\Services\admin_database_usage_gallery_table_names;
+use function Gallery\Services\admin_database_usage_normalize_table_row;
+use function Gallery\Services\admin_database_usage_unavailable;
+
 require_once __DIR__ . '/../app/services/admin_database_usage.php';
 
 /**

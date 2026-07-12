@@ -35,6 +35,15 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\admin_storage_statistics_add_group_value;
+use function Gallery\Services\admin_storage_statistics_compact_source_summary;
+use function Gallery\Services\admin_storage_statistics_finalize_group_rows;
+use function Gallery\Services\admin_storage_statistics_normalize_file_extension;
+use function Gallery\Services\admin_storage_statistics_normalize_generated_summary;
+use function Gallery\Services\admin_storage_statistics_size_bucket_key;
+use function Gallery\Services\admin_storage_statistics_snapshot_from_summaries;
+use function Gallery\Services\admin_storage_statistics_source_summary;
+
 require_once __DIR__ . '/../app/services/admin_storage_statistics.php';
 
 /**
