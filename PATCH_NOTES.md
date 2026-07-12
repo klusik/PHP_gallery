@@ -1,5 +1,79 @@
 # Patch notes
 
+## Version 0.84
+
+Version 0.84 is a reliability and maintainability release focused on canonical gallery URLs, hierarchical public paths, a cleaner upload subsystem, and more predictable lightbox navigation. It also strengthens migration auditing and consolidates the standalone test suite so the application is easier to upgrade, verify, and operate across shared-hosting environments.
+
+  ### Highlights
+
+  #### Safer and more capable public gallery paths
+
+  - Hardened public gallery path parsing, normalization, validation, and URL generation.
+  - Restored hierarchical public paths so nested galleries retain their complete public location.
+  - Preserved canonical path behavior across gallery creation, editing, moving, and sidecar operations.
+  - Improved route handling for public galleries and public media links.
+
+  #### Improved lightbox and map navigation
+
+  - Added an accessible keyboard-shortcut help panel to the lightbox toolbar.
+  - Documented keyboard controls for photo navigation, fullscreen, maps, slideshows, and closing the lightbox.
+  - Improved previous/next navigation behavior and pointer-event handling in map split view.
+  - Kept lightbox navigation controls visible when map split mode requires them.
+  - Improved responsive styling, safe-area positioning, focus behavior, and HUD visibility.
+
+  #### Removed obsolete experimental upload infrastructure
+
+  - Removed the obsolete experimental upload and thumbnail-rebuild services.
+  - Removed the associated experimental browser workers, admin assets, migrations, and test coverage.
+  - Retained the supported browser upload and thumbnail-rebuild implementation and its production migrations.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Updated `app/services/public_paths.php` with centralized canonical path handling and hierarchical path restoration.
+  - Updated `app/helpers.php`, `app/services/gallery_mutations.php`, and `app/services/gallery_sidecars.php` to use the hardened path behavior.
+  - Added `app/migration_definitions.php` for centralized migration metadata and consistency checks.
+  - Updated `app/migrations.php` and `install.php` to keep migration discovery and installation aligned.
+  - Updated EXIF and public gallery services to use the corrected public URL behavior.
+
+  #### Database
+
+  - Added migration `202607120001_browser_upload_legacy_settings_cleanup.php` to remove obsolete browser-upload settings.
+  - Added migration `202607120002_harden_gallery_public_paths.php` for public-path normalization and compatibility.
+  - Added migration `202607120003_restore_hierarchical_gallery_public_paths.php` to restore nested gallery URL structure.
+  - Removed the obsolete experimental upload and thumbnail-rebuild migrations.
+
+  #### Frontend
+
+  - Updated `public/assets/gallery-modules/lightbox.js` and `public/assets/styles/lightbox.css` for shortcut help and map split navigation.
+  - Updated `public/assets/gallery-modules/lightbox-deferred.js`, `public/assets/gallery.js`, and `public/assets/public-gallery.js` for the revised lightbox integration.
+  - Updated English and Czech translations for shortcut help, navigation labels, and map controls.
+  - Removed obsolete experimental upload and thumbnail-rebuild browser modules.
+
+  #### Tests
+
+  - Added `tests/run.php` as a consolidated runner for the standalone PHP test scripts.
+  - Added shared DNG, thumbnail-compatibility, and fixed-clock test shims under `tests/support/`.
+  - Added focused coverage for public gallery paths and migration consistency.
+  - Expanded regression coverage for administration, lightbox behavior, thumbnails, uploads, URLs, and public asset loading.
+
+  ### User Impact
+
+  #### For visitors
+
+  - Nested galleries now keep stable, readable hierarchical public URLs.
+  - Public gallery and media links behave more consistently across rewrite configurations.
+  - Lightbox photo navigation is easier to discover and more reliable in map split view.
+  - Keyboard and assistive-technology users receive clearer control labels and shortcut guidance.
+
+  #### For administrators
+
+  - Gallery editing and moving workflows use safer canonical public paths.
+  - Database upgrades remove obsolete experimental settings and preserve hierarchical URL behavior.
+  - The supported upload workflow is easier to maintain after removal of unused experimental components.
+  - The consolidated test runner makes release and deployment verification faster and more repeatable.
+
 ## Version 0.83
 
 Version 0.83 is a comprehensive performance optimization and profiling release focused on measuring, analyzing, and improving gallery rendering efficiency. It introduces sophisticated benchmarking tools for administrators, optimizes critical rendering paths, implements lightbox preloading, and adds detailed performance profiling across the entire platform. The release includes four-phase optimization initiatives targeting thumbnail lookup performance, internationalization handling, manifest generation, and browser rendering speed.
