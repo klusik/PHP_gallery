@@ -74,6 +74,30 @@ function pending_migration_files(array $files, array $appliedVersions): array
     ));
 }
 
+
+
+/**
+ * Return true when an array uses consecutive integer keys beginning at zero.
+ *
+ * PHP Gallery supports PHP 8.0, while array_is_list() was introduced in PHP
+ * 8.1. Keeping this compatibility helper local to the migration subsystem
+ * avoids raising the minimum runtime version merely to validate definitions.
+ *
+ * @param array<mixed> $value Array value.
+ * @return bool True when the array is a list.
+ */
+function migration_array_is_list(array $value): bool
+{
+    $expectedKey = 0;
+    foreach ($value as $key => $_item) {
+        if ($key !== $expectedKey) {
+            return false;
+        }
+        $expectedKey++;
+    }
+    return true;
+}
+
 /**
  * Load and validate one migration definition.
  *
@@ -92,7 +116,7 @@ function load_migration_definition(string $file): array
         throw new RuntimeException('Migration ' . basename($file) . ' must return an array.');
     }
 
-    if (array_is_list($definition)) {
+    if (migration_array_is_list($definition)) {
         $statements = $definition;
         $after = null;
     } else {
@@ -104,7 +128,7 @@ function load_migration_definition(string $file): array
         $after = $definition['after'] ?? null;
     }
 
-    if (!is_array($statements) || !array_is_list($statements)) {
+    if (!is_array($statements) || !migration_array_is_list($statements)) {
         throw new RuntimeException('Migration ' . basename($file) . ' statements must be a list.');
     }
     foreach ($statements as $index => $statement) {
@@ -121,3 +145,27 @@ function load_migration_definition(string $file): array
         'after' => $after,
     ];
 }
+
+/**
+ * Load and validate all pending migration definitions before execution starts.
+ *
+ * Preflight validation prevents a malformed later migration from being
+ * discovered only after earlier pending migrations have already modified the
+ * database. Definitions are returned by their absolute file path so both the
+ * normal updater and installer execute the exact preflighted values.
+ *
+ * @param array<int,string> $files Migration file paths.
+ * @return array<string,array{statements: array<int,string>, after: callable|null}> Definitions keyed by file path.
+ */
+function load_migration_definitions(array $files): array
+{
+    $definitions = [];
+    foreach ($files as $file) {
+        if (!is_string($file) || $file === '' || !is_file($file) || !is_readable($file)) {
+            throw new RuntimeException('Migration file is missing or unreadable: ' . (string) $file);
+        }
+        $definitions[$file] = load_migration_definition($file);
+    }
+    return $definitions;
+}
+

@@ -1,5 +1,60 @@
 # Patch notes
 
+## Version 0.84.1
+
+Version 0.84.1 is a migration reliability patch for installations upgrading through the 0.84 public-path changes. It makes migration definitions safe for both the current definition-aware runner and older SQL-only runners, adds deterministic repair and verification behavior, and improves regression coverage for partially applied or legacy migration states.
+
+  ### Highlights
+
+  #### Migration runner compatibility
+
+  - Preserved compatibility with the former SQL-only migration runner used by older installations.
+  - Prevented PHP migration definitions and repair callbacks from being interpreted as SQL statements.
+  - Validated all pending migration definitions before applying the first database change.
+  - Recorded migration versions only after all SQL statements and repair callbacks completed successfully.
+
+  #### Public path repair and verification
+
+  - Added deterministic repair handling for legacy and partially applied gallery public-path migrations.
+  - Re-ran hierarchical public-path repairs after the migration runner upgrade.
+  - Verified that nested filesystem galleries retain complete nested public URL paths.
+  - Kept repair operations transactional when the migration runner does not already own a transaction.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `app/migration_repairs.php` for reusable transactional migration repair callbacks.
+  - Updated `app/migration_definitions.php` to support current and legacy migration loading contracts.
+  - Updated `app/migrations.php` to validate the complete pending migration set before execution.
+  - Updated `install.php` to keep installation-time migration behavior aligned with the normal updater.
+
+  #### Database
+
+  - Updated `202607120002_harden_gallery_public_paths.php` and `202607120003_restore_hierarchical_gallery_public_paths.php` for legacy-runner compatibility.
+  - Added migration `202607120004_verify_gallery_public_paths_after_runner_upgrade.php`.
+  - Ensured migration repair callbacks run before their migration versions are recorded.
+
+  #### Tests
+
+  - Added `tests/migration_legacy_runner_compatibility_test.php`.
+  - Added coverage for direct-require migration execution under the former SQL-only runner.
+  - Added assertions for repair callbacks, transaction commits, rollback behavior, and hierarchical path verification.
+  - Updated `tests/migration_consistency_test.php` and `TESTING.md` for the expanded migration checks.
+
+  ### User Impact
+
+  #### For administrators
+
+  - Upgrades from older 0.84 migration-runner states complete more safely.
+  - Partially applied public-path migrations can be repaired deterministically during upgrade.
+  - Migration failures are less likely to leave a version marked as applied prematurely.
+
+  #### For visitors
+
+  - Nested gallery URLs remain hierarchical after an upgrade.
+  - Existing public gallery links are preserved while path repairs are applied.
+
 ## Version 0.84
 
 Version 0.84 is a reliability and maintainability release focused on canonical gallery URLs, hierarchical public paths, a cleaner upload subsystem, and more predictable lightbox navigation. It also strengthens migration auditing and consolidates the standalone test suite so the application is easier to upgrade, verify, and operate across shared-hosting environments.
