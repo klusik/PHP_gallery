@@ -236,6 +236,8 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         \Gallery\Core\discover_migration_files($migrationPath),
         $appliedVersions
     );
+    // $definitionsByFile validates the complete pending set before installation changes the database.
+    $definitionsByFile = \Gallery\Core\load_migration_definitions($files);
     // Variable $ran stores this steps working value.
     $ran = [];
 
@@ -243,7 +245,7 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         // Variable $version stores this steps working value.
         $version = basename($file, '.php');
         // $definition stores the validated SQL statements and optional post-migration repair.
-        $definition = \Gallery\Core\load_migration_definition($file);
+        $definition = $definitionsByFile[$file];
         foreach ($definition['statements'] as $statement) {
             installer_apply_migration_statement($pdo, $statement);
         }
