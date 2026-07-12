@@ -639,12 +639,27 @@ function image_has_gps(array $image): bool
  */
 function image_map_point(array $image, array $gallery, bool $includeThumb = true, ?array $thumbnailBundle = null): array
 {
+    // $displayTitle stores the public-facing label used by map popups and dialogs.
+    $displayTitle = trim(public_image_display_title($image, $gallery));
+    // $filename stores the raw uploaded filename so public maps can avoid showing it as a title.
+    $filename = trim((string) ($image['filename'] ?? ''));
+    // $filenameStem stores the raw filename without an extension for legacy imported titles.
+    $filenameStem = trim((string) pathinfo($filename, PATHINFO_FILENAME));
+    if ($displayTitle === $filename || $displayTitle === $filenameStem) {
+        $displayTitle = '';
+    }
+    if ($displayTitle === '') {
+        $displayTitle = trim((string) ($gallery['title'] ?? ''));
+    }
+    if ($displayTitle === '') {
+        $displayTitle = $filenameStem;
+    }
     // $point stores the lightweight marker payload consumed by JavaScript maps.
     $point = [
         'id' => (int) $image['id'],
         'lat' => (float) $image['gps_lat'],
         'lng' => (float) $image['gps_lng'],
-        'title' => (string) ($image['title'] ?: $image['filename']),
+        'title' => $displayTitle,
         'description' => (string) ($image['description'] ?? ''),
         'image' => url_for('media', ['id' => $image['id']]),
         'gallery' => (string) $gallery['title'],

@@ -138,6 +138,8 @@ use function Gallery\Services\normalize_gallery_visibility;
 use function Gallery\Services\nsfw_guard_schema_ready;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\picture_game_schema_ready;
+use function Gallery\Services\public_path_schema_ready;
+use function Gallery\Services\refresh_gallery_public_paths;
 use function Gallery\Services\regenerate_gallery_share_token;
 use function Gallery\Services\render_admin_thumbnail_bound_slider;
 use function Gallery\Services\revoke_gallery_share_token;
@@ -779,6 +781,9 @@ function admin_save_gallery_from_input(array $gallery, array $input, array $file
     // $stmt stores an intermediate value used by the surrounding gallery workflow.
     $stmt = db()->prepare('UPDATE galleries SET ' . implode(', ', array_keys($fields)) . ' WHERE id = ?');
     $stmt->execute(array_merge(array_values($fields), [$galleryId]));
+    if (public_path_schema_ready()) {
+        refresh_gallery_public_paths();
+    }
     if (thumbnail_bounds_schema_ready() && $thumbnailBoundsRecursive && $shouldUpdateThumbnailBounds) {
         save_gallery_thumbnail_bounds($gallery, $thumbnailBounds[0], $thumbnailBounds[1], true);
     }

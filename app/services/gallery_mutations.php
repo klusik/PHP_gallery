@@ -160,7 +160,7 @@ function delete_gallery_subtrees(array $galleryIds): array
     thumbnail_maintenance_summary_cache_clear();
     sync_gallery_parent_ids();
     if (public_path_schema_ready()) {
-        regenerate_public_paths();
+        refresh_gallery_public_paths();
     }
 
     return ['root_count' => count($deletedFolders), 'row_count' => count($allRowIds), 'missing_folders' => $missingFolders];
@@ -544,7 +544,7 @@ function delete_gallery_images(int $galleryId, array $imageIds): array
 
     thumbnail_maintenance_summary_cache_clear();
     if (public_path_schema_ready()) {
-        regenerate_public_paths();
+        regenerate_gallery_image_public_slugs($galleryId);
     }
     // $updatedGallery stores the refreshed row after title-picture cleanup.
     $updatedGallery = find_gallery($galleryId);
@@ -802,7 +802,8 @@ function move_gallery_images(int $sourceGalleryId, int $destinationGalleryId, ar
     if (!$deferMaintenance) {
         thumbnail_maintenance_summary_cache_clear();
         if (public_path_schema_ready()) {
-            regenerate_public_paths();
+            regenerate_gallery_image_public_slugs($sourceGalleryId);
+            regenerate_gallery_image_public_slugs($destinationGalleryId);
         }
         // $updatedSourceGallery stores the source row after title-picture cleanup.
         $updatedSourceGallery = find_gallery($sourceGalleryId, true);
@@ -1177,6 +1178,9 @@ function move_gallery_folder_to_parent(int $galleryId, ?int $parentId, ?string $
     }
 
     sync_gallery_parent_ids();
+    if (public_path_schema_ready()) {
+        refresh_gallery_public_paths();
+    }
     foreach (array_keys($pathMap) as $id) {
         // $updated stores an intermediate value used by the surrounding gallery workflow.
         $updated = find_gallery((int) $id, true);
@@ -1258,6 +1262,9 @@ function import_galleries(array $folderPaths, bool $createThumbnails = false): a
     }
 
     sync_gallery_parent_ids();
+    if ($importedIds && public_path_schema_ready()) {
+        refresh_gallery_public_paths();
+    }
     foreach ($importedIds as $galleryId) {
         $scanned += scan_gallery_images($galleryId);
     }
@@ -1301,6 +1308,9 @@ function import_galleries_without_thumbnails(array $folderPaths): array
         $imported++;
     }
     sync_gallery_parent_ids();
+    if ($importedIds && public_path_schema_ready()) {
+        refresh_gallery_public_paths();
+    }
     foreach ($importedIds as $galleryId) {
         $scanned += scan_gallery_images($galleryId);
     }
@@ -1312,6 +1322,8 @@ function import_galleries_without_thumbnails(array $folderPaths): array
  */
 function sync_gallery_parent_ids(): void
 {
+    // $hierarchyChanged tracks repairs that require clean public paths to be rebuilt.
+    $hierarchyChanged = false;
     // Variable $galleries stores this steps working value.
     $stmt = db()->prepare('SELECT id, folder_path, parent_id FROM galleries ORDER BY folder_path');
     $stmt->execute();
@@ -1320,7 +1332,9 @@ function sync_gallery_parent_ids(): void
         // Missing intermediate gallery rows are repaired before parent lookup.
         // This fixes older imports where a deep folder was imported without its
         // parent and therefore appeared on the public homepage as a root gallery.
-        ensure_gallery_ancestors_for_path((string) $gallery['folder_path']);
+        if (ensure_gallery_ancestors_for_path((string) $gallery['folder_path']) !== []) {
+            $hierarchyChanged = true;
+        }
     }
 
     // New ancestor rows may have been inserted above, so read the final hierarchy once.
@@ -1347,6 +1361,7 @@ function sync_gallery_parent_ids(): void
         if ($parentPath === '' || $parentPath === '/') {
             if ($currentParentId !== null) {
                 $clearParent->execute([now_sql(), (int) $gallery['id']]);
+                $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
             }
             continue;
         }
@@ -1356,12 +1371,18 @@ function sync_gallery_parent_ids(): void
         if ($parentId === null) {
             if ($currentParentId !== null) {
                 $clearParent->execute([now_sql(), (int) $gallery['id']]);
+                $hierarchyChanged = $hierarchyChanged || $clearParent->rowCount() > 0;
             }
             continue;
         }
         if ($currentParentId !== $parentId) {
             $setParent->execute([$parentId, now_sql(), (int) $gallery['id'], $parentId]);
+            $hierarchyChanged = $hierarchyChanged || $setParent->rowCount() > 0;
         }
+    }
+
+    if ($hierarchyChanged && public_path_schema_ready()) {
+        refresh_gallery_public_paths();
     }
 }
 

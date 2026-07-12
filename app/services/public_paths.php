@@ -29,7 +29,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-05-04
+ *   2026-07-12
  */
 
 declare(strict_types=1);
@@ -46,6 +46,7 @@ use function Gallery\Core\gallery_seo_title;
 use function Gallery\Core\image_alt_text;
 use function Gallery\Core\image_public_url;
 use function Gallery\Core\now_sql;
+use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\public_base_url;
 use function Gallery\Core\slugify;
 
@@ -667,6 +668,264 @@ function regenerate_public_paths(): array
 }
 
 /**
+ * Refresh clean public gallery paths without rebuilding image slugs.
+ *
+ * Gallery creation, title changes, and hierarchy moves use this narrower path
+ * because image URL slugs are unaffected. The helper participates in an
+ * existing transaction when called by a larger operation and otherwise owns a
+ * short transaction around the complete path rebuild.
+ *
+ * @return int Number of gallery rows refreshed.
+ */
+function refresh_gallery_public_paths(): int
+{
+    if (!public_path_schema_ready()) {
+        return 0;
+    }
+
+    $pdo = db();
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $count = regenerate_gallery_public_paths($pdo);
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+        return $count;
+    } catch (Throwable $exception) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+}
+
+/**
+ * Build deterministic clean URL assignments for gallery rows.
+ *
+ * The function is database-independent so hierarchy, transliteration, sibling
+ * collisions, and legacy filesystem names can be tested directly. Returned
+ * assignments are keyed by gallery id and contain the final local slug and
+ * complete hierarchical public path.
+ *
+ * @param array<int,array<string,mixed>> $galleries Gallery rows.
+ * @return array<int,array{slug:string,path:string}> Assignments keyed by gallery id.
+ */
+function gallery_public_path_assignments(array $galleries): array
+{
+    $byId = [];
+    $folderPathById = [];
+    foreach ($galleries as $gallery) {
+        $galleryId = (int) ($gallery['id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+        $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        $byId[$galleryId] = $gallery;
+        $folderPathById[$galleryId] = $folderPath;
+    }
+
+    $parentIdById = gallery_parent_id_assignments_from_folder_paths($galleries);
+    $childrenByParent = [];
+    foreach ($byId as $galleryId => $gallery) {
+        $folderPath = $folderPathById[$galleryId] ?? '';
+        $physicalParentPath = gallery_folder_parent_path($folderPath);
+        if ($physicalParentPath !== '') {
+            // Physical folder nesting is the canonical hierarchy. Keeping this
+            // path as the sibling key also handles historical rows whose
+            // parent_id was null or stale when a public-path repair ran.
+            $siblingKey = 'path:' . $physicalParentPath;
+        } else {
+            $siblingKey = 'parent:' . (int) ($parentIdById[$galleryId] ?? 0);
+        }
+        $childrenByParent[$siblingKey][] = $gallery;
+    }
+
+    // Assign sibling slugs once in stable row order so duplicate titles receive
+    // deterministic numeric suffixes regardless of which branch is built first.
+    $slugById = [];
+    foreach ($childrenByParent as $siblings) {
+        $usedSlugs = [];
+        foreach ($siblings as $sibling) {
+            $siblingId = (int) ($sibling['id'] ?? 0);
+            $baseName = basename(str_replace('\\', '/', trim((string) ($sibling['folder_path'] ?? ''), '/')));
+            $base = (string) (($sibling['title'] ?? '') ?: $baseName ?: ($sibling['slug'] ?? '') ?: 'gallery');
+            $slug = unique_public_slug_in_set($base, $usedSlugs);
+            $slugById[$siblingId] = $slug;
+            $usedSlugs[$slug] = true;
+        }
+    }
+
+    $pathsById = [];
+    $visiting = [];
+    $buildPath = static function (int $galleryId) use (
+        &$buildPath,
+        &$pathsById,
+        &$visiting,
+        $byId,
+        $folderPathById,
+        $parentIdById,
+        $slugById
+    ): string {
+        if (isset($pathsById[$galleryId])) {
+            return $pathsById[$galleryId];
+        }
+        $gallery = $byId[$galleryId] ?? null;
+        if (!$gallery) {
+            return 'gallery';
+        }
+        if (isset($visiting[$galleryId])) {
+            // Broken historical parent cycles must not make URL maintenance hang.
+            return $pathsById[$galleryId] = $slugById[$galleryId] ?? 'gallery';
+        }
+
+        $visiting[$galleryId] = true;
+        $slug = $slugById[$galleryId] ?? 'gallery';
+        $parentId = (int) ($parentIdById[$galleryId] ?? 0);
+        if ($parentId > 0 && isset($byId[$parentId]) && $parentId !== $galleryId) {
+            $path = trim($buildPath($parentId) . '/' . $slug, '/');
+        } else {
+            // When an intermediate gallery row is absent, preserve every real
+            // folder ancestor in the public URL instead of collapsing the leaf
+            // gallery to a root URL. Existing ancestor rows still use their
+            // titles through the recursive branch above.
+            $physicalParentPath = gallery_folder_parent_path($folderPathById[$galleryId] ?? '');
+            $prefix = gallery_public_path_from_folder_segments($physicalParentPath);
+            $path = trim(($prefix !== '' ? $prefix . '/' : '') . $slug, '/');
+        }
+        unset($visiting[$galleryId]);
+        return $pathsById[$galleryId] = $path;
+    };
+
+    $assignments = [];
+    foreach (array_keys($byId) as $galleryId) {
+        $assignments[$galleryId] = [
+            'slug' => $slugById[$galleryId] ?? 'gallery',
+            'path' => $buildPath($galleryId),
+        ];
+    }
+    return $assignments;
+}
+
+/**
+ * Return canonical parent assignments derived from stored filesystem paths.
+ *
+ * Folder nesting is the source of truth used by gallery moves and hierarchy
+ * synchronization. This pure helper deliberately does not trust parent_id when
+ * an immediate parent folder row exists, because older imports and interrupted
+ * repairs can leave that column null or stale.
+ *
+ * @param array<int,array<string,mixed>> $galleries Gallery rows.
+ * @return array<int,int|null> Parent identifiers keyed by gallery id.
+ */
+function gallery_parent_id_assignments_from_folder_paths(array $galleries): array
+{
+    $byId = [];
+    $folderPathById = [];
+    $galleryIdByFolderPath = [];
+    foreach ($galleries as $gallery) {
+        $galleryId = (int) ($gallery['id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+        $folderPath = normalize_relative_path((string) ($gallery['folder_path'] ?? ''));
+        $byId[$galleryId] = $gallery;
+        $folderPathById[$galleryId] = $folderPath;
+        if ($folderPath !== '') {
+            $galleryIdByFolderPath[$folderPath] = $galleryId;
+        }
+    }
+
+    $assignments = [];
+    foreach ($byId as $galleryId => $gallery) {
+        $parentPath = gallery_folder_parent_path($folderPathById[$galleryId] ?? '');
+        $parentId = $parentPath !== '' ? (int) ($galleryIdByFolderPath[$parentPath] ?? 0) : 0;
+        if ($parentId === $galleryId) {
+            $parentId = 0;
+        }
+        $assignments[$galleryId] = $parentId > 0 ? $parentId : null;
+    }
+    return $assignments;
+}
+
+/**
+ * Return the normalized immediate parent folder for one gallery path.
+ *
+ * @param string $folderPath Gallery folder path.
+ * @return string Parent folder path or an empty string for a root gallery.
+ */
+function gallery_folder_parent_path(string $folderPath): string
+{
+    $folderPath = normalize_relative_path($folderPath);
+    if ($folderPath === '' || !str_contains($folderPath, '/')) {
+        return '';
+    }
+    $segments = explode('/', $folderPath);
+    array_pop($segments);
+    return implode('/', $segments);
+}
+
+/**
+ * Convert physical folder ancestors into a clean public-path prefix.
+ *
+ * This fallback is used only when an intermediate gallery row is missing. It
+ * keeps the URL hierarchy intact while the normal hierarchy repair creates or
+ * reconnects the missing row later.
+ *
+ * @param string $folderPath Folder path containing zero or more ancestors.
+ * @return string Clean slash-separated public path.
+ */
+function gallery_public_path_from_folder_segments(string $folderPath): string
+{
+    $folderPath = normalize_relative_path($folderPath);
+    if ($folderPath === '') {
+        return '';
+    }
+    $segments = [];
+    foreach (explode('/', $folderPath) as $segment) {
+        $segments[] = slugify($segment);
+    }
+    return implode('/', $segments);
+}
+
+/**
+ * Repair parent_id values from canonical filesystem nesting.
+ *
+ * Public-path regeneration calls this first so a migration or maintenance run
+ * cannot produce a root-level URL merely because an older row has a missing or
+ * stale parent_id value.
+ *
+ * @param PDO $pdo Database connection.
+ * @return int Number of parent links changed.
+ */
+function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
+{
+    $rows = $pdo->query('SELECT id, parent_id, folder_path FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id')->fetchAll();
+    $assignments = gallery_parent_id_assignments_from_folder_paths($rows);
+    $updateParent = $pdo->prepare('UPDATE galleries SET parent_id = ? WHERE id = ?');
+    $changed = 0;
+
+    foreach ($rows as $row) {
+        $galleryId = (int) ($row['id'] ?? 0);
+        if ($galleryId <= 0) {
+            continue;
+        }
+        $currentParentId = $row['parent_id'] === null ? null : (int) $row['parent_id'];
+        $desiredParentId = $assignments[$galleryId] ?? null;
+        if ($currentParentId === $desiredParentId) {
+            continue;
+        }
+        $updateParent->execute([$desiredParentId, $galleryId]);
+        $changed++;
+    }
+
+    return $changed;
+}
+
+/**
  * Regenerate clean URL path values for all galleries.
  *
  * @param PDO $pdo Database connection.
@@ -674,110 +933,30 @@ function regenerate_public_paths(): array
  */
 function regenerate_gallery_public_paths(PDO $pdo): int
 {
-    // $stmt stores an intermediate value used by the surrounding gallery workflow.
+    repair_gallery_parent_ids_from_folder_paths($pdo);
+
     $stmt = $pdo->query('SELECT id, parent_id, title, folder_path, slug FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id');
-    // $galleries stores an intermediate value used by the surrounding gallery workflow.
     $galleries = $stmt->fetchAll();
-    // $byId stores an intermediate value used by the surrounding gallery workflow.
-    $byId = [];
-    // $childrenByParent stores an intermediate value used by the surrounding gallery workflow.
-    $childrenByParent = [];
+    $assignments = gallery_public_path_assignments($galleries);
 
-    foreach ($galleries as $gallery) {
-        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
-        $galleryId = (int) $gallery['id'];
-        // $parentId stores an intermediate value used by the surrounding gallery workflow.
-        $parentId = $gallery['parent_id'] !== null ? (int) $gallery['parent_id'] : 0;
-        $byId[$galleryId] = $gallery;
-        $childrenByParent[$parentId][] = $gallery;
-    }
+    // Clear the old values first so a title or hierarchy change cannot hit the
+    // unique url_path_hash index because another gallery still owns a path that
+    // will be reassigned later in this same rebuild.
+    $pdo->exec('UPDATE galleries SET url_slug = NULL, url_path = NULL, url_path_hash = NULL');
 
-    // $pathsById stores an intermediate value used by the surrounding gallery workflow.
-    $pathsById = [];
-    // $slugById stores an intermediate value used by the surrounding gallery workflow.
-    $slugById = [];
-    // $visited stores an intermediate value used by the surrounding gallery workflow.
-    $visited = [];
-    // $count stores an intermediate value used by the surrounding gallery workflow.
-    $count = 0;
-
-    // $buildPath stores an intermediate value used by the surrounding gallery workflow.
-    $buildPath = static function (array $gallery) use (&$buildPath, &$pathsById, &$slugById, &$visited, $byId, $childrenByParent): string {
-        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
-        $galleryId = (int) $gallery['id'];
-        if (isset($pathsById[$galleryId])) {
-            return $pathsById[$galleryId];
-        }
-        if (isset($visited[$galleryId])) {
-            // $fallback stores an intermediate value used by the surrounding gallery workflow.
-            $fallback = slugify((string) ($gallery['slug'] ?: $gallery['title'] ?: basename((string) $gallery['folder_path'])));
-            $slugById[$galleryId] = $fallback;
-            return $pathsById[$galleryId] = $fallback;
-        }
-
-        $visited[$galleryId] = true;
-        // $parentId stores an intermediate value used by the surrounding gallery workflow.
-        $parentId = $gallery['parent_id'] !== null ? (int) $gallery['parent_id'] : 0;
-        // $siblings stores an intermediate value used by the surrounding gallery workflow.
-        $siblings = $childrenByParent[$parentId] ?? [$gallery];
-        // $usedSlugs stores an intermediate value used by the surrounding gallery workflow.
-        $usedSlugs = [];
-
-        foreach ($siblings as $sibling) {
-            // $siblingId stores an intermediate value used by the surrounding gallery workflow.
-            $siblingId = (int) $sibling['id'];
-            if (isset($slugById[$siblingId])) {
-                $usedSlugs[$slugById[$siblingId]] = true;
-                continue;
-            }
-
-            // $baseName stores an intermediate value used by the surrounding gallery workflow.
-            $baseName = basename(str_replace('\\', '/', trim((string) $sibling['folder_path'], '/')));
-            // $base stores an intermediate value used by the surrounding gallery workflow.
-            $base = (string) ($sibling['title'] ?: $baseName ?: $sibling['slug'] ?: 'gallery');
-            // $slug stores an intermediate value used by the surrounding gallery workflow.
-            $slug = unique_public_slug_in_set($base, $usedSlugs);
-            $slugById[$siblingId] = $slug;
-            $usedSlugs[$slug] = true;
-        }
-
-        // $slug stores an intermediate value used by the surrounding gallery workflow.
-        $slug = $slugById[$galleryId] ?? slugify((string) ($gallery['title'] ?: $gallery['slug'] ?: 'gallery'));
-        if ($parentId > 0 && isset($byId[$parentId])) {
-            // $parentPath stores an intermediate value used by the surrounding gallery workflow.
-            $parentPath = $buildPath($byId[$parentId]);
-            // $path stores an intermediate value used by the surrounding gallery workflow.
-            $path = trim($parentPath . '/' . $slug, '/');
-        } else {
-            // $path stores an intermediate value used by the surrounding gallery workflow.
-            $path = $slug;
-        }
-
-        $pathsById[$galleryId] = $path;
-        unset($visited[$galleryId]);
-        return $path;
-    };
-
-    // $update stores an intermediate value used by the surrounding gallery workflow.
     $update = $pdo->prepare('UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, updated_at = ? WHERE id = ?');
-    foreach ($galleries as $gallery) {
-        // $galleryId stores an intermediate value used by the surrounding gallery workflow.
-        $galleryId = (int) $gallery['id'];
-        // $path stores an intermediate value used by the surrounding gallery workflow.
-        $path = $buildPath($gallery);
-        // $slug stores an intermediate value used by the surrounding gallery workflow.
-        $slug = $slugById[$galleryId] ?? basename($path);
+    foreach ($assignments as $galleryId => $assignment) {
+        $path = $assignment['path'];
         $update->execute([
-            $slug,
+            $assignment['slug'],
             $path,
             hash('sha256', $path),
             now_sql(),
             $galleryId,
         ]);
-        $count++;
     }
 
-    return $count;
+    return count($assignments);
 }
 
 /**

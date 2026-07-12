@@ -34,6 +34,19 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\thumbnail_compatibility_mode_log_value;
+use function Gallery\Services\thumbnail_expected_dimensions;
+use function Gallery\Services\thumbnail_file_geometry_status;
+use function Gallery\Services\thumbnail_policy_requested_formats;
+use function Gallery\Services\thumbnail_warmup_log_candidate_summary;
+use function Gallery\Services\thumbnail_warmup_normalize_items;
+use function Gallery\Services\thumbnail_warmup_normalize_sizes;
+use function Gallery\Services\thumbnail_warmup_request_policy_summary;
+use function Gallery\Services\thumbnail_warmup_token;
+use function Gallery\Services\thumbnail_warmup_token_is_valid;
+use const Gallery\Services\THUMBNAIL_COMPATIBILITY_LEGACY;
+use const Gallery\Services\THUMBNAIL_COMPATIBILITY_MODERN;
+
 require __DIR__ . '/../app/bootstrap.php';
 
 /**

@@ -36,6 +36,10 @@
 
 declare(strict_types=1);
 
+use function Gallery\Views\view_admin_stylesheet_files;
+use function Gallery\Views\view_script_asset_for_context;
+use function Gallery\Views\view_stylesheet_files_for_context;
+
 if (!function_exists('e')) {
         /**
      * Minimal HTML escaping shim for layout helper tests.

@@ -15,19 +15,28 @@ php -l path/to/file.php
 For JavaScript, use whatever local parser or linter is available in your environment. Syntax checks catch obvious breakage, but they do not prove the app still behaves correctly.
 
 ### 2. Script-Level Tests
-The repository already uses direct PHP test scripts under `tests/`. Run them with plain PHP:
+The repository uses current direct PHP regression tests under `tests/`. Run the complete isolated suite with:
+
+```bash
+php tests/run.php
+```
+
+Run one focused test directly when diagnosing a failure:
 
 ```bash
 php tests/gallery_visibility_model_test.php
-php tests/gallery_branding_model_test.php
-php tests/favorite_galleries_model_test.php
-php tests/gallery_dates_model_test.php
+php tests/browser_upload_settings_test.php
+php tests/gallery_public_paths_test.php
+php tests/migration_consistency_test.php
+php tests/thumbnail_warmup_model_test.php
 ```
 
 The favorite shortcut test covers zero configured shortcuts, direct gallery links, the optional main-page shortcut, duplicate/missing-gallery cleanup, public visibility filtering, and HTML escaping.
 The gallery dates test covers manual date range normalization, reversed-range rejection, public display formatting with en dash separators, rendered date attributes, and branch matching used by scoped EXIF suggestion reviews.
+The gallery public-path test covers Czech transliteration, decomposed accents, invisible Unicode characters, HTML entities, hierarchical paths, and sibling slug collisions.
+The migration consistency test validates every migration definition and proves that old schema_migrations rows remain harmless after obsolete migration files are removed.
 
-These are best for pure logic, helper functions, and regression checks that do not require a browser session.
+These tests are maintained against the current namespaced production code. They are best for pure logic, helper functions, and regression checks that do not require a browser session. A release patch should not be published while `php tests/run.php` reports a failure.
 
 ### 3. Manual Functional Smoke Tests
 For feature work, use the same end-to-end scenario every time. Keep one dedicated test installation or local database so you can create and remove test content freely.
@@ -45,8 +54,9 @@ Recommended flow:
 9. Open an existing gallery that contains photos with EXIF dates, use **Apply to this gallery**, and confirm the From/To fields update without a full page reload when JavaScript is enabled. Repeat from any side-panel editor entry point that exposes the same component. Then confirm the gallery card displays the resulting branch range with the en dash separator.
 10. Open **Review branch suggestions** for a parent gallery and confirm the table only lists that gallery and its subgalleries.
 11. Open Admin **Gallery dates** after scanning images with EXIF dates, then apply one suggestion and confirm the gallery card displays the resulting date range.
-12. Rename or move the gallery if the change touches file or path logic.
-13. Delete the test gallery and confirm cleanup succeeds.
+12. Rename or move the gallery if the change touches file or path logic. Confirm the public URL uses lowercase ASCII slugs, contains no encoded spaces or diacritics, and still resolves after moving the gallery under another parent.
+13. Create a gallery named **Testovací fotky** with a child named **Test nahrání** and confirm the child URL is `/gallery/testovaci-fotky/test-nahrani/`.
+14. Delete the test gallery and confirm cleanup succeeds.
 
 ## What To Retest After A Change
 

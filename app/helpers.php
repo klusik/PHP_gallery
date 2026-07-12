@@ -496,12 +496,13 @@ function gallery_public_url(array $gallery): string
     // $urlPath stores an intermediate value used by the surrounding gallery workflow.
     $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($urlPath === '') {
-        // $urlPath stores an intermediate value used by the surrounding gallery workflow.
-        $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+        // A globally unique stored slug is a safer legacy fallback than exposing
+        // physical folder names containing spaces, accents, or private naming.
+        $urlPath = trim((string) ($gallery['slug'] ?? ''), '/');
     }
     if ($urlPath === '') {
-        // $urlPath stores an intermediate value used by the surrounding gallery workflow.
-        $urlPath = (string) ($gallery['slug'] ?? 'gallery');
+        $folderName = basename(str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), '/')));
+        $urlPath = slugify((string) (($gallery['title'] ?? '') ?: $folderName ?: 'gallery'));
     }
     if (!url_rewrite_should_emit_clean_urls()) {
         return url_for('gallery', ['public_path' => $urlPath]);
@@ -529,10 +530,11 @@ function image_public_url(array $image, array $gallery): string
     }
     $urlPath = trim((string) ($gallery['url_path'] ?? ''), '/');
     if ($urlPath === '') {
-        $urlPath = trim((string) ($gallery['folder_path'] ?? ''), '/');
+        $urlPath = trim((string) ($gallery['slug'] ?? ''), '/');
     }
     if ($urlPath === '') {
-        $urlPath = (string) ($gallery['slug'] ?? 'gallery');
+        $folderName = basename(str_replace('\\', '/', trim((string) ($gallery['folder_path'] ?? ''), '/')));
+        $urlPath = slugify((string) (($gallery['title'] ?? '') ?: $folderName ?: 'gallery'));
     }
     if (!url_rewrite_should_emit_clean_urls()) {
         return url_for('gallery', ['public_path' => trim($urlPath . '/' . $slug, '/')]);
@@ -1125,17 +1127,50 @@ function now_sql(): string
 
 /**
  * Convert human-entered titles/tag names into URL-safe slugs.
+ *
+ * The normalization is deliberately deterministic across shared-hosting PHP
+ * installations. Czech and common Central European characters are mapped
+ * explicitly before the optional intl/iconv fallbacks, decomposed combining
+ * marks are removed, and invisible formatting characters cannot split words.
  */
 function slugify(string $text): string
 {
-    // Variable $ascii stores this steps working value.
-    $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-    // Variable $source stores this steps working value.
+    // Decode values copied from HTML sources before transliteration.
+    $text = html_entity_decode(trim($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // Remove soft hyphens, zero-width characters, and byte-order marks.
+    $text = (string) preg_replace('/[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $text);
+
+    if (class_exists('Normalizer')) {
+        // NFKD exposes combining accents so they can be removed consistently.
+        $normalized = \Normalizer::normalize($text, \Normalizer::FORM_KD);
+        if (is_string($normalized)) {
+            $text = $normalized;
+        }
+    }
+
+    // Keep Czech and neighboring-language transliteration stable even when the
+    // server locale or iconv implementation differs from the development host.
+    $text = strtr($text, [
+        'Á' => 'A', 'Ä' => 'A', 'Č' => 'C', 'Ć' => 'C', 'Ď' => 'D', 'É' => 'E', 'Ě' => 'E', 'Ë' => 'E',
+        'Í' => 'I', 'Ĺ' => 'L', 'Ľ' => 'L', 'Ň' => 'N', 'Ń' => 'N', 'Ó' => 'O', 'Ö' => 'O', 'Ô' => 'O',
+        'Ř' => 'R', 'Ŕ' => 'R', 'Š' => 'S', 'Ś' => 'S', 'Ť' => 'T', 'Ú' => 'U', 'Ů' => 'U', 'Ü' => 'U',
+        'Ý' => 'Y', 'Ž' => 'Z', 'Ź' => 'Z', 'Ż' => 'Z', 'Æ' => 'AE', 'Œ' => 'OE', 'Ø' => 'O', 'Ł' => 'L',
+        'á' => 'a', 'ä' => 'a', 'č' => 'c', 'ć' => 'c', 'ď' => 'd', 'é' => 'e', 'ě' => 'e', 'ë' => 'e',
+        'í' => 'i', 'ĺ' => 'l', 'ľ' => 'l', 'ň' => 'n', 'ń' => 'n', 'ó' => 'o', 'ö' => 'o', 'ô' => 'o',
+        'ř' => 'r', 'ŕ' => 'r', 'š' => 's', 'ś' => 's', 'ť' => 't', 'ú' => 'u', 'ů' => 'u', 'ü' => 'u',
+        'ý' => 'y', 'ž' => 'z', 'ź' => 'z', 'ż' => 'z', 'æ' => 'ae', 'œ' => 'oe', 'ø' => 'o', 'ł' => 'l',
+        'ß' => 'ss',
+    ]);
+    // Remove accents left as decomposed Unicode combining marks.
+    $text = (string) preg_replace('/\p{M}+/u', '', $text);
+
+    // iconv remains useful for characters outside the explicit map. Failure is
+    // tolerated because the ASCII filter below still produces a safe result.
+    $ascii = function_exists('iconv') ? iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text) : false;
     $source = $ascii === false ? $text : $ascii;
-    // Variable $slug stores this steps working value.
-    $slug = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $source));
-    // Variable $slug stores this steps working value.
-    $slug = trim($slug, '-');
+    $source = function_exists('mb_strtolower') ? mb_strtolower($source, 'UTF-8') : strtolower($source);
+    $slug = (string) preg_replace('/[^a-z0-9]+/i', '-', $source);
+    $slug = trim(strtolower($slug), '-');
     return $slug !== '' ? $slug : 'gallery';
 }
 

@@ -60,7 +60,8 @@
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-slideshow-link,
-.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-help-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -87,6 +88,52 @@
     background: rgba(255, 253, 248, 0.24);
     box-shadow: 0 0 0 3px rgba(255, 253, 248, 0.16);
 }
+
+.lightbox-help-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid rgba(255, 253, 248, 0.62);
+    border-radius: var(--radius, 16px);
+    background: rgba(255, 253, 248, 0.1);
+    color: #fffdf8;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lightbox-help-button[aria-expanded="true"] {
+    border-color: rgba(255, 253, 248, 0.92);
+    background: rgba(255, 253, 248, 0.22);
+}
+
+.lightbox-help-panel {
+    display: grid;
+    gap: 0.15rem;
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 0.45rem 0.7rem;
+    border: 1px solid rgba(255, 253, 248, 0.16);
+    border-radius: var(--radius, 16px);
+    background: rgba(10, 10, 10, 0.58);
+    color: rgba(255, 253, 248, 0.88);
+    font-size: 0.9rem;
+    line-height: 1.35;
+    text-align: center;
+    backdrop-filter: blur(8px);
+}
+
+.lightbox-help-panel[hidden] {
+    display: none !important;
+}
+
+.lightbox-help-panel strong {
+    color: #fffdf8;
+}
+
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-meta {
     max-width: min(42rem, calc(100% - 2rem));
     padding: 0.32rem 0.48rem;
@@ -101,7 +148,8 @@
 
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-fullscreen-link,
 .lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-slideshow-link,
-.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button {
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-map-button,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen) .lightbox-toolbar > .lightbox-help-button {
     width: auto;
     min-width: 0;
     padding: 0.25rem 0.55rem;
@@ -336,6 +384,32 @@
 }
 .lightbox.is-initial-loading .lightbox-stage-link > img {
     opacity: 0;
+}
+.lightbox.is-navigation-loading .lightbox-stage-link {
+    cursor: progress;
+}
+.lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
+    content: '';
+    grid-area: 1 / 1;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 0.22rem solid rgba(255, 255, 255, 0.28);
+    border-top-color: rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    box-shadow: 0 0.7rem 2.2rem rgba(0, 0, 0, 0.42);
+    pointer-events: none;
+    z-index: 6;
+    animation: lightbox-navigation-spinner 0.82s linear infinite;
+}
+@keyframes lightbox-navigation-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lightbox.is-navigation-loading:not(.is-initial-loading) .lightbox-stage-link::after {
+        animation: none;
+    }
 }
 .lightbox:not(.is-fullscreen):not(.is-mobile-fullscreen) .lightbox-stage-link {
     width: var(--lightbox-stage-width, auto);
@@ -695,18 +769,64 @@
     margin: 0;
 }
 
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-nav {
+    position: absolute;
+    z-index: 3;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.55rem;
+    pointer-events: none;
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-nav-button {
+    pointer-events: auto;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid rgba(255, 253, 248, 0.72);
+    border-radius: var(--radius, 16px);
+    background: rgba(10, 10, 10, 0.54);
+    color: #fffdf8;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1;
+    box-shadow: 0 0.45rem 1.2rem rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-nav-button:hover,
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-map-split-nav-button:focus-visible {
+    border-color: rgba(255, 253, 248, 0.95);
+    background: rgba(255, 253, 248, 0.2);
+}
+
+
 .lightbox.is-fullscreen .lightbox-nav {
     position: absolute;
     top: 50%;
+    z-index: 12;
+    pointer-events: auto;
+    touch-action: manipulation;
     transform: translateY(-50%);
 }
 
 .lightbox.is-fullscreen .lightbox-previous {
-    left: 1rem;
+    left: calc(env(safe-area-inset-left, 0px) + 1.75rem);
 }
 
 .lightbox.is-fullscreen .lightbox-next {
-    right: 1rem;
+    right: calc(env(safe-area-inset-right, 0px) + 1.75rem);
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-previous {
+    left: calc(env(safe-area-inset-left, 0px) + 1.5rem);
+}
+
+.lightbox.is-fullscreen:not(.is-mobile-fullscreen).is-map-split .lightbox-next {
+    right: calc(max(560px, 38vw) + env(safe-area-inset-right, 0px) + 1rem);
 }
 
 .lightbox.is-fullscreen figure a {
@@ -716,6 +836,11 @@
 
 .has-lightbox {
     overflow: hidden;
+}
+
+.has-lightbox .back-to-top-button {
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 
 .lightbox-map-hud-button {

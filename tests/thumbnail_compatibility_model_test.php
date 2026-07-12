@@ -35,6 +35,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\delete_legacy_jpg_thumbnails_for_image;
+use function Gallery\Services\set_thumbnail_compatibility_mode;
+use function Gallery\Services\thumbnail_compatibility_mode;
+use function Gallery\Services\thumbnail_compatibility_mode_normalize;
+use function Gallery\Services\thumbnail_formats_for_compatibility_policy;
+
 $GLOBALS['thumbnail_compatibility_test_settings'] = [];
 $GLOBALS['thumbnail_compatibility_test_root'] = '';
 
@@ -150,6 +156,7 @@ function thumbnail_abs_path(array $image, array $gallery, int $size, string $for
     return rtrim((string) $gallery['thumbs_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $base . '_thumb' . $size . '.' . $format;
 }
 
+require_once __DIR__ . '/support/thumbnail_compatibility_shims.php';
 require_once __DIR__ . '/../app/services/thumbnail_compatibility.php';
 
 /**
@@ -176,7 +183,7 @@ assert_thumbnail_compatibility_same(['jpg', 'webp'], thumbnail_formats_for_compa
 
 set_thumbnail_compatibility_mode('modern');
 assert_thumbnail_compatibility_same(['webp'], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', true), 'modern mode uses WebP when available');
-assert_thumbnail_compatibility_same(['jpg'], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', false), 'modern mode falls back to JPG when WebP is unavailable');
+assert_thumbnail_compatibility_same([], thumbnail_formats_for_compatibility_policy('/tmp/photo.jpg', 'image/jpeg', false), 'modern mode does not silently create legacy JPG thumbnails when WebP is unavailable');
 assert_thumbnail_compatibility_same(['webp'], thumbnail_formats_for_compatibility_policy('/tmp/raw.dng', 'image/x-adobe-dng', true), 'modern DNG thumbnails use WebP only');
 
 $root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'thumbnail-compatibility-' . bin2hex(random_bytes(6));

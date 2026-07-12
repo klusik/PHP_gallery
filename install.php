@@ -34,6 +34,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/app/migration_definitions.php';
+
 session_name('gallery_cms_installer');
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -227,26 +229,26 @@ function installer_run_migrations(PDO $pdo, string $migrationPath): array
         applied_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Variable $applied stores this steps working value.
-    $applied = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
-    // Variable $applied stores this steps working value.
-    $applied = array_flip($applied);
-    // Variable $files stores this steps working value.
-    $files = glob($migrationPath . '/*.php') ?: [];
-    sort($files);
+    // $appliedVersions stores the immutable audit rows already recorded by this database.
+    $appliedVersions = $pdo->query('SELECT version FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN);
+    // $files stores only current migration files that have not yet been applied.
+    $files = \Gallery\Core\pending_migration_files(
+        \Gallery\Core\discover_migration_files($migrationPath),
+        $appliedVersions
+    );
     // Variable $ran stores this steps working value.
     $ran = [];
 
     foreach ($files as $file) {
         // Variable $version stores this steps working value.
         $version = basename($file, '.php');
-        if (isset($applied[$version])) {
-            continue;
-        }
-        // Variable $statements stores this steps working value.
-        $statements = require $file;
-        foreach ($statements as $statement) {
+        // $definition stores the validated SQL statements and optional post-migration repair.
+        $definition = \Gallery\Core\load_migration_definition($file);
+        foreach ($definition['statements'] as $statement) {
             installer_apply_migration_statement($pdo, $statement);
+        }
+        if ($definition['after'] !== null) {
+            $definition['after']($pdo);
         }
         // Variable $stmt stores this steps working value.
         $stmt = $pdo->prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)');

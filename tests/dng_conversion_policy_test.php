@@ -35,6 +35,12 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\dng_conversion_attempt_order;
+use function Gallery\Services\dng_conversion_color_policy;
+use function Gallery\Services\dng_conversion_source_policy;
+use function Gallery\Services\dng_normalize_conversion_color_policy;
+use function Gallery\Services\dng_normalize_conversion_source_policy;
+
 $GLOBALS['dng_policy_test_settings'] = [];
 
 /**
@@ -66,6 +72,7 @@ function app_setting(string $key, ?string $default = null): ?string
     return array_key_exists($key, $GLOBALS['dng_policy_test_settings']) ? (string) $GLOBALS['dng_policy_test_settings'][$key] : $default;
 }
 
+require_once __DIR__ . '/support/dng_policy_shims.php';
 require_once __DIR__ . '/../app/services/dng_derivatives.php';
 
 /**

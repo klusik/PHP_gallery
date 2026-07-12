@@ -36,6 +36,21 @@
 
 declare(strict_types=1);
 
+use function Gallery\Services\openai_text_assist_api_key_format_valid;
+use function Gallery\Services\openai_text_assist_decrypt_secret;
+use function Gallery\Services\openai_text_assist_default_settings;
+use function Gallery\Services\openai_text_assist_encrypt_secret;
+use function Gallery\Services\openai_text_assist_extract_output_text;
+use function Gallery\Services\openai_text_assist_key_hint;
+use function Gallery\Services\openai_text_assist_language_instruction;
+use function Gallery\Services\openai_text_assist_model_catalog;
+use function Gallery\Services\openai_text_assist_normalize_language;
+use function Gallery\Services\openai_text_assist_normalize_model;
+use function Gallery\Services\openai_text_assist_normalize_task;
+use function Gallery\Services\openai_text_assist_payload_input;
+use function Gallery\Services\openai_text_assist_prompt;
+use function Gallery\Services\openai_text_assist_task_uses_images;
+
 if (!function_exists('cms_config')) {
         /**
      * Return deterministic config material for isolated encryption tests.
