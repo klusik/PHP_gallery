@@ -1,6 +1,6 @@
 {
     "version": "0.84.1",
-    "generated_at": "2026-07-12T20:07:39+00:00",
+    "generated_at": "2026-07-13T07:07:41+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
@@ -149,7 +149,7 @@
         "app/services/thumbnail_warmup.php": "sha256:8a9f54730c3f170fab4be9dd21e64eb9b23f8d02d7e9d83184bccfaf4622df47",
         "app/services/thumbnails.php": "sha256:e03aa1f4ad4b683103665eb58c2403dfcd4ae47cbfba51957034dc96762cee3f",
         "app/services/translations.php": "sha256:28b656ccb3b38a904cd64012e7e0b2aeb7aa37840c6862387ccfea94094e3c1c",
-        "app/services/updates.php": "sha256:b6c830576a60940ea40e30e7cf6bc46118137bc4261f45b380a6272516280103",
+        "app/services/updates.php": "sha256:1a770cf044ae06d0322bf6a64108e99fea7638caff03b112b45641b1fe4e3e1e",
         "app/services/upload_automation.php": "sha256:8bd182f15db13ceb2b4dbefec1d7e5935b37dfe6ca1617bea27758b57a1b6c29",
         "app/services/uploads.php": "sha256:e11c0405e7b725a7c496d0316f6c2fbbf69a5d7b282db047e3c41f7e3628c1f0",
         "app/services/votes.php": "sha256:f270dc4ea75e334911c503e5a5a68157def60bbca756a060505e5b012a2cd859",

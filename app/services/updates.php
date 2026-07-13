@@ -1853,19 +1853,35 @@ function application_update_assert_project_root(string $root): void
  */
 function application_update_assert_source_root(string $sourceRoot): void
 {
-    // $requiredPaths stores an intermediate value used by the surrounding gallery workflow.
+    // $requiredPaths stores files that must exist before the active installation is touched.
     $requiredPaths = [
         'index.php',
+        'public/index.php',
         'app/bootstrap.php',
+        'app/controllers.php',
+        'app/database.php',
+        'app/helpers.php',
+        'app/integrity.php',
+        'app/migrations.php',
+        'app/security.php',
+        'app/services.php',
         'app/services/updates.php',
+        'app/views.php',
+        'app/views/layout.php',
+        'app/lang/en.php',
         'public/assets/styles.css',
     ];
     foreach ($requiredPaths as $requiredPath) {
-        // $absolutePath stores an intermediate value used by the surrounding gallery workflow.
+        // $absolutePath stores the required file inside the extracted release snapshot.
         $absolutePath = $sourceRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $requiredPath);
-        if (!is_file($absolutePath)) {
-            throw new RuntimeException('Downloaded update archive is not a valid PHP Gallery repository snapshot. Missing: ' . $requiredPath);
+        if (!is_file($absolutePath) || !is_readable($absolutePath)) {
+            throw new RuntimeException('Downloaded update archive is incomplete. Missing or unreadable: ' . $requiredPath);
         }
+    }
+
+    // A current release must provide at least one migration-definition implementation.
+    if (!is_file($sourceRoot . '/app/migration_definitions.php') && !is_file($sourceRoot . '/app/migrations.php')) {
+        throw new RuntimeException('Downloaded update archive is incomplete. Missing migration support files.');
     }
 }
 
@@ -1900,65 +1916,118 @@ function application_update_extracted_root(string $extractDir): string
  */
 function application_update_copy_files(string $sourceRoot, string $destinationRoot, string $backupPath, bool $cleanUnexpectedFiles = false): array
 {
-    // $backup stores an intermediate value used by the surrounding gallery workflow.
+    application_update_assert_project_root($destinationRoot);
+    application_update_assert_source_root($sourceRoot);
+
+    // $backup stores the rollback archive for overwritten and removed files.
     $backup = new ZipArchive();
     if ($backup->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException('Could not create update backup archive.');
     }
 
-    application_update_assert_project_root($destinationRoot);
-    application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
-    // $removed stores files and directories that were backed up and deleted because they are not present in the incoming release snapshot.
-    $removed = application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles);
-
-    // $copied stores an intermediate value used by the surrounding gallery workflow.
+    // $stagedFiles maps temporary sibling files to their final destinations.
+    $stagedFiles = [];
+    // $copied stores the number of release files committed to the installation.
     $copied = 0;
-    // $iterator stores an intermediate value used by the surrounding gallery workflow.
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
+    // $removed stores obsolete managed paths removed only after all replacements succeed.
+    $removed = [];
 
-    foreach ($iterator as $item) {
-        if ($item->isLink()) {
-            continue;
-        }
-        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
-        if (application_update_path_is_protected($relativePath)) {
-            continue;
+    try {
+        // Stage every incoming file first. A staging failure leaves the active installation untouched.
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($sourceRoot, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $item) {
+            if ($item->isLink()) {
+                continue;
+            }
+            // $relativePath stores the normalized path inside the release snapshot.
+            $relativePath = str_replace('\\', '/', substr($item->getPathname(), strlen($sourceRoot) + 1));
+            if (application_update_path_is_protected($relativePath)) {
+                continue;
+            }
+
+            // $destination stores the corresponding active-installation path.
+            $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+            if ($item->isDir()) {
+                application_update_ensure_dir($destination);
+                continue;
+            }
+            if (is_dir($destination)) {
+                throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
+            }
+
+            $parent = dirname($destination);
+            application_update_ensure_dir($parent);
+            $temporaryPath = $parent . '/.php-gallery-update-' . bin2hex(random_bytes(8)) . '.tmp';
+            if (!copy($item->getPathname(), $temporaryPath)) {
+                throw new RuntimeException('Could not stage update file: ' . $relativePath);
+            }
+            $expectedSize = filesize($item->getPathname());
+            $stagedSize = filesize($temporaryPath);
+            if ($expectedSize === false || $stagedSize === false || $expectedSize !== $stagedSize) {
+                @unlink($temporaryPath);
+                throw new RuntimeException('Staged update file failed size verification: ' . $relativePath);
+            }
+            $stagedFiles[] = [
+                'temporary' => $temporaryPath,
+                'destination' => $destination,
+                'relative' => $relativePath,
+            ];
         }
 
-        // $destination stores an intermediate value used by the surrounding gallery workflow.
-        $destination = $destinationRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-        if ($item->isDir()) {
-            application_update_ensure_dir($destination);
-            continue;
+        // Commit dependency files before bootstrap and public entry points.
+        usort($stagedFiles, static function (array $left, array $right): int {
+            $priority = static function (string $path): int {
+                return match ($path) {
+                    'index.php' => 40,
+                    'public/index.php' => 30,
+                    'app/bootstrap.php' => 20,
+                    'app/services/updates.php' => 10,
+                    default => 0,
+                };
+            };
+            $priorityComparison = $priority((string) $left['relative']) <=> $priority((string) $right['relative']);
+            return $priorityComparison !== 0
+                ? $priorityComparison
+                : strcmp((string) $left['relative'], (string) $right['relative']);
+        });
+
+        foreach ($stagedFiles as $stagedFile) {
+            $destination = (string) $stagedFile['destination'];
+            $temporaryPath = (string) $stagedFile['temporary'];
+            $relativePath = (string) $stagedFile['relative'];
+            if (is_file($destination)) {
+                $backup->addFile($destination, $relativePath);
+            }
+            if (!rename($temporaryPath, $destination)) {
+                throw new RuntimeException('Could not atomically replace update file: ' . $relativePath);
+            }
+            application_update_invalidate_opcache_for_path($destination);
+            $copied++;
         }
-        if (is_dir($destination)) {
-            throw new RuntimeException('Cannot replace directory with file during update: ' . $relativePath);
+        $stagedFiles = [];
+
+        // Cleanup happens only after the complete replacement snapshot is active.
+        application_update_backup_and_remove_misplaced_project_copy($destinationRoot, $backup);
+        $removed = application_update_remove_obsolete_managed_paths($sourceRoot, $destinationRoot, $backup, $cleanUnexpectedFiles);
+    } finally {
+        foreach ($stagedFiles as $stagedFile) {
+            $temporaryPath = (string) ($stagedFile['temporary'] ?? '');
+            if ($temporaryPath !== '' && is_file($temporaryPath)) {
+                @unlink($temporaryPath);
+            }
         }
-        // $parent stores an intermediate value used by the surrounding gallery workflow.
-        $parent = dirname($destination);
-        application_update_ensure_dir($parent);
-        if (is_file($destination)) {
-            $backup->addFile($destination, $relativePath);
-        }
-        if (!copy($item->getPathname(), $destination)) {
-            throw new RuntimeException('Could not copy update file: ' . $relativePath);
-        }
-        application_update_invalidate_opcache_for_path($destination);
-        $copied++;
+        $backup->close();
     }
 
-    $backup->close();
     return [
         'files_copied' => $copied,
         'removed_paths' => $removed,
         'removed_count' => count($removed),
     ];
 }
-
 
 /**
  * Return true when a path is within a directory that the updater owns.
@@ -2118,8 +2187,10 @@ function application_update_backup_and_remove_misplaced_project_copy(string $roo
  */
 function application_update_misplaced_project_paths(string $root): array
 {
-    // $knownMisplacedPaths stores an intermediate value used by the surrounding gallery workflow.
-    $knownMisplacedPaths = [
+    // Only remove paths that unambiguously represent a complete project copied inside app.
+    // Never infer misplaced files from a whitelist of valid app entries, because that list
+    // becomes stale whenever a legitimate top-level module or directory is added.
+    return [
         'app/app',
         'app/public',
         'app/database',
@@ -2142,55 +2213,6 @@ function application_update_misplaced_project_paths(string $root): array
         'app/PATCH_NOTES.md',
         'app/ARCHITECTURE.md',
     ];
-
-    // $appDirectory stores an intermediate value used by the surrounding gallery workflow.
-    $appDirectory = $root . '/app';
-    if (!is_dir($appDirectory)) {
-        return $knownMisplacedPaths;
-    }
-
-    // $entries stores an intermediate value used by the surrounding gallery workflow.
-    $entries = scandir($appDirectory) ?: [];
-    foreach ($entries as $entry) {
-        if ($entry === '.' || $entry === '..') {
-            continue;
-        }
-        // $relativePath stores an intermediate value used by the surrounding gallery workflow.
-        $relativePath = 'app/' . $entry;
-        if (application_update_app_entry_is_expected($entry)) {
-            continue;
-        }
-        if (!in_array($relativePath, $knownMisplacedPaths, true)) {
-            $knownMisplacedPaths[] = $relativePath;
-        }
-    }
-
-    return $knownMisplacedPaths;
-}
-
-/**
- * Return true for normal entries that belong directly inside the app directory.
- *
- * @param string $entry Entry value.
- * @return bool True when the condition matches.
- */
-function application_update_app_entry_is_expected(string $entry): bool
-{
-    // $expectedEntries stores an intermediate value used by the surrounding gallery workflow.
-    $expectedEntries = [
-        'bootstrap.php',
-        'controllers.php',
-        'controllers',
-        'core-manifest.json',
-        'database.php',
-        'helpers.php',
-        'integrity.php',
-        'migrations.php',
-        'security.php',
-        'services.php',
-        'services',
-    ];
-    return in_array($entry, $expectedEntries, true);
 }
 
 /**
