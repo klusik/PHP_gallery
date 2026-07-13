@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 0.84.2
+
+Version 0.84.2 is an updater safety patch focused on preventing incomplete deployments and accidental cleanup of valid application files. It strengthens release snapshot validation, stages replacements before activating them, narrows misplaced-project cleanup, and adds regression coverage for updater failure paths and current application layouts.
+
+  ### Highlights
+
+  #### Safer update deployment
+
+  - Required critical application, public entry-point, service, view, language, and migration files before an update can modify the installation.
+  - Rejected incomplete or unreadable release snapshots with specific diagnostics.
+  - Staged incoming files before replacing active files so failures during copying leave the installation less exposed to partial updates.
+  - Applied replacements in dependency-aware order and atomically renamed staged files into place.
+  - Delayed obsolete-file cleanup until the complete replacement snapshot was active.
+
+  #### More precise cleanup behavior
+
+  - Stopped treating unknown top-level `app/` entries as misplaced project copies.
+  - Preserved valid modules such as `app/views.php`, `app/views/`, `app/lang/`, `app/migration_definitions.php`, and `app/migration_repairs.php`.
+  - Kept cleanup limited to known nested project artifacts such as `app/app`, `app/public`, and `app/index.php`.
+  - Improved backup and rollback preparation for overwritten and removed managed files.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Updated `app/services/updates.php` with complete source-root validation and staged file replacement.
+  - Added size verification for staged update files before activation.
+  - Preserved OPcache invalidation after each successful replacement.
+  - Improved updater error messages for missing files, staging failures, directory/file conflicts, and atomic replacement failures.
+
+  #### Tests
+
+  - Added `tests/updater_safety_model_test.php`.
+  - Covered required release files and rejection of incomplete update snapshots.
+  - Covered protection of valid top-level application modules from cleanup.
+  - Covered recognition of known nested project artifacts.
+  - Updated `TESTING.md` with the updater safety regression test.
+
+  ### User Impact
+
+  #### For administrators
+
+  - Updates fail earlier when a downloaded archive is incomplete instead of touching the active installation.
+  - Valid application modules are no longer at risk of being removed as presumed misplaced project copies.
+  - Update diagnostics identify the missing or unreadable release component that needs attention.
+
+  #### For visitors
+
+  - A failed update is less likely to leave the public site with a mixed or incomplete code version.
+  - Successful updates preserve the existing public gallery behavior while replacing files safely.
+
 ## Version 0.84.1
 
 Version 0.84.1 is a migration reliability patch for installations upgrading through the 0.84 public-path changes. It makes migration definitions safe for both the current definition-aware runner and older SQL-only runners, adds deterministic repair and verification behavior, and improves regression coverage for partially applied or legacy migration states.
