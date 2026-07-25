@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.84.2
+**Current Version:** 0.85
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -89,6 +89,9 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Backup on update** - Overwritten files preserved under `cache/updates/backups`
 - **Emergency recovery** - Revert to stable branch from `reset.php`
 - **Database migrations** - Automatic schema evolution with admin-triggerable execution
+- **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
+- **Safe logical cleanup** - Dry-run and bounded resumable removal of proven orphans, deterministic duplicates, and explicitly expired temporary state, with exact row identities audited transactionally
+- **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table optimization previews, and separately confirmed selected `OPTIMIZE TABLE`, never automatic
 
 ### Admin Tools
 

@@ -51,6 +51,9 @@ use function Gallery\Services\admin_dashboard_notice_messages;
 use function Gallery\Services\admin_dashboard_view_model;
 use function Gallery\Services\admin_database_usage_recompute_statistics;
 use function Gallery\Services\admin_database_usage_summary;
+use function Gallery\Services\database_maintenance_cleanup_state;
+use function Gallery\Services\database_maintenance_load_report;
+use function Gallery\Services\database_maintenance_schema_repair_readiness;
 use function Gallery\Services\admin_render_profile_start;
 use function Gallery\Services\admin_storage_statistics_cached_snapshot;
 use function Gallery\Services\admin_storage_statistics_process_job;
@@ -101,13 +104,21 @@ function cms_admin_storage_statistics(): void
 {
     require_admin();
     $activeTab = (string) ($_GET['tab'] ?? 'files');
-    if (!in_array($activeTab, ['files', 'database'], true)) {
+    if (!in_array($activeTab, ['files', 'database', 'maintenance'], true)) {
         $activeTab = 'files';
     }
     $statistics = $activeTab === 'files' && function_exists('Gallery\\Services\\admin_storage_statistics_cached_snapshot') ? admin_storage_statistics_cached_snapshot(true) : null;
     $databaseUsage = $activeTab === 'database' && function_exists('Gallery\\Services\\admin_database_usage_summary') ? admin_database_usage_summary() : null;
+    $databaseMaintenance = [];
+    if ($activeTab === 'maintenance') {
+        $databaseMaintenance = [
+            'report' => function_exists('Gallery\\Services\\database_maintenance_load_report') ? database_maintenance_load_report() : null,
+            'cleanup_state' => function_exists('Gallery\\Services\\database_maintenance_cleanup_state') ? database_maintenance_cleanup_state() : [],
+            'repair_readiness' => function_exists('Gallery\\Services\\database_maintenance_schema_repair_readiness') ? database_maintenance_schema_repair_readiness() : [],
+        ];
+    }
     $notice = (string) flash_message('admin_notice');
-    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab, $notice);
+    view_render_admin_storage_statistics_page($statistics, $databaseUsage, $activeTab, $notice, $databaseMaintenance);
 }
 
 /**

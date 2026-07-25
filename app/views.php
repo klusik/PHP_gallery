@@ -44,6 +44,7 @@ require_once __DIR__ . '/views/admin_storage_statistics.php';
 require_once __DIR__ . '/views/admin_gallery_report.php';
 require_once __DIR__ . '/views/admin_upload_settings.php';
 require_once __DIR__ . '/views/admin_database_usage.php';
+require_once __DIR__ . '/views/admin_database_maintenance.php';
 require_once __DIR__ . '/views/admin_dashboard_sections.php';
 require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/navigation_data.php';

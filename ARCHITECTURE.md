@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.84.2';
+const CMS_VERSION = '0.85';
 ```
 
 Update-related code uses:
@@ -397,6 +397,25 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 ```
 
 Use migrations for all schema changes. Do not alter tables from controller code.
+
+## Database Maintenance Architecture
+
+Database maintenance is an explicit Admin workflow, not a background dashboard query. The implementation is split across:
+
+- `app/services/database_maintenance.php` for information_schema normalization, migration and code audits, table policies, candidate classification, resumable cleanup, schema-repair readiness, and selected physical operations.
+- `app/controllers/admin_database_maintenance.php` for Admin authentication, POST-only routing, CSRF validation, confirmation phrases, flash messages, logging, and redirects.
+- `app/views/admin_database_maintenance.php` for the cached audit, candidate reasons and confidence, table-specific policies, thumbnail distribution, and selected-table forms.
+- `database/migrations/202607250001_database_maintenance_schema_repair.php` plus `app/migration_repairs.php` for conditional legacy schema repair.
+
+The inspection pipeline reads `information_schema.TABLES`, `COLUMNS`, `STATISTICS`, `KEY_COLUMN_USAGE`, and `REFERENTIAL_CONSTRAINTS`, then correlates active objects with every migration source and code reference. Broad lexical matches are retained for investigation, while schema-removal evidence is restricted to production SQL literals that contain the table and column in the same statement fragment. Test references are tracked separately. The result is stored as structured JSON under `cache/` and is never regenerated during ordinary dashboard rendering.
+
+Logical cleanup is allow-listed. Each rule has an explicit table, category, confidence, reason, count query, deterministic identifier query, bounded delete query, survivor policy when applicable, and `filesystem_effects = false`. Cleanup state is persisted in `app_settings` so one web request executes at most one bounded rule batch and retries remain idempotent. Unknown tables and tables without proven ownership semantics are disabled by default. Logical cleanup, schema repair, and `OPTIMIZE TABLE` each expose a first-class dry-run path that executes no deletion, DDL, or table operation.
+
+For live cleanup, the selected row identities and deletion execute in one transaction. Before commit, the service writes an immutable row to `database_maintenance_audit_log` containing the operation, rule, reason, identity columns, every removed identifier, and affected count. Identifier-count mismatch or audit insertion failure raises an error and rolls back the deletion. The ordinary Admin log receives only a secondary summary.
+
+Schema repair and data cleanup are independent. DDL uses a new timestamped migration and checks each object before alteration. The Admin repair action refuses to invoke the general migration runner while unrelated migrations are pending. MySQL and MariaDB DDL auto-commit is treated explicitly, so irreversible DDL is not wrapped into the same opaque request as row deletion.
+
+`ANALYZE TABLE` and `OPTIMIZE TABLE` are selected-table actions. `ANALYZE` refreshes optimizer metadata. `OPTIMIZE` is separately confirmed, may rebuild or lock a table, and is never run by inspection, cleanup, normal page loads, or migrations.
 
 ## Settings System
 

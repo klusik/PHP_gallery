@@ -1110,6 +1110,147 @@ body.is-navdata-updating {
     gap: 0.35rem;
 }
 
+.admin-database-maintenance-intro .inline-action-form,
+.admin-database-schema-repair-panel .inline-action-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+}
+
+.admin-database-cleanup-panel .admin-storage-chart-card form,
+.admin-database-physical-panel .admin-storage-chart-card form {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-database-cleanup-panel label,
+.admin-database-schema-repair-panel label,
+.admin-database-physical-panel label {
+    display: grid;
+    gap: 0.35rem;
+    color: #1d2327;
+    font-weight: 700;
+}
+
+.admin-database-checkbox-label,
+.admin-database-table-selection label {
+    display: flex;
+    align-items: flex-start;
+}
+
+.admin-database-operation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.admin-database-table-selection {
+    display: grid;
+    gap: 0.4rem;
+    max-height: 24rem;
+    overflow: auto;
+    padding: 0.65rem;
+    border: 1px solid var(--admin-border, #d6dee6);
+    border-radius: 10px;
+    background: #fbfcfd;
+}
+
+.admin-database-table-selection label {
+    gap: 0.45rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 7px;
+    font-weight: 600;
+}
+
+.admin-database-table-selection label:hover {
+    background: #eef4f8;
+}
+
+.admin-database-table-selection small {
+    margin-left: auto;
+    color: #64717d;
+    font-weight: 500;
+    text-align: right;
+}
+
+.admin-database-table-detail {
+    margin-top: 0.7rem;
+    border: 1px solid var(--admin-border, #d6dee6);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.admin-database-table-detail > summary {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.admin-database-table-detail > summary small {
+    color: #64717d;
+    font-weight: 600;
+    text-align: right;
+}
+
+.admin-database-table-detail[open] > summary {
+    border-bottom: 1px solid var(--admin-border, #d6dee6);
+    background: #f7fafc;
+}
+
+.admin-database-table-detail > :not(summary) {
+    margin-right: 1rem;
+    margin-left: 1rem;
+}
+
+.admin-database-table-detail > :last-child {
+    margin-bottom: 1rem;
+}
+
+.admin-database-policy-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.admin-database-policy-list > div {
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--admin-border, #d6dee6);
+    border-radius: 9px;
+    background: #fbfcfd;
+}
+
+.admin-database-policy-list dt {
+    color: #1d2327;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.admin-database-policy-list dd {
+    margin: 0.25rem 0 0;
+    color: #46515c;
+    line-height: 1.45;
+}
+
+@media (max-width: 820px) {
+    .admin-database-table-detail > summary,
+    .admin-database-policy-list {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-database-table-detail > summary small,
+    .admin-database-table-selection small {
+        margin-left: 0;
+        text-align: left;
+    }
+}
+
 .admin-gallery-report-hero {
     align-items: center;
 }

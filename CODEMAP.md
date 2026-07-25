@@ -97,6 +97,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Dev mode | `app/controllers/admin_dashboard.php`, `app/services/app_settings.php` | Viewer diagnostics toggle rendered under System health maintenance. |
 | Migrations from admin | `app/controllers/admin_dashboard.php`, `app/migrations.php` | Pending migration action rendered only when needed. |
 | Integrity checks | `app/controllers/admin_integrity.php`, `app/integrity.php` | Core-file and deployment health checks. |
+| Database inspection and maintenance | `app/services/database_maintenance.php`, `app/controllers/admin_database_maintenance.php`, `app/views/admin_database_maintenance.php`, `public/assets/styles/admin-dashboard.css`, `database/migrations/202607250001_database_maintenance_schema_repair.php` | Explicit full-schema audit, scoped production/test SQL-reference evidence, cached JSON report, high-confidence bounded cleanup with transactional row-identifier audit, conditional schema repair, selected `ANALYZE TABLE`, and separately confirmed selected `OPTIMIZE TABLE`. |
 
 ## Gallery Administration
 
