@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.74';
+const CMS_VERSION = '0.84.2';
 ```
 
 Update-related code uses:
@@ -30,14 +30,14 @@ const CMS_UPDATE_BRANCHES = ['main', 'master'];
 3. **Controllers handle HTTP, services handle behavior**
    Controller files under `app/controllers/` read requests, validate permissions, process forms or JSON actions, and render or redirect. Service files under `app/services/` contain reusable business logic.
 
-4. **Database migrations are append-only**
-   Schema changes are stored as sequential PHP migration files in `database/migrations/`. Migrations are applied in filename order and recorded in `schema_migrations`.
+4. **Database migrations are append-only and prevalidated**
+   Schema changes are stored as sequential PHP migration files in `database/migrations/`. Migrations are prevalidated as a complete pending set, applied in filename order, and recorded in `schema_migrations` only after SQL statements and optional repair callbacks succeed.
 
 5. **Shared hosting compatibility**
    Runtime dependencies are intentionally small. The app expects PHP, PDO MySQL, Apache-style rewrite support when available, and writable directories for galleries, cache, uploads, thumbnails, and generated assets.
 
 6. **Defensive updates**
-   Migrations tolerate some duplicate DDL errors to recover from interrupted installs or partially applied browser updates.
+   Release archives are checked for required runtime files, staged and size-verified before activation, and cleaned up only after replacement succeeds. Cleanup is limited to known nested project artifacts so valid application modules are preserved.
 
 7. **Feature isolation**
    Recent features are usually introduced as focused controller and service files instead of expanding old monolithic files.
@@ -380,10 +380,12 @@ Migration rules:
 
 1. Files are read from `database/migrations/*.php`.
 2. Files are sorted lexically, so timestamp prefixes define execution order.
-3. Each migration returns an array of SQL statements.
-4. Each statement is executed by `apply_migration_statement()`.
-5. The migration is recorded in `schema_migrations` only after all statements in that file complete.
-6. Duplicate DDL errors are treated as safe replays for common MySQL/MariaDB object-exists cases.
+3. Each migration returns a validated definition containing `statements` and may provide an `after` repair callback. Legacy files may still return a plain SQL statement list.
+4. The complete pending definition set is loaded and validated before execution starts.
+5. Each SQL statement is executed by `apply_migration_statement()`.
+6. The optional `after` callback runs before the migration is recorded.
+7. The migration is recorded in `schema_migrations` only after all statements and repair callbacks complete.
+8. Duplicate DDL errors are treated as safe replays for common MySQL/MariaDB object-exists cases.
 
 The migration table is created automatically:
 
@@ -420,13 +422,25 @@ When adding a setting:
 4. Save from admin controllers after CSRF validation.
 5. Do not create new config.php values for mutable runtime options.
 
-## Browser Browser-Prepared Upload Path
+## Browser-Prepared Upload Path
 
 The default upload form now uses browser-side preparation when the browser pipeline is enabled. Selected files are prepared in the browser, including originals, responsive thumbnails, and client-read metadata, then batched into store-only ZIP archives under the server upload-size limit, the admin absolute ZIP cap, and the admin maximum-images-per-batch cap. Each batch posts to `admin_upload_browser_batch`. The server remains authoritative for CSRF validation, gallery ownership, ZIP validation, final filename selection, unpacking and thumbnail metadata registration. The per-upload checkbox is checked by default. If it is unchecked, or if browser capability checks fail before any server-side write starts, the JavaScript uploader uses the normal server-side `admin_upload` fallback. The browser JSON endpoint also detects PHP-discarded multipart bodies and returns a JSON 413 response when PHP receives an empty request after upload limits are exceeded.
 
 The browser implementation lives in `public/assets/gallery-modules/admin-browser-upload.js` and `public/assets/gallery-modules/browser-image-worker.js`. The server orchestration and guard logic live in `app/services/browser_uploads.php`; the dedicated settings view lives in `app/views/admin_upload_settings.php`. Controllers only handle HTTP validation, persistence orchestration, and response formatting.
 
-The same browser settings also control the browser-assisted thumbnail rebuild path exposed from the admin maintenance thumbnail card. This maintenance action remains unchecked by default and leaves the normal server-side thumbnail job as the default. When checked, the server streams originals only as deterministic store-only source ZIP chunks from `admin_thumbnail_browser_source_chunk`; the browser parses each chunk, creates thumbnails in Web Workers, serializes all prepared-image batching work, packages only the prepared derivative files into store-only upload ZIP batches, and posts those batches to `admin_thumbnail_browser_upload_batch`. The server stays authoritative for image identity, source selection, thumbnail path resolution, payload validation, final writes and thumbnail metadata refresh. Source chunk size is configured separately from upload batch size because it is a download-only payload and can be much larger than the prepared ZIP uploads, but the server also caps source chunks by item count so a single browser pass never has to coordinate hundreds of originals at once. After the full pass, the browser can run bounded repair passes over the current missing-thumbnail inventory to close transient client-side gaps without requiring another manual rebuild.
+The same browser settings also control the optional browser-assisted thumbnail rebuild path exposed from the admin maintenance thumbnail card. The normal server-side job remains the default. When enabled, the server streams originals as deterministic store-only source ZIP chunks; browser workers create thumbnails and upload prepared derivative batches. The server remains authoritative for image identity, source selection, thumbnail paths, payload validation, final writes, and metadata refresh. Bounded repair passes can revisit missing-thumbnail inventory after the main pass.
+
+## Migration Compatibility and Repairs
+
+`app/migration_definitions.php` normalizes both modern migration definitions and legacy plain SQL lists. `app/migration_repairs.php` contains reusable transactional repairs for data transformations that cannot be expressed safely as SQL alone. This compatibility layer matters during rolling or partial deployments: an older runner may directly `require` a migration file while a newer runner loads its definition first.
+
+Repair migrations return an empty SQL list to the legacy runner and execute their callback while the legacy `$pdo` variable is in scope. The current runner executes the same callback through the validated `after` definition. A migration version is recorded only after the callback succeeds.
+
+## Updater Safety
+
+The updater in `app/services/updates.php` validates the extracted release root before modifying the active installation. It requires critical entry points, bootstrap modules, views, language files, services, assets, and migration support files. It copies incoming files to temporary sibling paths, verifies their sizes, activates them in dependency-aware order, and removes temporary files in a `finally` block. Obsolete managed paths are removed only after replacement succeeds, and backups include overwritten and removed files.
+
+Cleanup does not infer that an unknown `app/` entry is invalid. Only known nested project-copy artifacts such as `app/app`, `app/public`, and `app/index.php` are targeted, protecting legitimate top-level modules added by later releases.
 
 ## Security Model
 

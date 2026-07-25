@@ -20,6 +20,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | View loader | `app/views.php` |
 | Database connection | `app/database.php` |
 | Migration runner | `app/migrations.php` |
+| Migration definition validation | `app/migration_definitions.php` |
+| Migration data repairs | `app/migration_repairs.php` |
 | Security/session/CSRF helpers | `app/security.php` |
 | General helpers | `app/helpers.php` |
 | Integrity manifest logic | `app/integrity.php`, `app/core-manifest.json`, `scripts/generate_manifest.php` |
@@ -247,6 +249,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Admin update UI | `app/controllers/updates.php` |
 | Patch notes | `PATCH_NOTES.md` |
 | Release metadata | `release-metadata.json` |
+| Updater safety regression test | `tests/updater_safety_model_test.php` |
 
 ## Language and Translations
 
@@ -293,6 +296,9 @@ This file maps features to source files. It is optimized for fast maintenance an
 | `tests/simbrief_description_model_test.php` | SimBrief description model behavior. |
 | `tests/upload_automation_sim_camera_metadata_test.php` | Upload automation camera metadata behavior. |
 | `tests/url_rewrite_settings_test.php` | URL rewrite settings behavior. |
+| `tests/migration_consistency_test.php` | Migration definitions, preflight validation, and obsolete-version compatibility. |
+| `tests/migration_legacy_runner_compatibility_test.php` | Compatibility with the former SQL-only migration runner. |
+| `tests/updater_safety_model_test.php` | Required update files, staged-update assumptions, and cleanup safety. |
 
 ## Common Change Recipes
 
