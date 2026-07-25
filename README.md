@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.66+
+**Current Version:** 0.85
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -37,7 +37,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Maintenance tools** - Regenerate, delete, or verify thumbnail cache
 
 ### Access Control
-- **Visibility modes** - Public, draft (admin-only), or private (password/token protected)
+- **Visibility modes** - Public, unpublished (admin-only), or private (password/token protected)
 - **Password protection** - Per-gallery passwords with session-scoped unlock
 - **Share links** - Generate time-limited or permanent share tokens
 - **Inheritance** - Child galleries inherit parent access rules
@@ -89,6 +89,9 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **Backup on update** - Overwritten files preserved under `cache/updates/backups`
 - **Emergency recovery** - Revert to stable branch from `reset.php`
 - **Database migrations** - Automatic schema evolution with admin-triggerable execution
+- **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
+- **Safe logical cleanup** - Dry-run and bounded resumable removal of proven orphans, deterministic duplicates, and explicitly expired temporary state, with exact row identities audited transactionally
+- **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table optimization previews, and separately confirmed selected `OPTIMIZE TABLE`, never automatic
 
 ### Admin Tools
 
@@ -110,6 +113,8 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Progress bar for transfer and thumbnail generation
 - Immediate scanning after upload
 - Validation of file types and sizes
+- Optional browser-side preparation with client thumbnails, EXIF metadata, bounded ZIP batches, and server-side validation
+- Automatic fallback to normal server-side uploads when browser preparation is unavailable
 
 #### Gallery Management
 - Gallery list with filtering and search
@@ -149,6 +154,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - File-to-database consistency checking
 - Automatic thumbnail rebuilding when needed
 - Database migration runner
+- Scheduled maintenance for bounded thumbnail checks, metadata refresh, and cleanup work
 - File permission diagnostics
 
 #### Account Settings
@@ -342,8 +348,10 @@ Then open `http://localhost:8000/` in your browser.
 1. Go to **Updates** to check GitHub for new versions
 2. See available versions and read patch notes
 3. Click **Update** to download and install
-4. Backup of overwritten files saved under `cache/updates/backups/`
-5. Your `config.php`, galleries, and custom CSS are never overwritten
+4. The updater validates required release files before touching the installation
+5. Incoming files are staged, size-checked, and activated before obsolete managed files are removed
+6. Backups of overwritten and removed files are saved under `cache/updates/backups/`
+7. Your `config.php`, galleries, and custom CSS are never overwritten
 
 #### Customizing Appearance
 
@@ -360,8 +368,10 @@ When you see a "migration pending" notice on the dashboard:
 
 1. Click **Run database migration** (appears automatically)
 2. Or visit **Admin > Migrations**
-3. The runner executes all pending migrations in order
-4. No action needed after - new features become available
+3. The runner validates all pending migration definitions before making changes
+4. SQL statements and optional PHP repair callbacks execute in filename order
+5. A migration is recorded only after its statements and repair callback succeed
+6. No action is needed after completion - new features become available
 
 ## Configuration
 
@@ -393,6 +403,8 @@ For developers interested in the codebase structure, see **[ARCHITECTURE.md](ARC
 - Performance optimizations
 - Security practices
 - Database migration system
+- Updater staging and recovery behavior
+- Browser-prepared uploads and scheduled maintenance
 
 ## Performance Tuning
 
@@ -495,14 +507,13 @@ The codebase is organized for easy extension:
 
 ### Testing
 
-Run the included test files:
+Run the complete standalone regression suite:
 
 ```bash
-php tests/gallery_visibility_model_test.php
-php tests/gallery_branding_model_test.php
+php tests/run.php
 ```
 
-Or integrate with your test runner (PHPUnit, etc.)
+The runner currently executes 24 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
 ## Troubleshooting
 
@@ -555,4 +566,4 @@ See **[PATCH_NOTES.md](PATCH_NOTES.md)** for detailed version history and recent
 
 ---
 
-**PHP Gallery CMS** - Simple, powerful, and runs everywhere. Enjoy! 🎉
+**PHP Gallery CMS** - Simple, powerful, and designed for ordinary shared hosting.

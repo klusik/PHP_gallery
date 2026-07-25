@@ -14,7 +14,8 @@
  *   - Confirm the current migration loader receives an after callback
  *   - Simulate the former direct-require runner with a PDO variable in scope
  *   - Confirm repair migrations return only SQL-statement lists to the former runner
- *   - Confirm the repair executes before the former runner records the migration
+ *   - Confirm repairs execute before the former runner records their migrations
+ *   - Confirm the conditional database-maintenance repair safely no-ops when its table is absent
  *
  * Author:
  *   Rudolf Klusal
@@ -30,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-07-12
+ *   2026-07-25
  */
 
 declare(strict_types=1);
@@ -93,6 +94,60 @@ namespace {
         {
             return $this->rows;
         }
+
+        /**
+         * Accept parameters for information_schema compatibility probes.
+         *
+         * @param array<int|string,mixed>|null $params Bound values.
+         */
+        public function execute(?array $params = null): bool
+        {
+            return true;
+        }
+    }
+
+    /**
+     * Dynamic prepared statement used for information_schema compatibility probes.
+     */
+    final class MigrationLegacyRunnerPreparedStatement extends PDOStatement
+    {
+        private MigrationLegacyRunnerPdo $pdo;
+        private string $query;
+
+        /** @var array<int|string,mixed> */
+        private array $params = [];
+
+        /**
+         * @param MigrationLegacyRunnerPdo $pdo Test database connection.
+         * @param string $query Prepared SQL query.
+         */
+        public function __construct(MigrationLegacyRunnerPdo $pdo, string $query)
+        {
+            $this->pdo = $pdo;
+            $this->query = $query;
+        }
+
+        /**
+         * Store bound values for a later information_schema probe.
+         *
+         * @param array<int|string,mixed>|null $params Bound values.
+         */
+        public function execute(?array $params = null): bool
+        {
+            $this->params = $params ?? [];
+            return true;
+        }
+
+        /**
+         * Resolve one simulated information_schema result.
+         *
+         * @param int $column Column index.
+         * @return mixed Scalar result.
+         */
+        public function fetchColumn(int $column = 0): mixed
+        {
+            return $this->pdo->informationSchemaProbe($this->query, array_values($this->params));
+        }
     }
 
     /**
@@ -103,17 +158,59 @@ namespace {
         private bool $transactionActive = false;
         public int $commitCount = 0;
         public int $rollbackCount = 0;
+        public bool $auditTableCreated = false;
 
         public function __construct()
         {
         }
 
         /**
+         * Prepare a dynamic information_schema compatibility probe.
+         *
          * @param string $query SQL query.
-         * @param int|null $fetchMode Fetch mode.
-         * @param mixed ...$fetchModeArgs Fetch arguments.
-         * @return PDOStatement|false Statement result.
+         * @param array<int|string,mixed> $options Driver options.
          */
+        public function prepare(string $query, array $options = []): PDOStatement|false
+        {
+            if (str_contains($query, 'information_schema.')) {
+                return new MigrationLegacyRunnerPreparedStatement($this, $query);
+            }
+            throw new RuntimeException('Unexpected migration test prepare: ' . $query);
+        }
+
+        /**
+         * Resolve one simulated information_schema lookup.
+         *
+         * @param string $query Prepared SQL query.
+         * @param array<int,mixed> $params Bound values.
+         * @return bool Whether the requested schema object exists.
+         */
+        public function informationSchemaProbe(string $query, array $params): bool
+        {
+            if (str_contains($query, 'information_schema.TABLES')) {
+                $tableName = (string) ($params[0] ?? '');
+                return $tableName === 'database_maintenance_audit_log' && $this->auditTableCreated;
+            }
+
+            if (str_contains($query, 'information_schema.COLUMNS')) {
+                $tableName = (string) ($params[0] ?? '');
+                $columnName = (string) ($params[1] ?? '');
+                $auditColumns = [
+                    'id', 'operation_id', 'rule_key', 'table_name', 'category', 'reason',
+                    'identifier_columns_json', 'removed_identifiers_json', 'deleted_count', 'created_at',
+                ];
+                return $tableName === 'database_maintenance_audit_log'
+                    && $this->auditTableCreated
+                    && in_array($columnName, $auditColumns, true);
+            }
+
+            if (str_contains($query, 'information_schema.STATISTICS') || str_contains($query, 'information_schema.TABLE_CONSTRAINTS')) {
+                return false;
+            }
+
+            throw new RuntimeException('Unexpected information_schema probe: ' . $query);
+        }
+
         public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
         {
             if (str_contains($query, 'COUNT(*) FROM galleries')) {
@@ -127,6 +224,18 @@ namespace {
                 ]]);
             }
             throw new RuntimeException('Unexpected migration test query: ' . $query);
+        }
+
+        /**
+         * Accept the conditional audit-table CREATE used by the maintenance repair.
+         */
+        public function exec(string $statement): int|false
+        {
+            if (str_contains($statement, 'CREATE TABLE database_maintenance_audit_log')) {
+                $this->auditTableCreated = true;
+                return 0;
+            }
+            throw new RuntimeException('Unexpected migration test exec: ' . $statement);
         }
 
         public function beginTransaction(): bool
@@ -189,8 +298,18 @@ namespace {
 
     assert_migration_legacy_compatibility(
         $GLOBALS['migration_legacy_repair_calls'] === count($migrationFiles),
-        'Every migration must execute exactly one repair under the former runner.'
+        'Every public-path migration must execute exactly one repair under the former runner.'
     );
+
+    $databaseMaintenanceMigration = __DIR__ . '/../database/migrations/202607250001_database_maintenance_schema_repair.php';
+    $definition = load_migration_definition($databaseMaintenanceMigration);
+    assert_migration_legacy_compatibility($definition['statements'] === [], 'Database maintenance repair must expose no unconditional SQL statements.');
+    assert_migration_legacy_compatibility(is_callable($definition['after']), 'Database maintenance repair must expose a current-runner callback.');
+    $pdo = new MigrationLegacyRunnerPdo();
+    $legacyStatements = require $databaseMaintenanceMigration;
+    assert_migration_legacy_compatibility($legacyStatements === [], 'Database maintenance repair must return an empty SQL list to the former runner.');
+    assert_migration_legacy_compatibility($pdo->auditTableCreated, 'Database maintenance repair must create its transactional audit table under the former runner.');
+    assert_migration_legacy_compatibility($pdo->commitCount === 0 && $pdo->rollbackCount === 0, 'The conditional repair must not start an unnecessary transaction.');
 
     echo "Legacy migration runner compatibility tests passed.\n";
 }

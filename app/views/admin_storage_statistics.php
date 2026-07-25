@@ -51,8 +51,9 @@ use function Gallery\Services\t;
  * @param ?array $databaseUsage Database usage value.
  * @param string $activeTab Active tab value.
  * @param string $notice Notice value.
+ * @param array<string, mixed> $databaseMaintenance Explicit maintenance view model.
  */
-function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files', string $notice = ''): void
+function view_render_admin_storage_statistics_page(?array $statistics, ?array $databaseUsage = null, string $activeTab = 'files', string $notice = '', array $databaseMaintenance = []): void
 {
     $activeTab = view_admin_storage_statistics_normalize_tab($activeTab);
     render_header(t('admin.storage.page_title', 'Storage statistics'));
@@ -66,6 +67,17 @@ function view_render_admin_storage_statistics_page(?array $statistics, ?array $d
     if ($activeTab === 'database') {
         if (function_exists('Gallery\\Views\\view_render_admin_database_usage_panel')) {
             view_render_admin_database_usage_panel($databaseUsage);
+        }
+        render_footer();
+        return;
+    }
+    if ($activeTab === 'maintenance') {
+        if (function_exists('Gallery\\Views\\view_render_admin_database_maintenance_panel')) {
+            view_render_admin_database_maintenance_panel(
+                is_array($databaseMaintenance['report'] ?? null) ? $databaseMaintenance['report'] : null,
+                is_array($databaseMaintenance['cleanup_state'] ?? null) ? $databaseMaintenance['cleanup_state'] : [],
+                is_array($databaseMaintenance['repair_readiness'] ?? null) ? $databaseMaintenance['repair_readiness'] : []
+            );
         }
         render_footer();
         return;
@@ -107,6 +119,11 @@ function view_render_admin_storage_statistics_tabs(string $activeTab): void
             'hint' => t('admin.storage.tab_database_hint', 'MySQL/MariaDB table storage'),
             'url' => url_for('admin_storage_statistics', ['tab' => 'database']),
         ],
+        'maintenance' => [
+            'label' => t('admin.storage.tab_database_maintenance', 'DB maintenance'),
+            'hint' => t('admin.storage.tab_database_maintenance_hint', 'Inspection, cleanup, repair, analyze, optimize'),
+            'url' => url_for('admin_storage_statistics', ['tab' => 'maintenance']),
+        ],
     ];
 
     echo '<nav class="admin-storage-tabs panel" aria-label="' . e(t('admin.storage.tabs_aria', 'Storage statistics sections')) . '">';
@@ -129,7 +146,7 @@ function view_render_admin_storage_statistics_tabs(string $activeTab): void
  */
 function view_admin_storage_statistics_normalize_tab(string $activeTab): string
 {
-    return in_array($activeTab, ['files', 'database'], true) ? $activeTab : 'files';
+    return in_array($activeTab, ['files', 'database', 'maintenance'], true) ? $activeTab : 'files';
 }
 
 /**

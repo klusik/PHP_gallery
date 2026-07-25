@@ -46,7 +46,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.84.2';
+const CMS_VERSION = '0.85';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -233,6 +233,11 @@ function cms_run(): void
         'admin_gallery_benchmark_status' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_status',
         'admin_gallery_benchmark_download' => '\\Gallery\\Controllers\\cms_admin_gallery_benchmark_download',
         'admin_database_usage_recompute' => '\\Gallery\\Controllers\\cms_admin_database_usage_recompute',
+        'admin_database_maintenance_inspect' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_inspect',
+        'admin_database_maintenance_cleanup' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_cleanup',
+        'admin_database_maintenance_repair' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_repair',
+        'admin_database_maintenance_analyze' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_analyze',
+        'admin_database_maintenance_optimize' => '\\Gallery\\Controllers\\cms_admin_database_maintenance_optimize',
         'admin_public_search_settings' => '\\Gallery\\Controllers\\cms_admin_public_search_settings',
         'admin_exif_gps_settings' => '\\Gallery\\Controllers\\cms_admin_exif_gps_settings',
         'admin_seo_guard_settings' => '\\Gallery\\Controllers\\cms_admin_seo_guard_settings',

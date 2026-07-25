@@ -53,6 +53,8 @@ require_once __DIR__ . '/services/public_render_profiler.php';
 require_once __DIR__ . '/services/admin_render_profiler.php';
 // Load database usage helpers before dashboard and storage pages need capacity metrics.
 require_once __DIR__ . '/services/admin_database_usage.php';
+// Load explicit database maintenance after shared database usage and schema helpers.
+require_once __DIR__ . '/services/database_maintenance.php';
 // Load Admin dashboard data helpers before the dashboard controller is registered.
 require_once __DIR__ . '/services/admin_dashboard.php';
 // Load custom CSS helpers before theme rendering needs preset and asset paths.

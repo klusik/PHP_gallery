@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 0.85
+
+Version 0.85 is a database maintenance and storage reliability release. It adds a complete read-only audit of the active schema, bounded and explainable cleanup for only high-confidence records, conditional repair of legacy thumbnail metadata structures, and separately confirmed database statistics and physical optimization actions. The release is designed for shared hosting, where inspection must remain explicit, resumable, auditable, and safe.
+
+  ### Database maintenance extension
+
+  #### Added complete read-only database inspection
+
+  - Added an explicit Admin maintenance tab that inventories every table dynamically through `information_schema`.
+  - Reports table engines, collations, estimated rows, storage, columns, defaults, ENUM/SET definitions, keys, foreign keys, migration references, broad code references, and separately scoped production/test SQL evidence.
+  - Writes the latest structured report to `cache/admin-database-maintenance-report.json` only after the administrator starts an inspection.
+  - Keeps the ordinary dashboard fast by loading only the cached report during normal rendering.
+
+  #### Added bounded and explainable logical cleanup
+
+  - Added high-confidence rules for proven orphan rows, deterministic duplicate metadata rows, and records with explicit application expiry semantics.
+  - Added dry-run output, persisted resumable state, bounded batch sizes, before/after counters, failure state, CSRF protection, Admin authentication, explicit confirmation, and structured logging.
+  - Added `database_maintenance_audit_log`; each committed batch records the exact removed row identities and reason inside the same transaction, so an audit-write failure rolls back deletion.
+  - Protected galleries, images, tags, users, settings, audit logs, telemetry, migration history, imported navigation data, and unknown tables from generic automatic deletion.
+  - Kept all filesystem media, thumbnail files, and ZIP files outside the database cleanup workflow.
+
+  #### Added conditional legacy schema repair
+
+  - Added migration `202607250001_database_maintenance_schema_repair.php`.
+  - Creates the transactional cleanup audit table when absent and repairs partial thumbnail metadata compaction by checking every table, column, index, and foreign key before alteration.
+  - Preserves source geometry and orientation in `images` before removing proven duplicated legacy thumbnail columns.
+  - Supports already compact databases, partially applied historical migrations, MySQL/MariaDB DDL auto-commit behavior, and the former SQL-only migration runner.
+  - Added a non-mutating repair dry-run that reports the pending migration and exact legacy objects before any DDL is applied.
+
+  #### Separated statistics refresh from physical optimization
+
+  - Added selected-table `ANALYZE TABLE` and separately confirmed `OPTIMIZE TABLE` actions, including a selected-table dry-run plan before physical optimization.
+  - Displays allocated size and `data_free` before execution and warns about shared-hosting locks and rebuild cost.
+  - Never runs `OPTIMIZE TABLE` from inspection, logical cleanup, page load, or normal migrations.
+  - Reports successful execution without claiming that the storage engine necessarily reduced physical filesystem usage.
+
+  #### Expanded regression coverage
+
+  - Added `tests/database_maintenance_test.php` for inventory normalization, scoped SQL-reference extraction, table policy protection, legacy object detection, cleanup classification, deterministic duplicate survival, thumbnail distribution reporting, dry-run contracts, and Admin security requirements.
+  - Added `tests/database_maintenance_schema_repair_test.php` for absent, partial, compact, retry, geometry-preservation, and no-row-deletion repair behavior.
+  - Extended migration consistency and former-runner compatibility tests for the new conditional repair migration.
+
 ## Version 0.84.2
 
 Version 0.84.2 is an updater safety patch focused on preventing incomplete deployments and accidental cleanup of valid application files. It strengthens release snapshot validation, stages replacements before activating them, narrows misplaced-project cleanup, and adds regression coverage for updater failure paths and current application layouts.

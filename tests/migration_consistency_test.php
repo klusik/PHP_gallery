@@ -15,7 +15,7 @@
  *   - Keep migration versions unique and lexically ordered
  *   - Confirm obsolete implementation names are absent from migration filenames
  *   - Confirm the browser-setting cleanup follows the canonical setting seeds
- *   - Confirm the current gallery public-path repair is a recorded post-migration step
+ *   - Confirm current public-path and database-maintenance repairs are recorded callbacks
  *
  * Author:
  *   Rudolf Klusal
@@ -31,7 +31,7 @@
  *   - Prefer small, readable changes over broad rewrites.
  *
  * Last Updated:
- *   2026-07-12
+ *   2026-07-25
  */
 
 declare(strict_types=1);
@@ -93,8 +93,9 @@ $legacyCleanup = '202607120001_browser_upload_legacy_settings_cleanup';
 $publicPathRepair = '202607120002_harden_gallery_public_paths';
 $hierarchicalPathRepair = '202607120003_restore_hierarchical_gallery_public_paths';
 $runnerCompatibilityRepair = '202607120004_verify_gallery_public_paths_after_runner_upgrade';
+$databaseMaintenanceRepair = '202607250001_database_maintenance_schema_repair';
 
-foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair] as $requiredVersion) {
+foreach ([$browserSeed, $browserSafety, $browserRebuild, $legacyCleanup, $publicPathRepair, $hierarchicalPathRepair, $runnerCompatibilityRepair, $databaseMaintenanceRepair] as $requiredVersion) {
     assert_migration_consistency(isset($definitions[$requiredVersion]), 'Required migration is missing: ' . $requiredVersion);
 }
 assert_migration_consistency(strcmp($legacyCleanup, $browserRebuild) > 0, 'Legacy cleanup must run after canonical browser setting migrations.');
@@ -107,6 +108,9 @@ assert_migration_consistency(strcmp($hierarchicalPathRepair, $publicPathRepair) 
 assert_migration_consistency($definitions[$runnerCompatibilityRepair]['after'] !== null, 'Runner compatibility repair must be recorded as a post-migration callback.');
 assert_migration_consistency($definitions[$runnerCompatibilityRepair]['statements'] === [], 'Runner compatibility repair should not contain unrelated SQL schema changes.');
 assert_migration_consistency(strcmp($runnerCompatibilityRepair, $hierarchicalPathRepair) > 0, 'Runner compatibility repair must run after the hierarchical path repair.');
+assert_migration_consistency($definitions[$databaseMaintenanceRepair]['after'] !== null, 'Database maintenance repair must be recorded as a post-migration callback.');
+assert_migration_consistency($definitions[$databaseMaintenanceRepair]['statements'] === [], 'Database maintenance repair must conditionally inspect objects instead of exposing destructive SQL statements.');
+assert_migration_consistency(strcmp($databaseMaintenanceRepair, $runnerCompatibilityRepair) > 0, 'Database maintenance repair must run after the released migration-runner compatibility repair.');
 
 $simulatedFiles = [
     '/project/database/migrations/202606100001_browser_client_upload_settings.php',
