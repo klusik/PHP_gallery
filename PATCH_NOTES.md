@@ -1,41 +1,88 @@
 # Patch notes
 
+## Version 0.86.1
+
+Version 0.86.1 is a patch-level consistency, documentation, versioning, and repository-hygiene release. It aligns the documented Duplicate Photo Detector behavior with the implementation already shipped in 0.86, corrects current-version metadata, completes the ledger schema documentation, adds the repository's referenced MIT license, and regenerates integrity metadata without changing the detector's runtime workflow.
+
+  ### Highlights
+
+  #### Corrected Duplicate Photo Detector documentation
+
+  - Corrected stale descriptions that characterized the complete detector workflow as report-only, read-only, or non-destructive.
+  - Clarified that metadata scanning itself only reads indexed image metadata, while review-ledger controls persist administrator decisions and **Delete this** permanently removes one explicitly selected result.
+  - Documented the implementation already present in 0.86: clickable gallery/photo context, canonical pair ignores, exact-gallery ignores, per-administrator ledger ownership, parent/child gallery independence, **Clear ledger**, and in-place result deletion.
+  - Clarified that the existing Admin right-side panel and AJAX fragment-refresh path are primary, while normal POST/redirect handling remains the non-JavaScript or direct-request fallback.
+
+  #### Corrected release and repository metadata
+
+  - Updated the runtime and current documentation version from `0.86` to `0.86.1`.
+  - Corrected the historical 0.86 release notes to describe the detector functionality that was already present in that release rather than presenting it as report-only.
+  - Added the standard MIT `LICENSE` file referenced by existing source headers, using the locally documented author and project year.
+  - Regenerated `app/core-manifest.json` from the final local release tree with version `0.86.1`.
+
+  ### Technical Details
+
+  #### Documentation and source descriptions
+
+  - Updated `ARCHITECTURE.md` with the current version, three-job session limit, immutable server-owned scope, Admin/CSRF validation, pair/image/gallery scope checks, AJAX-first mutation flow, and existing deletion delegation.
+  - Updated `DATABASE.md` with version `0.86.1`, the actual duplicate-ledger indexes, canonical per-administrator keys, exact-gallery semantics, and cascade behavior defined by `202608080001_duplicate_photo_ledger.php`.
+  - Verified `README.md` and `CODEMAP.md` against the local controller, detector service, ledger service, view, JavaScript, CSS, migration, normal image-deletion service, and focused tests.
+  - Updated stale file-level purpose/responsibility text without removing comments, docstrings, or PHPDoc blocks.
+
+  #### Tests
+
+  - Updated detector test descriptions to distinguish pure metadata matching from the controller's explicit ledger and deletion mutations.
+  - Updated `TESTING.md` to describe selected-branch/global scope, bounded pair expansion, per-administrator ledger behavior, exact-gallery independence, deletion/job pruning, AJAX-first panel behavior, and POST deletion fallback accurately.
+  - Re-ran the focused duplicate detector and ledger tests, migration and updater/version-related tests, manifest checks, PHP syntax checks, and the complete standalone PHP regression suite.
+
+  ### User Impact
+
+  #### For administrators
+
+  - The documented workflow now matches the controls administrators actually see in the Duplicate Photo Detector.
+  - Release, database, testing, and architecture references consistently describe version `0.86.1` and the existing 0.86 detector behavior.
+  - No detector interaction or deletion behavior changed as part of this patch.
+
+  #### For visitors
+
+  - There is no public gallery behavior change in this patch release.
+
 ## Version 0.86
 
-Version 0.86 adds a safe, report-only duplicate photo detection workflow for administrators. It identifies exact and possible duplicates using the existing image checksum, file-size, dimension, MIME, and stored EXIF metadata pipeline, presents the evidence in the existing right-side panel, and records bounded inspection state without modifying photo files or image records.
+Version 0.86 added the Admin Duplicate Photo Detector for bounded review and cleanup of exact and metadata-supported duplicate candidates. It introduced selected-gallery-branch and explicit all-gallery scanning, deterministic left/right findings, clickable public context, persistent per-administrator review rules, and explicit deletion through the existing gallery image-deletion service inside the established Admin right-side panel.
 
   ### Highlights
 
   #### Added duplicate photo detection
 
   - Added an Admin duplicate-photo detector to the gallery workflow.
-  - Searches the selected gallery by default and provides an explicit, unchecked **Search all galleries** option for a broader scan.
-  - Displays possible duplicate groups with thumbnails, gallery context, filenames, file sizes, dimensions, MIME types, capture dates, camera/lens metadata, and matching evidence.
+  - Searches the selected gallery and its descendants by default and provides an explicit, unchecked **Search all galleries** option for a broader scan.
+  - Displays deterministic left/right findings with thumbnails, clickable gallery/photo context, filenames, file sizes, dimensions, MIME types, capture dates, camera/lens metadata, and matching evidence.
   - Distinguishes exact checksum matches from strong and possible metadata candidates instead of treating file size alone as proof.
   - Keeps incomplete or missing EXIF values from creating false exact matches.
-  - Keeps the first release version report-only: no files or image rows are deleted, moved, renamed, merged, or modified.
+  - Added per-administrator pair and exact-gallery review rules, ledger clearing, and explicit deletion of a selected result through the normal gallery image-deletion service.
 
   ### Technical Details
 
   #### Backend
 
-  - Added `app/controllers/admin_duplicate_photos.php` for authenticated, CSRF-protected selected-gallery and global-search requests, JSON responses, fallback rendering, and bounded result handling.
-  - Added `app/services/duplicate_photo_detector.php` for scope validation, metadata normalization, deterministic grouping, confidence classification, result ordering, and preview data preparation.
-  - Added `app/services/duplicate_photo_ledger.php` for bounded inspection records and safe ledger access.
+  - Added `app/controllers/admin_duplicate_photos.php` for authenticated, CSRF-protected scanning, ledger mutations, validated deletion, JSON responses, and POST/redirect fallback handling.
+  - Added `app/services/duplicate_photo_detector.php` for immutable server-side scope, bounded session jobs, metadata normalization, deterministic matching, canonical pair expansion, ledger filtering, and paginated result preparation.
+  - Added `app/services/duplicate_photo_ledger.php` for canonical pair rules and exact-gallery rules owned independently by each administrator.
   - Reused the existing `images.checksum_sha256`, `file_size`, dimensions, MIME, and stored EXIF fields populated by `app/services/image_scanning.php`.
-  - Added migration `202608080001_duplicate_photo_ledger.php` for durable duplicate-inspection ledger state and integrated schema maintenance readiness checks.
+  - Added migration `202608080001_duplicate_photo_ledger.php` with per-administrator pair/gallery primary keys, lookup indexes, and cascading user/image/gallery foreign keys.
 
   #### Frontend
 
-  - Added `app/views/admin_duplicate_photos.php` for the report panel and accessible empty, loading, error, and result states.
-  - Added `public/assets/gallery-modules/admin-duplicate-photo-detector.js` for side-panel loading, scope selection, bounded refreshes, and result rendering.
+  - Added `app/views/admin_duplicate_photos.php` for scope controls, bounded progress, pair findings, public context links, ledger actions, deletion controls, and POST fallbacks.
+  - Added `public/assets/gallery-modules/admin-duplicate-photo-detector.js` for capture-phase delegated handling, automatic bounded continuation, and in-place scan/ledger/delete fragment refresh.
   - Added `public/assets/styles/admin-duplicate-photo-detector.css` for responsive duplicate groups, evidence labels, thumbnails, and panel states.
-  - Integrated the feature with the existing `admin-side-panel.js` workflow, gallery editor entry point, translations, URL helpers, escaping, and asset loading pipeline.
+  - Integrated the feature with the existing `admin-side-panel.js` workflow so normal JavaScript operation keeps the panel open and does not navigate or reload the Admin page.
 
   #### Tests
 
-  - Added `tests/duplicate_photo_detector_test.php` for checksum matching, candidate confidence, EXIF normalization, gallery scope, global scope, deterministic ordering, inaccessible galleries, missing metadata, and non-destructive behavior.
-  - Added `tests/duplicate_photo_ledger_test.php` for ledger schema readiness, bounded persistence, duplicate inspection state, and safe retry behavior.
+  - Added `tests/duplicate_photo_detector_test.php` for checksum and EXIF matching, missing metadata, scope validation, deterministic bounded pairs, ledger filtering, clickable context, deletion validation, job pruning, and AJAX side-panel contracts.
+  - Added `tests/duplicate_photo_ledger_test.php` for canonical pair keys, exact-gallery semantics, parent/child independence, per-administrator schema keys, cascades, parameterized persistence, and protected maintenance policy.
   - Updated `TESTING.md` with focused automated and manual verification steps for the duplicate detector and right-side panel.
 
   ### User Impact
@@ -44,13 +91,12 @@ Version 0.86 adds a safe, report-only duplicate photo detection workflow for adm
 
   - Administrators can review likely duplicate photos directly from the selected gallery’s right-side panel.
   - Global searching is opt-in, making the default workflow safer and faster for large installations.
-  - Each result explains why photos were grouped, allowing manual review before any future cleanup decision.
-  - Detection is non-destructive and does not alter the gallery or image library.
+  - Each result explains why photos were grouped and provides persistent review controls plus explicit deletion of a confirmed duplicate.
+  - AJAX is the primary interaction path; POST/redirect remains available as fallback when JavaScript is unavailable or the route is used directly.
 
   #### For visitors
 
-  - There is no direct public-facing behavior change.
-  - Existing public gallery rendering, URLs, thumbnails, EXIF display, and image records remain unchanged by duplicate detection.
+  - Duplicate scanning and ledger review are Admin-only; public behavior changes only when an administrator explicitly deletes a selected image.
 
 ## Version 0.85
 

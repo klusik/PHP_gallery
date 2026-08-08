@@ -8,7 +8,7 @@
  * Module Type: Test Script
  *
  * Purpose:
- *   Verifies duplicate-photo matching, scope resolution, ordering, and read-only behavior.
+ *   Verifies duplicate-photo matching, scope resolution, ordering, mutation boundaries, and side-panel contracts.
  *
  * Responsibilities:
  *   - Cover exact SHA-256 duplicate grouping and checksum differences
@@ -258,7 +258,7 @@ $sparseExifRows = [
 $job = duplicate_detector_test_job();
 duplicate_photo_detector_process_rows($job, $sparseExifRows);
 $job = duplicate_photo_detector_finalize_job($job);
-assert_duplicate_detector_same(1, count($job['possible_groups']), 'capture time plus camera make/model is enough for a report-only EXIF candidate');
+assert_duplicate_detector_same(1, count($job['possible_groups']), 'capture time plus camera make/model is enough for a possible EXIF candidate');
 assert_duplicate_detector_same([17, 18], array_values($job['possible_groups'])[0] ?? null, 'sparse but meaningful matching EXIF is not discarded because file sizes differ');
 
 $strongRows = [
@@ -380,7 +380,7 @@ $tempPath = tempnam(sys_get_temp_dir(), 'duplicate-photo-detector-');
 if ($tempPath === false) {
     throw new RuntimeException('Could not create duplicate detector side-effect test file.');
 }
-file_put_contents($tempPath, 'read-only detector sentinel');
+file_put_contents($tempPath, 'metadata matching sentinel');
 $fileHashBefore = hash_file('sha256', $tempPath);
 $job = duplicate_detector_test_job();
 duplicate_photo_detector_process_rows($job, $sideEffectRows);
@@ -392,13 +392,17 @@ unlink($tempPath);
 
 $serviceSource = file_get_contents(__DIR__ . '/../app/services/duplicate_photo_detector.php');
 if (!is_string($serviceSource)) {
-    throw new RuntimeException('Could not read duplicate detector service source for read-only SQL assertion.');
+    throw new RuntimeException('Could not read duplicate detector service source for matching-boundary SQL assertion.');
 }
 assert_duplicate_detector_same(false, preg_match('/\b(?:UPDATE|DELETE\s+FROM|INSERT\s+INTO|REPLACE\s+INTO)\s+images\b/i', $serviceSource) === 1, 'detector service contains no image-table mutation SQL');
 
 assert_duplicate_detector_true(str_contains($serviceSource, 'INNER JOIN galleries child'), 'local detector resolves descendant galleries from the selected branch root');
 assert_duplicate_detector_true(str_contains($serviceSource, "child.folder_path LIKE CONCAT(root.folder_path, '/%')"), 'local detector includes nested subgallery folder paths');
 assert_duplicate_detector_true(str_contains($serviceSource, 'gallery_id IN ($placeholders)'), 'local image batches use the immutable gallery-branch id snapshot');
+assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_BATCH_SIZE = 300'), 'server caps one detector metadata batch at 300 rows');
+assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_JOB_TTL_SECONDS = 3600'), 'detector jobs expire after one hour');
+assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_SESSION_JOBS = 3'), 'administrator sessions retain at most three detector jobs');
+assert_duplicate_detector_true(str_contains($serviceSource, 'DUPLICATE_PHOTO_DETECTOR_MAX_PAIR_REFERENCES = 10000'), 'result pair expansion has a hard reference bound');
 
 $viewSource = file_get_contents(__DIR__ . '/../app/views/admin_duplicate_photos.php');
 if (!is_string($viewSource)) {
@@ -430,6 +434,9 @@ assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_
 assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_ledger_clear($adminUserId)'), 'clear-ledger controller removes only the authenticated administrator ledger');
 assert_duplicate_detector_true(str_contains($controllerSource, '$image = find_image($imageId);'), 'ignore-gallery controller derives gallery ownership from the current image instead of trusting a browser gallery id');
 assert_duplicate_detector_true(str_contains($controllerSource, 'duplicate_photo_detector_job_contains_pair($job, $leftImageId, $rightImageId)'), 'ignore-pair controller requires the submitted pair to belong to one completed detector finding');
+assert_duplicate_detector_true(str_contains($controllerSource, 'require_admin();'), 'duplicate detector route requires administrator authentication');
+assert_duplicate_detector_true(str_contains($controllerSource, 'verify_csrf();'), 'every duplicate detector POST action passes CSRF validation');
+assert_duplicate_detector_true(str_contains($controllerSource, "if (\$action === 'step')"), 'scan continuation is a focused token-driven controller action');
 
 $javascriptSource = file_get_contents(__DIR__ . '/../public/assets/gallery-modules/admin-duplicate-photo-detector.js');
 if (!is_string($javascriptSource)) {

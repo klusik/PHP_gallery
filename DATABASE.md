@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.85. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.86.1. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -283,7 +283,7 @@ Stores administrator-confirmed/reviewed image relationships that should not be o
 | `image_id_high` | Larger image id in the canonical ignored pair. |
 | `created_at` | When the pair was added to the ledger. |
 
-Primary key `(user_id, image_id_low, image_id_high)` prevents duplicate decisions for the same administrator. Both image foreign keys and the user foreign key use `ON DELETE CASCADE`, so ledger rows disappear automatically when their owning account or either referenced image is deleted. The detector does not use these rows to modify image content; they filter future result pairs only.
+Primary key `(user_id, image_id_low, image_id_high)` prevents duplicate decisions for the same administrator. Indexes `duplicate_photo_ledger_pairs_low_index` and `duplicate_photo_ledger_pairs_high_index` support cleanup and lookup by either referenced image. Both image foreign keys and the user foreign key use `ON DELETE CASCADE`, so ledger rows disappear automatically when their owning account or either referenced image is deleted. Ledger rows filter future result pairs; image deletion is a separate explicit detector action delegated to the normal gallery image-deletion service.
 
 ### `duplicate_photo_ledger_galleries`
 
@@ -295,7 +295,7 @@ Stores exact-gallery suppression rules for the Duplicate Photo Detector. A rule 
 | `gallery_id` | Exact gallery whose photos should be omitted from duplicate pairs for this administrator. |
 | `created_at` | When the gallery rule was added. |
 
-Primary key `(user_id, gallery_id)` keeps each exact-gallery rule unique per administrator. User and gallery foreign keys use `ON DELETE CASCADE`. **Clear ledger** deletes both ledger table rows only for the authenticated administrator.
+Primary key `(user_id, gallery_id)` keeps each exact-gallery rule unique per administrator. Index `duplicate_photo_ledger_galleries_gallery_index` supports lookup and cascade cleanup by gallery. User and gallery foreign keys use `ON DELETE CASCADE`. **Clear ledger** deletes rows from both ledger tables only for the authenticated administrator.
 
 These tables are created by `database/migrations/202608080001_duplicate_photo_ledger.php`. No changes are made to the `images` matching metadata columns. Existing checksum and EXIF data remains the detector evidence source.
 
@@ -683,8 +683,8 @@ The structured audit is cached at `cache/admin-database-maintenance-report.json`
 | --- | --- | --- | --- | --- | --- | --- |
 | `galleries` | gallery/content data | Filesystem gallery folder and gallery metadata | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | Report only unless a deterministic logical identity is explicitly defined. | Valid gallery content is always protected. Cleanup: **disabled**. Physical optimization: **manual**. |
 | `images` | gallery/content data | Gallery and source image | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | Report only unless a deterministic logical identity is explicitly defined. | Valid image content is always protected. Cleanup: **disabled**. Physical optimization: **manual**. |
-| `duplicate_photo_ledger_pairs` | administrator workflow state | Per-administrator reviewed duplicate image relationships | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | Report only unless a deterministic logical identity is explicitly defined. | Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades. Cleanup: **disabled**. Physical optimization: **manual**. |
-| `duplicate_photo_ledger_galleries` | administrator workflow state | Per-administrator exact-gallery duplicate suppression rules | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | Report only unless a deterministic logical identity is explicitly defined. | Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades. Cleanup: **disabled**. Physical optimization: **manual**. |
+| `duplicate_photo_ledger_pairs` | administrator workflow state | Per-administrator reviewed duplicate image relationships | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | No generic duplicate-cleanup rule is defined. | Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades. Cleanup: **disabled**. Physical optimization: **manual**. |
+| `duplicate_photo_ledger_galleries` | administrator workflow state | Per-administrator exact-gallery duplicate suppression rules | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | No generic duplicate-cleanup rule is defined. | Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades. Cleanup: **disabled**. Physical optimization: **manual**. |
 | `tags` | gallery/content data | Administrator-defined taxonomy | Disabled. No generic deletion semantics are assumed. | No automatic retention deletion. | Report only unless a deterministic logical identity is explicitly defined. | Unused tags may be intentional and are not removed automatically. Cleanup: **disabled**. Physical optimization: **manual**. |
 | `gallery_tags` | gallery/content data | Gallery and tag link | Remove only links whose gallery or tag parent is missing. | No retention rule. | Composite primary key defines one gallery/tag link. | Only rows matching a listed high-confidence rule may be removed. Cleanup: **automatic**. Physical optimization: **manual**. |
 | `image_tags` | gallery/content data | Image and tag link | Remove only links whose image or tag parent is missing. | No retention rule. | Composite primary key defines one image/tag link. | Only rows matching a listed high-confidence rule may be removed. Cleanup: **automatic**. Physical optimization: **manual**. |

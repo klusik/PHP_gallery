@@ -6,7 +6,7 @@
  * Module Type: Browser Module
  *
  * Purpose:
- *   Runs the read-only duplicate photo detector through bounded Admin AJAX requests.
+ *   Runs duplicate scanning, review-ledger actions, and explicit deletion through Admin AJAX requests.
  *
  * Responsibilities:
  *   - Enhance the existing POST forms without removing their non-JavaScript fallback
