@@ -8,14 +8,14 @@
  * Module Type: View
  *
  * Purpose:
- *   Renders the read-only Admin duplicate photo detector in full-page and side-panel contexts.
+ *   Renders Admin duplicate scanning, review-ledger, and deletion controls in full-page and side-panel contexts.
  *
  * Responsibilities:
  *   - Render selected-gallery and optional global-search controls
  *   - Render bounded scan progress with a normal POST continuation fallback
  *   - Render exact and possible duplicate groups with decision-making metadata
  *   - Reuse existing thumbnail URL, translation, escaping, and side-panel helpers
- *   - Expose no destructive actions
+ *   - Render explicit deletion and persistent review-ledger actions with POST fallbacks
  *
  * Author:
  *   Rudolf Klusal
@@ -361,7 +361,7 @@ function view_render_admin_duplicate_photo_detector(array $gallery, ?array $job 
         'title' => (string) ($gallery['title'] ?? ('#' . $galleryId)),
         'path' => (string) ($gallery['folder_path'] ?? '/'),
     ])) . '</p>';
-    echo '<div class="notice">' . e(t('admin.duplicate_photos.report_only', 'Detection itself is read-only. Use Delete this only when you explicitly want to permanently remove one result image, its database row, and generated derivatives.')) . '</div>';
+    echo '<div class="notice">' . e(t('admin.duplicate_photos.report_only', 'Scanning reads stored metadata only. Ledger controls save your review decisions. Use Delete this only when you explicitly want to permanently remove one result image, its database row, and generated derivatives.')) . '</div>';
     echo '</div>';
 
     echo '<div class="admin-duplicate-photo-ledger">';

@@ -14,8 +14,8 @@
  *   - Resolve selected-gallery and administrator-wide detector scopes
  *   - Normalize stored EXIF values into deterministic fingerprints
  *   - Process image metadata in bounded, session-backed batches
- *   - Build deterministic, read-only duplicate groups and result pages
- *   - Keep duplicate detection independent from destructive gallery operations
+ *   - Build deterministic duplicate groups and bounded result pages
+ *   - Keep metadata matching pure while exposing validated job state to controller-owned actions
  *
  * Author:
  *   Rudolf Klusal
@@ -400,7 +400,7 @@ function duplicate_photo_detector_exif_fingerprint(array $image): ?array
 }
 
 /**
- * Build the EXIF fingerprint used for report-only duplicate candidates.
+ * Build the EXIF fingerprint used for possible-duplicate candidates.
  *
  * The original strict fingerprint remains available for conservative callers.
  * Candidate detection also accepts capture time plus camera/lens identity with

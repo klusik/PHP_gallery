@@ -8,7 +8,7 @@
  * Module Type: Controller
  *
  * Purpose:
- *   Handles the read-only Admin duplicate photo detector workflow.
+ *   Handles Admin duplicate scanning, review-ledger actions, and explicit result deletion.
  *
  * Responsibilities:
  *   - Validate administrator access and the selected gallery
@@ -16,6 +16,8 @@
  *   - Return existing-style JSON responses for AJAX batches
  *   - Render the reusable full-page and side-panel detector report
  *   - Keep browser-supplied scope flags out of continuation requests
+ *   - Validate and persist per-administrator review-ledger actions
+ *   - Delegate explicit result deletion to the normal gallery image-deletion service
  *
  * Author:
  *   Rudolf Klusal
