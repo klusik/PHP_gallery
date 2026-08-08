@@ -263,6 +263,7 @@ function cms_run(): void
         'admin_media_renamer' => '\\Gallery\\Controllers\\cms_admin_media_renamer',
         'admin_gallery_dates' => '\\Gallery\\Controllers\\cms_admin_gallery_dates',
         'admin_gallery_date_suggestion' => '\\Gallery\\Controllers\\cms_admin_gallery_date_suggestion',
+        'admin_duplicate_photos' => '\\Gallery\\Controllers\\cms_admin_duplicate_photos',
         'admin_bulk_galleries' => '\\Gallery\\Controllers\\cms_admin_bulk_galleries',
         'admin_tags' => '\\Gallery\\Controllers\\cms_admin_tags',
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',

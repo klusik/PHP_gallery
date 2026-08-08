@@ -66,6 +66,7 @@ import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assis
 import { setupPublicHomeSearch } from './gallery-modules/public-home-search.js?v=20260528-public-search-context-v1';
 import { setupAdminGalleryMigration } from './gallery-modules/admin-gallery-migration.js?v=20260527-gallery-migration-reconnect-v1';
 import { setupAdminGalleryDateSuggestions } from './gallery-modules/admin-gallery-date-suggestion.js?v=20260607-date-suggestion-endpoint-v2';
+import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplicate-photo-detector.js?v=20260808-duplicate-photo-detector-ledger-v4';
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260618-gallery-benchmark-v1';
@@ -119,6 +120,7 @@ function runWhenDomReady(callback) {
 function bootGalleryBrowserFeatures() {
     setupAdminBulkSelection();
     setupAdminGalleryDateSuggestions();
+    setupAdminDuplicatePhotoDetector();
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
     setupAdminGalleryBenchmark();

@@ -49,6 +49,7 @@ require_once __DIR__ . '/views/admin_dashboard_sections.php';
 require_once __DIR__ . '/views/admin_dashboard.php';
 require_once __DIR__ . '/views/navigation_data.php';
 require_once __DIR__ . '/views/admin_gallery_forms.php';
+require_once __DIR__ . '/views/admin_duplicate_photos.php';
 require_once __DIR__ . '/views/admin_gallery_migration.php';
 require_once __DIR__ . '/views/gallery_descriptions.php';
 require_once __DIR__ . '/views/simbrief_descriptions.php';

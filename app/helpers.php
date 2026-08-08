@@ -1621,6 +1621,7 @@ function render_header(string $title, ?array $currentGallery = null, bool $publi
         'assets/styles/admin-update.css',
         'assets/styles/admin-tags.css',
         'assets/styles/side-panel.css',
+        'assets/styles/admin-duplicate-photo-detector.css',
         'assets/styles/admin-cinematic.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
@@ -1960,6 +1961,7 @@ function render_footer(): void
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-side-panel.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-date-picker.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-date-suggestion.js',
+        dirname(__DIR__) . '/public/assets/gallery-modules/admin-duplicate-photo-detector.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-simbrief-description.js',
         dirname(__DIR__) . '/public/assets/gallery-modules/admin-gallery-benchmark.js',
     ];

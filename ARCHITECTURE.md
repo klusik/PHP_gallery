@@ -700,6 +700,14 @@ EXIF/GPS display is default-enabled globally through `app_settings.exif_gps_maps
 
 The Admin dashboard renders a shared EXIF/GPS defaults card through `view_render_admin_exif_gps_defaults_card()`. That card posts to `cms_admin_exif_gps_settings()`, where the admin can change the global default and reset all gallery overrides to inherited behavior. The gallery editor uses the same storage rules with a tri-state select, so the full editor and side-panel editor do not need separate GPS-display logic. Bulk gallery actions use the same nullable model for force on, force off and inherit-default operations. Public map endpoints and GPS-coordinate renderers must call `gallery_allows_gps_maps()` or `gallery_effective_gps_map_enabled()` instead of reading `gps_map_enabled` directly.
 
+## Admin Side-Panel Interaction Contract
+
+The existing Admin right-side panel is the primary UI surface for workflows launched through `data-gallery-side-panel-link`. With JavaScript enabled, actions inside that panel must stay inside it: submit through the existing AJAX/fetch workflow, keep the panel shell open, and update only the panel fragment plus any directly affected background UI. Side-panel actions must not redirect to their normal full-page controller route, change the browser location, or reload the page as their normal success path. Traditional POST/redirect handling is retained only for JavaScript-disabled browsers and intentional direct-page use.
+
+Panel content is dynamically replaced, so feature modules must use delegated or otherwise rebind-safe event handling. Panel-owned form submissions must be intercepted before generic Admin handlers can fall through to full-page navigation. When changing a side-panel JavaScript module, its versioned import in the application entrypoint must also be updated so deployed clients do not reuse a stale module that lacks the current in-panel behavior. Focused tests should assert both the AJAX implementation and the absence of unintended reload/navigation paths.
+
+A one-click/in-place workflow must not gain an unsolicited browser confirmation dialog or intermediate page. Destructive actions still require the normal server-side Admin authentication, CSRF validation, scope/authorization checks, path safety, and existing mutation services.
+
 ## Gallery Date Ranges and EXIF Suggestions
 
 Manual gallery dates use `galleries.gallery_date` as the start date and `galleries.gallery_date_end` as the optional end date. The public renderer keeps single-date galleries compact and only renders a range when both endpoints differ; visible ranges use an en dash (`–`) between endpoints. Gallery sidecars persist both values when present, so filesystem imports and migration transfer preserve the date range.
@@ -707,6 +715,42 @@ Manual gallery dates use `galleries.gallery_date` as the start date and `galleri
 The Admin gallery dates tool builds suggestions from `images.exif_taken_at`. For each gallery, it aggregates the minimum and maximum EXIF capture date from images directly inside that gallery and all descendant galleries. Suggestions are only advisory: the admin can apply, edit, or ignore each row. Existing manual date ranges are shown and are not selected by default, which prevents accidental overwrite of curated dates.
 
 The gallery editor surfaces the same recursive branch suggestion directly beside the date range fields. The **Apply to this gallery** action persists the suggested range for the current gallery only, using all images in that gallery and descendants. Both the full admin editor and side-panel editor use the same rendered suggestion component and the same `admin_gallery_date_suggestion` POST endpoint. JavaScript enhances this action through `public/assets/gallery-modules/admin-gallery-date-suggestion.js`, reads gallery id, CSRF token and endpoint URL from component data attributes, updates the From/To inputs and refreshed suggestion panel in place, and preserves the normal POST/redirect fallback for browsers without JavaScript. The **Review branch suggestions** link opens `admin_gallery_dates` with `gallery_id`, limiting the review table to that gallery branch so a parent trip gallery and its daily subgalleries can be approved from one focused screen.
+
+
+## Duplicate Photo Detector
+
+The Admin Duplicate Photo Detector follows the same controller, service, view, and side-panel model used by other gallery maintenance workflows. The gallery editor exposes **Find duplicate photos** from the Images section with `data-gallery-side-panel-link` and the `duplicate-detector` workflow name. `public/assets/gallery-modules/admin-side-panel.js` keeps ownership of the reusable right-side panel shell, while `public/assets/gallery-modules/admin-duplicate-photo-detector.js` enhances the detector's normal POST forms with bounded AJAX continuation and in-panel mutation actions.
+
+`app/controllers/admin_duplicate_photos.php` requires administrator authentication before resolving any detector scope. A selected gallery must exist even for global searches. The **Search all galleries** checkbox is unchecked in fresh detector forms. When it is off, the server resolves the selected gallery plus every descendant subgallery from the stored gallery hierarchy and snapshots those gallery IDs into the immutable session job scope. When it is explicitly checked, the scope expands to all galleries available to the authenticated administrator. Continuation requests do not resend or re-resolve `gallery_id`, descendant scope, or the global flag; they send only CSRF data, a bounded batch size, and an opaque session job token whose stored scope controls every later query.
+
+`app/services/duplicate_photo_detector.php` reads metadata already stored in `images` by the existing scanner and does not reopen every image to extract EXIF data. A detector job snapshots the highest eligible image id and total row count, then reads rows in ascending primary-key batches. The default browser batch is 200 rows and the service caps one batch at 300 rows. Match accumulators and the image-to-gallery snapshot live in the administrator session for one hour. After matching, efficient internal groups are expanded into deterministic left/right pair comparisons, because persistent review decisions apply to one exact image relationship rather than every member of a larger group. Pair expansion considers at most 10,000 candidate relationships per render before ledger filtering and result pages show 10 surviving pairs at once, preventing pathological duplicate groups or heavily ledgered groups from causing unbounded pair-combination work.
+
+Matching rules are deterministic:
+
+- **Exact duplicate**: every member has the same valid non-empty `images.checksum_sha256`. SHA-256 equality is treated as byte-for-byte identity.
+- **Strong candidate signals**: an exact checksum group is additionally marked when file size and pixel dimensions also match and meaningful non-empty normalized EXIF metadata is compatible. Because checksum equality is already exact, this is corroboration rather than a weaker confidence class.
+- **Possible duplicate**: the images share a sufficiently complete normalized EXIF fingerprint. File size is retained as corroborating evidence but is not required to match, because equivalent photos can have different byte sizes after upload-path, metadata, or encoding differences. File size alone never creates a pair.
+- Missing or empty EXIF values are omitted from the fingerprint. Two absent values do not become evidence simply because both are absent.
+- The EXIF fingerprint normalizes capture time, camera make/model, lens, focal length, aperture, exposure time, ISO, and paired GPS coordinates in a fixed order. A possible-match fingerprint requires capture time, camera or lens identity evidence, and sufficient additional meaningful values.
+
+The result view uses existing translation, escaping, CSRF, public URL, thumbnail, and database helpers. Each pair shows matching signals and two labelled image cards. Gallery title and gallery path are links generated through `gallery_public_url()`. Filename, preview, and gallery-relative file path are links generated through `image_public_url()`. Context links open in a new tab so the administrator can inspect the public gallery/photo context without replacing the Admin page or closing the detector side panel.
+
+### Duplicate review ledger
+
+Migration `database/migrations/202608080001_duplicate_photo_ledger.php` adds two administrator-owned tables. `duplicate_photo_ledger_pairs` stores canonical image-id pairs `(image_id_low, image_id_high)` per administrator. `duplicate_photo_ledger_galleries` stores exact gallery IDs per administrator. Foreign keys cascade when users, images, or galleries are deleted, so stale review rows do not survive deleted parents. Generic database maintenance classifies both tables as protected administrator workflow state; their normal lifecycle is owned by the Duplicate Photo Detector.
+
+`app/services/duplicate_photo_ledger.php` is the only persistence layer for these review decisions. An **Ignore this pair from now on** action stores only the displayed image relationship. Future result generation removes that pair while leaving other pair combinations from the same internal duplicate group eligible. Each left/right card also exposes **Ignore all from this gallery**. The controller accepts the result image ID, reloads the image server-side, revalidates it against the immutable detector scope, derives its current `gallery_id`, and only then stores the gallery rule. The browser does not choose the persisted gallery ID. Gallery rules are exact by design and do not cascade to descendants, so a parent gallery and any child gallery can be reviewed independently. **Clear ledger** removes only the authenticated administrator's pair and gallery rules.
+
+Ledger filtering is applied to completed results and to later searches for the same administrator. A pair is omitted when its canonical image relationship is ledgered, or when either image belongs to an exact gallery ID in the gallery ledger. The ledger is per administrator, so one administrator's review decisions do not affect another account.
+
+### Side-panel mutations
+
+**Delete this**, **Ignore this pair from now on**, both independent **Ignore all from this gallery** controls, and **Clear ledger** are normal POST forms for non-JavaScript/direct-route fallback, but the primary browser pipeline is AJAX. `admin-duplicate-photo-detector.js` intercepts dynamically injected forms in the capture phase, adds the existing AJAX markers, consumes the controller's JSON response, replaces only the detector fragment, and leaves the reusable right-side panel open. These actions must not call `window.location`, assign `location.href`, reload the page, or introduce a browser confirmation dialog unless explicitly required by a future feature. The module import is cache-busted whenever this interaction contract changes so deployed browsers do not fall through to stale POST behavior.
+
+Per-image deletion still delegates to `delete_gallery_images()` so original-file deletion, image-row deletion, thumbnail/DNG derivative cleanup, title-picture cleanup, path boundaries, and existing mutation semantics are reused. Successful deletion also prunes the image from the persisted detector job before the panel fragment is rendered again. Ledger actions never delete or modify gallery/image content.
+
+Older rows with missing checksum/EXIF scanner metadata should be refreshed through the existing **Scan/import images** workflow, which reuses `app/services/image_scanning.php` and the existing EXIF extraction pipeline.
+
 
 ## Gallery Migration and API Transfer
 
@@ -769,6 +813,8 @@ Logs support category, severity, status, subject, request id, route, method, AJA
 | `public/assets/styles.css` | Main public and admin styling. |
 | `public/assets/gallery.js` | Gallery UI behavior, search, maps, inline admin behavior and related browser interactions. |
 | `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | In-place apply workflow for the reusable per-gallery EXIF date suggestion component in full editor and side-panel contexts. |
+| `public/assets/gallery-modules/admin-duplicate-photo-detector.js` | Bounded scan continuation plus delete, pair-ledger, exact-gallery-ledger, and clear-ledger AJAX actions. All refresh only the detector fragment and preserve the existing side-panel shell; POST/redirect remains fallback-only. |
+| `public/assets/styles/admin-duplicate-photo-detector.css` | Responsive Admin and side-panel presentation for pair comparisons, linked context, ledger controls, previews, metadata, confidence badges, and progress. |
 | `public/assets/gallery-modules/admin-refresh-progress.js` | Ajax progress workflow for Admin filesystem gallery discovery. |
 | `public/assets/telemetry.js` | Telemetry event capture. |
 | `public/assets/usage.js` | Usage collection helper. |

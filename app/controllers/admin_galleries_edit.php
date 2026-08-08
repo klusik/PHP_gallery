@@ -1757,6 +1757,18 @@ function cms_admin_edit_gallery(): void
                     'data-gallery-side-panel-url' => url_for('admin_upload', ['gallery_id' => $gallery['id'], 'panel' => 1]),
                 ],
             ],
+            [
+                'label' => t('admin.duplicate_photos.action_label', 'Find duplicate photos'),
+                'url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id']]),
+                'class' => 'button secondary',
+                'attributes' => [
+                    'data-gallery-side-panel-link' => true,
+                    'data-admin-side-panel-workflow' => 'duplicate-detector',
+                    'data-admin-side-panel-kicker' => t('admin.duplicate_photos.kicker', 'Gallery tools'),
+                    'data-admin-side-panel-title' => t('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'),
+                    'data-gallery-side-panel-url' => url_for('admin_duplicate_photos', ['gallery_id' => $gallery['id'], 'panel' => 1]),
+                ],
+            ],
         ],
         'actions_html' => $scanImagesActionHtml,
     ]);

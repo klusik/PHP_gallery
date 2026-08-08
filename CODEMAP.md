@@ -116,6 +116,7 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Gallery sidecars | `app/services/gallery_sidecars.php` | Metadata sidecar persistence. |
 | Gallery display settings | `app/services/gallery_display.php`, `app/services/gallery_grid.php`, `app/services/gallery_description_layout.php`, `app/services/gallery_count_badges.php`, `app/services/gallery_dates.php`, `app/services/exif.php` | Public rendering behavior, including date range display and effective EXIF/GPS display inheritance. |
 | EXIF-derived gallery date suggestions | `app/controllers/admin_gallery_dates.php`, `app/services/gallery_dates.php`, `app/views/admin_gallery_forms.php`, `public/assets/gallery-modules/admin-gallery-date-suggestion.js` | Aggregates `images.exif_taken_at` across each gallery branch, supports scoped branch reviews through `gallery_id`, lets admins approve, edit, or ignore suggested ranges, and applies the current gallery suggestion through the shared focused endpoint with AJAX or POST fallback. |
+| Duplicate Photo Detector | `app/controllers/admin_duplicate_photos.php`, `app/services/duplicate_photo_detector.php`, `app/services/duplicate_photo_ledger.php`, `app/views/admin_duplicate_photos.php`, `public/assets/gallery-modules/admin-duplicate-photo-detector.js`, `public/assets/styles/admin-duplicate-photo-detector.css`, `app/services/gallery_mutations.php`, `app/controllers/admin_galleries_edit.php`, `public/assets/gallery-modules/admin-side-panel.js`, `database/migrations/202608080001_duplicate_photo_ledger.php`, `tests/duplicate_photo_detector_test.php`, `tests/duplicate_photo_ledger_test.php` | Selected-gallery-branch or explicit all-gallery scan using stored SHA-256 and normalized EXIF metadata, rendered as deterministic left/right pair comparisons. Gallery/photo paths use existing public URL helpers. Per-admin ledger rules suppress one canonical pair or one exact gallery ID, with parent/child galleries independent; **Clear ledger** resets only that administrator's rules. Scan, ledger, clear, and single-click delete actions use the existing side-panel AJAX pipeline without reload/navigation; POST remains fallback-only. |
 
 ## Image Administration
 
@@ -291,6 +292,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | `tests/admin_log_severity_filter_test.php` | Log filtering behavior. |
 | `tests/gallery_branding_model_test.php` | Gallery branding model. |
 | `tests/gallery_dates_model_test.php` | Gallery date range normalization and renderer behavior. |
+| `tests/duplicate_photo_detector_test.php` | Duplicate checksum/EXIF matching, pair expansion and ledger filtering, selected-gallery branch/global scope, deterministic ordering, linked-context rendering, delete/ledger scope validation, detector-job pruning, and AJAX side-panel integration contracts. |
+| `tests/duplicate_photo_ledger_test.php` | Canonical pair keys, pair/gallery suppression semantics, parent/child gallery independence, migration foreign keys, parameterized ledger persistence, and protection against image/gallery mutations. |
 | `tests/gallery_migration_model_test.php` | Migration model behavior. |
 | `tests/gallery_visibility_model_test.php` | Gallery visibility compatibility. |
 | `tests/openai_text_assist_model_test.php` | OpenAI settings/model behavior. |
