@@ -113,6 +113,7 @@ $loggedInUser = ['id' => 1, 'username' => 'admin'];
 $loggedInPublicStyles = view_stylesheet_files_for_context('public-page', $loggedInUser, false);
 assert_public_asset_contains('assets/styles/admin.css', $loggedInPublicStyles, 'logged-in public styles keep admin CSS');
 assert_public_asset_contains('assets/styles/side-panel.css', $loggedInPublicStyles, 'logged-in public styles keep side panel CSS');
+assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $loggedInPublicStyles, 'logged-in public styles include duplicate detector CSS');
 
 $anonymousPreviewStyles = view_stylesheet_files_for_context('public-page', $loggedInUser, true);
 assert_public_asset_same($anonymousPublicStyles, $anonymousPreviewStyles, 'anonymous preview uses the anonymous public CSS set');
@@ -121,6 +122,7 @@ $adminStyles = view_stylesheet_files_for_context('admin-page', $loggedInUser, fa
 assert_public_asset_contains('assets/styles/admin.css', $adminStyles, 'admin pages include admin CSS');
 assert_public_asset_contains('assets/styles/admin-layout.css', $adminStyles, 'admin pages include admin layout CSS');
 assert_public_asset_contains('assets/styles/side-panel.css', $adminStyles, 'admin pages include side panel CSS');
+assert_public_asset_contains('assets/styles/admin-duplicate-photo-detector.css', $adminStyles, 'admin pages include duplicate detector CSS');
 
 assert_public_asset_same('assets/public-gallery.js', view_script_asset_for_context(false, null, false), 'anonymous public pages use the public entrypoint');
 assert_public_asset_same('assets/gallery.js', view_script_asset_for_context(false, $loggedInUser, false), 'logged-in public pages keep the full entrypoint');

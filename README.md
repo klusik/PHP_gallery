@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.85
+**Current Version:** 0.86
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -25,6 +25,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **EXIF display** - Show image metadata (camera, lens, ISO, GPS coordinates) on public pages
 - **EXIF/GPS defaults** - GPS maps and coordinates are enabled globally by default, with per-gallery inherit, force on and force off controls plus a dashboard reset for all overrides
 - **EXIF date suggestions** - Suggest gallery date ranges from original photo capture dates, including subgalleries, with one reusable editor component for full admin pages and side panels plus editable admin approval
+- **Duplicate photo detector** - Compare exact SHA-256 and metadata-supported possible duplicates as left/right pairs, open gallery/photo context directly, remember reviewed pairs or exact galleries in a per-admin ledger, and delete confirmed copies in place
 - **GPS maps** - Render interactive maps when images have location data and the effective EXIF/GPS policy allows display
 
 ### Thumbnails & Performance
@@ -125,6 +126,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - Cover image selection and upload
 - Manual gallery date ranges with From and To fields
 - EXIF-derived date range suggestions that can be applied directly from a gallery editor without a full page reload, or reviewed, edited and ignored per gallery branch
+- Duplicate photo detector in the gallery Admin side panel with selected-branch/all-gallery scope, linked gallery/photo context, per-admin reviewed-pair/exact-gallery ledger controls, and AJAX **Delete this** cleanup
 
 #### Image Management
 - Per-gallery image grid
@@ -299,6 +301,22 @@ Then open `http://localhost:8000/` in your browser.
 1. Upload image files to the gallery folder via FTP
 2. Use admin **Scan for new images** to import them
 3. Create thumbnails from the admin interface
+
+#### Finding Duplicate Photos
+
+1. Open an existing gallery in the Admin editor.
+2. In the Images section, choose **Find duplicate photos**. The detector opens in the existing right-side Admin panel.
+3. Leave **Search all galleries** unchecked to inspect the selected gallery and all nested subgalleries. Enable it explicitly to inspect all galleries available to the administrator.
+4. Start the scan. JavaScript processes stored image metadata in bounded AJAX batches; normal POST forms remain available only as the non-JavaScript/direct-page fallback.
+5. Review deterministic left/right duplicate pairs. Exact pairs use matching SHA-256 content; possible pairs use normalized EXIF evidence. File size is corroborating information only.
+6. Click the gallery title/path to open that public gallery, or the preview/filename/gallery-relative path to open the public photo context. These links open a new tab so the Admin detector panel remains available.
+7. Choose **Ignore this pair from now on** after reviewing one relationship. The canonical image pair is saved to your administrator ledger and is omitted from later searches without suppressing unrelated pair combinations.
+8. Choose **Ignore all from this gallery** independently on the left or right card to suppress future pairs involving that exact gallery. Gallery rules do not imply parent or child galleries, so nested galleries can be reviewed independently.
+9. Use **Clear ledger** to remove your stored pair and gallery decisions and make those findings eligible again.
+10. To remove one confirmed duplicate, choose **Delete this**. With JavaScript enabled, delete and all ledger controls run immediately through AJAX, keep the right-side panel open, do not navigate or reload the page, and refresh only detector state. The delete path reuses the normal gallery image deletion service. POST/redirect behavior is fallback-only.
+11. If older image rows are missing checksums or EXIF metadata, run the existing **Scan/import images** workflow first. The detector reuses stored scanner output and does not re-read every file during result requests.
+12. Apply pending database migrations before using the persistent review ledger. Migration `202608080001_duplicate_photo_ledger.php` creates the two per-administrator ledger tables.
+
 
 #### Organizing Galleries
 
@@ -513,7 +531,7 @@ Run the complete standalone regression suite:
 php tests/run.php
 ```
 
-The runner currently executes 24 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
+The runner currently executes 28 focused PHP tests covering gallery models, paths, migrations, uploads, thumbnails, public assets, URL rewrites, AI settings, and updater safety. Individual scripts can still be run directly when isolating a behavior. The project intentionally has no Composer or PHPUnit dependency.
 
 ## Troubleshooting
 

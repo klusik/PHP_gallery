@@ -25,6 +25,8 @@ Run one focused test directly when diagnosing a failure:
 
 ```bash
 php tests/gallery_visibility_model_test.php
+php tests/duplicate_photo_detector_test.php
+php tests/duplicate_photo_ledger_test.php
 php tests/browser_upload_settings_test.php
 php tests/gallery_public_paths_test.php
 php tests/migration_consistency_test.php
@@ -37,6 +39,7 @@ php tests/thumbnail_warmup_model_test.php
 
 The favorite shortcut test covers zero configured shortcuts, direct gallery links, the optional main-page shortcut, duplicate/missing-gallery cleanup, public visibility filtering, and HTML escaping.
 The gallery dates test covers manual date range normalization, reversed-range rejection, public display formatting with en dash separators, rendered date attributes, and branch matching used by scoped EXIF suggestion reviews.
+The duplicate photo detector tests cover exact checksum matches, normalized EXIF candidates, file-size-only rejection, selected/global scope, deterministic pair expansion, persistent pair/exact-gallery filtering, parent/child gallery independence, clickable public context links, delete and ledger scope validation, database migration contracts, reuse of the existing image deletion service, and in-place AJAX side-panel integration for delete/ignore/clear actions.
 The gallery public-path test covers Czech transliteration, decomposed accents, invisible Unicode characters, HTML entities, hierarchical paths, and sibling slug collisions.
 The migration consistency test validates every migration definition, preflights the complete migration set, and proves that old schema_migrations rows remain harmless after obsolete migration files are removed.
 The legacy migration-runner compatibility test verifies that PHP repair migrations work both with the current definition-aware runner and with the former SQL-only runner that may still be present during a partial patch deployment.
@@ -66,20 +69,27 @@ Recommended flow:
 13. Create a gallery named **Testovací fotky** with a child named **Test nahrání** and confirm the child URL is `/gallery/testovaci-fotky/test-nahrani/`.
 14. Delete the test gallery and confirm cleanup succeeds.
 
-### Database Maintenance Smoke Test
 
-Use a disposable database or a verified backup when testing destructive actions.
+### Duplicate Photo Detector Smoke Test
 
-1. Open Admin, Storage statistics, Database maintenance and confirm no full audit runs during ordinary dashboard loading.
-2. Run **Inspect database** and verify every active table appears with columns, indexes, foreign keys, storage, policy, migration references, and code-reference counts.
-3. Confirm the thumbnail section states that `image_thumbnail_variants` stores metadata only and shows size, format, and status distribution.
-4. Run the cleanup dry-run and confirm candidate counts change no data and report zero filesystem deletions.
-5. On prepared orphan fixtures, run one confirmed cleanup batch, reload, continue until complete, and rerun to prove idempotency. Confirm the same transaction created a `database_maintenance_audit_log` row containing every removed primary-key identity and the cleanup reason.
-6. Confirm valid galleries, images, users, `admin_logs`, every telemetry table, migration audit tables, and unknown tables remain untouched.
-7. On a legacy or partially compact thumbnail schema, run the repair dry-run first and confirm it reports the pending migration and exact planned objects without DDL. Then type `REPAIR`, apply the dedicated migration, and reinspect.
-8. Select one disposable table for **Refresh database statistics** and verify `ANALYZE TABLE` result messages.
-9. Select one disposable table for **Reclaim table space**, preview the selected optimization plan, and confirm no table statement ran. Then type `OPTIMIZE` and verify failure or engine messages are surfaced without claiming guaranteed disk reduction.
-10. Confirm no media, thumbnail, or ZIP file is deleted by any database-only action.
+1. Apply pending migrations, including `202608080001_duplicate_photo_ledger.php`, then log in as an administrator and open a gallery containing prepared duplicate photos across the selected gallery and one or more nested subgalleries.
+2. Open **Find duplicate photos** from the gallery Images section and confirm it uses the existing right-side Admin panel rather than a second modal or standalone route.
+3. Confirm **Search all galleries** is unchecked on a fresh detector view. Run local and explicit global scans and verify the scope labels and bounded AJAX progress while the panel remains open.
+4. Verify exact SHA-256 and normalized-EXIF possible matches still behave as specified, including different file sizes for valid EXIF candidates and rejection of size-only matches.
+5. Confirm completed findings are rendered as deterministic left/right pairs. Verify each side shows image id, filename, file size, dimensions/MIME where stored, EXIF/camera/lens context, and matching signals.
+6. Click each gallery title/path and verify it opens the correct public gallery in a new tab. Click each preview, filename, and gallery-relative path and verify it opens the correct public photo context in a new tab. The Admin page and detector panel must remain unchanged.
+7. Click **Ignore this pair from now on** on one finding. Verify the action completes through AJAX with no reload/navigation, the right-side panel remains open, the pair disappears immediately, and the ledger count increases.
+8. Start a new duplicate search with the same administrator and verify the ignored pair is not shown again while other relationships from the same source group remain eligible.
+9. On a left/right pair from different galleries, click **Ignore all from this gallery** on only one side. Verify all currently displayed/future pairs involving that exact gallery are suppressed. Verify a parent or child gallery with a different gallery id is not suppressed automatically.
+10. Repeat the exact-gallery action from the opposite side of another pair to confirm left/right controls are independent and the server derives the stored gallery from the submitted result image rather than a browser-provided gallery id.
+11. Use **Clear ledger**. Verify it runs through AJAX, the panel stays open, counts return to zero, and a new search can show previously ignored pair/gallery findings again.
+12. Confirm ledger decisions are per administrator by testing with a second administrator account when available. One account's ignored pairs/galleries must not suppress another account's results.
+13. On a disposable duplicate, press **Delete this** once. Confirm there is no confirmation dialog, no reload/navigation, the browser URL stays unchanged, the panel remains open, and refreshed pair counts/results reflect the deletion.
+14. Confirm deletion reuses the existing gallery image mutation semantics for original files, image rows, derivatives, cover references, path safety, and Admin logging. Repeat for a nested subgallery and global-search result.
+15. Confirm forged/stale pair IDs, image IDs, moved images outside an immutable local scope, and missing/expired detector jobs are rejected server-side.
+16. Disable JavaScript or use the detector route directly and verify normal POST/redirect forms still work as fallback for scan continuation and ledger actions. This fallback is not the expected JavaScript interaction path.
+17. Run `php tests/duplicate_photo_detector_test.php`, `php tests/duplicate_photo_ledger_test.php`, `php tests/migration_consistency_test.php`, and the full `php tests/run.php` suite.
+
 
 ## What To Retest After A Change
 
@@ -106,8 +116,12 @@ Ask these questions before and after the change:
 - Can visitors still browse public galleries?
 - Can media still upload, render, and delete?
 - Did I touch a route, permission check, or database schema?
+- If an action starts in the Admin right-side panel, does the JavaScript path keep the panel open and avoid page navigation/reload?
 
 If the answer is yes to any of those, run the manual smoke test in addition to syntax checks.
+
+For side-panel work, full-page POST/redirect behavior is a fallback test, not the expected JavaScript behavior. Test the in-panel path first. A panel action should update its fragment or affected page elements in place. If the feature is specified as one-click, also verify that no unrequested `window.confirm()` or other intermediate prompt was introduced.
+For persistent side-panel mutations such as ignore/review ledgers, verify every action through the JavaScript path first: the request must ask for JSON, the browser URL must not change, the panel shell must stay open, only owned fragments/page elements may refresh, and controls rendered by the replacement fragment must still be intercepted by delegated handlers.
 
 ## Recommended Habit
 Keep a short test note for each significant change:
@@ -118,3 +132,14 @@ Keep a short test note for each significant change:
 - any warning signs or follow-up work
 
 That makes regressions easier to track and helps future changes focus on the highest-risk paths first.
+
+### Duplicate Photo Detector side-panel deletion
+
+1. Open a gallery while authenticated as an administrator and launch **Find duplicate photos** from the existing right-side Admin panel.
+2. Complete a scan that contains at least one duplicate group.
+3. Click **Delete this** once and verify no browser confirmation dialog appears.
+4. Verify the delete request starts immediately through AJAX, the browser URL does not navigate to the standalone Admin Duplicate Photo Detector page, no full-page reload occurs, and the right-side panel remains open.
+5. Verify only the detector fragment refreshes in place, the deleted photo disappears immediately, and a group with only one surviving member is removed.
+6. Repeat from a result belonging to a nested subgallery and, separately, from **Search all galleries** scope.
+7. Refresh the underlying gallery afterward and verify the deleted image remains deleted and no unrelated image was removed.
+

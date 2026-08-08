@@ -105,6 +105,8 @@ function database_maintenance_table_policies(): array
     return [
         'galleries' => $protected('gallery/content data', 'Filesystem gallery folder and gallery metadata', 'Valid gallery content is always protected.'),
         'images' => $protected('gallery/content data', 'Gallery and source image', 'Valid image content is always protected.'),
+        'duplicate_photo_ledger_pairs' => $protected('administrator workflow state', 'Per-administrator reviewed duplicate image relationships', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
+        'duplicate_photo_ledger_galleries' => $protected('administrator workflow state', 'Per-administrator exact-gallery duplicate suppression rules', 'Ledger decisions are removed only by the Duplicate Photo Detector controls or foreign-key cascades.'),
         'tags' => $protected('gallery/content data', 'Administrator-defined taxonomy', 'Unused tags may be intentional and are not removed automatically.'),
         'gallery_tags' => $derived('gallery/content data', 'Gallery and tag link', 'Remove only links whose gallery or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one gallery/tag link.', 'automatic'),
         'image_tags' => $derived('gallery/content data', 'Image and tag link', 'Remove only links whose image or tag parent is missing.', 'No retention rule.', 'Composite primary key defines one image/tag link.', 'automatic'),

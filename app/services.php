@@ -86,6 +86,9 @@ require_once __DIR__ . '/services/gallery_mutations.php';
 require_once __DIR__ . '/services/gallery_metadata_organizer.php';
 require_once __DIR__ . '/services/picture_manager.php';
 require_once __DIR__ . '/services/image_scanning.php';
+// Load persistent duplicate-review ledger helpers before the detector renders filtered findings.
+require_once __DIR__ . '/services/duplicate_photo_ledger.php';
+require_once __DIR__ . '/services/duplicate_photo_detector.php';
 require_once __DIR__ . '/services/uploads.php';
 require_once __DIR__ . '/services/upload_automation.php';
 require_once __DIR__ . '/services/mobile_webdav.php';

@@ -477,6 +477,15 @@ function sidePanelWorkflowFromLink(link) {
                 loadErrorMessage: 'The upload workflow could not be loaded.',
             };
         }
+        if (name === 'duplicate-detector') {
+            return {
+                name,
+                kicker: link.dataset.adminSidePanelKicker || i18n('admin.duplicate_photos.kicker', 'Gallery tools'),
+                title: link.dataset.adminSidePanelTitle || i18n('admin.duplicate_photos.page_title', 'Duplicate Photo Detector'),
+                loadingMessage: i18n('admin.duplicate_photos.loading', 'Loading duplicate detector...'),
+                loadErrorMessage: i18n('admin.duplicate_photos.load_failed', 'The duplicate detector could not be loaded.'),
+            };
+        }
         return {
             name: 'create',
             kicker: link.dataset.adminSidePanelKicker || 'Admin shortcut',
@@ -517,7 +526,7 @@ function sidePanelContentFromHtml(html, workflow) {
         return trimmed;
     }
     const parsed = new DOMParser().parseFromString(html, 'text/html');
-    const directFragment = parsed.querySelector('[data-gallery-create-panel], [data-admin-upload-panel]');
+    const directFragment = parsed.querySelector('[data-gallery-create-panel], [data-admin-upload-panel], [data-duplicate-photo-detector]');
     if (directFragment instanceof HTMLElement) {
         return directFragment.outerHTML;
     }

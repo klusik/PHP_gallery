@@ -46,7 +46,7 @@ use function Gallery\Services\seo_request_guard_enforce;
 use function Gallery\Services\site_maintenance_register_request_trigger;
 use function Gallery\Services\translation_bootstrap_request;
 
-const CMS_VERSION = '0.85';
+const CMS_VERSION = '0.86';
 const CMS_GITHUB_REPOSITORY = 'klusik/PHP_gallery';
 const CMS_UPDATE_BRANCHES = ['main', 'master'];
 
@@ -263,6 +263,7 @@ function cms_run(): void
         'admin_media_renamer' => '\\Gallery\\Controllers\\cms_admin_media_renamer',
         'admin_gallery_dates' => '\\Gallery\\Controllers\\cms_admin_gallery_dates',
         'admin_gallery_date_suggestion' => '\\Gallery\\Controllers\\cms_admin_gallery_date_suggestion',
+        'admin_duplicate_photos' => '\\Gallery\\Controllers\\cms_admin_duplicate_photos',
         'admin_bulk_galleries' => '\\Gallery\\Controllers\\cms_admin_bulk_galleries',
         'admin_tags' => '\\Gallery\\Controllers\\cms_admin_tags',
         'admin_run_migrations' => '\\Gallery\\Controllers\\cms_admin_run_migrations',

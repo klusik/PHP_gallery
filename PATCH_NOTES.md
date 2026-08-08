@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 0.86
+
+Version 0.86 adds a safe, report-only duplicate photo detection workflow for administrators. It identifies exact and possible duplicates using the existing image checksum, file-size, dimension, MIME, and stored EXIF metadata pipeline, presents the evidence in the existing right-side panel, and records bounded inspection state without modifying photo files or image records.
+
+  ### Highlights
+
+  #### Added duplicate photo detection
+
+  - Added an Admin duplicate-photo detector to the gallery workflow.
+  - Searches the selected gallery by default and provides an explicit, unchecked **Search all galleries** option for a broader scan.
+  - Displays possible duplicate groups with thumbnails, gallery context, filenames, file sizes, dimensions, MIME types, capture dates, camera/lens metadata, and matching evidence.
+  - Distinguishes exact checksum matches from strong and possible metadata candidates instead of treating file size alone as proof.
+  - Keeps incomplete or missing EXIF values from creating false exact matches.
+  - Keeps the first release version report-only: no files or image rows are deleted, moved, renamed, merged, or modified.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `app/controllers/admin_duplicate_photos.php` for authenticated, CSRF-protected selected-gallery and global-search requests, JSON responses, fallback rendering, and bounded result handling.
+  - Added `app/services/duplicate_photo_detector.php` for scope validation, metadata normalization, deterministic grouping, confidence classification, result ordering, and preview data preparation.
+  - Added `app/services/duplicate_photo_ledger.php` for bounded inspection records and safe ledger access.
+  - Reused the existing `images.checksum_sha256`, `file_size`, dimensions, MIME, and stored EXIF fields populated by `app/services/image_scanning.php`.
+  - Added migration `202608080001_duplicate_photo_ledger.php` for durable duplicate-inspection ledger state and integrated schema maintenance readiness checks.
+
+  #### Frontend
+
+  - Added `app/views/admin_duplicate_photos.php` for the report panel and accessible empty, loading, error, and result states.
+  - Added `public/assets/gallery-modules/admin-duplicate-photo-detector.js` for side-panel loading, scope selection, bounded refreshes, and result rendering.
+  - Added `public/assets/styles/admin-duplicate-photo-detector.css` for responsive duplicate groups, evidence labels, thumbnails, and panel states.
+  - Integrated the feature with the existing `admin-side-panel.js` workflow, gallery editor entry point, translations, URL helpers, escaping, and asset loading pipeline.
+
+  #### Tests
+
+  - Added `tests/duplicate_photo_detector_test.php` for checksum matching, candidate confidence, EXIF normalization, gallery scope, global scope, deterministic ordering, inaccessible galleries, missing metadata, and non-destructive behavior.
+  - Added `tests/duplicate_photo_ledger_test.php` for ledger schema readiness, bounded persistence, duplicate inspection state, and safe retry behavior.
+  - Updated `TESTING.md` with focused automated and manual verification steps for the duplicate detector and right-side panel.
+
+  ### User Impact
+
+  #### For administrators
+
+  - Administrators can review likely duplicate photos directly from the selected gallery’s right-side panel.
+  - Global searching is opt-in, making the default workflow safer and faster for large installations.
+  - Each result explains why photos were grouped, allowing manual review before any future cleanup decision.
+  - Detection is non-destructive and does not alter the gallery or image library.
+
+  #### For visitors
+
+  - There is no direct public-facing behavior change.
+  - Existing public gallery rendering, URLs, thumbnails, EXIF display, and image records remain unchanged by duplicate detection.
+
 ## Version 0.85
 
 Version 0.85 is a database maintenance and storage reliability release. It adds a complete read-only audit of the active schema, bounded and explainable cleanup for only high-confidence records, conditional repair of legacy thumbnail metadata structures, and separately confirmed database statistics and physical optimization actions. The release is designed for shared hosting, where inspection must remain explicit, resumable, auditable, and safe.
