@@ -1050,6 +1050,38 @@ This section is optional background for curious owners, hosting administrators, 
 
 When someone opens a page, the application first reads its configuration and determines which public or Admin action the address represents. It then asks the responsible part of the application to gather information, apply access rules, and produce a page, file, download, or saved result. The central starting file is \filepath{app/bootstrap.php}.
 
+\subsubsection{What happens when somebody opens your website}
+\index{request!life cycle}
+\index{website request}
+
+It is helpful to imagine that every visit begins with a person handing a small note to the gallery's reception desk. The note is the web request: it may say that the visitor wants the home page, a particular gallery, one photograph, a thumbnail, a download, or an Admin action. The visitor does not need to know which file contains the answer, just as a visitor to a real archive does not need to know which cupboard contains a particular photograph. PHP Gallery receives the note through its public entrance, prepares the installation for this one visit, understands what was requested, and then passes the work to the part of the application that is best suited to answer it.
+
+The first preparation step is called \emph{bootstrap}. This does not create or change your photographs. It means that the application gathers the basic information needed to work safely: it reads the local configuration, connects the request to the correct database when database information is needed, prepares the language and security settings, and starts the visitor or administrator session when the requested action requires one. The application also checks general conditions that should apply before a page is produced, such as whether a feature is enabled, whether a request needs a security check, and whether a scheduled maintenance opportunity should be recorded. These checks happen before the requested gallery or control is allowed to continue, so the same protective rules do not need to be reinvented separately on every screen.
+
+After preparation, PHP Gallery interprets the address. A visitor may use a clean address such as \codeword{/gallery/holidays/rome}, while another installation may use a compatible query-style address containing a page name. The application translates both forms into the same internal meaning. It recognizes that the first address asks for the public gallery called ``holidays/rome'' and that a request ending in a thumbnail filename asks for a smaller image copy rather than a normal page. This translation is called routing. Routing is not the act of opening a photograph; it is the act of deciding which kind of answer is needed and which information belongs to that answer.
+
+Once the meaning is known, the application chooses a controller. A controller is the responsible reception clerk for one kind of request. A public-gallery controller prepares a gallery page, a media controller prepares an authorized image or original file, an Admin controller handles an administrative action, and a maintenance controller handles a repair or inspection task. The controller does not normally perform every detail itself. It asks specialized services to check access, find galleries and images, prepare thumbnails, load tags, validate a form, save a change, or create a download. Finally, the controller returns the appropriate result: an HTML page, a JSON response for an in-place Admin action, a media file, a download, or a redirect to another address.
+
+This means that opening one gallery is a coordinated journey rather than a single file being displayed directly. The request enters through one public door, the bootstrap prepares the application, routing identifies the requested destination, the controller coordinates the work, services apply the rules and gather the information, and the final response travels back to the browser. The browser then displays the result and may add interactive behavior such as the lightbox, search suggestions, voting, progressive thumbnail sharpening, or the Admin side panel. If JavaScript is unavailable, the server-rendered page and its normal links still provide the essential route wherever that feature supports a no-JavaScript path.
+
+\important{For a gallery owner, this process explains why a direct image or thumbnail address is still protected. The address does not bypass the application simply because it ends in an image filename. It is routed through the same request preparation and access decision before the file is allowed to reach the visitor.}
+
+\subsubsection{The three central steps: preparation, routing, and dispatch}
+\index{bootstrap}
+\index{routing}
+\index{controller dispatch}
+
+The three central steps can be understood as preparation, routing, and dispatch. \emph{Preparation} makes the application ready for the current visit. It reads the installation's instructions, establishes the context in which the request will run, and performs shared checks. \emph{Routing} reads the requested address and turns it into a meaningful destination with its parameters, such as a gallery path, share token, page number, thumbnail size, or file format. \emph{Dispatch} hands that prepared destination to the controller that knows how to complete it. The words are technical names for a simple sequence: get ready, understand the request, and give it to the right helper.
+
+These steps are kept together near the beginning of the application because their order matters. Access and request-safety decisions must happen before private information is assembled. A thumbnail request must be understood as a thumbnail request before the application selects a generated file. An Admin form must be recognized as an Admin operation before its submitted values are accepted. Keeping the common preparation and hand-off steps in one central place helps the application behave consistently when the same photograph is reached from a gallery card, a lightbox, a direct link, a search result, or a download action.
+
+\subsubsection{Why one central entrance is useful}
+\index{front controller}
+
+PHP Gallery uses one central public entrance for ordinary web requests. In technical language this is often called a \emph{front controller}; for an owner, it is simply the main reception desk. It gives the application one reliable opportunity to prepare configuration, security, translation, sessions, and feature rules before any particular page is handled. The repository-root \filepath{index.php} is a compatibility entrance for hosting and local-development arrangements, while \filepath{public/index.php} is the normal public entrance. Both lead into the same bootstrap process, so choosing one supported web-root arrangement does not create a different application.
+
+This arrangement also helps preserve the filesystem and database partnership described earlier. The address may identify a gallery path or image, but the application still resolves that identity through its catalog, checks the corresponding permissions, and then uses the actual gallery files when it is time to serve media. A request is therefore not trusted merely because its text resembles a folder name or a filename. The central entrance gives the application a consistent place to translate the request and apply the rules before it touches the requested result.
+
 \begin{lstlisting}
 browser request
   -> index.php or public/index.php
@@ -1063,25 +1095,76 @@ browser request
 
 \subsection{Controllers}
 
-Controllers are the reception desk. They receive a request, check who is asking and what was requested, then coordinate the appropriate work. Public gallery rendering resides principally in \filepath{app/controllers/public_gallery.php}. Other controller files receive uploads, media requests, maintenance actions, updates, and Admin forms.
+\index{controller}
+
+Controllers are the reception desk of the application. They receive the request after the central entrance and routing steps have prepared it, look at what the visitor or administrator is asking for, and coordinate the answer. A controller does not represent a photograph or a gallery itself. It represents an action involving one of them: show this gallery, open this image, accept this upload, save this description, inspect this installation, or return the next part of an Admin panel.
+
+For example, when a visitor opens a gallery, the controller first receives the selected gallery path and the visitor's request context. It helps establish which gallery the address refers to, asks the access rules whether the visitor may see it, and gathers the information needed for the page. When an administrator submits a form to rename a gallery, a different controller receives the submitted action, confirms that the administrator is signed in and that the request is genuine, and then asks the appropriate service to perform the change. The controller is therefore the coordinator of the journey, not the person who performs every specialist task.
+
+Public gallery rendering resides principally in \filepath{app/controllers/public_gallery.php}. Other controller files receive uploads, media requests, maintenance actions, updates, downloads, and Admin forms. Dividing these entry points by the kind of request helps the application keep a public visitor's experience separate from private administration. It also means that a request for a thumbnail can receive a small, efficient media response instead of loading the full page machinery needed for a dashboard.
+
+Controllers can return several kinds of answer. A normal page produces HTML for the browser to display. A side-panel action may produce a small HTML fragment or JSON information so the existing Admin screen can update in place. A media controller may send an authorized image file, while a download controller may prepare an archive. Some actions redirect the browser to a new address after a normal form submission. The result depends on the request, but the controller remains responsible for making sure that the right type of answer is returned.
+
+The most important promise made by a controller is that it does not skip the rules simply because the request is direct or technically small. A request for a thumbnail, map point, original file, or background asset still passes through the relevant access decision. A controller also hands persistent changes to trusted services instead of duplicating file deletion, authorization, CSRF, or database logic in each individual form handler. For the owner, this means that using a normal gallery link, a direct photo link, or an Admin control leads through the same protective decisions.
 
 \subsection{Services}
 
-Services are the specialists behind the reception desk. One specialist understands gallery access, another creates thumbnails, another finds duplicates, and others handle uploads, updates, metadata, maintenance, and search. Keeping these responsibilities focused helps several screens use the same trusted behavior.
+\index{service layer}
+
+Services are the specialists behind the reception desk. If a controller is the person who receives a request, a service is the person who knows how to do one particular kind of work correctly. One service understands gallery access, another creates thumbnails, another reads and validates image metadata, another finds likely duplicates, and others handle uploads, updates, maintenance, downloads, search, translations, and telemetry. The service files live mainly under \filepath{app/services/}.
+
+This separation is valuable because the same rule may be needed from several places. A photograph can be reached from a gallery card, a search result, a lightbox, a direct link, or a download operation. Each of those entry points should not invent its own version of ``is this visitor allowed to see the image?'' Instead, the controllers ask the gallery-access service to make that decision. Likewise, thumbnail generation, thumbnail validation, and thumbnail cleanup are shared responsibilities rather than separate behaviors hidden inside upload, maintenance, and public rendering screens.
+
+Consider a new photograph arriving through the browser. The upload controller receives the upload and passes it to upload-related services. Those services check the file, place it in the selected gallery, record the image in the catalog, read useful camera information, and arrange any requested thumbnail work. If the same photograph is later discovered because it was copied to the server by another method, discovery services can reuse the same image and metadata rules. The owner sees one consistent gallery even though the photograph entered through different doors.
+
+Services also protect the difference between the original file and the information about it. The original remains in the gallery folders, while services coordinate the database catalog, generated thumbnails, checksums, descriptions, visibility, and maintenance state. When a gallery is deleted, the gallery-mutation service can coordinate the database and filesystem consequences. When a thumbnail is missing, the thumbnail-maintenance service can record or repair that condition without requiring every public page controller to understand the repair process.
+
+Some services prepare information rather than change anything. A search service finds matching public content, a gallery lookup service resolves a public path, a rendering service prepares a media manifest, and a statistics service summarizes storage use. Other services perform deliberate changes such as saving a description or deleting an image. Keeping these responsibilities in named specialists makes it easier to tell whether a screen is merely reading the catalog or is about to change the collection.
+
+For a gallery owner, the practical result is consistency. A setting changed in Admin is interpreted by the same focused service wherever it matters. An access choice affects pages and media routes together. A maintenance operation uses the same thumbnail and filesystem rules as an upload. The service layer is the application's shared memory of how the gallery should behave.
 
 \subsection{Views and browser modules}
 
-Views turn prepared information into the page people see. Browser modules add interactive behavior such as the lightbox, search suggestions, voting, side panels, and progressive thumbnail sharpening. Public visitors receive a smaller set of browser features than signed-in administrators.
+\index{views}
+\index{browser modules}
 
-Browser code remains framework-free. Lifecycle functions support teardown and setup around dynamic fragment replacement. Modules own focused behavior such as lightbox control, responsive thumbnails, progressive thumbnail upgrades, voting, search, Admin side panels, and diagnostics.
+Views are the part that turns prepared information into the page people see. They place the site name, navigation, gallery title, description, cards, controls, messages, and footer into an HTML response. A view should not decide whether a visitor is allowed to see a protected gallery or how a thumbnail is generated. Those decisions are made before the view receives its prepared information. In everyday terms, the view is the careful display cabinet: it arranges the material for the visitor without being responsible for deciding which material may leave the archive.
+
+When a gallery page is prepared, a view may receive a selected gallery, its visible child galleries, permitted images, descriptions, tags, pagination links, thumbnail information, and the active theme. It can then present those elements consistently. The same layout helpers can be used for a home page, a public gallery, an Admin screen, or a side-panel fragment where appropriate, while each screen still has its own purpose and amount of detail.
+
+Browser modules add behavior after the HTML reaches the visitor's browser. They power the lightbox, search suggestions, voting, Admin side panels, upload progress, drag-and-drop actions, thumbnail upgrades, diagnostics, and other interactions. The server gives the browser the initial structure and the information needed to use it; the browser modules listen for actions and make the experience more immediate. For example, clicking a vote button can send a small request and update the displayed count without rebuilding the entire gallery page.
+
+Browser code remains framework-free, which means PHP Gallery does not require a large client-side application framework before a visitor can read a gallery. This keeps the public page understandable to ordinary browsers and helps the server-rendered HTML remain useful on its own. Public visitors receive a smaller set of browser features than signed-in administrators because an administrator's workspace needs controls for editing, progress, maintenance, and side-panel workflows that are not relevant to a normal visitor.
+
+The Admin side panel deserves special mention. Its content can be replaced while the surrounding page remains open. The browser modules therefore use lifecycle-aware setup and teardown behavior: a module can attach to a newly inserted form, stop listening to an old fragment, and attach again to the refreshed copy. Event delegation allows a stable parent area to recognize actions from controls that were added later, so the administrator can save an item, keep the panel open, and continue working without a full-page navigation.
+
+The division between views and browser modules also provides a safety net. The server can render links, forms, titles, alternative text, and essential image choices before JavaScript runs. JavaScript then improves speed and convenience where the browser supports it. This is why a visitor should still be able to open a gallery, follow a direct link, read its content, and navigate its important parts even when scripts are blocked, delayed, or unavailable.
 
 \subsection{Public selected-gallery render pipeline}
 
+\index{render pipeline}
+
 \subsubsection{Server render and browser enhancement}
 
-The selected-gallery controller resolves access, computes counts and pagination, loads direct children and visible image rows, batches thumbnail metadata, tags, and votes, and creates request-local media manifest entries. It then renders SEO metadata, branding, navigation, cards, pagination, lightbox configuration, diagnostics, telemetry, and footer assets.
+When a visitor opens a gallery, PHP Gallery follows a deliberate render pipeline. First it identifies the selected gallery and resolves the effective access rules, including visibility, parent-gallery protection, password state, share access, and any age-related restriction. The application performs this work before it constructs public media addresses. A visitor therefore does not receive a useful-looking page containing links to material that the visitor is not allowed to open.
+
+The application then prepares the gallery's shape. It counts or estimates the information needed for navigation, determines the current page of results, loads the direct child galleries, and selects the image rows that are visible in the current scope. It also prepares titles, descriptions, dates, tags, votes, ordering, and relevant display choices. A large collection is not treated as one enormous undifferentiated list: pagination allows the visitor to move through it in manageable sections.
+
+Next, the application prepares the media that the visible cards will need. It gathers thumbnail metadata in batches rather than asking the database the same small question once for every card. It creates request-local media manifest entries describing the candidates that are actually available and permitted for each image. This preparation allows the page to expose suitable image choices without repeatedly probing every possible file while the visitor is waiting for the first screen.
+
+The selected-gallery controller then gives the prepared information to the presentation layer. The response includes the page title and other search-engine information, branding, navigation, breadcrumbs, child-gallery cards, photograph cards, pagination, lightbox configuration, and the footer assets. Diagnostics and privacy-controlled telemetry may also receive carefully selected information about the render. These pieces are assembled for this request; they do not mean that the application has permanently copied the original photographs into the page or database.
+
+The browser receives a useful server-rendered starting point. It can read the title and descriptions, discover the initial image candidates, follow links, and preserve the page's semantic structure before JavaScript has finished loading. Browser modules then enhance that starting point: search can respond as the visitor types, votes can update in place, the lightbox can open without a new page, and the progressive renderer can request larger candidates when appropriate. The server remains responsible for access and for producing safe initial markup; the browser supplies convenience and carefully bounded enhancement.
 
 Server-side rendering gives browsers early semantic content and image discovery. JavaScript enhances search, votes, lightbox behavior, thumbnail policy, diagnostics, and authenticated controls. This division supports accessibility, crawlers, direct links, and graceful operation on constrained clients.
+
+\subsubsection{A visitor's example journey}
+
+Imagine that Anna opens a shared link to \emph{Travel / Rome}. The request first enters the central application entrance. Bootstrap prepares the installation and the request context. Routing recognizes the gallery path and passes it to the public-gallery controller. The controller asks the access service whether Anna may see the gallery, resolves the gallery record, and determines which child galleries and photographs belong on the requested page.
+
+The services then prepare the details that make the page useful. Gallery and image information provides the names and descriptions, pagination chooses the visible part of the collection, tag and vote services provide related controls, and thumbnail services identify the available display copies. The view arranges those results into the page. When the response reaches Anna's browser, the first cards can begin to appear using server-provided image information. If JavaScript is available, the lightbox and other enhancements become active; if it is not, the ordinary links and server-rendered content still provide the essential journey.
+
+If Anna clicks a photograph, the new request or browser action does not abandon the original protections. The selected image is resolved again, access is checked again where required, and the appropriate preview or original is chosen for that purpose. If she later opens the same link from a different browser, the application makes a fresh decision based on that visitor's access state rather than trusting that the address was previously used successfully. This repeated discipline is what allows friendly, shareable addresses to coexist with private and protected galleries.
 
 \section{Optional background: what the database remembers}
 \label{sec:database}
