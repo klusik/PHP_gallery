@@ -129,4 +129,25 @@ assert_public_asset_same('assets/gallery.js', view_script_asset_for_context(fals
 assert_public_asset_same('assets/public-gallery.js', view_script_asset_for_context(false, $loggedInUser, true), 'anonymous preview uses the public entrypoint');
 assert_public_asset_same('assets/gallery.js', view_script_asset_for_context(true, null, false), 'admin pages keep the full entrypoint');
 
+$anonymousEntrypointSource = file_get_contents(__DIR__ . '/../public/assets/public-gallery.js');
+if (!is_string($anonymousEntrypointSource)
+    || !str_contains($anonymousEntrypointSource, 'progressive-thumbnail-renderer.js')
+    || !str_contains($anonymousEntrypointSource, "'img[data-progressive-thumbnail]'")) {
+    throw new RuntimeException('Anonymous public entrypoint does not conditionally load progressive thumbnail behavior from matching markup.');
+}
+if (!str_contains($anonymousEntrypointSource, 'public-thumbnail-render-diagnostics.js')
+    || !str_contains($anonymousEntrypointSource, "'[data-public-thumbnail-diagnostics]'")) {
+    throw new RuntimeException('Anonymous-preview entrypoint does not keep Admin thumbnail diagnostics behind matching profile markup.');
+}
+
+$loggedInEntrypointSource = file_get_contents(__DIR__ . '/../public/assets/gallery.js');
+if (!is_string($loggedInEntrypointSource)
+    || !str_contains($loggedInEntrypointSource, 'setupProgressiveThumbnailRendererWhenPresent')
+    || !str_contains($loggedInEntrypointSource, "document.querySelector('img[data-progressive-thumbnail]')")) {
+    throw new RuntimeException('Logged-in entrypoint does not guard progressive thumbnail loading behind matching public markup.');
+}
+if (!str_contains($loggedInEntrypointSource, 'setupPublicThumbnailRenderDiagnostics')) {
+    throw new RuntimeException('Logged-in entrypoint does not initialize the Admin-only public thumbnail diagnostics panel.');
+}
+
 echo "Public asset loading model tests passed.\n";

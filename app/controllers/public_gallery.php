@@ -121,6 +121,9 @@ use function Gallery\Services\public_gallery_listing_sql_fragment;
 use function Gallery\Services\public_gallery_metadata;
 use function Gallery\Services\public_home_search_enabled;
 use function Gallery\Services\public_image_display_title;
+use function Gallery\Services\public_responsive_thumbnail_loading_attributes;
+use function Gallery\Services\public_thumbnail_render_picture_html;
+use function Gallery\Services\public_thumbnail_rendering_mode;
 use function Gallery\Services\public_path_schema_ready;
 use function Gallery\Services\public_render_profile_count;
 use function Gallery\Services\public_render_profile_db;
@@ -546,6 +549,8 @@ function cms_gallery(): void
     $publicPhotoReorderEnabled = $publicPageReorderEnabled && count($images) > 1;
     // $lightboxFeatureEnabled stores whether cards should open in the JavaScript lightbox instead of plain image URLs.
     $lightboxFeatureEnabled = !function_exists('Gallery\\Services\\feature_flag_enabled') || feature_flag_enabled('lightbox_modes');
+    // $publicThumbnailRenderingMode stores the validated site-level picture strategy for selected-gallery photo cards.
+    $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
     if ($images) {
         if ($pictureManagerEnabled) {
             render_picture_manager_toolbar($gallery, count($children) > 0);
@@ -560,7 +565,7 @@ function cms_gallery(): void
         echo '<section class="grid gallery-image-grid' . e(pagination_grid_columns_class($paginationSettings)) . '" data-public-reorder-list="photo" data-gallery-image-list' . $lightboxConfigAttributes . '>';
     }
     public_render_profile_count('rendered_images', count($images));
-    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest): void {
+    public_render_profile_span('render_image_cards', static function () use ($images, $gallery, $publicOnly, $photoMapsAllowed, $imageTagsById, $votesById, $votingAllowed, $paginationSettings, $photoPagination, $publicPhotoReorderEnabled, $pictureManagerEnabled, $lightboxExcludesRestrictedNsfw, $lightboxFeatureEnabled, $publicMediaManifest, $publicThumbnailRenderingMode): void {
     foreach ($images as $index => $image) {
         // Variable $imageNeedsNsfwGate stores whether this card must avoid exposing thumbnail/media URLs.
         $imageNeedsNsfwGate = $publicOnly && image_nsfw_restricted($image, $gallery) && !visitor_can_access_nsfw_content();
@@ -615,9 +620,8 @@ function cms_gallery(): void
         echo '<div class="image-stage">';
         // $thumbnailSizesAttribute stores a responsive image hint derived from the configured grid.
         $thumbnailSizesAttribute = pagination_photo_thumbnail_sizes_attribute($paginationSettings);
-        // $thumbnailLoadingAttributes keeps above-the-fold photos eager without forcing later rows to compete for bandwidth.
-        $thumbnailLoadingAttributes = public_thumbnail_loading_attributes($index);
-        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card stable picture', static fn (): string => thumbnail_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $thumbnailLoadingAttributes, $thumbnailBundle)) . '</a>';
+        // $publicThumbnailRenderingMode selects only the photo picture strategy; loading policy stays centralized with the renderer.
+        echo '<a class="image-preview-link" href="' . e($imagePageUrl) . '">' . public_render_profile_with_thumbnail_purpose('image card public thumbnail picture', static fn (): string => public_thumbnail_render_picture_html($image, 300, [300, 600, 800, 960], $thumbnailSizesAttribute, $altText, $index, $thumbnailBundle, $publicThumbnailRenderingMode)) . '</a>';
         if ($imageMapPoint) {
             echo '<button type="button" class="photo-map-pin" data-photo-map aria-label="' . e(t('public.show_photo_location', 'Show photo location')) . '" title="' . e(t('public.show_photo_location', 'Show photo location')) . '">&#128205;</button>';
         }
@@ -1180,25 +1184,19 @@ function gallery_share_url(int $galleryId, string $token): string
 }
 
 /**
- * Return stable loading attributes for public gallery and photo thumbnails.
+ * Return the stable responsive loading attributes still used by public gallery cover thumbnails.
  *
  * The first visible cards should load during the initial page render, because
  * lazy-loading a whole first row can leave empty thumbnail slots that then pop
- * in one by one. Later rows remain lazy so large galleries do not start too
- * many image requests at once.
+ * in one by one. Later rows remain lazy. Selected-gallery photo cards now obtain
+ * their responsive or progressive policy from public_thumbnail_rendering.php.
  *
  * @param int $index Index value.
  * @return string Text result for the caller.
  */
 function public_thumbnail_loading_attributes(int $index): string
 {
-    if ($index < 2) {
-        return 'loading="eager" fetchpriority="high"';
-    }
-    if ($index < 8) {
-        return 'loading="eager" fetchpriority="auto"';
-    }
-    return 'loading="lazy" fetchpriority="low"';
+    return public_responsive_thumbnail_loading_attributes($index);
 }
 
 /**

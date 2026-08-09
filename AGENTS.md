@@ -26,6 +26,15 @@ Persistent mutations launched from the right-side panel, including review/ignore
 
 Do not invent browser confirmation dialogs or extra intermediate navigation for an explicitly requested one-click/in-place panel action unless the feature requirements specifically call for confirmation. Destructive operations must still use the existing authentication, CSRF, authorization, path-safety, and mutation services.
 
+## Public Thumbnail Renderer Guidelines
+Both public thumbnail renderers are permanent supported pipelines. `responsive` is the safe default and must keep complete server-rendered responsive srcsets plus no-JavaScript behavior. `progressive` is a permanent machine/architecture name even while the Admin control displays a Beta maturity label. Do not introduce temporary, experimental, numbered, or replacement-style renderer identifiers.
+
+Changes to shared thumbnail bundle, bounds, HTML, manifest, warm-up, public-card, or browser lifecycle code must test both renderers. No renderer may weaken gallery/password/NSFW access checks, media authorization, semantic server-rendered image markup, useful alt text, or no-JavaScript navigation. Progressive larger candidates must remain inert until the bounded near-viewport scheduler activates them.
+
+The selected-gallery mode is stored as `public_thumbnail_rendering_mode` with only `responsive` and `progressive` values. Invalid values must fall back to responsive. The Admin-facing Beta wording is UI status only and must not leak into setting keys, PHP/JavaScript identifiers, CSS classes, filenames, data attributes, test names, or architecture terms.
+
+`PATCH_NOTES.md` is intentionally not changed as part of renderer implementation work unless a separate task explicitly requests release notes.
+
 ## Commit & Pull Request Guidelines
 Git history uses short, imperative messages, often with a feature prefix, for example `feat(admin): add media renamer workflow` or `Feature selector`. Keep commits focused and descriptive. Pull requests should explain the behavioral change, mention any schema or file-system impact, and include screenshots for UI changes when relevant. Note any setup steps needed to verify the change.
 

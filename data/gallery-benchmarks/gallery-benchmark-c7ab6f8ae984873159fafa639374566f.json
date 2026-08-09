@@ -1,0 +1,2851 @@
+{
+    "schema_version": 1,
+    "kind": "public_gallery_benchmark",
+    "token": "c7ab6f8ae984873159fafa639374566f",
+    "created_at": "2026-08-08T22:46:55Z",
+    "updated_at": "2026-08-08T22:46:57Z",
+    "runs_total": 5,
+    "gallery": {
+        "id": 69,
+        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+        "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+        "folder_path": "Herní Screeny/test-importu-galerie",
+        "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+        "visibility": "public",
+        "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+    },
+    "started_by": {
+        "id": 1,
+        "username": "admin"
+    },
+    "server_context": {
+        "php_version": "8.3.30",
+        "php_sapi": "apache2handler",
+        "os_family": "Windows",
+        "memory_limit": "512M",
+        "max_execution_time": "36000",
+        "opcache_enabled": null,
+        "https": false,
+        "server_software": "Apache/2.4.66 (Win64) OpenSSL/3.0.18 PHP/8.3.30",
+        "http_host": "localhost"
+    },
+    "initial_request": {
+        "method": "POST",
+        "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_start",
+        "remote_addr_present": true,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    },
+    "events": [
+        {
+            "at": "2026-08-08T22:46:55Z",
+            "type": "benchmark_started",
+            "message": "Admin started browser-driven gallery benchmark."
+        },
+        {
+            "at": "2026-08-08T22:46:55Z",
+            "type": "server_render_recorded",
+            "run_index": 1
+        },
+        {
+            "at": "2026-08-08T22:46:55Z",
+            "type": "browser_load_recorded",
+            "run_index": 1
+        },
+        {
+            "at": "2026-08-08T22:46:55Z",
+            "type": "server_render_recorded",
+            "run_index": 2
+        },
+        {
+            "at": "2026-08-08T22:46:55Z",
+            "type": "browser_load_recorded",
+            "run_index": 2
+        },
+        {
+            "at": "2026-08-08T22:46:56Z",
+            "type": "server_render_recorded",
+            "run_index": 3
+        },
+        {
+            "at": "2026-08-08T22:46:56Z",
+            "type": "browser_load_recorded",
+            "run_index": 3
+        },
+        {
+            "at": "2026-08-08T22:46:56Z",
+            "type": "server_render_recorded",
+            "run_index": 4
+        },
+        {
+            "at": "2026-08-08T22:46:56Z",
+            "type": "browser_load_recorded",
+            "run_index": 4
+        },
+        {
+            "at": "2026-08-08T22:46:56Z",
+            "type": "server_render_recorded",
+            "run_index": 5
+        },
+        {
+            "at": "2026-08-08T22:46:57Z",
+            "type": "browser_load_recorded",
+            "run_index": 5
+        }
+    ],
+    "runs": [
+        {
+            "run_index": 1,
+            "planned_at": "2026-08-08T22:46:55Z",
+            "server_render": {
+                "recorded_at": "2026-08-08T22:46:55Z",
+                "gallery": {
+                    "id": 69,
+                    "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+                    "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "folder_path": "Herní Screeny/test-importu-galerie",
+                    "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "visibility": "public",
+                    "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+                },
+                "request": {
+                    "method": "GET",
+                    "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=1&benchmark_cache_bust=1786229215152-1",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "snapshot": {
+                    "route": "gallery",
+                    "gallery_id": 69,
+                    "started_at_unix": 1786229215.246984,
+                    "ended_at_unix": 1786229215.409424,
+                    "total_ms": 162.44006156921387,
+                    "memory_usage_bytes": 18874368,
+                    "memory_peak_bytes": 18874368,
+                    "included_file_count": 166,
+                    "counters": {
+                        "db_queries": 5,
+                        "filesystem_checks": 0,
+                        "thumbnail_lookups": 0,
+                        "thumbnail_direct_hits": 0,
+                        "thumbnail_db_fallback_hits": 0,
+                        "thumbnail_fallback_searches": 0,
+                        "thumbnail_fallback_checks": 0,
+                        "thumbnail_fallback_hits": 0,
+                        "thumbnail_media_fallbacks": 0,
+                        "thumbnail_bundle_requests": 0,
+                        "thumbnail_bundle_cache_hits": 0,
+                        "thumbnail_bundle_cache_misses": 0,
+                        "thumbnail_bundle_variant_hits": 0,
+                        "thumbnail_bundle_fallback_hits": 0,
+                        "thumbnail_bundle_media_fallbacks": 0,
+                        "gallery_scan_calls": 1,
+                        "gallery_map_cache_hits": 0,
+                        "gallery_map_cache_misses": 0,
+                        "thumbnail_lookup_cache_hits": 0,
+                        "rendered_subgalleries": 0,
+                        "rendered_images": 60,
+                        "thumbnail_manifest_images": 60,
+                        "thumbnail_manifest_rows_loaded": 360,
+                        "thumbnail_manifest_images_with_rows": 60,
+                        "thumbnail_manifest_variant_hits": 120,
+                        "thumbnail_manifest_url_builds": 120,
+                        "thumbnail_manifest_metadata_bundles": 60,
+                        "thumbnail_manifest_candidate_sizes": 120,
+                        "thumbnail_manifest_selection_attempts": 180,
+                        "thumbnail_manifest_exact_selections": 180,
+                        "seo_json_ld_images": 20,
+                        "seo_json_ld_manifest_hits": 40
+                    },
+                    "timers": {
+                        "total_request": {
+                            "count": 1,
+                            "total_ms": 162.44006156921387,
+                            "max_ms": 162.44006156921387
+                        },
+                        "render_image_cards": {
+                            "count": 1,
+                            "total_ms": 92.13089942932129,
+                            "max_ms": 92.13089942932129
+                        },
+                        "public_gallery_media_manifest": {
+                            "count": 1,
+                            "total_ms": 23.03004264831543,
+                            "max_ms": 23.03004264831543
+                        },
+                        "media_manifest_build_entries": {
+                            "count": 1,
+                            "total_ms": 20.200014114379883,
+                            "max_ms": 20.200014114379883
+                        },
+                        "db_query": {
+                            "count": 5,
+                            "total_ms": 3.9398670196533203,
+                            "max_ms": 1.4100074768066406
+                        },
+                        "gallery_grid_settings": {
+                            "count": 1,
+                            "total_ms": 3.720998764038086,
+                            "max_ms": 3.720998764038086
+                        },
+                        "media_manifest_build_bundle": {
+                            "count": 60,
+                            "total_ms": 2.1712779998779297,
+                            "max_ms": 1.6782283782958984
+                        },
+                        "media_manifest_query_metadata": {
+                            "count": 1,
+                            "total_ms": 1.4100074768066406,
+                            "max_ms": 1.4100074768066406
+                        },
+                        "gallery_image_page_query": {
+                            "count": 1,
+                            "total_ms": 1.1968612670898438,
+                            "max_ms": 1.1968612670898438
+                        },
+                        "child_gallery_lookup": {
+                            "count": 1,
+                            "total_ms": 1.1539459228515625,
+                            "max_ms": 1.1539459228515625
+                        },
+                        "picture_game_lookup": {
+                            "count": 1,
+                            "total_ms": 1.0869503021240234,
+                            "max_ms": 1.0869503021240234
+                        },
+                        "media_manifest_schema_check": {
+                            "count": 1,
+                            "total_ms": 0.8778572082519531,
+                            "max_ms": 0.8778572082519531
+                        },
+                        "image_tag_lookup": {
+                            "count": 1,
+                            "total_ms": 0.6539821624755859,
+                            "max_ms": 0.6539821624755859
+                        },
+                        "gallery_lightbox_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5738735198974609,
+                            "max_ms": 0.5738735198974609
+                        },
+                        "gallery_image_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5340576171875,
+                            "max_ms": 0.5340576171875
+                        },
+                        "media_manifest_group_rows": {
+                            "count": 1,
+                            "total_ms": 0.370025634765625,
+                            "max_ms": 0.370025634765625
+                        },
+                        "image_vote_lookup": {
+                            "count": 1,
+                            "total_ms": 0.25916099548339844,
+                            "max_ms": 0.25916099548339844
+                        },
+                        "child_galleries_batch_db": {
+                            "count": 1,
+                            "total_ms": 0.225067138671875,
+                            "max_ms": 0.225067138671875
+                        },
+                        "seo_metadata_lookup": {
+                            "count": 1,
+                            "total_ms": 0.19788742065429688,
+                            "max_ms": 0.19788742065429688
+                        },
+                        "media_manifest_preview_format": {
+                            "count": 1,
+                            "total_ms": 0.11610984802246094,
+                            "max_ms": 0.11610984802246094
+                        },
+                        "background_asset_lookup": {
+                            "count": 1,
+                            "total_ms": 0.08893013000488281,
+                            "max_ms": 0.08893013000488281
+                        },
+                        "media_manifest_collect_images": {
+                            "count": 1,
+                            "total_ms": 0.0059604644775390625,
+                            "max_ms": 0.0059604644775390625
+                        },
+                        "media_manifest_configured_sizes": {
+                            "count": 1,
+                            "total_ms": 0.0040531158447265625,
+                            "max_ms": 0.0040531158447265625
+                        }
+                    },
+                    "thumbnail_purposes": [
+                        {
+                            "purpose": "media manifest lightbox preview 1600",
+                            "size": 1600,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo content 1200",
+                            "size": 1200,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo thumbnail 800",
+                            "size": 800,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "map point thumb 300",
+                            "size": 300,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        }
+                    ],
+                    "events": [],
+                    "request": {
+                        "method": "GET",
+                        "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=1&benchmark_cache_bust=1786229215152-1",
+                        "query_keys": [
+                            "view_as",
+                            "benchmark_token",
+                            "benchmark_run",
+                            "benchmark_cache_bust",
+                            "page",
+                            "public_path"
+                        ]
+                    }
+                }
+            },
+            "browser_load": {
+                "recorded_at": "2026-08-08T22:46:55Z",
+                "request": {
+                    "method": "POST",
+                    "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_browser",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "payload": {
+                    "recorded_at_browser": "2026-08-08T22:46:55.418Z",
+                    "iframe_elapsed_ms": 264.7999999523163,
+                    "navigation": {
+                        "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=1&benchmark_cache_bust=1786229215152-1",
+                        "entryType": "navigation",
+                        "initiatorType": "navigation",
+                        "startTime": 0,
+                        "duration": 264.6999999284744,
+                        "redirectStart": 0,
+                        "redirectEnd": 0,
+                        "fetchStart": 1.600000023841858,
+                        "domainLookupStart": 1.600000023841858,
+                        "domainLookupEnd": 1.600000023841858,
+                        "connectStart": 1.600000023841858,
+                        "connectEnd": 1.600000023841858,
+                        "secureConnectionStart": 0,
+                        "requestStart": 2.899999976158142,
+                        "responseStart": 149.19999992847443,
+                        "responseEnd": 257.2999999523163,
+                        "domInteractive": 258.2999999523163,
+                        "domContentLoadedEventStart": 261.60000002384186,
+                        "domContentLoadedEventEnd": 261.89999997615814,
+                        "domComplete": 264.39999997615814,
+                        "loadEventStart": 264.39999997615814,
+                        "loadEventEnd": 264.6999999284744,
+                        "transferSize": 206485,
+                        "encodedBodySize": 206185,
+                        "decodedBodySize": 206185
+                    },
+                    "resources": {
+                        "count": 78,
+                        "total_transfer_size": 0,
+                        "total_encoded_body_size": 4220221,
+                        "total_decoded_body_size": 4220221,
+                        "by_initiator_type": {
+                            "link": {
+                                "count": 9,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 183259,
+                                "total_decoded_body_size": 183259
+                            },
+                            "img": {
+                                "count": 61,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 3401055,
+                                "total_decoded_body_size": 3401055
+                            },
+                            "css": {
+                                "count": 1,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 313944,
+                                "total_decoded_body_size": 313944
+                            },
+                            "script": {
+                                "count": 7,
+                                "total_duration": 7.199999809265137,
+                                "max_duration": 1.6999999284744263,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 321963,
+                                "total_decoded_body_size": 321963
+                            }
+                        },
+                        "slowest": [
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/progressive-thumbnail-renderer.js?v=20260809-progressive-thumbnail-renderer",
+                                "initiatorType": "script",
+                                "duration": 1.6999999284744263,
+                                "transferSize": 0,
+                                "encodedBodySize": 22947,
+                                "decodedBodySize": 22947
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/public-home-search.js?v=20260528-public-search-context-v1",
+                                "initiatorType": "script",
+                                "duration": 1.600000023841858,
+                                "transferSize": 0,
+                                "encodedBodySize": 8428,
+                                "decodedBodySize": 8428
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/back-to-top.js?v=20260510-lifecycle-v3",
+                                "initiatorType": "script",
+                                "duration": 1.5,
+                                "transferSize": 0,
+                                "encodedBodySize": 5872,
+                                "decodedBodySize": 5872
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/public-gallery.js?v=1786221178",
+                                "initiatorType": "script",
+                                "duration": 1.0999999046325684,
+                                "transferSize": 0,
+                                "encodedBodySize": 4687,
+                                "decodedBodySize": 4687
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1",
+                                "initiatorType": "script",
+                                "duration": 0.6999999284744263,
+                                "transferSize": 0,
+                                "encodedBodySize": 11331,
+                                "decodedBodySize": 11331
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/admin-core.js?v=20260512-modular-admin-v1",
+                                "initiatorType": "script",
+                                "duration": 0.6000000238418579,
+                                "transferSize": 0,
+                                "encodedBodySize": 11103,
+                                "decodedBodySize": 11103
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/base.css?v=1778592272",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 3647,
+                                "decodedBodySize": 3647
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 44226,
+                                "decodedBodySize": 44226
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/lightbox.css?v=1783886091",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 32480,
+                                "decodedBodySize": 32480
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public-shared.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 40476,
+                                "decodedBodySize": 40476
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/utilities.css?v=1781460808",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 18220,
+                                "decodedBodySize": 18220
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles.css?v=1781473826",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 6834,
+                                "decodedBodySize": 6834
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/custom.css?v=1778582054",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8212,
+                                "decodedBodySize": 8212
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_css&v=7adecfbf6ec5",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8140,
+                                "decodedBodySize": 8140
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/mobile-gallery.css?v=1780493190",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 21024,
+                                "decodedBodySize": 21024
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_branding_asset&kind=separator",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 31047,
+                                "decodedBodySize": 31047
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0001/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 41432,
+                                "decodedBodySize": 41432
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0002/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 141690,
+                                "decodedBodySize": 141690
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0003/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67540,
+                                "decodedBodySize": 67540
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0004/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 47298,
+                                "decodedBodySize": 47298
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0005/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 45464,
+                                "decodedBodySize": 45464
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0006/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 42822,
+                                "decodedBodySize": 42822
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_background_asset&v=1778610557",
+                                "initiatorType": "css",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 313944,
+                                "decodedBodySize": 313944
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0007/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 46804,
+                                "decodedBodySize": 46804
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0008/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68252,
+                                "decodedBodySize": 68252
+                            }
+                        ]
+                    },
+                    "document": {
+                        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09 - Nejlepší Galerie na Světě",
+                        "readyState": "complete",
+                        "image_count": 62,
+                        "script_count": 3,
+                        "stylesheet_count": 10,
+                        "html_length": 206734
+                    }
+                }
+            },
+            "events": [
+                {
+                    "at": "2026-08-08T22:46:55Z",
+                    "type": "server_render_recorded",
+                    "message": "Gallery PHP render profile was recorded."
+                },
+                {
+                    "at": "2026-08-08T22:46:55Z",
+                    "type": "browser_load_recorded",
+                    "message": "Browser navigation and resource timing was recorded."
+                }
+            ]
+        },
+        {
+            "run_index": 2,
+            "planned_at": "2026-08-08T22:46:55Z",
+            "server_render": {
+                "recorded_at": "2026-08-08T22:46:55Z",
+                "gallery": {
+                    "id": 69,
+                    "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+                    "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "folder_path": "Herní Screeny/test-importu-galerie",
+                    "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "visibility": "public",
+                    "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+                },
+                "request": {
+                    "method": "GET",
+                    "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=2&benchmark_cache_bust=1786229215518-2",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "snapshot": {
+                    "route": "gallery",
+                    "gallery_id": 69,
+                    "started_at_unix": 1786229215.61371,
+                    "ended_at_unix": 1786229215.78206,
+                    "total_ms": 168.3499813079834,
+                    "memory_usage_bytes": 18874368,
+                    "memory_peak_bytes": 18874368,
+                    "included_file_count": 166,
+                    "counters": {
+                        "db_queries": 5,
+                        "filesystem_checks": 0,
+                        "thumbnail_lookups": 0,
+                        "thumbnail_direct_hits": 0,
+                        "thumbnail_db_fallback_hits": 0,
+                        "thumbnail_fallback_searches": 0,
+                        "thumbnail_fallback_checks": 0,
+                        "thumbnail_fallback_hits": 0,
+                        "thumbnail_media_fallbacks": 0,
+                        "thumbnail_bundle_requests": 0,
+                        "thumbnail_bundle_cache_hits": 0,
+                        "thumbnail_bundle_cache_misses": 0,
+                        "thumbnail_bundle_variant_hits": 0,
+                        "thumbnail_bundle_fallback_hits": 0,
+                        "thumbnail_bundle_media_fallbacks": 0,
+                        "gallery_scan_calls": 1,
+                        "gallery_map_cache_hits": 0,
+                        "gallery_map_cache_misses": 0,
+                        "thumbnail_lookup_cache_hits": 0,
+                        "rendered_subgalleries": 0,
+                        "rendered_images": 60,
+                        "thumbnail_manifest_images": 60,
+                        "thumbnail_manifest_rows_loaded": 360,
+                        "thumbnail_manifest_images_with_rows": 60,
+                        "thumbnail_manifest_variant_hits": 120,
+                        "thumbnail_manifest_url_builds": 120,
+                        "thumbnail_manifest_metadata_bundles": 60,
+                        "thumbnail_manifest_candidate_sizes": 120,
+                        "thumbnail_manifest_selection_attempts": 180,
+                        "thumbnail_manifest_exact_selections": 180,
+                        "seo_json_ld_images": 20,
+                        "seo_json_ld_manifest_hits": 40
+                    },
+                    "timers": {
+                        "total_request": {
+                            "count": 1,
+                            "total_ms": 168.3499813079834,
+                            "max_ms": 168.3499813079834
+                        },
+                        "render_image_cards": {
+                            "count": 1,
+                            "total_ms": 96.02594375610352,
+                            "max_ms": 96.02594375610352
+                        },
+                        "public_gallery_media_manifest": {
+                            "count": 1,
+                            "total_ms": 23.453950881958008,
+                            "max_ms": 23.453950881958008
+                        },
+                        "media_manifest_build_entries": {
+                            "count": 1,
+                            "total_ms": 20.59006690979004,
+                            "max_ms": 20.59006690979004
+                        },
+                        "db_query": {
+                            "count": 5,
+                            "total_ms": 4.323005676269531,
+                            "max_ms": 1.3949871063232422
+                        },
+                        "gallery_grid_settings": {
+                            "count": 1,
+                            "total_ms": 4.0988922119140625,
+                            "max_ms": 4.0988922119140625
+                        },
+                        "media_manifest_build_bundle": {
+                            "count": 60,
+                            "total_ms": 2.171039581298828,
+                            "max_ms": 1.6491413116455078
+                        },
+                        "media_manifest_query_metadata": {
+                            "count": 1,
+                            "total_ms": 1.3949871063232422,
+                            "max_ms": 1.3949871063232422
+                        },
+                        "gallery_image_page_query": {
+                            "count": 1,
+                            "total_ms": 1.2710094451904297,
+                            "max_ms": 1.2710094451904297
+                        },
+                        "child_gallery_lookup": {
+                            "count": 1,
+                            "total_ms": 1.2540817260742188,
+                            "max_ms": 1.2540817260742188
+                        },
+                        "picture_game_lookup": {
+                            "count": 1,
+                            "total_ms": 1.0538101196289062,
+                            "max_ms": 1.0538101196289062
+                        },
+                        "media_manifest_schema_check": {
+                            "count": 1,
+                            "total_ms": 0.9448528289794922,
+                            "max_ms": 0.9448528289794922
+                        },
+                        "image_tag_lookup": {
+                            "count": 1,
+                            "total_ms": 0.7491111755371094,
+                            "max_ms": 0.7491111755371094
+                        },
+                        "gallery_lightbox_count_query": {
+                            "count": 1,
+                            "total_ms": 0.7369518280029297,
+                            "max_ms": 0.7369518280029297
+                        },
+                        "gallery_image_count_query": {
+                            "count": 1,
+                            "total_ms": 0.6680488586425781,
+                            "max_ms": 0.6680488586425781
+                        },
+                        "media_manifest_group_rows": {
+                            "count": 1,
+                            "total_ms": 0.36597251892089844,
+                            "max_ms": 0.36597251892089844
+                        },
+                        "image_vote_lookup": {
+                            "count": 1,
+                            "total_ms": 0.2779960632324219,
+                            "max_ms": 0.2779960632324219
+                        },
+                        "child_galleries_batch_db": {
+                            "count": 1,
+                            "total_ms": 0.25200843811035156,
+                            "max_ms": 0.25200843811035156
+                        },
+                        "seo_metadata_lookup": {
+                            "count": 1,
+                            "total_ms": 0.21910667419433594,
+                            "max_ms": 0.21910667419433594
+                        },
+                        "background_asset_lookup": {
+                            "count": 1,
+                            "total_ms": 0.10180473327636719,
+                            "max_ms": 0.10180473327636719
+                        },
+                        "media_manifest_preview_format": {
+                            "count": 1,
+                            "total_ms": 0.09918212890625,
+                            "max_ms": 0.09918212890625
+                        },
+                        "media_manifest_collect_images": {
+                            "count": 1,
+                            "total_ms": 0.0059604644775390625,
+                            "max_ms": 0.0059604644775390625
+                        },
+                        "media_manifest_configured_sizes": {
+                            "count": 1,
+                            "total_ms": 0.0050067901611328125,
+                            "max_ms": 0.0050067901611328125
+                        }
+                    },
+                    "thumbnail_purposes": [
+                        {
+                            "purpose": "media manifest lightbox preview 1600",
+                            "size": 1600,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo content 1200",
+                            "size": 1200,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo thumbnail 800",
+                            "size": 800,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "map point thumb 300",
+                            "size": 300,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        }
+                    ],
+                    "events": [],
+                    "request": {
+                        "method": "GET",
+                        "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=2&benchmark_cache_bust=1786229215518-2",
+                        "query_keys": [
+                            "view_as",
+                            "benchmark_token",
+                            "benchmark_run",
+                            "benchmark_cache_bust",
+                            "page",
+                            "public_path"
+                        ]
+                    }
+                }
+            },
+            "browser_load": {
+                "recorded_at": "2026-08-08T22:46:55Z",
+                "request": {
+                    "method": "POST",
+                    "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_browser",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "payload": {
+                    "recorded_at_browser": "2026-08-08T22:46:55.789Z",
+                    "iframe_elapsed_ms": 271,
+                    "navigation": {
+                        "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=2&benchmark_cache_bust=1786229215518-2",
+                        "entryType": "navigation",
+                        "initiatorType": "navigation",
+                        "startTime": 0,
+                        "duration": 270.89999997615814,
+                        "redirectStart": 0,
+                        "redirectEnd": 0,
+                        "fetchStart": 1.399999976158142,
+                        "domainLookupStart": 1.399999976158142,
+                        "domainLookupEnd": 1.399999976158142,
+                        "connectStart": 1.399999976158142,
+                        "connectEnd": 1.399999976158142,
+                        "secureConnectionStart": 0,
+                        "requestStart": 2.799999952316284,
+                        "responseStart": 151.79999995231628,
+                        "responseEnd": 264.6999999284744,
+                        "domInteractive": 265.5,
+                        "domContentLoadedEventStart": 269.89999997615814,
+                        "domContentLoadedEventEnd": 270,
+                        "domComplete": 270.6999999284744,
+                        "loadEventStart": 270.6999999284744,
+                        "loadEventEnd": 270.89999997615814,
+                        "transferSize": 206485,
+                        "encodedBodySize": 206185,
+                        "decodedBodySize": 206185
+                    },
+                    "resources": {
+                        "count": 75,
+                        "total_transfer_size": 0,
+                        "total_encoded_body_size": 4182974,
+                        "total_decoded_body_size": 4182974,
+                        "by_initiator_type": {
+                            "link": {
+                                "count": 9,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 183259,
+                                "total_decoded_body_size": 183259
+                            },
+                            "img": {
+                                "count": 61,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 3401055,
+                                "total_decoded_body_size": 3401055
+                            },
+                            "css": {
+                                "count": 1,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 313944,
+                                "total_decoded_body_size": 313944
+                            },
+                            "script": {
+                                "count": 4,
+                                "total_duration": 3.100000023841858,
+                                "max_duration": 1.399999976158142,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 284716,
+                                "total_decoded_body_size": 284716
+                            }
+                        },
+                        "slowest": [
+                            {
+                                "name": "http://localhost/Galerie/public/assets/public-gallery.js?v=1786221178",
+                                "initiatorType": "script",
+                                "duration": 1.399999976158142,
+                                "transferSize": 0,
+                                "encodedBodySize": 4687,
+                                "decodedBodySize": 4687
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1",
+                                "initiatorType": "script",
+                                "duration": 1,
+                                "transferSize": 0,
+                                "encodedBodySize": 11331,
+                                "decodedBodySize": 11331
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/admin-core.js?v=20260512-modular-admin-v1",
+                                "initiatorType": "script",
+                                "duration": 0.7000000476837158,
+                                "transferSize": 0,
+                                "encodedBodySize": 11103,
+                                "decodedBodySize": 11103
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/base.css?v=1778592272",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 3647,
+                                "decodedBodySize": 3647
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 44226,
+                                "decodedBodySize": 44226
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/lightbox.css?v=1783886091",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 32480,
+                                "decodedBodySize": 32480
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public-shared.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 40476,
+                                "decodedBodySize": 40476
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/utilities.css?v=1781460808",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 18220,
+                                "decodedBodySize": 18220
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles.css?v=1781473826",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 6834,
+                                "decodedBodySize": 6834
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/custom.css?v=1778582054",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8212,
+                                "decodedBodySize": 8212
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_css&v=7adecfbf6ec5",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8140,
+                                "decodedBodySize": 8140
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/mobile-gallery.css?v=1780493190",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 21024,
+                                "decodedBodySize": 21024
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_branding_asset&kind=separator",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 31047,
+                                "decodedBodySize": 31047
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0001/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 41432,
+                                "decodedBodySize": 41432
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0002/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 141690,
+                                "decodedBodySize": 141690
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0003/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67540,
+                                "decodedBodySize": 67540
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0004/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 47298,
+                                "decodedBodySize": 47298
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0005/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 45464,
+                                "decodedBodySize": 45464
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0006/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 42822,
+                                "decodedBodySize": 42822
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_background_asset&v=1778610557",
+                                "initiatorType": "css",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 313944,
+                                "decodedBodySize": 313944
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0007/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 46804,
+                                "decodedBodySize": 46804
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0008/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68252,
+                                "decodedBodySize": 68252
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0009/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 55148,
+                                "decodedBodySize": 55148
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0010/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67610,
+                                "decodedBodySize": 67610
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0011/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 74694,
+                                "decodedBodySize": 74694
+                            }
+                        ]
+                    },
+                    "document": {
+                        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09 - Nejlepší Galerie na Světě",
+                        "readyState": "complete",
+                        "image_count": 62,
+                        "script_count": 3,
+                        "stylesheet_count": 10,
+                        "html_length": 206734
+                    }
+                }
+            },
+            "events": [
+                {
+                    "at": "2026-08-08T22:46:55Z",
+                    "type": "server_render_recorded",
+                    "message": "Gallery PHP render profile was recorded."
+                },
+                {
+                    "at": "2026-08-08T22:46:55Z",
+                    "type": "browser_load_recorded",
+                    "message": "Browser navigation and resource timing was recorded."
+                }
+            ]
+        },
+        {
+            "run_index": 3,
+            "planned_at": "2026-08-08T22:46:55Z",
+            "server_render": {
+                "recorded_at": "2026-08-08T22:46:56Z",
+                "gallery": {
+                    "id": 69,
+                    "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+                    "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "folder_path": "Herní Screeny/test-importu-galerie",
+                    "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "visibility": "public",
+                    "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+                },
+                "request": {
+                    "method": "GET",
+                    "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=3&benchmark_cache_bust=1786229215887-3",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "snapshot": {
+                    "route": "gallery",
+                    "gallery_id": 69,
+                    "started_at_unix": 1786229215.983531,
+                    "ended_at_unix": 1786229216.147363,
+                    "total_ms": 163.8319492340088,
+                    "memory_usage_bytes": 18874368,
+                    "memory_peak_bytes": 18874368,
+                    "included_file_count": 166,
+                    "counters": {
+                        "db_queries": 5,
+                        "filesystem_checks": 0,
+                        "thumbnail_lookups": 0,
+                        "thumbnail_direct_hits": 0,
+                        "thumbnail_db_fallback_hits": 0,
+                        "thumbnail_fallback_searches": 0,
+                        "thumbnail_fallback_checks": 0,
+                        "thumbnail_fallback_hits": 0,
+                        "thumbnail_media_fallbacks": 0,
+                        "thumbnail_bundle_requests": 0,
+                        "thumbnail_bundle_cache_hits": 0,
+                        "thumbnail_bundle_cache_misses": 0,
+                        "thumbnail_bundle_variant_hits": 0,
+                        "thumbnail_bundle_fallback_hits": 0,
+                        "thumbnail_bundle_media_fallbacks": 0,
+                        "gallery_scan_calls": 1,
+                        "gallery_map_cache_hits": 0,
+                        "gallery_map_cache_misses": 0,
+                        "thumbnail_lookup_cache_hits": 0,
+                        "rendered_subgalleries": 0,
+                        "rendered_images": 60,
+                        "thumbnail_manifest_images": 60,
+                        "thumbnail_manifest_rows_loaded": 360,
+                        "thumbnail_manifest_images_with_rows": 60,
+                        "thumbnail_manifest_variant_hits": 120,
+                        "thumbnail_manifest_url_builds": 120,
+                        "thumbnail_manifest_metadata_bundles": 60,
+                        "thumbnail_manifest_candidate_sizes": 120,
+                        "thumbnail_manifest_selection_attempts": 180,
+                        "thumbnail_manifest_exact_selections": 180,
+                        "seo_json_ld_images": 20,
+                        "seo_json_ld_manifest_hits": 40
+                    },
+                    "timers": {
+                        "total_request": {
+                            "count": 1,
+                            "total_ms": 163.8319492340088,
+                            "max_ms": 163.8319492340088
+                        },
+                        "render_image_cards": {
+                            "count": 1,
+                            "total_ms": 91.67003631591797,
+                            "max_ms": 91.67003631591797
+                        },
+                        "public_gallery_media_manifest": {
+                            "count": 1,
+                            "total_ms": 23.725032806396484,
+                            "max_ms": 23.725032806396484
+                        },
+                        "media_manifest_build_entries": {
+                            "count": 1,
+                            "total_ms": 20.887136459350586,
+                            "max_ms": 20.887136459350586
+                        },
+                        "db_query": {
+                            "count": 5,
+                            "total_ms": 4.097938537597656,
+                            "max_ms": 1.3649463653564453
+                        },
+                        "gallery_grid_settings": {
+                            "count": 1,
+                            "total_ms": 3.831148147583008,
+                            "max_ms": 3.831148147583008
+                        },
+                        "media_manifest_build_bundle": {
+                            "count": 60,
+                            "total_ms": 2.2025108337402344,
+                            "max_ms": 1.6651153564453125
+                        },
+                        "media_manifest_query_metadata": {
+                            "count": 1,
+                            "total_ms": 1.3649463653564453,
+                            "max_ms": 1.3649463653564453
+                        },
+                        "picture_game_lookup": {
+                            "count": 1,
+                            "total_ms": 1.3320446014404297,
+                            "max_ms": 1.3320446014404297
+                        },
+                        "gallery_image_page_query": {
+                            "count": 1,
+                            "total_ms": 1.3031959533691406,
+                            "max_ms": 1.3031959533691406
+                        },
+                        "child_gallery_lookup": {
+                            "count": 1,
+                            "total_ms": 1.0559558868408203,
+                            "max_ms": 1.0559558868408203
+                        },
+                        "media_manifest_schema_check": {
+                            "count": 1,
+                            "total_ms": 0.9510517120361328,
+                            "max_ms": 0.9510517120361328
+                        },
+                        "image_tag_lookup": {
+                            "count": 1,
+                            "total_ms": 0.8261203765869141,
+                            "max_ms": 0.8261203765869141
+                        },
+                        "gallery_image_count_query": {
+                            "count": 1,
+                            "total_ms": 0.6098747253417969,
+                            "max_ms": 0.6098747253417969
+                        },
+                        "gallery_lightbox_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5950927734375,
+                            "max_ms": 0.5950927734375
+                        },
+                        "media_manifest_group_rows": {
+                            "count": 1,
+                            "total_ms": 0.36787986755371094,
+                            "max_ms": 0.36787986755371094
+                        },
+                        "image_vote_lookup": {
+                            "count": 1,
+                            "total_ms": 0.3027915954589844,
+                            "max_ms": 0.3027915954589844
+                        },
+                        "child_galleries_batch_db": {
+                            "count": 1,
+                            "total_ms": 0.22482872009277344,
+                            "max_ms": 0.22482872009277344
+                        },
+                        "seo_metadata_lookup": {
+                            "count": 1,
+                            "total_ms": 0.19311904907226562,
+                            "max_ms": 0.19311904907226562
+                        },
+                        "background_asset_lookup": {
+                            "count": 1,
+                            "total_ms": 0.13899803161621094,
+                            "max_ms": 0.13899803161621094
+                        },
+                        "media_manifest_preview_format": {
+                            "count": 1,
+                            "total_ms": 0.09799003601074219,
+                            "max_ms": 0.09799003601074219
+                        },
+                        "media_manifest_collect_images": {
+                            "count": 1,
+                            "total_ms": 0.0059604644775390625,
+                            "max_ms": 0.0059604644775390625
+                        },
+                        "media_manifest_configured_sizes": {
+                            "count": 1,
+                            "total_ms": 0.0040531158447265625,
+                            "max_ms": 0.0040531158447265625
+                        }
+                    },
+                    "thumbnail_purposes": [
+                        {
+                            "purpose": "media manifest lightbox preview 1600",
+                            "size": 1600,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo content 1200",
+                            "size": 1200,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo thumbnail 800",
+                            "size": 800,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "map point thumb 300",
+                            "size": 300,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        }
+                    ],
+                    "events": [],
+                    "request": {
+                        "method": "GET",
+                        "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=3&benchmark_cache_bust=1786229215887-3",
+                        "query_keys": [
+                            "view_as",
+                            "benchmark_token",
+                            "benchmark_run",
+                            "benchmark_cache_bust",
+                            "page",
+                            "public_path"
+                        ]
+                    }
+                }
+            },
+            "browser_load": {
+                "recorded_at": "2026-08-08T22:46:56Z",
+                "request": {
+                    "method": "POST",
+                    "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_browser",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "payload": {
+                    "recorded_at_browser": "2026-08-08T22:46:56.155Z",
+                    "iframe_elapsed_ms": 267.39999997615814,
+                    "navigation": {
+                        "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=3&benchmark_cache_bust=1786229215887-3",
+                        "entryType": "navigation",
+                        "initiatorType": "navigation",
+                        "startTime": 0,
+                        "duration": 267.2999999523163,
+                        "redirectStart": 0,
+                        "redirectEnd": 0,
+                        "fetchStart": 1.399999976158142,
+                        "domainLookupStart": 1.399999976158142,
+                        "domainLookupEnd": 1.399999976158142,
+                        "connectStart": 1.399999976158142,
+                        "connectEnd": 1.399999976158142,
+                        "secureConnectionStart": 0,
+                        "requestStart": 2.5,
+                        "responseStart": 152.20000004768372,
+                        "responseEnd": 260.7999999523163,
+                        "domInteractive": 261.39999997615814,
+                        "domContentLoadedEventStart": 264.7000000476837,
+                        "domContentLoadedEventEnd": 264.89999997615814,
+                        "domComplete": 267,
+                        "loadEventStart": 267,
+                        "loadEventEnd": 267.2999999523163,
+                        "transferSize": 206485,
+                        "encodedBodySize": 206185,
+                        "decodedBodySize": 206185
+                    },
+                    "resources": {
+                        "count": 78,
+                        "total_transfer_size": 0,
+                        "total_encoded_body_size": 4220221,
+                        "total_decoded_body_size": 4220221,
+                        "by_initiator_type": {
+                            "link": {
+                                "count": 9,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 183259,
+                                "total_decoded_body_size": 183259
+                            },
+                            "img": {
+                                "count": 61,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 3401055,
+                                "total_decoded_body_size": 3401055
+                            },
+                            "css": {
+                                "count": 1,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 313944,
+                                "total_decoded_body_size": 313944
+                            },
+                            "script": {
+                                "count": 7,
+                                "total_duration": 6.699999809265137,
+                                "max_duration": 1.7999999523162842,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 321963,
+                                "total_decoded_body_size": 321963
+                            }
+                        },
+                        "slowest": [
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/progressive-thumbnail-renderer.js?v=20260809-progressive-thumbnail-renderer",
+                                "initiatorType": "script",
+                                "duration": 1.7999999523162842,
+                                "transferSize": 0,
+                                "encodedBodySize": 22947,
+                                "decodedBodySize": 22947
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/back-to-top.js?v=20260510-lifecycle-v3",
+                                "initiatorType": "script",
+                                "duration": 1.399999976158142,
+                                "transferSize": 0,
+                                "encodedBodySize": 5872,
+                                "decodedBodySize": 5872
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/public-home-search.js?v=20260528-public-search-context-v1",
+                                "initiatorType": "script",
+                                "duration": 1.2999999523162842,
+                                "transferSize": 0,
+                                "encodedBodySize": 8428,
+                                "decodedBodySize": 8428
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/public-gallery.js?v=1786221178",
+                                "initiatorType": "script",
+                                "duration": 1,
+                                "transferSize": 0,
+                                "encodedBodySize": 4687,
+                                "decodedBodySize": 4687
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/admin-core.js?v=20260512-modular-admin-v1",
+                                "initiatorType": "script",
+                                "duration": 0.6000000238418579,
+                                "transferSize": 0,
+                                "encodedBodySize": 11103,
+                                "decodedBodySize": 11103
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1",
+                                "initiatorType": "script",
+                                "duration": 0.5999999046325684,
+                                "transferSize": 0,
+                                "encodedBodySize": 11331,
+                                "decodedBodySize": 11331
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/base.css?v=1778592272",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 3647,
+                                "decodedBodySize": 3647
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 44226,
+                                "decodedBodySize": 44226
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/lightbox.css?v=1783886091",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 32480,
+                                "decodedBodySize": 32480
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public-shared.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 40476,
+                                "decodedBodySize": 40476
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/utilities.css?v=1781460808",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 18220,
+                                "decodedBodySize": 18220
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles.css?v=1781473826",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 6834,
+                                "decodedBodySize": 6834
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/custom.css?v=1778582054",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8212,
+                                "decodedBodySize": 8212
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_css&v=7adecfbf6ec5",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8140,
+                                "decodedBodySize": 8140
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/mobile-gallery.css?v=1780493190",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 21024,
+                                "decodedBodySize": 21024
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_branding_asset&kind=separator",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 31047,
+                                "decodedBodySize": 31047
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0001/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 41432,
+                                "decodedBodySize": 41432
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0002/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 141690,
+                                "decodedBodySize": 141690
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0003/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67540,
+                                "decodedBodySize": 67540
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0004/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 47298,
+                                "decodedBodySize": 47298
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0005/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 45464,
+                                "decodedBodySize": 45464
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0006/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 42822,
+                                "decodedBodySize": 42822
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_background_asset&v=1778610557",
+                                "initiatorType": "css",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 313944,
+                                "decodedBodySize": 313944
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0007/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 46804,
+                                "decodedBodySize": 46804
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0008/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68252,
+                                "decodedBodySize": 68252
+                            }
+                        ]
+                    },
+                    "document": {
+                        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09 - Nejlepší Galerie na Světě",
+                        "readyState": "complete",
+                        "image_count": 62,
+                        "script_count": 3,
+                        "stylesheet_count": 10,
+                        "html_length": 206734
+                    }
+                }
+            },
+            "events": [
+                {
+                    "at": "2026-08-08T22:46:56Z",
+                    "type": "server_render_recorded",
+                    "message": "Gallery PHP render profile was recorded."
+                },
+                {
+                    "at": "2026-08-08T22:46:56Z",
+                    "type": "browser_load_recorded",
+                    "message": "Browser navigation and resource timing was recorded."
+                }
+            ]
+        },
+        {
+            "run_index": 4,
+            "planned_at": "2026-08-08T22:46:55Z",
+            "server_render": {
+                "recorded_at": "2026-08-08T22:46:56Z",
+                "gallery": {
+                    "id": 69,
+                    "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+                    "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "folder_path": "Herní Screeny/test-importu-galerie",
+                    "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "visibility": "public",
+                    "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+                },
+                "request": {
+                    "method": "GET",
+                    "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=4&benchmark_cache_bust=1786229216251-4",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "snapshot": {
+                    "route": "gallery",
+                    "gallery_id": 69,
+                    "started_at_unix": 1786229216.370692,
+                    "ended_at_unix": 1786229216.530952,
+                    "total_ms": 160.25996208190918,
+                    "memory_usage_bytes": 18874368,
+                    "memory_peak_bytes": 18874368,
+                    "included_file_count": 166,
+                    "counters": {
+                        "db_queries": 5,
+                        "filesystem_checks": 0,
+                        "thumbnail_lookups": 0,
+                        "thumbnail_direct_hits": 0,
+                        "thumbnail_db_fallback_hits": 0,
+                        "thumbnail_fallback_searches": 0,
+                        "thumbnail_fallback_checks": 0,
+                        "thumbnail_fallback_hits": 0,
+                        "thumbnail_media_fallbacks": 0,
+                        "thumbnail_bundle_requests": 0,
+                        "thumbnail_bundle_cache_hits": 0,
+                        "thumbnail_bundle_cache_misses": 0,
+                        "thumbnail_bundle_variant_hits": 0,
+                        "thumbnail_bundle_fallback_hits": 0,
+                        "thumbnail_bundle_media_fallbacks": 0,
+                        "gallery_scan_calls": 1,
+                        "gallery_map_cache_hits": 0,
+                        "gallery_map_cache_misses": 0,
+                        "thumbnail_lookup_cache_hits": 0,
+                        "rendered_subgalleries": 0,
+                        "rendered_images": 60,
+                        "thumbnail_manifest_images": 60,
+                        "thumbnail_manifest_rows_loaded": 360,
+                        "thumbnail_manifest_images_with_rows": 60,
+                        "thumbnail_manifest_variant_hits": 120,
+                        "thumbnail_manifest_url_builds": 120,
+                        "thumbnail_manifest_metadata_bundles": 60,
+                        "thumbnail_manifest_candidate_sizes": 120,
+                        "thumbnail_manifest_selection_attempts": 180,
+                        "thumbnail_manifest_exact_selections": 180,
+                        "seo_json_ld_images": 20,
+                        "seo_json_ld_manifest_hits": 40
+                    },
+                    "timers": {
+                        "total_request": {
+                            "count": 1,
+                            "total_ms": 160.25996208190918,
+                            "max_ms": 160.25996208190918
+                        },
+                        "render_image_cards": {
+                            "count": 1,
+                            "total_ms": 89.05601501464844,
+                            "max_ms": 89.05601501464844
+                        },
+                        "public_gallery_media_manifest": {
+                            "count": 1,
+                            "total_ms": 23.129940032958984,
+                            "max_ms": 23.129940032958984
+                        },
+                        "media_manifest_build_entries": {
+                            "count": 1,
+                            "total_ms": 20.292043685913086,
+                            "max_ms": 20.292043685913086
+                        },
+                        "db_query": {
+                            "count": 5,
+                            "total_ms": 4.070281982421875,
+                            "max_ms": 1.3740062713623047
+                        },
+                        "gallery_grid_settings": {
+                            "count": 1,
+                            "total_ms": 3.882884979248047,
+                            "max_ms": 3.882884979248047
+                        },
+                        "media_manifest_build_bundle": {
+                            "count": 60,
+                            "total_ms": 2.2275447845458984,
+                            "max_ms": 1.7161369323730469
+                        },
+                        "media_manifest_query_metadata": {
+                            "count": 1,
+                            "total_ms": 1.3740062713623047,
+                            "max_ms": 1.3740062713623047
+                        },
+                        "gallery_image_page_query": {
+                            "count": 1,
+                            "total_ms": 1.2619495391845703,
+                            "max_ms": 1.2619495391845703
+                        },
+                        "picture_game_lookup": {
+                            "count": 1,
+                            "total_ms": 1.1990070343017578,
+                            "max_ms": 1.1990070343017578
+                        },
+                        "child_gallery_lookup": {
+                            "count": 1,
+                            "total_ms": 1.074075698852539,
+                            "max_ms": 1.074075698852539
+                        },
+                        "media_manifest_schema_check": {
+                            "count": 1,
+                            "total_ms": 0.9310245513916016,
+                            "max_ms": 0.9310245513916016
+                        },
+                        "image_tag_lookup": {
+                            "count": 1,
+                            "total_ms": 0.7529258728027344,
+                            "max_ms": 0.7529258728027344
+                        },
+                        "gallery_lightbox_count_query": {
+                            "count": 1,
+                            "total_ms": 0.61798095703125,
+                            "max_ms": 0.61798095703125
+                        },
+                        "gallery_image_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5831718444824219,
+                            "max_ms": 0.5831718444824219
+                        },
+                        "media_manifest_group_rows": {
+                            "count": 1,
+                            "total_ms": 0.3719329833984375,
+                            "max_ms": 0.3719329833984375
+                        },
+                        "image_vote_lookup": {
+                            "count": 1,
+                            "total_ms": 0.2560615539550781,
+                            "max_ms": 0.2560615539550781
+                        },
+                        "child_galleries_batch_db": {
+                            "count": 1,
+                            "total_ms": 0.23317337036132812,
+                            "max_ms": 0.23317337036132812
+                        },
+                        "seo_metadata_lookup": {
+                            "count": 1,
+                            "total_ms": 0.2129077911376953,
+                            "max_ms": 0.2129077911376953
+                        },
+                        "background_asset_lookup": {
+                            "count": 1,
+                            "total_ms": 0.12993812561035156,
+                            "max_ms": 0.12993812561035156
+                        },
+                        "media_manifest_preview_format": {
+                            "count": 1,
+                            "total_ms": 0.09799003601074219,
+                            "max_ms": 0.09799003601074219
+                        },
+                        "media_manifest_collect_images": {
+                            "count": 1,
+                            "total_ms": 0.007152557373046875,
+                            "max_ms": 0.007152557373046875
+                        },
+                        "media_manifest_configured_sizes": {
+                            "count": 1,
+                            "total_ms": 0.0040531158447265625,
+                            "max_ms": 0.0040531158447265625
+                        }
+                    },
+                    "thumbnail_purposes": [
+                        {
+                            "purpose": "media manifest lightbox preview 1600",
+                            "size": 1600,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo content 1200",
+                            "size": 1200,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo thumbnail 800",
+                            "size": 800,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "map point thumb 300",
+                            "size": 300,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        }
+                    ],
+                    "events": [],
+                    "request": {
+                        "method": "GET",
+                        "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=4&benchmark_cache_bust=1786229216251-4",
+                        "query_keys": [
+                            "view_as",
+                            "benchmark_token",
+                            "benchmark_run",
+                            "benchmark_cache_bust",
+                            "page",
+                            "public_path"
+                        ]
+                    }
+                }
+            },
+            "browser_load": {
+                "recorded_at": "2026-08-08T22:46:56Z",
+                "request": {
+                    "method": "POST",
+                    "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_browser",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "payload": {
+                    "recorded_at_browser": "2026-08-08T22:46:56.538Z",
+                    "iframe_elapsed_ms": 284.5,
+                    "navigation": {
+                        "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=4&benchmark_cache_bust=1786229216251-4",
+                        "entryType": "navigation",
+                        "initiatorType": "navigation",
+                        "startTime": 0,
+                        "duration": 284.5,
+                        "redirectStart": 0,
+                        "redirectEnd": 0,
+                        "fetchStart": 1.5,
+                        "domainLookupStart": 1.5,
+                        "domainLookupEnd": 1.5,
+                        "connectStart": 1.5,
+                        "connectEnd": 1.5,
+                        "secureConnectionStart": 0,
+                        "requestStart": 2.799999952316284,
+                        "responseStart": 174.89999997615814,
+                        "responseEnd": 280.7000000476837,
+                        "domInteractive": 281.39999997615814,
+                        "domContentLoadedEventStart": 281.7999999523163,
+                        "domContentLoadedEventEnd": 282,
+                        "domComplete": 284.2999999523163,
+                        "loadEventStart": 284.2999999523163,
+                        "loadEventEnd": 284.5,
+                        "transferSize": 206485,
+                        "encodedBodySize": 206185,
+                        "decodedBodySize": 206185
+                    },
+                    "resources": {
+                        "count": 80,
+                        "total_transfer_size": 0,
+                        "total_encoded_body_size": 4236168,
+                        "total_decoded_body_size": 4249136,
+                        "by_initiator_type": {
+                            "link": {
+                                "count": 10,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 183979,
+                                "total_decoded_body_size": 196947
+                            },
+                            "img": {
+                                "count": 61,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 3401055,
+                                "total_decoded_body_size": 3401055
+                            },
+                            "css": {
+                                "count": 1,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 313944,
+                                "total_decoded_body_size": 313944
+                            },
+                            "script": {
+                                "count": 8,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 337190,
+                                "total_decoded_body_size": 337190
+                            }
+                        },
+                        "slowest": [
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/base.css?v=1778592272",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 3647,
+                                "decodedBodySize": 3647
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 44226,
+                                "decodedBodySize": 44226
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/lightbox.css?v=1783886091",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 32480,
+                                "decodedBodySize": 32480
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public-shared.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 40476,
+                                "decodedBodySize": 40476
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/utilities.css?v=1781460808",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 18220,
+                                "decodedBodySize": 18220
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles.css?v=1781473826",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 6834,
+                                "decodedBodySize": 6834
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/custom.css?v=1778582054",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8212,
+                                "decodedBodySize": 8212
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_css&v=7adecfbf6ec5",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8140,
+                                "decodedBodySize": 8140
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/mobile-gallery.css?v=1780493190",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 21024,
+                                "decodedBodySize": 21024
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_branding_asset&kind=separator",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 31047,
+                                "decodedBodySize": 31047
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0001/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 41432,
+                                "decodedBodySize": 41432
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0002/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 141690,
+                                "decodedBodySize": 141690
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0003/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67540,
+                                "decodedBodySize": 67540
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0004/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 47298,
+                                "decodedBodySize": 47298
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0005/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 45464,
+                                "decodedBodySize": 45464
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0006/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 42822,
+                                "decodedBodySize": 42822
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_background_asset&v=1778610557",
+                                "initiatorType": "css",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 313944,
+                                "decodedBodySize": 313944
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0007/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 46804,
+                                "decodedBodySize": 46804
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0008/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68252,
+                                "decodedBodySize": 68252
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0009/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 55148,
+                                "decodedBodySize": 55148
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0010/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67610,
+                                "decodedBodySize": 67610
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0011/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 74694,
+                                "decodedBodySize": 74694
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0012/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 72952,
+                                "decodedBodySize": 72952
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0013/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68424,
+                                "decodedBodySize": 68424
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0014/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68770,
+                                "decodedBodySize": 68770
+                            }
+                        ]
+                    },
+                    "document": {
+                        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09 - Nejlepší Galerie na Světě",
+                        "readyState": "complete",
+                        "image_count": 62,
+                        "script_count": 3,
+                        "stylesheet_count": 10,
+                        "html_length": 206734
+                    }
+                }
+            },
+            "events": [
+                {
+                    "at": "2026-08-08T22:46:56Z",
+                    "type": "server_render_recorded",
+                    "message": "Gallery PHP render profile was recorded."
+                },
+                {
+                    "at": "2026-08-08T22:46:56Z",
+                    "type": "browser_load_recorded",
+                    "message": "Browser navigation and resource timing was recorded."
+                }
+            ]
+        },
+        {
+            "run_index": 5,
+            "planned_at": "2026-08-08T22:46:55Z",
+            "server_render": {
+                "recorded_at": "2026-08-08T22:46:56Z",
+                "gallery": {
+                    "id": 69,
+                    "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09",
+                    "slug": "z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "folder_path": "Herní Screeny/test-importu-galerie",
+                    "url_path": "herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09",
+                    "visibility": "public",
+                    "public_url": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/"
+                },
+                "request": {
+                    "method": "GET",
+                    "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=5&benchmark_cache_bust=1786229216637-5",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "snapshot": {
+                    "route": "gallery",
+                    "gallery_id": 69,
+                    "started_at_unix": 1786229216.736502,
+                    "ended_at_unix": 1786229216.905659,
+                    "total_ms": 169.1570281982422,
+                    "memory_usage_bytes": 18874368,
+                    "memory_peak_bytes": 18874368,
+                    "included_file_count": 166,
+                    "counters": {
+                        "db_queries": 5,
+                        "filesystem_checks": 0,
+                        "thumbnail_lookups": 0,
+                        "thumbnail_direct_hits": 0,
+                        "thumbnail_db_fallback_hits": 0,
+                        "thumbnail_fallback_searches": 0,
+                        "thumbnail_fallback_checks": 0,
+                        "thumbnail_fallback_hits": 0,
+                        "thumbnail_media_fallbacks": 0,
+                        "thumbnail_bundle_requests": 0,
+                        "thumbnail_bundle_cache_hits": 0,
+                        "thumbnail_bundle_cache_misses": 0,
+                        "thumbnail_bundle_variant_hits": 0,
+                        "thumbnail_bundle_fallback_hits": 0,
+                        "thumbnail_bundle_media_fallbacks": 0,
+                        "gallery_scan_calls": 1,
+                        "gallery_map_cache_hits": 0,
+                        "gallery_map_cache_misses": 0,
+                        "thumbnail_lookup_cache_hits": 0,
+                        "rendered_subgalleries": 0,
+                        "rendered_images": 60,
+                        "thumbnail_manifest_images": 60,
+                        "thumbnail_manifest_rows_loaded": 360,
+                        "thumbnail_manifest_images_with_rows": 60,
+                        "thumbnail_manifest_variant_hits": 120,
+                        "thumbnail_manifest_url_builds": 120,
+                        "thumbnail_manifest_metadata_bundles": 60,
+                        "thumbnail_manifest_candidate_sizes": 120,
+                        "thumbnail_manifest_selection_attempts": 180,
+                        "thumbnail_manifest_exact_selections": 180,
+                        "seo_json_ld_images": 20,
+                        "seo_json_ld_manifest_hits": 40
+                    },
+                    "timers": {
+                        "total_request": {
+                            "count": 1,
+                            "total_ms": 169.1570281982422,
+                            "max_ms": 169.1570281982422
+                        },
+                        "render_image_cards": {
+                            "count": 1,
+                            "total_ms": 95.40796279907227,
+                            "max_ms": 95.40796279907227
+                        },
+                        "public_gallery_media_manifest": {
+                            "count": 1,
+                            "total_ms": 24.09219741821289,
+                            "max_ms": 24.09219741821289
+                        },
+                        "media_manifest_build_entries": {
+                            "count": 1,
+                            "total_ms": 21.053075790405273,
+                            "max_ms": 21.053075790405273
+                        },
+                        "db_query": {
+                            "count": 5,
+                            "total_ms": 4.112958908081055,
+                            "max_ms": 1.4460086822509766
+                        },
+                        "gallery_grid_settings": {
+                            "count": 1,
+                            "total_ms": 3.932952880859375,
+                            "max_ms": 3.932952880859375
+                        },
+                        "media_manifest_build_bundle": {
+                            "count": 60,
+                            "total_ms": 2.1970272064208984,
+                            "max_ms": 1.667022705078125
+                        },
+                        "media_manifest_query_metadata": {
+                            "count": 1,
+                            "total_ms": 1.4460086822509766,
+                            "max_ms": 1.4460086822509766
+                        },
+                        "gallery_image_page_query": {
+                            "count": 1,
+                            "total_ms": 1.2500286102294922,
+                            "max_ms": 1.2500286102294922
+                        },
+                        "picture_game_lookup": {
+                            "count": 1,
+                            "total_ms": 1.1429786682128906,
+                            "max_ms": 1.1429786682128906
+                        },
+                        "child_gallery_lookup": {
+                            "count": 1,
+                            "total_ms": 1.1131763458251953,
+                            "max_ms": 1.1131763458251953
+                        },
+                        "media_manifest_schema_check": {
+                            "count": 1,
+                            "total_ms": 0.9109973907470703,
+                            "max_ms": 0.9109973907470703
+                        },
+                        "image_tag_lookup": {
+                            "count": 1,
+                            "total_ms": 0.7989406585693359,
+                            "max_ms": 0.7989406585693359
+                        },
+                        "gallery_lightbox_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5960464477539062,
+                            "max_ms": 0.5960464477539062
+                        },
+                        "gallery_image_count_query": {
+                            "count": 1,
+                            "total_ms": 0.5729198455810547,
+                            "max_ms": 0.5729198455810547
+                        },
+                        "media_manifest_group_rows": {
+                            "count": 1,
+                            "total_ms": 0.47206878662109375,
+                            "max_ms": 0.47206878662109375
+                        },
+                        "image_vote_lookup": {
+                            "count": 1,
+                            "total_ms": 0.3600120544433594,
+                            "max_ms": 0.3600120544433594
+                        },
+                        "child_galleries_batch_db": {
+                            "count": 1,
+                            "total_ms": 0.247955322265625,
+                            "max_ms": 0.247955322265625
+                        },
+                        "seo_metadata_lookup": {
+                            "count": 1,
+                            "total_ms": 0.19407272338867188,
+                            "max_ms": 0.19407272338867188
+                        },
+                        "media_manifest_preview_format": {
+                            "count": 1,
+                            "total_ms": 0.1361370086669922,
+                            "max_ms": 0.1361370086669922
+                        },
+                        "background_asset_lookup": {
+                            "count": 1,
+                            "total_ms": 0.13303756713867188,
+                            "max_ms": 0.13303756713867188
+                        },
+                        "media_manifest_collect_images": {
+                            "count": 1,
+                            "total_ms": 0.009059906005859375,
+                            "max_ms": 0.009059906005859375
+                        },
+                        "media_manifest_configured_sizes": {
+                            "count": 1,
+                            "total_ms": 0.0050067901611328125,
+                            "max_ms": 0.0050067901611328125
+                        }
+                    },
+                    "thumbnail_purposes": [
+                        {
+                            "purpose": "media manifest lightbox preview 1600",
+                            "size": 1600,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo content 1200",
+                            "size": 1200,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "media manifest seo thumbnail 800",
+                            "size": 800,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        },
+                        {
+                            "purpose": "map point thumb 300",
+                            "size": 300,
+                            "format": "webp",
+                            "calls": 0,
+                            "cache_hits": 0,
+                            "bundle_calls": 60,
+                            "total_ms": 0,
+                            "max_ms": 0
+                        }
+                    ],
+                    "events": [],
+                    "request": {
+                        "method": "GET",
+                        "request_uri": "/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=5&benchmark_cache_bust=1786229216637-5",
+                        "query_keys": [
+                            "view_as",
+                            "benchmark_token",
+                            "benchmark_run",
+                            "benchmark_cache_bust",
+                            "page",
+                            "public_path"
+                        ]
+                    }
+                }
+            },
+            "browser_load": {
+                "recorded_at": "2026-08-08T22:46:57Z",
+                "request": {
+                    "method": "POST",
+                    "request_uri": "/Galerie/index.php?page=admin_gallery_benchmark_browser",
+                    "remote_addr_present": true,
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                },
+                "payload": {
+                    "recorded_at_browser": "2026-08-08T22:46:56.913Z",
+                    "iframe_elapsed_ms": 273.5,
+                    "navigation": {
+                        "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/?view_as=anonymous&benchmark_token=c7ab6f8ae984873159fafa639374566f&benchmark_run=5&benchmark_cache_bust=1786229216637-5",
+                        "entryType": "navigation",
+                        "initiatorType": "navigation",
+                        "startTime": 0,
+                        "duration": 273.39999997615814,
+                        "redirectStart": 0,
+                        "redirectEnd": 0,
+                        "fetchStart": 1.2999999523162842,
+                        "domainLookupStart": 1.2999999523162842,
+                        "domainLookupEnd": 1.2999999523162842,
+                        "connectStart": 1.2999999523162842,
+                        "connectEnd": 1.2999999523162842,
+                        "secureConnectionStart": 0,
+                        "requestStart": 2.6999999284744263,
+                        "responseStart": 157.39999997615814,
+                        "responseEnd": 270.5,
+                        "domInteractive": 271.2999999523163,
+                        "domContentLoadedEventStart": 271.59999990463257,
+                        "domContentLoadedEventEnd": 271.7999999523163,
+                        "domComplete": 273,
+                        "loadEventStart": 273.09999990463257,
+                        "loadEventEnd": 273.39999997615814,
+                        "transferSize": 206485,
+                        "encodedBodySize": 206185,
+                        "decodedBodySize": 206185
+                    },
+                    "resources": {
+                        "count": 80,
+                        "total_transfer_size": 0,
+                        "total_encoded_body_size": 4236168,
+                        "total_decoded_body_size": 4249136,
+                        "by_initiator_type": {
+                            "link": {
+                                "count": 10,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 183979,
+                                "total_decoded_body_size": 196947
+                            },
+                            "img": {
+                                "count": 61,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 3401055,
+                                "total_decoded_body_size": 3401055
+                            },
+                            "css": {
+                                "count": 1,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 313944,
+                                "total_decoded_body_size": 313944
+                            },
+                            "script": {
+                                "count": 8,
+                                "total_duration": 0,
+                                "max_duration": 0,
+                                "total_transfer_size": 0,
+                                "total_encoded_body_size": 337190,
+                                "total_decoded_body_size": 337190
+                            }
+                        },
+                        "slowest": [
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/base.css?v=1778592272",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 3647,
+                                "decodedBodySize": 3647
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 44226,
+                                "decodedBodySize": 44226
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/lightbox.css?v=1783886091",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 32480,
+                                "decodedBodySize": 32480
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/public-shared.css?v=1781457652",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 40476,
+                                "decodedBodySize": 40476
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/utilities.css?v=1781460808",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 18220,
+                                "decodedBodySize": 18220
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles.css?v=1781473826",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 6834,
+                                "decodedBodySize": 6834
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/custom.css?v=1778582054",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8212,
+                                "decodedBodySize": 8212
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_css&v=7adecfbf6ec5",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 8140,
+                                "decodedBodySize": 8140
+                            },
+                            {
+                                "name": "http://localhost/Galerie/public/assets/styles/mobile-gallery.css?v=1780493190",
+                                "initiatorType": "link",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 21024,
+                                "decodedBodySize": 21024
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_branding_asset&kind=separator",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 31047,
+                                "decodedBodySize": 31047
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0001/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 41432,
+                                "decodedBodySize": 41432
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0002/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 141690,
+                                "decodedBodySize": 141690
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0003/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67540,
+                                "decodedBodySize": 67540
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0004/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 47298,
+                                "decodedBodySize": 47298
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0005/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 45464,
+                                "decodedBodySize": 45464
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0006/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 42822,
+                                "decodedBodySize": 42822
+                            },
+                            {
+                                "name": "http://localhost/Galerie/index.php?page=theme_background_asset&v=1778610557",
+                                "initiatorType": "css",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 313944,
+                                "decodedBodySize": 313944
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0007/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 46804,
+                                "decodedBodySize": 46804
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0008/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68252,
+                                "decodedBodySize": 68252
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0009/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 55148,
+                                "decodedBodySize": 55148
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0010/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 67610,
+                                "decodedBodySize": 67610
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0011/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 74694,
+                                "decodedBodySize": 74694
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0012/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 72952,
+                                "decodedBodySize": 72952
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0013/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68424,
+                                "decodedBodySize": 68424
+                            },
+                            {
+                                "name": "http://localhost/Galerie/gallery/herni-screeny/z-marseilles-do-bristolu-lfml-eggd-eu-tour-leg-09/hern-i-screeny-test-importu-galerie-0014/thumb-1280.webp",
+                                "initiatorType": "img",
+                                "duration": 0,
+                                "transferSize": 0,
+                                "encodedBodySize": 68770,
+                                "decodedBodySize": 68770
+                            }
+                        ]
+                    },
+                    "document": {
+                        "title": "Z Marseilles do Bristolu, LFML EGGD, EU tour LEG 09 - Nejlepší Galerie na Světě",
+                        "readyState": "complete",
+                        "image_count": 62,
+                        "script_count": 3,
+                        "stylesheet_count": 10,
+                        "html_length": 206734
+                    }
+                }
+            },
+            "events": [
+                {
+                    "at": "2026-08-08T22:46:56Z",
+                    "type": "server_render_recorded",
+                    "message": "Gallery PHP render profile was recorded."
+                },
+                {
+                    "at": "2026-08-08T22:46:57Z",
+                    "type": "browser_load_recorded",
+                    "message": "Browser navigation and resource timing was recorded."
+                }
+            ]
+        }
+    ],
+    "summary": {
+        "runs_total": 5,
+        "server_runs_recorded": 5,
+        "browser_runs_recorded": 5,
+        "server_total_ms": {
+            "count": 5,
+            "min": 160.25996208190918,
+            "max": 169.1570281982422,
+            "avg": 164.80779647827148,
+            "latest": 169.1570281982422
+        },
+        "browser_iframe_elapsed_ms": {
+            "count": 5,
+            "min": 264.7999999523163,
+            "max": 284.5,
+            "avg": 272.2399999856949,
+            "latest": 273.5
+        },
+        "db_queries": {
+            "count": 5,
+            "min": 5,
+            "max": 5,
+            "avg": 5,
+            "latest": 5
+        },
+        "filesystem_checks": {
+            "count": 5,
+            "min": 0,
+            "max": 0,
+            "avg": 0,
+            "latest": 0
+        },
+        "thumbnail_fallback_searches": {
+            "count": 5,
+            "min": 0,
+            "max": 0,
+            "avg": 0,
+            "latest": 0
+        },
+        "thumbnail_fallback_checks": {
+            "count": 5,
+            "min": 0,
+            "max": 0,
+            "avg": 0,
+            "latest": 0
+        },
+        "thumbnail_bundle_cache_misses": {
+            "count": 5,
+            "min": 0,
+            "max": 0,
+            "avg": 0,
+            "latest": 0
+        }
+    }
+}

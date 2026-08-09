@@ -1717,3 +1717,47 @@ button:disabled,
         min-width: 0;
     }
 }
+
+/* Copy-friendly browser measurements inside the existing Admin-only public render profile. */
+.public-thumbnail-diagnostics {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.public-thumbnail-diagnostics-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.public-thumbnail-diagnostics-heading h2,
+.public-thumbnail-diagnostics-help {
+    margin: 0;
+}
+
+.public-thumbnail-diagnostics-help {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+
+.public-thumbnail-diagnostics-report {
+    width: 100%;
+    min-height: 22rem;
+    box-sizing: border-box;
+    resize: vertical;
+    border: 1px solid rgba(120, 120, 120, 0.25);
+    border-radius: 0.65rem;
+    padding: 0.75rem;
+    background: rgba(248, 250, 252, 0.96);
+    color: #0f172a;
+    font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    white-space: pre;
+}
+
+@media (max-width: 640px) {
+    .public-thumbnail-diagnostics-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

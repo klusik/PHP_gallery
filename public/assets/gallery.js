@@ -70,6 +70,7 @@ import { setupAdminDuplicatePhotoDetector } from './gallery-modules/admin-duplic
 import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-statistics.js?v=20260608-storage-statistics-v1';
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260615-admin-gallery-report-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260618-gallery-benchmark-v1';
+import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupAdminBulkSelection, setupGalleryBulkDeleteConfirmation, setupImageBulkDeleteConfirmation, setupImageBulkMoveFields, setupThumbnailCacheDeleteConfirmation } from './gallery-modules/admin-bulk-actions.js?v=20260519-gallery-picker-v1';
 import { setupTagSuggestions, setupGalleryLightbox } from './gallery-modules/lightbox-deferred.js?v=20260620-lightbox-phaseb-help-map-nav-v1';
@@ -111,6 +112,21 @@ function runWhenDomReady(callback) {
 }
 
 /**
+ * Load progressive public thumbnail behavior only when the server selected that renderer for this page.
+ *
+ * Logged-in visitors share gallery.js with Admin pages, so a conditional dynamic import keeps the progressive
+ * implementation out of Admin-only module work while preserving the same public renderer lifecycle as anonymous pages.
+ */
+function setupProgressiveThumbnailRendererWhenPresent() {
+    if (!document.querySelector('img[data-progressive-thumbnail]')) {
+        return;
+    }
+    import('./gallery-modules/progressive-thumbnail-renderer.js?v=20260809-progressive-thumbnail-renderer')
+        .then((module) => module.setupProgressiveThumbnailRenderer?.())
+        .catch(() => {});
+}
+
+/**
  * Boots all gallery browser features.
  *
  * Each setup function is null-safe. Pages that do not contain the corresponding
@@ -124,6 +140,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminStorageStatistics();
     setupAdminGalleryReport();
     setupAdminGalleryBenchmark();
+    setupPublicThumbnailRenderDiagnostics();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();
     setupGallerySearchPickers();
@@ -159,6 +176,7 @@ function bootGalleryBrowserFeatures() {
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupAdminNavigationDataPanel);
     runWhenDomReady(setupResponsiveThumbnailSizes);
+    runWhenDomReady(setupProgressiveThumbnailRendererWhenPresent);
     runWhenDomReady(setupThumbnailWarmup);
     runWhenDomReady(setupAdminImageReordering);
     runWhenDomReady(setupPublicGalleryPageReordering);

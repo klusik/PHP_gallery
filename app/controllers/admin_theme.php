@@ -43,6 +43,8 @@ use const Gallery\Services\CMS_PAGINATION_MAX_COLUMNS;
 use const Gallery\Services\CMS_PAGINATION_MAX_ROWS;
 use const Gallery\Services\THEME_FAVORITE_GALLERIES_HOME_TOKEN;
 use const Gallery\Services\THEME_FAVORITE_GALLERIES_MAX;
+use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE;
+use const Gallery\Services\PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\db;
 use function Gallery\Core\e;
@@ -76,6 +78,8 @@ use function Gallery\Services\gallery_lightbox_browsing_mode_options;
 use function Gallery\Services\main_page_gallery_grid_settings;
 use function Gallery\Services\pagination_dimension_value;
 use function Gallery\Services\pagination_global_settings;
+use function Gallery\Services\public_thumbnail_rendering_mode;
+use function Gallery\Services\public_thumbnail_rendering_mode_save;
 use function Gallery\Services\remove_stored_favicon;
 use function Gallery\Services\reset_all_gallery_grid_overrides;
 use function Gallery\Services\sanitize_hex_color;
@@ -469,6 +473,15 @@ function cms_admin_theme(): void
                 set_app_setting('theme_public_content_revision', (string) time());
             }
             set_app_setting('theme_gallery_count_badge_enabled', !empty($_POST['theme_gallery_count_badge_enabled']) ? '1' : '0');
+            // $previousPublicThumbnailRenderingMode stores the public picture-markup policy before this save.
+            $previousPublicThumbnailRenderingMode = public_thumbnail_rendering_mode();
+            // Public thumbnail renderer values are normalized in the service so unsupported POST data safely selects responsive mode.
+            $nextPublicThumbnailRenderingMode = public_thumbnail_rendering_mode_save($_POST['public_thumbnail_rendering_mode'] ?? null);
+            if ($nextPublicThumbnailRenderingMode !== $previousPublicThumbnailRenderingMode) {
+                // The rendering mode changes selected-gallery server-rendered picture markup and browser activation markers.
+                // Bump the existing public content revision so cache diagnostics reflect the new mode immediately.
+                set_app_setting('theme_public_content_revision', (string) time());
+            }
             if ($lightboxModesFeatureEnabled) {
                 // $previousLightboxBrowsingMode stores the currently rendered lightbox mode before this save.
                 $previousLightboxBrowsingMode = theme_lightbox_browsing_mode();
@@ -509,6 +522,8 @@ function cms_admin_theme(): void
     $paginationSettings = pagination_global_settings();
     // Variable $homeGridSettings stores the separate public home-page gallery grid.
     $homeGridSettings = main_page_gallery_grid_settings();
+    // $publicThumbnailRenderingMode stores the validated public photo-card rendering mode shown by the Layout form.
+    $publicThumbnailRenderingMode = public_thumbnail_rendering_mode();
     render_header(t('admin.theme.page_title', 'Theme'));
     if (!empty($_GET['grid_reset'])) {
         // $databaseRows stores how many database gallery rows reported a custom-grid reset.
@@ -817,6 +832,16 @@ function cms_admin_theme(): void
     echo '<fieldset class="form-grid" id="admin-gallery-count-badge"><legend>' . e(t('admin.theme.layout.count_badge_legend', 'Contained-picture badge')) . '</legend>';
     echo '<label class="checkbox-label"><input type="checkbox" name="theme_gallery_count_badge_enabled" value="1"' . (((string) ($theme['gallery_count_badge_enabled'] ?? '1')) === '1' ? ' checked' : '') . '> ' . e(t('admin.theme.layout.show_count_badge', 'Show stacked-picture icon and image count on gallery cards')) . '</label>';
     echo '<p class="muted">' . e(t('admin.theme.layout.count_badge_hint', 'Enabled by default. Individual galleries can inherit this setting or override it in the gallery editor.')) . '</p>';
+    echo '</fieldset>';
+    echo '<fieldset class="form-grid" id="admin-public-thumbnail-rendering"><legend>' . e(t('admin.theme.layout.thumbnail_rendering_legend', 'Public thumbnail rendering')) . '</legend>';
+    echo '<label>' . e(t('admin.theme.layout.thumbnail_rendering_label', 'Selected-gallery photo cards')) . '<select name="public_thumbnail_rendering_mode" aria-describedby="admin-public-thumbnail-rendering-help admin-public-thumbnail-rendering-transfer">';
+    echo '<option value="' . e(PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE) . '"' . ($publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_RESPONSIVE ? ' selected' : '') . '>' . e(t('admin.theme.layout.thumbnail_rendering_responsive_label', 'Responsive browser selection - Default')) . '</option>';
+    echo '<option value="' . e(PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE) . '"' . ($publicThumbnailRenderingMode === PUBLIC_THUMBNAIL_RENDERING_PROGRESSIVE ? ' selected' : '') . '>' . e(t('admin.theme.layout.thumbnail_rendering_progressive_label', 'Progressive thumbnail sharpening - Beta')) . '</option>';
+    echo '</select></label>';
+    echo '<p class="muted" id="admin-public-thumbnail-rendering-help"><strong>' . e(t('admin.theme.layout.thumbnail_rendering_responsive_title', 'Responsive browser selection:')) . '</strong> ' . e(t('admin.theme.layout.thumbnail_rendering_responsive_help', 'The complete responsive candidate set is exposed immediately and the browser selects the most appropriate available thumbnail.')) . '</p>';
+    echo '<p class="muted"><strong>' . e(t('admin.theme.layout.thumbnail_rendering_progressive_title', 'Progressive thumbnail sharpening:')) . '</strong> ' . e(t('admin.theme.layout.thumbnail_rendering_progressive_help', 'A small thumbnail is presented first. Larger thumbnails are activated later for relevant visible or near-visible cards, prioritizing initial page responsiveness over earliest full sharpness.')) . '</p>';
+    echo '<p class="muted" id="admin-public-thumbnail-rendering-transfer">' . e(t('admin.theme.layout.thumbnail_rendering_transfer_note', 'Progressive rendering can transfer both the small thumbnail and a larger replacement, potentially increasing total transferred bytes while improving perceived initial responsiveness.')) . '</p>';
+    echo '<p class="muted">' . e(t('admin.theme.layout.thumbnail_rendering_scope_note', 'This setting applies to photo cards in a selected gallery. Gallery cover and collage thumbnails keep responsive browser selection.')) . '</p>';
     echo '</fieldset>';
     echo '</div>';
     $layoutCardsHtml = ob_get_clean();
