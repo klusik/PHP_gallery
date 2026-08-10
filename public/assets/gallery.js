@@ -92,7 +92,7 @@ import {
     setupAdminNavdataUpdateFeedback,
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
-} from './gallery-modules/admin-operations.js?v=20260616-metadata-organizer-scroll-v1';
+} from './gallery-modules/admin-operations.js?v=20260810-admin-log-scaling-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

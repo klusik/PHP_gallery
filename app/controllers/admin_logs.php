@@ -42,6 +42,7 @@ use function Gallery\Controllers\cms_not_found;
 use function Gallery\Core\base_url;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\e;
+use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
 use function Gallery\Core\render_footer;
 use function Gallery\Core\render_header;
@@ -54,19 +55,32 @@ use function Gallery\Services\set_app_setting;
 use function Gallery\Services\translation_interpolate;
 use function Gallery\Services\translation_load_language;
 use function Gallery\Views\view_render_admin_feature_flag;
+use function Gallery\Services\admin_log_archive_delete_file;
+use function Gallery\Services\admin_log_archive_file_name;
+use function Gallery\Services\admin_log_archive_list;
+use function Gallery\Services\admin_log_archive_maintenance_run;
+use function Gallery\Services\admin_log_archive_path;
+use function Gallery\Services\admin_log_archive_retention_options;
+use function Gallery\Services\admin_log_archive_set_retention_days;
+use function Gallery\Services\admin_log_archive_status;
+use function Gallery\Services\admin_log_archive_stream_member;
+use function Gallery\Services\admin_log_archive_stream_zip;
+use function Gallery\Services\admin_log_archive_valid_date;
+use function Gallery\Services\admin_dashboard_format_bytes;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_log_category_options;
 use function Gallery\Services\admin_log_context_array;
 use function Gallery\Services\admin_log_count;
-use function Gallery\Services\admin_log_create_export_zip;
-use function Gallery\Services\admin_log_export_group_text;
-use function Gallery\Services\admin_log_export_payload;
-use function Gallery\Services\admin_log_export_rows;
+use function Gallery\Services\admin_log_create_export_zip_streamed;
+use function Gallery\Services\admin_log_export_group_header_text;
 use function Gallery\Services\admin_log_export_temp_path;
 use function Gallery\Services\admin_log_export_text;
 use function Gallery\Services\admin_log_export_zip_filename;
 use function Gallery\Services\admin_log_find;
-use function Gallery\Services\admin_log_group_member_rows;
+use function Gallery\Services\admin_log_group_hash_for_entry;
+use function Gallery\Services\admin_log_group_member_export_batch;
+use function Gallery\Services\admin_log_group_member_page;
+use function Gallery\Services\admin_log_group_member_summary;
 use function Gallery\Services\admin_log_grouped_count;
 use function Gallery\Services\admin_log_grouped_list;
 use function Gallery\Services\admin_log_list;
@@ -76,6 +90,7 @@ use function Gallery\Services\admin_log_status_label;
 use function Gallery\Services\admin_log_status_options;
 use function Gallery\Services\admin_log_update_group_status;
 use function Gallery\Services\admin_log_update_status;
+use const Gallery\Services\ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
 
 /**
  * Administrative log controller model.
@@ -506,6 +521,51 @@ function admin_log_filter_url(array $overrides = []): string
 }
 
 /**
+ * Render one bounded chunk of raw grouped admin log instances.
+ *
+ * @param array $members Group member rows.
+ * @param int $startIndex Zero-based index of the first rendered member.
+ * @return string Text result for the caller.
+ */
+function render_admin_log_group_member_rows(array $members, int $startIndex = 0): string
+{
+    ob_start();
+    foreach ($members as $index => $member) {
+        // $displayIndex stores the stable one-based instance number across lazy pages.
+        $displayIndex = max(0, $startIndex) + $index + 1;
+        echo '<div class="admin-log-group-instance">';
+        echo '<strong>#' . e((string) $displayIndex) . '</strong> ';
+        echo e((string) ($member['created_at'] ?? ''));
+        echo ' | ID ' . e((string) ($member['id'] ?? '0'));
+        echo ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
+        if (!empty($member['username'])) {
+            echo ' | ' . e((string) $member['username']);
+        }
+        if (!empty($member['request_id'])) {
+            echo ' | ' . e(admin_log_english_t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $member['request_id']);
+        }
+        if (!empty($member['route_name'])) {
+            echo ' | ' . e((string) $member['route_name']);
+        }
+        if (!empty($member['message'])) {
+            echo '<pre>' . e((string) $member['message']);
+            $memberContext = admin_log_context_array($member);
+            if ($memberContext !== []) {
+                echo "\n" . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            }
+            echo '</pre>';
+        } else {
+            $memberContext = admin_log_context_array($member);
+            if ($memberContext !== []) {
+                echo '<pre>' . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</pre>';
+            }
+        }
+        echo '</div>';
+    }
+    return (string) ob_get_clean();
+}
+
+/**
  * Render the admin log table rows for normal page loads and live search responses.
  *
  * @param array $logs Logs value.
@@ -533,8 +593,6 @@ function render_admin_log_table_rows(array $logs): string
         $groupSelectionValue = $groupCount > 1 && !empty($entry['group_hash'])
             ? 'group:' . (string) $entry['group_hash']
             : (string) ((int) $entry['id']);
-        // $groupMembers stores every raw log row contained inside this grouped summary.
-        $groupMembers = isset($entry['group_members']) && is_array($entry['group_members']) ? $entry['group_members'] : [];
         echo '<tr data-admin-log-row>';
         echo '<td><input type="checkbox" name="log_ids[]" value="' . e($groupSelectionValue) . '" form="admin-log-bulk-form"></td>';
         echo '<td data-admin-log-created-at>' . e($createdAtLabel);
@@ -565,31 +623,17 @@ function render_admin_log_table_rows(array $logs): string
         echo '<dt>' . e(admin_log_english_t('admin.logs.route', 'Route')) . '</dt><dd>' . e((string) ($entry['route_name'] ?? '')) . '</dd>';
         echo '<dt>' . e(admin_log_english_t('admin.logs.request_id', 'Request ID')) . '</dt><dd>' . e((string) ($entry['request_id'] ?? '')) . '</dd>';
         echo '</dl>';
-        if ($groupCount > 1 && $groupMembers !== []) {
-            echo '<details class="log-context"><summary>' . e(admin_log_english_t('admin.logs.all_instances', 'All grouped instances')) . ' (' . e((string) count($groupMembers)) . ')</summary><pre>';
-            foreach ($groupMembers as $member) {
-                echo e((string) ($member['created_at'] ?? ''));
-                echo ' | #' . e((string) ($member['id'] ?? '0'));
-                echo ' | ' . e((string) ($member['severity'] ?? $member['level'] ?? ''));
-                if (!empty($member['username'])) {
-                    echo ' | ' . e((string) $member['username']);
-                }
-                if (!empty($member['request_id'])) {
-                    echo ' | ' . e(admin_log_english_t('admin.logs.request_prefix', 'Request')) . ' ' . e((string) $member['request_id']);
-                }
-                if (!empty($member['route_name'])) {
-                    echo ' | ' . e((string) $member['route_name']);
-                }
-                if (!empty($member['message'])) {
-                    echo "\n  " . e((string) $member['message']);
-                }
-                $memberContext = admin_log_context_array($member);
-                if ($memberContext !== []) {
-                    echo "\n  " . e(json_encode($memberContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-                }
-                echo "\n";
-            }
-            echo '</pre></details>';
+        if ($groupCount > 1 && !empty($entry['group_hash'])) {
+            // $membersUrl loads raw instances only when the administrator opens this group.
+            $membersUrl = url_for('admin_log_group_members', [
+                'id' => (int) $entry['id'],
+                'group' => (string) $entry['group_hash'],
+            ]);
+            echo '<details class="log-context admin-log-group-members" data-admin-log-group-members data-admin-log-group-members-url="' . e($membersUrl) . '" data-admin-log-group-total="' . e((string) $groupCount) . '">';
+            echo '<summary>' . e(admin_log_english_t('admin.logs.all_instances', 'All grouped instances')) . ' (' . e((string) $groupCount) . ')</summary>';
+            echo '<div data-admin-log-group-members-list><p class="muted">' . e(admin_log_english_t('admin.logs.instances_lazy_hint', 'Open this section to load raw instances in small batches.')) . '</p></div>';
+            echo '<div class="log-detail-actions"><button type="button" class="button secondary" data-admin-log-group-members-more hidden>' . e(admin_log_english_t('admin.logs.load_more_instances', 'Load more instances')) . '</button><span class="muted" data-admin-log-group-members-state aria-live="polite"></span></div>';
+            echo '</details>';
         }
         echo '<code>' . e((string) $entry['event_key']) . '</code>';
         if (!empty($entry['subject_type']) || !empty($entry['subject_id'])) {
@@ -611,6 +655,154 @@ function render_admin_log_table_rows(array $logs): string
         echo '</tr>';
     }
     return (string) ob_get_clean();
+}
+
+/**
+ * Normalize the filesystem archive browser page number.
+ *
+ * @param mixed $value Submitted page value.
+ * @return int One-based page number.
+ */
+function admin_log_archive_page_number(mixed $value): int
+{
+    return max(1, (int) $value);
+}
+
+/**
+ * Build an Admin Logs URL for one archive browser page while preserving live-log filters.
+ *
+ * @param int $archivePage Archive browser page number.
+ * @return string URL for the caller.
+ */
+function admin_log_archive_page_url(int $archivePage): string
+{
+    $params = $_GET;
+    unset($params['ajax']);
+    $params['archive_page'] = max(1, $archivePage);
+    unset($params['page']);
+    return url_for('admin_logs', $params);
+}
+
+/**
+ * Render the compact filesystem archive pagination control.
+ *
+ * @param int $page Current page.
+ * @param int $pages Total pages.
+ * @return string HTML fragment.
+ */
+function render_admin_log_archive_pagination(int $page, int $pages): string
+{
+    if ($pages <= 1) {
+        return '';
+    }
+    $html = '<nav class="pagination admin-log-archive-pagination" aria-label="Archived log pages">';
+    if ($page > 1) {
+        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page - 1)) . '">Previous</a>';
+    }
+    $html .= '<span class="pagination-status">Page ' . e((string) $page) . ' of ' . e((string) $pages) . '</span>';
+    if ($page < $pages) {
+        $html .= '<a class="pagination-link" href="' . e(admin_log_archive_page_url($page + 1)) . '">Next</a>';
+    }
+    $html .= '</nav>';
+    return $html;
+}
+
+/**
+ * Render filesystem-backed Admin log archive controls and archive files.
+ *
+ * @param array<string,mixed> $status Archive-maintenance status.
+ * @param array<string,mixed> $archiveList Paginated archive listing.
+ */
+function render_admin_log_archive_panel(array $status, array $archiveList): void
+{
+    $retentionDays = max(0, (int) ($status['retention_days'] ?? 30));
+    $inventory = is_array($status['inventory'] ?? null) ? $status['inventory'] : [];
+    $nextRunAt = max(0, (int) ($status['next_run_at'] ?? 0));
+    $lastResult = is_array($status['last_result'] ?? null) ? $status['last_result'] : [];
+    $archivePage = max(1, (int) ($archiveList['page'] ?? 1));
+    $archivePages = max(1, (int) ($archiveList['pages'] ?? 1));
+    $items = is_array($archiveList['items'] ?? null) ? $archiveList['items'] : [];
+
+    echo '<section class="panel admin-log-archive-panel">';
+    echo '<div class="admin-log-archive-heading"><div><h2>Planned Admin log maintenance</h2><p class="muted">Recent logs stay live in MariaDB. Older completed days are archived as permanent daily ZIP files containing JSON, a fully expanded static HTML report, and a verification manifest. Database rows are deleted only after that ZIP has been verified.</p></div></div>';
+
+    if (empty($status['zip_available'])) {
+        echo '<div class="notice">PHP ZipArchive is not available. Automatic Admin log archival cannot run safely until the ZIP extension is enabled.</div>';
+    }
+
+    echo '<div class="admin-log-archive-controls">';
+    echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-retention-form">' . csrf_field();
+    echo '<input type="hidden" name="action" value="save_retention">';
+    echo '<label><span>Keep live logs</span><select name="retention_days">';
+    foreach (admin_log_archive_retention_options() as $days) {
+        $label = $days === 0 ? 'Forever, disable automatic archiving' : $days . ' days';
+        echo '<option value="' . (int) $days . '"' . ($retentionDays === $days ? ' selected' : '') . '>' . e($label) . '</option>';
+    }
+    echo '</select></label><button type="submit" class="secondary">Save retention</button></form>';
+
+    echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-run-form">' . csrf_field();
+    echo '<input type="hidden" name="action" value="run_now">';
+    echo '<button type="submit">Run maintenance cycle now</button>';
+    echo '</form>';
+    echo '</div>';
+
+    echo '<p class="muted admin-log-archive-policy">The lightweight due counter is checked on normal gallery and Admin page loads. When due, one safe daily archive cycle runs after the visible response. A backlog is retried shortly; once caught up, the next normal check is approximately 24 hours later. Archived ZIP files are never deleted automatically.</p>';
+
+    echo '<dl class="admin-log-archive-metrics">';
+    echo '<div><dt>Live retention</dt><dd>' . e($retentionDays === 0 ? 'Forever' : $retentionDays . ' days') . '</dd></div>';
+    echo '<div><dt>Archived ZIPs</dt><dd>' . e((string) max(0, (int) ($inventory['count'] ?? 0))) . '</dd></div>';
+    echo '<div><dt>Archive storage</dt><dd>' . e(admin_dashboard_format_bytes(max(0, (int) ($inventory['total_bytes'] ?? 0)))) . '</dd></div>';
+    echo '<div><dt>Oldest archive</dt><dd>' . e((string) (($inventory['oldest_date'] ?? '') !== '' ? $inventory['oldest_date'] : 'none')) . '</dd></div>';
+    echo '<div><dt>Newest archive</dt><dd>' . e((string) (($inventory['newest_date'] ?? '') !== '' ? $inventory['newest_date'] : 'none')) . '</dd></div>';
+    $nextRunLabel = $retentionDays === 0
+        ? 'disabled'
+        : ($nextRunAt <= time() ? 'due now' : date('Y-m-d H:i:s', $nextRunAt));
+    echo '<div><dt>Next automatic check</dt><dd>' . e($nextRunLabel) . '</dd></div>';
+    echo '</dl>';
+
+    if ($lastResult !== []) {
+        $lastReason = (string) ($lastResult['reason'] ?? '');
+        $lastDate = (string) ($lastResult['archive_date'] ?? '');
+        $lastRows = max(0, (int) ($lastResult['archived_rows'] ?? 0));
+        $lastDeleted = max(0, (int) ($lastResult['deleted_rows'] ?? 0));
+        $lastSummary = 'Last cycle: ' . ($lastReason !== '' ? $lastReason : (!empty($lastResult['ok']) ? 'completed' : 'failed')) . '.';
+        if ($lastDate !== '') {
+            $lastSummary .= ' Archive day ' . $lastDate . ', ' . $lastRows . ' rows preserved, ' . $lastDeleted . ' live rows removed.';
+        }
+        if (!empty($lastResult['error'])) {
+            $lastSummary .= ' Error: ' . (string) $lastResult['error'];
+        }
+        echo '<p class="muted admin-log-archive-last-result">' . e($lastSummary) . '</p>';
+    }
+
+    echo '<div class="admin-log-archive-heading admin-log-archive-files-heading"><div><h3>Archived logs</h3><p class="muted">These rows come directly from ZIP files on disk. View the frozen HTML/JSON through authenticated routes, download the original ZIP, or delete a selected archive manually.</p></div></div>';
+    echo render_admin_log_archive_pagination($archivePage, $archivePages);
+    if ($items === []) {
+        echo '<p class="muted">No Admin log ZIP archives exist yet.</p>';
+    } else {
+        echo '<div class="admin-log-table-wrap"><table class="admin-log-archive-table"><thead><tr><th>Date</th><th>Records</th><th>ZIP size</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        foreach ($items as $item) {
+            $date = (string) ($item['date'] ?? '');
+            if (!admin_log_archive_valid_date($date)) {
+                continue;
+            }
+            echo '<tr><td><strong>' . e($date) . '</strong><div class="muted">' . e((string) ($item['file_name'] ?? admin_log_archive_file_name($date))) . '</div></td>';
+            echo '<td>' . e(!empty($item['manifest_available']) ? (string) max(0, (int) ($item['row_count'] ?? 0)) : 'manifest unavailable') . '</td>';
+            echo '<td>' . e(admin_dashboard_format_bytes(max(0, (int) ($item['bytes'] ?? 0)))) . '</td>';
+            echo '<td>' . e((string) (($item['created_at'] ?? '') !== '' ? $item['created_at'] : 'unknown')) . '</td>';
+            echo '<td><div class="admin-log-archive-actions">';
+            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'html'])) . '">View HTML</a>';
+            echo '<a class="button secondary" target="_blank" rel="noopener" href="' . e(url_for('admin_log_archive_view', ['date' => $date, 'kind' => 'json'])) . '">View JSON</a>';
+            echo '<a class="button secondary" href="' . e(url_for('admin_log_archive_download', ['date' => $date])) . '">Download ZIP</a>';
+            echo '<form method="post" action="' . e(url_for('admin_log_archive_maintenance')) . '" class="admin-log-archive-delete-form">' . csrf_field();
+            echo '<input type="hidden" name="action" value="delete_archive"><input type="hidden" name="date" value="' . e($date) . '">';
+            echo '<button type="submit" class="secondary danger" onclick="return confirm(' . e(json_encode('Permanently delete ' . admin_log_archive_file_name($date) . '? This archived log data cannot be recovered from PHP Gallery.', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ');">Delete</button>';
+            echo '</form></div></td></tr>';
+        }
+        echo '</tbody></table></div>';
+    }
+    echo render_admin_log_archive_pagination($archivePage, $archivePages);
+    echo '</section>';
 }
 
 /**
@@ -681,12 +873,25 @@ function cms_admin_logs(): void
         return;
     }
 
+    // $archivePage stores the filesystem archive browser page independently of live-log pagination.
+    $archivePage = admin_log_archive_page_number($_GET['archive_page'] ?? 1);
+    // $archiveStatus stores the lightweight counter state and filesystem inventory.
+    $archiveStatus = admin_log_archive_status();
+    // $archiveList opens manifests only for the currently visible archive page.
+    $archiveList = admin_log_archive_list($archivePage);
+    // $notice stores the result of retention, manual maintenance, and archive file actions.
+    $notice = (string) flash_message('admin_notice');
+
     render_header(admin_log_english_t('admin.logs.title', 'Admin log'));
     echo '<section class="hero"><h1>' . e(admin_log_english_t('admin.logs.title', 'Admin log')) . '</h1><p>' . e(admin_log_english_t('admin.logs.intro', 'Operational events, failures, and maintenance actions.')) . '</p><nav class="nav">';
     echo '<a class="button secondary" href="' . e(url_for('admin')) . '">' . e(admin_log_english_t('admin.logs.back_to_dashboard', 'Back to dashboard')) . '</a>';
     echo '<a class="button secondary" href="' . e(url_for('admin_telemetry')) . '">' . e(admin_log_english_t('admin.logs.anonymous_telemetry', 'Anonymous telemetry')) . '</a>';
     echo '<a class="button" href="' . e(url_for('admin_logs_export_zip')) . '">' . e(admin_log_english_t('admin.logs.export_all_zip', 'Export all logs ZIP')) . '</a>';
     echo '</nav></section>';
+    if ($notice !== '') {
+        echo '<div class="notice">' . e($notice) . '</div>';
+    }
+    render_admin_log_archive_panel($archiveStatus, $archiveList);
 
     echo '<section class="panel admin-log-filters-panel"><div class="admin-log-filters-header"><div><h2>' . e(admin_log_english_t('admin.logs.filters', 'Filters')) . '</h2><p class="muted">' . e(admin_log_english_t('admin.logs.filters_intro', 'Refine the operational log by category, severity, grouping, and row count.')) . '</p></div><span class="admin-log-filter-state" data-admin-log-live-state aria-live="polite"></span></div><form method="get" action="' . e(base_url('index.php')) . '" class="admin-log-filter-grid" data-admin-log-filter-form data-admin-log-live-url="' . e(url_for('admin_logs')) . '" data-admin-log-searching-text="' . e(admin_log_english_t('admin.logs.searching', 'Searching...')) . '" data-admin-log-updated-text="' . e(admin_log_english_t('admin.logs.updated', 'Updated.')) . '" data-admin-log-failed-text="' . e(admin_log_english_t('admin.logs.live_search_failed', 'Live search failed. Use Apply filters.')) . '" data-admin-log-shown-text="' . e(admin_log_english_t('admin.logs.shown_suffix', 'shown')) . '" data-admin-log-when-text="' . e(admin_log_english_t('admin.logs.when', 'When')) . '">';
     echo '<input type="hidden" name="page" value="admin_logs">';
@@ -736,6 +941,188 @@ function cms_admin_logs(): void
     }
     echo '</select></label><button type="submit" name="action" value="bulk">' . e(admin_log_english_t('admin.logs.apply_to_selected', 'Apply to selected')) . '</button><span class="muted">' . e(admin_log_english_t('admin.logs.bulk_grouping_hint', 'Selecting a grouped row applies the state to every matching instance in that group.')) . '</span></div></form></section>';
     render_footer();
+}
+
+/**
+ * Return one bounded lazy-loaded page of raw instances for a grouped Admin log row.
+ */
+function cms_admin_log_group_members(): void
+{
+    require_admin();
+    // $logId stores the representative grouped row id supplied by the server-rendered table.
+    $logId = max(0, (int) ($_GET['id'] ?? 0));
+    // $groupHash stores the deterministic group identity supplied by the server-rendered table.
+    $groupHash = strtolower(trim((string) ($_GET['group'] ?? '')));
+    // $offset stores the next bounded raw-instance position requested by the browser.
+    $offset = max(0, (int) ($_GET['offset'] ?? 0));
+
+    $entry = $logId > 0 ? admin_log_find($logId) : null;
+    if ($entry === null || preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1 || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)) {
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        http_response_code(404);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'error' => admin_log_english_t('admin.logs.group_not_found', 'Grouped log entry not found.')], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return;
+    }
+
+    // Fetch one extra row so the response can expose has_more without a separate COUNT query.
+    $page = admin_log_group_member_page($entry, ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE + 1, $offset);
+    $hasMore = count($page) > ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE;
+    if ($hasMore) {
+        $page = array_slice($page, 0, ADMIN_LOG_GROUP_MEMBER_PAGE_SIZE);
+    }
+    $nextOffset = $offset + count($page);
+
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode([
+        'ok' => true,
+        'html' => render_admin_log_group_member_rows($page, $offset),
+        'loaded' => count($page),
+        'next_offset' => $nextOffset,
+        'has_more' => $hasMore,
+        'state_text' => admin_log_english_t('admin.logs.instances_loaded', '{count} raw instances loaded.', ['count' => (string) $nextOffset]),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+/**
+ * Save Admin log retention, force one archive cycle, or explicitly delete an archive file.
+ */
+function cms_admin_log_archive_maintenance(): void
+{
+    require_admin();
+    verify_csrf();
+    $action = trim((string) ($_POST['action'] ?? ''));
+
+    if ($action === 'save_retention') {
+        $days = admin_log_archive_set_retention_days((int) ($_POST['retention_days'] ?? 30));
+        $label = $days === 0 ? 'Forever' : $days . ' days';
+        flash_message('admin_notice', 'Admin log live retention saved: ' . $label . '. Archived ZIP files are never deleted automatically.');
+        redirect_to(url_for('admin_logs'));
+    }
+
+    if ($action === 'run_now') {
+        $result = admin_log_archive_maintenance_run([
+            'source' => 'admin_manual',
+            'force' => true,
+        ]);
+        if (!empty($result['busy'])) {
+            flash_message('admin_notice', 'Admin log archive maintenance is already running in another request.');
+        } elseif (empty($result['ok'])) {
+            flash_message('admin_notice', 'Admin log archive maintenance failed: ' . (string) ($result['error'] ?? $result['reason'] ?? 'unknown error'));
+        } elseif ((string) ($result['reason'] ?? '') === 'retention_forever') {
+            flash_message('admin_notice', 'Admin log archive maintenance is disabled because live retention is set to Forever.');
+        } elseif (!empty($result['archive_date'])) {
+            $message = 'Admin log maintenance archived ' . (string) $result['archive_date']
+                . ': ' . max(0, (int) ($result['archived_rows'] ?? 0)) . ' rows preserved in ZIP, '
+                . max(0, (int) ($result['deleted_rows'] ?? 0)) . ' represented live rows removed.';
+            if (!empty($result['has_more'])) {
+                $message .= ' More eligible days remain and will continue in later safe cycles.';
+            } else {
+                $message .= ' The archive backlog is caught up.';
+            }
+            flash_message('admin_notice', $message);
+        } else {
+            flash_message('admin_notice', 'Admin log maintenance found no completed days old enough to archive.');
+        }
+        redirect_to(url_for('admin_logs'));
+    }
+
+    if ($action === 'delete_archive') {
+        $date = trim((string) ($_POST['date'] ?? ''));
+        if (!admin_log_archive_valid_date($date)) {
+            flash_message('admin_notice', 'Invalid Admin log archive date.');
+            redirect_to(url_for('admin_logs'));
+        }
+        try {
+            $deleted = admin_log_archive_delete_file($date);
+            if ($deleted) {
+                admin_log_event('warning', 'admin_log.archive_deleted', 'An Admin log archive ZIP was deleted manually.', [
+                    'archive_date' => $date,
+                    'file_name' => admin_log_archive_file_name($date),
+                ], [
+                    'severity' => 'warning',
+                    'category' => 'admin',
+                ]);
+                flash_message('admin_notice', 'Deleted archived Admin log file ' . admin_log_archive_file_name($date) . '.');
+            } else {
+                flash_message('admin_notice', 'The selected Admin log archive file no longer exists.');
+            }
+        } catch (Throwable $exception) {
+            flash_message('admin_notice', 'Unable to delete the selected Admin log archive: ' . $exception->getMessage());
+        }
+        redirect_to(url_for('admin_logs'));
+    }
+
+    cms_not_found();
+}
+
+/**
+ * Stream the static HTML or canonical JSON member of one archived Admin log day.
+ */
+function cms_admin_log_archive_view(): void
+{
+    require_admin();
+    $date = trim((string) ($_GET['date'] ?? ''));
+    $kind = strtolower(trim((string) ($_GET['kind'] ?? 'html')));
+    if (!admin_log_archive_valid_date($date) || !in_array($kind, ['html', 'json'], true)) {
+        cms_not_found();
+        return;
+    }
+    $path = admin_log_archive_path($date);
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: ' . ($kind === 'json' ? 'application/json' : 'text/html') . '; charset=utf-8');
+    header('Content-Disposition: inline; filename="admin-logs-' . $date . '.' . $kind . '"');
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    if ($kind === 'html') {
+        header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+    }
+    try {
+        admin_log_archive_stream_member($date, $kind);
+    } catch (Throwable) {
+        // The file existed when headers were prepared but could have become unavailable concurrently.
+    }
+}
+
+/**
+ * Download one immutable daily Admin log ZIP archive.
+ */
+function cms_admin_log_archive_download(): void
+{
+    require_admin();
+    $date = trim((string) ($_GET['date'] ?? ''));
+    if (!admin_log_archive_valid_date($date)) {
+        cms_not_found();
+        return;
+    }
+    $path = admin_log_archive_path($date);
+    if (!is_file($path)) {
+        cms_not_found();
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="' . admin_log_archive_file_name($date) . '"');
+    header('Content-Length: ' . max(0, (int) filesize($path)));
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    admin_log_archive_stream_zip($date);
 }
 
 /**
@@ -812,7 +1199,7 @@ function cms_admin_log_export(): void
     // $logId stores the requested admin log identifier from the query string.
     $logId = max(0, (int) ($_GET['id'] ?? 0));
     // $groupHash stores the optional grouped admin log hash from the query string.
-    $groupHash = trim((string) ($_GET['group'] ?? ''));
+    $groupHash = strtolower(trim((string) ($_GET['group'] ?? '')));
     if ($logId <= 0) {
         cms_not_found();
         return;
@@ -823,24 +1210,69 @@ function cms_admin_log_export(): void
         cms_not_found();
         return;
     }
+
+    // $isGroupedExport is true only when the supplied group hash matches the representative row.
+    $isGroupedExport = false;
+    if ($groupHash !== '') {
+        if (preg_match('/^[a-f0-9]{64}$/', $groupHash) !== 1 || !hash_equals(admin_log_group_hash_for_entry($entry), $groupHash)) {
+            cms_not_found();
+            return;
+        }
+        $isGroupedExport = true;
+    }
+
     // $fileName stores a filesystem-safe diagnostic export name.
     $fileName = 'php-gallery-log-' . $logId . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
-    // $exportText stores the plain-text diagnostic response body.
-    $exportText = admin_log_export_text($entry);
-    if ($groupHash !== '') {
-        $groupMembers = admin_log_group_member_rows([$groupHash]);
-        if ($groupMembers !== []) {
-            $fileName = 'php-gallery-log-group-' . substr($groupHash, 0, 12) . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
-            $exportText = admin_log_export_group_text($entry, $groupMembers);
-        }
+    if ($isGroupedExport) {
+        $fileName = 'php-gallery-log-group-' . substr($groupHash, 0, 12) . '-' . preg_replace('/[^0-9A-Za-z_-]/', '-', (string) ($entry['event_key'] ?? 'event')) . '.txt';
     }
-    if (ob_get_level() > 0) {
+
+    // Remove all application output buffers so a very large grouped export can stream directly.
+    while (ob_get_level() > 0) {
         ob_end_clean();
     }
     header('Content-Type: text/plain; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $fileName . '"');
     header('X-Content-Type-Options: nosniff');
-    echo $exportText;
+    header('Cache-Control: no-store');
+
+    if (!$isGroupedExport) {
+        echo admin_log_export_text($entry);
+        return;
+    }
+
+    // $summary stores scalar group metadata without materializing raw LONGTEXT contexts.
+    $summary = admin_log_group_member_summary($entry);
+    $groupCount = max(0, (int) ($summary['group_count'] ?? 0));
+    $entry['first_created_at'] = (string) ($summary['first_created_at'] ?? '');
+    $entry['latest_created_at'] = (string) ($summary['latest_created_at'] ?? '');
+    echo admin_log_export_group_header_text($entry, $groupCount);
+
+    $beforeCreatedAt = null;
+    $beforeId = 0;
+    $written = 0;
+    $batchSize = 250;
+    while (true) {
+        // $members stores one indexed keyset page, keeping memory bounded regardless of group size.
+        $members = admin_log_group_member_export_batch($entry, $beforeCreatedAt, $beforeId, $batchSize);
+        if ($members === []) {
+            break;
+        }
+        foreach ($members as $member) {
+            $written++;
+            echo '[' . $written . '/' . $groupCount . "]\n";
+            echo admin_log_export_text($member) . "\n";
+        }
+        $lastMember = end($members);
+        $beforeCreatedAt = is_array($lastMember) ? (string) ($lastMember['created_at'] ?? '') : '';
+        $beforeId = is_array($lastMember) ? max(0, (int) ($lastMember['id'] ?? 0)) : 0;
+        if (count($members) < $batchSize || $beforeCreatedAt === '' || $beforeId <= 0 || connection_aborted()) {
+            break;
+        }
+        if (function_exists('flush')) {
+            flush();
+        }
+    }
 }
 
 
@@ -852,12 +1284,10 @@ function cms_admin_logs_export_zip(): void
     require_admin();
     $filePath = '';
     try {
-        // $rows stores the complete admin log set so CSV and JSON are built from one database read.
-        $rows = admin_log_export_rows();
-        $payload = admin_log_export_payload($rows);
+        // $filePath stores only the finished ZIP; CSV and JSON rows are streamed through temporary files.
         $filePath = admin_log_export_temp_path();
-        admin_log_create_export_zip($filePath, $payload);
-        if (ob_get_level() > 0) {
+        admin_log_create_export_zip_streamed($filePath);
+        while (ob_get_level() > 0) {
             ob_end_clean();
         }
         admin_log_send_export_zip($filePath, admin_log_export_zip_filename());

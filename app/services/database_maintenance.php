@@ -129,7 +129,7 @@ function database_maintenance_table_policies(): array
         'user_google_accounts' => $derived('authentication and accounts', 'User Google account link', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'User id and Google subject are unique identities.', 'automatic'),
         'user_openai_text_settings' => $derived('settings', 'User OpenAI text profile', 'Remove only rows whose user parent is missing.', 'No retention rule.', 'One row per user.', 'automatic'),
         'app_settings' => $protected('settings', 'Application configuration', 'Unknown and compatibility settings are retained. Dedicated migrations may remove proven obsolete keys.'),
-        'admin_logs' => $protected('audit logs', 'Administrator audit and diagnostics history', 'Never deleted by generic database cleanup. Retention requires a separate explicit policy.'),
+        'admin_logs' => $protected('audit logs', 'Administrator audit and diagnostics history', 'Generic database cleanup never deletes Admin logs. Admin Logs archival maintenance removes historical rows only after a verified daily filesystem ZIP has been created.'),
         'database_maintenance_audit_log' => $protected('audit logs', 'Transactional database cleanup audit trail', 'Immutable row-identifier audit records are never deleted by generic database cleanup.'),
         'telemetry_settings' => $protected('telemetry/analytics', 'Telemetry configuration', 'Never deleted by generic database cleanup.'),
         'telemetry_sessions' => $protected('telemetry/analytics', 'Anonymous telemetry session data', 'Retention is owned by the separate telemetry maintenance workflow.'),

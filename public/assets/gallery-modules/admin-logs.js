@@ -86,6 +86,98 @@ export function setupAdminLogStatusForms() {
     });
 }
 
+// Function `setupAdminLogGroupMembers` attaches lazy grouped-instance loading.
+/**
+ * Handle setup admin log group members.
+ *
+ * Raw instances are fetched only when a grouped row is opened, and every request
+ * is bounded so one noisy event cannot force the browser or PHP to hold the full
+ * group in memory.
+ *
+ * @param {ParentNode} root Root node containing newly rendered log rows.
+ */
+function setupAdminLogGroupMembers(root = document) {
+    root.querySelectorAll('[data-admin-log-group-members]').forEach((details) => {
+        if (details.dataset.adminLogGroupMembersReady === '1') {
+            return;
+        }
+        details.dataset.adminLogGroupMembersReady = '1';
+
+        const list = details.querySelector('[data-admin-log-group-members-list]');
+        const moreButton = details.querySelector('[data-admin-log-group-members-more]');
+        const state = details.querySelector('[data-admin-log-group-members-state]');
+        let nextOffset = 0;
+        let loadedOnce = false;
+        let loading = false;
+
+        // Function `loadNextPage` requests one bounded server page and appends it in place.
+        const loadNextPage = async () => {
+            if (loading || !list) {
+                return;
+            }
+            const baseUrl = details.dataset.adminLogGroupMembersUrl || '';
+            if (!baseUrl) {
+                return;
+            }
+            loading = true;
+            if (moreButton) {
+                moreButton.disabled = true;
+            }
+            if (state) {
+                state.textContent = 'Loading instances...';
+            }
+
+            try {
+                const url = new URL(baseUrl, window.location.href);
+                url.searchParams.set('offset', String(nextOffset));
+                const response = await fetch(url.toString(), {
+                    headers: {'Accept': 'application/json'},
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const result = await response.json();
+                if (!result.ok) {
+                    throw new Error(result.error || 'Unable to load grouped log instances.');
+                }
+
+                if (!loadedOnce) {
+                    list.innerHTML = '';
+                }
+                if (result.html) {
+                    list.insertAdjacentHTML('beforeend', result.html);
+                }
+                nextOffset = Math.max(nextOffset, Number(result.next_offset) || 0);
+                loadedOnce = true;
+                if (moreButton) {
+                    moreButton.hidden = !result.has_more;
+                }
+                if (state) {
+                    state.textContent = result.state_text || `${nextOffset} raw instances loaded.`;
+                }
+            } catch {
+                if (state) {
+                    state.textContent = 'Unable to load grouped instances.';
+                }
+            } finally {
+                loading = false;
+                if (moreButton) {
+                    moreButton.disabled = false;
+                }
+            }
+        };
+
+        details.addEventListener('toggle', () => {
+            if (details.open && !loadedOnce) {
+                loadNextPage();
+            }
+        });
+        if (moreButton) {
+            moreButton.addEventListener('click', loadNextPage);
+        }
+    });
+}
+
 // Function `setupAdminLogLiveFilters` executes this focused behavior.
 /**
  * Handle setup admin log live filters.
@@ -102,6 +194,7 @@ export function setupAdminLogLiveFilters() {
     if (!form || !tbody) {
         return;
     }
+    setupAdminLogGroupMembers(tbody);
     // Variable `countLabel` stores this steps working value.
     const countLabel = document.querySelector('[data-admin-log-count]');
     // Variable `stateLabel` stores this steps working value.
@@ -263,6 +356,7 @@ export function setupAdminLogLiveFilters() {
             }
             tbody.innerHTML = result.rows_html || '';
             setupAdminLogStatusForms();
+            setupAdminLogGroupMembers(tbody);
             setPage(result.log_page || 1);
             if (countLabel) {
                 countLabel.textContent = `(${result.count_text || `${Number(result.count || 0)} ${liveText.shown}`})`;

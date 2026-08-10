@@ -123,6 +123,8 @@ require_once __DIR__ . '/services/downloads.php';
 // Load media renaming after downloads so stale ZIP archives can be invalidated.
 require_once __DIR__ . '/services/media_renamer.php';
 require_once __DIR__ . '/services/logs.php';
+// Load filesystem-backed Admin log archiving after log export helpers are available.
+require_once __DIR__ . '/services/admin_log_archives.php';
 // Load gallery benchmark helpers after logs so benchmark runs can be recorded as support artifacts.
 require_once __DIR__ . '/services/gallery_benchmark.php';
 // Load scheduled site maintenance after logs, thumbnails, downloads, and cleanup helpers are available.

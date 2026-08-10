@@ -2184,6 +2184,138 @@ body.admin-image-order-active {
     }
 }
 
+.admin-log-archive-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.admin-log-archive-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.admin-log-archive-heading h2,
+.admin-log-archive-heading h3,
+.admin-log-archive-heading p {
+    margin-top: 0;
+}
+
+.admin-log-archive-heading p {
+    max-width: 62rem;
+    margin-bottom: 0;
+}
+
+.admin-log-archive-files-heading {
+    margin-top: 0.35rem;
+    padding-top: 1rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.admin-log-archive-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    align-items: end;
+}
+
+.admin-log-archive-retention-form,
+.admin-log-archive-run-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: end;
+    margin: 0;
+}
+
+.admin-log-archive-retention-form label {
+    display: grid;
+    gap: 0.35rem;
+    min-width: min(24rem, 100%);
+    color: #273445;
+    font-size: 0.84rem;
+    font-weight: 780;
+}
+
+.admin-log-archive-policy,
+.admin-log-archive-last-result {
+    margin: 0;
+}
+
+.admin-log-archive-metrics {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.7rem;
+    margin: 0;
+}
+
+.admin-log-archive-metrics > div {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.72);
+}
+
+.admin-log-archive-metrics dt {
+    margin-bottom: 0.25rem;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.admin-log-archive-metrics dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-weight: 760;
+}
+
+.admin-log-archive-table {
+    min-width: 54rem;
+}
+
+.admin-log-archive-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.admin-log-archive-delete-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.admin-log-archive-pagination {
+    margin: 0;
+}
+
+@media (max-width: 72rem) {
+    .admin-log-archive-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 48rem) {
+    .admin-log-archive-controls,
+    .admin-log-archive-retention-form,
+    .admin-log-archive-run-form {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+
+    .admin-log-archive-retention-form label {
+        min-width: 0;
+    }
+
+    .admin-log-archive-metrics {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 .admin-log-filters-panel {
     border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
     background:

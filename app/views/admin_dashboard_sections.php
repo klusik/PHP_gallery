@@ -605,7 +605,7 @@ function view_render_admin_dashboard_site_maintenance_card(array $model, string 
 
     echo '<article class="' . e($className) . ' admin-site-maintenance-card">';
     echo '<strong>' . e(t('admin.site_maintenance.title', 'Scheduled site maintenance')) . '</strong>';
-    echo '<p class="admin-site-maintenance-copy">' . e(t('admin.site_maintenance.hint', 'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired.')) . '</p>';
+    echo '<p class="admin-site-maintenance-copy">' . e(t('admin.site_maintenance.hint', 'Daily maintenance scans the whole gallery after the configured UTC time. Valid thumbnails are reused. Only missing, stale, wrong-ratio, or metadata-missing variants are repaired. Admin log archiving is managed separately from the Admin Logs page.')) . '</p>';
 
     if ($stateStatus !== '') {
         echo '<div class="admin-site-maintenance-statusline"><strong>' . e(t('admin.site_maintenance.current_state', 'Current state')) . ':</strong> <span>' . e($stateStatus) . ($phase !== '' ? ' / ' . e($phase) : '') . '</span></div>';
