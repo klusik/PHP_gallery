@@ -49,8 +49,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.86.1}
-\newcommand{\manualdate}{9 August 2026}
+\newcommand{\version}{0.87}
+\newcommand{\manualdate}{10 August 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1025,6 +1025,20 @@ Maintenance tools inspect generated variants, identify missing or stale derivati
 \subsection{Database maintenance}
 
 Database inspection inventories schema objects, references, ownership categories, retention policy, and cleanup confidence. Logical cleanup uses allow-listed rules with deterministic selection, bounded batches, and audit records. Schema repair provides a dry-run and idempotent migration path. Physical table optimization remains a separately confirmed selected-table operation.\footnote{Storage-engine allocation values such as data-free estimates describe engine state and do not guarantee a precise number of filesystem bytes returned after optimization.}
+
+\subsection{Admin log history and archives}
+\index{admin logs}
+\index{log archive}
+
+Everyday administrative work creates a useful history: uploads, gallery changes, security decisions, maintenance results, warnings, and other operational events can leave a record in the Admin log. That history is valuable when you want to understand what happened, when it happened, and which account or request was involved. It is also normal for the table to become large on an active installation. Version~\version{} therefore treats log care as its own explicit maintenance task rather than allowing generic database cleanup to remove audit history unexpectedly.
+
+The Admin log screen can show individual entries or group repeated events into a compact summary. A group might represent many occurrences of the same kind of thumbnail warning, upload result, or maintenance message. Opening the group reveals its members. This gives an administrator a useful overview without losing the underlying detail. Large lists and exports are processed in bounded portions, so requesting a complete history does not require the browser or PHP to hold the entire table in memory at once.
+
+The owner can choose how long recent logs should remain in the live database. Choosing \emph{Forever} disables automatic archival. Choosing a finite live period does not immediately throw older records away. The maintenance workflow first selects complete calendar days that are safely older than the live window, writes a protected archive containing both machine-readable JSON and a readable static HTML report, checks that the archive contains the expected number of records, and only then removes those same rows from the live table. The archive is stored under \filepath{data/admin-log-archives/}, which is application data rather than a public gallery area and carries an additional web-server protection rule.
+
+Archive maintenance is deliberately recoverable. It writes temporary files before promoting a completed archive, records a small state file, and uses a lock so two maintenance requests do not process the same history simultaneously. If hosting limits, a connection interruption, or another problem stops the work, the Admin screen can show the incomplete state and the next maintenance attempt can verify, continue, or safely recover it. An archive is never considered a reason to delete live records merely because a file with a similar name exists; the row-count and archive metadata checks are part of the safety boundary.
+
+Administrators should still include the database and the \filepath{data/admin-log-archives/} directory in coordinated backups. The live database contains recent operational history, while the archive directory contains older history selected by the explicit retention policy. Keeping both gives the owner a continuous record and makes a restored installation easier to investigate after an update, migration, or unexpected event.
 
 \subsection{Application updates}
 

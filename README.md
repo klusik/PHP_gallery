@@ -2,7 +2,7 @@
 
 A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The application uses the filesystem as the authoritative source for gallery structure, while storing all metadata, access rules, votes, user accounts, and audit logs in MySQL or MariaDB.
 
-**Current Version:** 0.86.1
+**Current Version:** 0.87
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no framework overhead. Just PHP + MySQL.
 
@@ -37,6 +37,7 @@ A modern PHP 8.0+ gallery CMS designed for ordinary shared hosting. The applicat
 - **DNG RAW support** - Generate display masters from DNG raw files
 - **Lazy loading** - Deferred thumbnail loading in fullscreen gallery
 - **Maintenance tools** - Regenerate, delete, or verify thumbnail cache
+- **Admin log scalability** - Browse grouped operational events, export large histories in bounded batches, and keep recent records in the live database while archiving older days safely
 
 #### Public thumbnail rendering modes
 
@@ -104,6 +105,7 @@ Progressive rendering prioritizes perceived initial responsiveness, not minimum 
 - **Database inspection** - Explicit full-schema inventory with migration/code audit, cleanup reasons, and protected-table policies
 - **Safe logical cleanup** - Dry-run and bounded resumable removal of proven orphans, deterministic duplicates, and explicitly expired temporary state, with exact row identities audited transactionally
 - **Physical database maintenance** - Selected `ANALYZE TABLE`, selected-table optimization previews, and separately confirmed selected `OPTIMIZE TABLE`, never automatic
+- **Admin log archive maintenance** - Configure live-log retention, create protected day archives, inspect archive state, and recover safely after interrupted archive work
 
 ### Admin Tools
 

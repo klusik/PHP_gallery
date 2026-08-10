@@ -1,6 +1,6 @@
 # PHP Gallery Database Documentation
 
-This document describes the database schema used by PHP Gallery as of application version 0.86.1. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
+This document describes the database schema used by PHP Gallery as of application version 0.87. The source of truth remains the migration files in `database/migrations/`, but this file summarizes the final model and the purpose of each table.
 
 ## Database Engine
 
@@ -72,6 +72,7 @@ Current migration sequence:
 | `202606070001_gallery_date_ranges.php` | Adds optional gallery date range end values. |
 | `202607250001_database_maintenance_schema_repair.php` | Creates the transactional cleanup audit table, conditionally repairs partial thumbnail metadata compaction, and removes only proven legacy objects after preserving source geometry. |
 | `202608080001_duplicate_photo_ledger.php` | Adds per-administrator reviewed duplicate-pair and exact-gallery ledger tables used by the Admin Duplicate Photo Detector. |
+| `202608100001_admin_log_scaling.php` | Adds age and grouping indexes for bounded Admin log retention and grouped browsing on large installations. |
 
 ## Entity Relationship Overview
 
@@ -424,6 +425,8 @@ Important columns:
 | `context_json` | Structured context. |
 | `resolved_at`, `resolution_note` | Resolution workflow fields. |
 | `created_at` | Log timestamp. |
+
+Admin logs remain the live operational history and are not removed by generic database cleanup. Version 0.87 adds indexed age and grouping access paths so Admin browsing, grouped summaries, and bounded retention work do not require an avoidable full-table scan. The explicit Admin log archive workflow moves complete older calendar days into protected filesystem archives before removing their live rows. Archive manifests identify the application version, date, row count, and export format; the archive service verifies the expected row count before deletion and keeps recoverable state when work is interrupted.
 
 ## Authentication and Account Security
 

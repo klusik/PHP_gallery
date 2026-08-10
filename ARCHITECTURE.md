@@ -9,7 +9,7 @@ This document is intended to help future maintainers and AI coding agents unders
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.86.1';
+const CMS_VERSION = '0.87';
 ```
 
 Update-related code uses:
@@ -326,7 +326,7 @@ Key service families:
 | Maps and aviation | `exif.php`, `flight_maps.php`, `navigation_data.php`, `simbrief_descriptions.php` | EXIF GPS, default-enabled EXIF/GPS display policy with per-gallery overrides, flight route maps, waypoint lookup and SimBrief OFP processing. |
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
-| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, audit logs, GitHub update checks, API migration and resumable scheduled maintenance. |
+| Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `admin_log_archives.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, grouped and exportable audit logs, protected day archives, GitHub update checks, API migration and resumable scheduled maintenance. |
 
 ## View Layer
 

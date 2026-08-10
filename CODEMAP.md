@@ -244,6 +244,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Display logs | `app/controllers/admin_logs.php` |
 | Update log status | `app/controllers/admin_logs.php`, handler `cms_admin_log_update` |
 | Export logs | `app/controllers/admin_logs.php`, handlers `cms_admin_log_export`, `cms_admin_logs_export_zip` |
+| Archive and retain logs | `app/services/admin_log_archives.php`, `app/controllers/admin_logs.php`, `app/controllers/site_maintenance.php` |
+| Archive protection | `data/admin-log-archives/.htaccess` |
 | Table | `admin_logs` |
 
 ## Updates and GitHub Integration
@@ -294,6 +296,8 @@ This file maps features to source files. It is optimized for fast maintenance an
 | Test | Purpose |
 | --- | --- |
 | `tests/admin_log_severity_filter_test.php` | Log filtering behavior. |
+| `tests/admin_log_scaling_test.php` | Indexed grouped browsing, bounded exports, and retention contracts. |
+| `tests/admin_log_archive_maintenance_test.php` | Protected day archives, resumable archive state, row-count safety, and archive cleanup behavior. |
 | `tests/gallery_branding_model_test.php` | Gallery branding model. |
 | `tests/gallery_dates_model_test.php` | Gallery date range normalization and renderer behavior. |
 | `tests/duplicate_photo_detector_test.php` | Duplicate checksum/EXIF matching, pair expansion and ledger filtering, selected-gallery branch/global scope, deterministic ordering, linked-context rendering, delete/ledger scope validation, detector-job pruning, and AJAX side-panel integration contracts. |

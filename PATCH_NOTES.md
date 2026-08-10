@@ -1,5 +1,74 @@
 # Patch notes
 
+## Version 0.87
+
+Version 0.87 is an operational scalability and public-rendering release. It introduces a durable Admin log lifecycle for installations whose audit history has grown large, adds grouped browsing and bounded exports, moves eligible historical days into protected filesystem archives before removing their live database rows, and preserves resumable recovery when maintenance is interrupted. It also adds the permanent progressive public thumbnail renderer, improves the explanation of the application request pipeline for gallery owners, and refreshes the release documentation and integrity metadata.
+
+  ### Highlights
+
+  #### Scaled Admin logs for growing installations
+
+  - Added grouped Admin log browsing so repeated operational events can be reviewed as useful summaries instead of overwhelming the screen with identical rows.
+  - Added bounded keyset pagination for large log lists, group members, and exports so work remains controlled as `admin_logs` grows.
+  - Added complete CSV, JSON, and ZIP export paths that stream large histories through bounded database and temporary-file batches.
+  - Added configurable live-log retention with a `Forever` option and explicit archive-first behavior for historical records.
+
+  #### Added protected Admin log archives
+
+  - Added day-based archives under `data/admin-log-archives/`, protected by `data/admin-log-archives/.htaccess` and kept outside ordinary public browsing.
+  - Added self-describing JSON and static HTML archive files so archived history remains inspectable without a live database query or JavaScript.
+  - Added archive manifests containing the application version, archive date, row count, format, and source identity information.
+  - Added row-count verification before live rows are removed, atomic temporary-file promotion, lock/state files, resumable maintenance, and recovery for interrupted archive creation or cleanup.
+  - Added Admin controls and status reporting for archive inspection, retention choices, pending work, failures, and safe continuation.
+
+  #### Improved public thumbnail rendering
+
+  - Added the permanent `progressive` selected-gallery renderer as a small-first, bounded near-viewport sharpening pipeline.
+  - Preserved `responsive` as the safe default with complete server-rendered candidate markup and no-JavaScript behavior.
+  - Kept larger progressive candidates inert until the browser scheduler activates them and retained gallery, password, NSFW, media authorization, semantic markup, and useful-alt-text checks.
+
+  ### Technical Details
+
+  #### Backend
+
+  - Added `app/services/admin_log_archives.php` for archive paths, retention normalization, day snapshots, bounded row streaming, manifests, static archive output, locks, resumable state, recovery, and cleanup.
+  - Extended `app/services/logs.php` with grouped summaries, group-member browsing, bounded keyset exports, archive-first retention boundaries, and reusable normalized export payloads.
+  - Updated `app/controllers/admin_logs.php` and `app/controllers/site_maintenance.php` for archive settings, archive maintenance, grouped views, exports, status updates, and recovery-aware Admin responses.
+  - Added migration `202608100001_admin_log_scaling.php` with `(created_at, id)` and grouping indexes for age-bounded and grouped `admin_logs` access.
+  - Kept generic database cleanup from deleting live audit history or archive files; log retention remains an explicit, separately authorized policy.
+
+  #### Frontend and public rendering
+
+  - Updated Admin log controls and styles for grouped rows, archive state, retention actions, bounded progress, errors, and in-place refresh behavior.
+  - Preserved the Admin right-side panel as the primary JavaScript interaction surface, with direct POST/redirect behavior remaining a compatibility fallback.
+  - Updated the public thumbnail renderer and browser lifecycle documentation to distinguish permanent `responsive` and `progressive` architecture terms from the Admin-facing Beta label.
+
+  #### Documentation and release metadata
+
+  - Updated `README.md`, `ARCHITECTURE.md`, `DATABASE.md`, `CODEMAP.md`, and `TESTING.md` for Version 0.87 and the new Admin log lifecycle.
+  - Expanded `docs/PHP_Gallery_Manual.tex` with an owner-friendly explanation of request preparation, routing, dispatch, controllers, services, views, browser modules, and the selected-gallery render pipeline.
+  - Regenerated `docs/PHP_Gallery_Manual.pdf` and `app/core-manifest.json` for the Version 0.87 release surface.
+
+  #### Tests
+
+  - Added `tests/admin_log_scaling_test.php` for migration, grouping, bounded export, retention, and archive-first contracts.
+  - Added `tests/admin_log_archive_maintenance_test.php` for protected archive paths, generated archive formats, row-count safety, resumable state, interrupted work, and cleanup behavior.
+  - Extended public thumbnail, Admin panel, and maintenance verification guidance for both permanent thumbnail renderers and the new log archive workflow.
+
+  ### User Impact
+
+  #### For administrators
+
+  - Large audit histories remain easier to browse, group, export, and maintain without treating the entire `admin_logs` table as one unbounded operation.
+  - Older records can be moved out of the live database while remaining available as protected, readable day archives.
+  - Interrupted maintenance can be inspected and continued instead of silently deleting incomplete history.
+  - The manual now explains the application's request and rendering process in everyday language, making the relationship between the website, database, services, and browser clearer.
+
+  #### For visitors
+
+  - Public gallery photo cards retain the responsive renderer as the default and can use progressive small-first sharpening when selected by the owner.
+  - Access checks, protected media behavior, direct links, semantic server-rendered markup, and no-JavaScript navigation remain intact.
+
 ## Version 0.86.1
 
 Version 0.86.1 is a patch-level consistency, documentation, versioning, and repository-hygiene release. It aligns the documented Duplicate Photo Detector behavior with the implementation already shipped in 0.86, corrects current-version metadata, completes the ledger schema documentation, adds the repository's referenced MIT license, and regenerates integrity metadata without changing the detector's runtime workflow.
